@@ -10,6 +10,7 @@ publish.workspace = true
 [dependencies]
 apifast-domain.workspace = true
 apifast-template.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true

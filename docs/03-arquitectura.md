@@ -124,7 +124,23 @@ Definidos como traits en `apifast-app`:
 | `Clock` | Hora actual y medición de tiempos | Sistema, o falso en tests |
 | `Prompter` | Pedir un valor al usuario (`{{?Texto}}`) | GUI o terminal |
 
-Cada puerto tiene además una implementación en memoria para tests.
+Cada puerto tiene además una implementación en memoria para tests, en `apifast_app::memory`.
+
+Los repositorios son síncronos: leen archivos pequeños y el driver los ejecuta fuera del hilo de la interfaz. `HttpTransport` es asíncrono, con `async fn` nativo en traits y futures `Send`, así que `apifast-app` no depende de tokio.
+
+### Cadena de tipos del envío
+
+```
+archivo → ResolvedRequest → RenderedRequest → HttpTransport
+          (herencia)        (plantillas y auth)
+```
+
+Cada tipo solo se construye a partir del anterior (`resolve` en el dominio, `render_request` en la aplicación), con campos privados y un doctest `compile_fail` que lo comprueba. Al renderizar:
+
+- La query sale de la URL, como en Bruno: la lista `params` de tipo query solo la refleja para la interfaz. Los path params sustituyen los segmentos `:nombre` de la ruta.
+- Se añade un `Content-Type` según el body si ningún header lo define.
+- La auth se convierte en headers o en un parámetro de query y sustituye el `Authorization` (o el header de la API key) de la request.
+- Un esquema de auth o un tipo de body todavía no implementado es un error, nunca un envío sin él.
 
 ## Casos de uso
 

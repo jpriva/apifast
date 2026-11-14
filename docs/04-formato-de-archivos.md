@@ -163,6 +163,8 @@ docs: |-
 
 Cualquier entrada de lista (`params`, `headers`, variables, aserciones) admite `disabled: true`.
 
+Los parámetros de query se envían desde la URL. Bruno los duplica en `http.params` para su interfaz; apifast hace lo mismo al guardar y nunca los envía dos veces. Los parámetros de ruta (`type: path`) sustituyen los segmentos `:nombre` de la URL.
+
 ### Tipos de body
 
 | `type` | `data` |

@@ -8,6 +8,7 @@ version = "0.0.0"
 dependencies = [
  "apifast-domain",
  "apifast-template",
+ "thiserror",
 ]
 
 [[package]]

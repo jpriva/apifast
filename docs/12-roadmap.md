@@ -74,13 +74,13 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
 - [x] `apifast-template`: parser, árbol reversible, render recursivo, variables dinámicas básicas (`$randomUUID`, `$timestamp`, `$isoTimestamp`, `$randomInt`).
 - [ ] Rutas en variables de tipo objeto (`{{user.address.city}}`): requiere leer JSON fuera del dominio o un lector propio en `apifast-template`.
 - [ ] Variables dinámicas de datos de prueba (`$randomEmail`, `$randomFullName`, `$randomWord`).
-- [ ] `apifast-app`: puertos, `OpenCollection`, `LoadRequest`, `SaveRequest`, `ResolveVariables`, `SendRequest`.
+- [x] `apifast-app`: puertos, `OpenCollection`, `LoadRequest`, `SaveRequest`, `ResolveVariables`, `SendRequest`. `RenderedRequest` es el único tipo que acepta el transporte. El watcher de `OpenCollection` llega en F2 y el timeline por canal en F5.
 - [ ] `apifast-storage-fs`: lectura con `oneyaml` (serde) y guardado con JSON Patch por elemento sobre el documento releído del disco; lectura y escritura de `opencollection.yml`, `folder.yml`, requests y entornos; carpeta `.apifast/` con el identificador de colección; escritura atómica; conservación de claves desconocidas.
 - [ ] `apifast-http`: envío con reqwest y rustls, redirecciones manuales, timeout, cancelación, cuerpo en streaming a disco.
-- [ ] Autenticación básica: Basic, Bearer, API key, heredada.
+- [x] Autenticación básica: Basic, Bearer, API key, heredada. Se aplica al renderizar, en `apifast-app`; un esquema sin implementar da error en vez de enviar sin auth.
 - [ ] `apifast-history`: almacén de respuestas en archivos.
 - [ ] `apifast-cli`: `apifast send <archivo> --env <nombre>`.
-- [ ] Implementaciones en memoria de todos los puertos.
+- [x] Implementaciones en memoria de todos los puertos (`apifast_app::memory`).
 - [ ] Corpus de round-trip con colecciones YAML de Bruno, incluidos archivos reescritos por Bruno al guardar (con `config.proxy`, `bundled` y `settings` por defecto).
 - [x] Test de reglas de arquitectura (adelantado en F0, `apifast-arch-tests`).
 
