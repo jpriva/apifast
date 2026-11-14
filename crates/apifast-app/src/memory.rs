@@ -24,8 +24,8 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 /// `users` or `users/admin`.
 #[derive(Debug)]
 pub struct MemoryCollections {
-    collection: Collection,
-    folders: BTreeMap<String, Folder>,
+    collection: Mutex<Collection>,
+    folders: Mutex<BTreeMap<String, Folder>>,
     requests: Mutex<BTreeMap<RequestPath, HttpRequest>>,
 }
 
@@ -33,16 +33,16 @@ impl MemoryCollections {
     /// An empty collection.
     pub fn new(collection: Collection) -> Self {
         Self {
-            collection,
-            folders: BTreeMap::new(),
+            collection: Mutex::new(collection),
+            folders: Mutex::new(BTreeMap::new()),
             requests: Mutex::new(BTreeMap::new()),
         }
     }
 
     /// Adds a folder at `path`.
     #[must_use]
-    pub fn with_folder(mut self, path: &str, folder: Folder) -> Self {
-        self.folders.insert(path.to_owned(), folder);
+    pub fn with_folder(self, path: &str, folder: Folder) -> Self {
+        lock(&self.folders).insert(path.to_owned(), folder);
         self
     }
 
@@ -58,23 +58,29 @@ impl MemoryCollections {
         lock(&self.requests).get(&RequestPath::new(path)).cloned()
     }
 
-    fn folder_chain(&self, path: &RequestPath) -> Vec<Folder> {
-        let parts: Vec<&str> = path.as_str().split('/').collect();
-        let mut chain = Vec::new();
-        for depth in 1..parts.len() {
-            let folder_path = parts[..depth].join("/");
-            let folder = self
-                .folders
-                .get(&folder_path)
-                .cloned()
-                .unwrap_or_else(|| Folder::new(parts[depth - 1]));
-            chain.push(folder);
-        }
-        chain
+    /// The folder currently stored at `path`.
+    pub fn folder(&self, path: &str) -> Option<Folder> {
+        lock(&self.folders).get(path).cloned()
     }
 
-    fn items_under(&self, prefix: &str) -> Vec<TreeItem> {
-        let requests = lock(&self.requests);
+    fn folder_chain(&self, path: &RequestPath) -> Vec<Folder> {
+        let folders = lock(&self.folders);
+        let parts: Vec<&str> = path.as_str().split('/').collect();
+        (1..parts.len())
+            .map(|depth| {
+                folders
+                    .get(&parts[..depth].join("/"))
+                    .cloned()
+                    .unwrap_or_else(|| Folder::new(parts[depth - 1]))
+            })
+            .collect()
+    }
+
+    fn items_under(
+        prefix: &str,
+        folders: &BTreeMap<String, Folder>,
+        requests: &BTreeMap<RequestPath, HttpRequest>,
+    ) -> Vec<TreeItem> {
         let mut items: Vec<TreeItem> = requests
             .iter()
             .filter(|(path, _)| parent(path.as_str()) == prefix)
@@ -85,15 +91,14 @@ impl MemoryCollections {
                 seq: request.seq,
             })
             .collect();
-        drop(requests);
         items.extend(
-            self.folders
+            folders
                 .iter()
                 .filter(|(path, _)| parent(path) == prefix)
                 .map(|(path, folder)| TreeItem::Folder {
                     path: path.clone(),
                     folder: folder.clone(),
-                    children: self.items_under(path),
+                    children: Self::items_under(path, folders, requests),
                 }),
         );
         items
@@ -107,13 +112,13 @@ fn parent(path: &str) -> &str {
 impl CollectionRepository for MemoryCollections {
     fn tree(&self) -> Result<CollectionTree, RepositoryError> {
         Ok(CollectionTree {
-            collection: self.collection.clone(),
-            items: self.items_under(""),
+            collection: lock(&self.collection).clone(),
+            items: Self::items_under("", &lock(&self.folders), &lock(&self.requests)),
         })
     }
 
     fn collection(&self) -> Result<Collection, RepositoryError> {
-        Ok(self.collection.clone())
+        Ok(lock(&self.collection).clone())
     }
 
     fn request(&self, path: &RequestPath) -> Result<LoadedRequest, RepositoryError> {
@@ -135,20 +140,54 @@ impl CollectionRepository for MemoryCollections {
         lock(&self.requests).insert(path.clone(), request.clone());
         Ok(())
     }
+
+    fn save_folder(&self, path: &str, folder: &Folder) -> Result<(), RepositoryError> {
+        lock(&self.folders).insert(path.to_owned(), folder.clone());
+        Ok(())
+    }
+
+    fn save_collection(&self, collection: &Collection) -> Result<(), RepositoryError> {
+        collection.clone_into(&mut lock(&self.collection));
+        Ok(())
+    }
 }
 
 /// Environments and process variables kept in memory.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct MemoryEnvironments {
-    /// The environments.
-    pub environments: Vec<Environment>,
-    /// Values for `{{process.env.NAME}}`.
-    pub process_env: BTreeMap<String, String>,
+    environments: Mutex<Vec<Environment>>,
+    process_env: BTreeMap<String, String>,
+}
+
+impl MemoryEnvironments {
+    /// These environments, with no process variables.
+    pub fn new(environments: Vec<Environment>) -> Self {
+        Self {
+            environments: Mutex::new(environments),
+            process_env: BTreeMap::new(),
+        }
+    }
+
+    /// Adds a value for `{{process.env.NAME}}`.
+    #[must_use]
+    pub fn with_process_env(mut self, name: &str, value: &str) -> Self {
+        self.process_env.insert(name.to_owned(), value.to_owned());
+        self
+    }
 }
 
 impl EnvironmentRepository for MemoryEnvironments {
     fn environments(&self) -> Result<Vec<Environment>, RepositoryError> {
-        Ok(self.environments.clone())
+        Ok(lock(&self.environments).clone())
+    }
+
+    fn save_environment(&self, environment: &Environment) -> Result<(), RepositoryError> {
+        let mut all = lock(&self.environments);
+        match all.iter_mut().find(|e| e.name == environment.name) {
+            Some(existing) => environment.clone_into(existing),
+            None => all.push(environment.clone()),
+        }
+        Ok(())
     }
 
     fn process_env(&self) -> Result<BTreeMap<String, String>, RepositoryError> {

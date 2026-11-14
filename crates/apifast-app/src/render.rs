@@ -203,6 +203,11 @@ pub fn render_request(
             }
         }
         AuthScheme::None => {}
+        AuthScheme::Unsupported(kind) => {
+            return Err(AppError::Validation(format!(
+                "auth scheme `{kind}` is not supported yet"
+            )));
+        }
         // Error out rather than silently sending without auth. The message
         // does not include the scheme's fields.
         _ => {
@@ -276,7 +281,13 @@ impl Renderer<'_, '_> {
                         name: self.text(&part.name)?,
                         value: match &part.value {
                             MultipartValue::Text(text) => MultipartValue::Text(self.text(text)?),
-                            MultipartValue::File(path) => MultipartValue::File(self.text(path)?),
+                            MultipartValue::Files(paths) => {
+                                let mut rendered = Vec::with_capacity(paths.len());
+                                for path in paths {
+                                    rendered.push(self.text(path)?);
+                                }
+                                MultipartValue::Files(rendered)
+                            }
                         },
                         content_type: part.content_type.clone(),
                     });

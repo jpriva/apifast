@@ -75,13 +75,36 @@ pub enum TreeItem {
         /// Position among its siblings.
         seq: Option<u32>,
     },
+    /// A request of a kind this version cannot open yet, such as GraphQL.
+    /// It is listed so the tree matches the files on disk.
+    Other {
+        /// Path of the request file.
+        path: RequestPath,
+        /// Display name.
+        name: String,
+        /// Its `info.type`, such as `graphql`.
+        kind: String,
+        /// Position among its siblings.
+        seq: Option<u32>,
+    },
+    /// A file that could not be read. One broken file must not hide the rest
+    /// of the collection.
+    Invalid {
+        /// Path of the file.
+        path: RequestPath,
+        /// Why it could not be read.
+        message: String,
+    },
 }
 
 impl TreeItem {
     fn sort_key(&self) -> (Option<u32>, &str) {
         match self {
             Self::Folder { folder, .. } => (folder.seq, folder.name.as_str()),
-            Self::Request { seq, name, .. } => (*seq, name.as_str()),
+            Self::Request { seq, name, .. } | Self::Other { seq, name, .. } => {
+                (*seq, name.as_str())
+            }
+            Self::Invalid { path, .. } => (None, path.as_str()),
         }
     }
 }
@@ -125,6 +148,7 @@ pub trait CollectionRepository {
     fn request(&self, path: &RequestPath) -> Result<LoadedRequest, RepositoryError>;
 
     /// Saves a request atomically, keeping keys the domain does not model.
+    /// Creates the file if it does not exist.
     ///
     /// # Errors
     ///
@@ -134,6 +158,21 @@ pub trait CollectionRepository {
         path: &RequestPath,
         request: &HttpRequest,
     ) -> Result<(), RepositoryError>;
+
+    /// Saves the metadata of the folder at `path` (relative to the root,
+    /// such as `users/admin`), creating its `folder.yml` if needed.
+    ///
+    /// # Errors
+    ///
+    /// If the file cannot be written.
+    fn save_folder(&self, path: &str, folder: &Folder) -> Result<(), RepositoryError>;
+
+    /// Saves the collection root.
+    ///
+    /// # Errors
+    ///
+    /// If the file cannot be written.
+    fn save_collection(&self, collection: &Collection) -> Result<(), RepositoryError>;
 }
 
 /// Environments and process variables of a collection.
@@ -144,6 +183,13 @@ pub trait EnvironmentRepository {
     ///
     /// If an environment file cannot be read or is not valid.
     fn environments(&self) -> Result<Vec<Environment>, RepositoryError>;
+
+    /// Saves an environment, matched by name, creating its file if needed.
+    ///
+    /// # Errors
+    ///
+    /// If the file cannot be written.
+    fn save_environment(&self, environment: &Environment) -> Result<(), RepositoryError>;
 
     /// Values for `{{process.env.NAME}}`: the collection's `.env` over the
     /// system environment.

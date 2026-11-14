@@ -17,6 +17,15 @@ pub enum RepositoryError {
         /// What is wrong.
         message: String,
     },
+    /// The file is valid but holds something this version cannot handle yet,
+    /// such as a GraphQL request.
+    #[error("`{path}`: {what} is not supported yet")]
+    Unsupported {
+        /// Path relative to the collection.
+        path: String,
+        /// What is not supported.
+        what: String,
+    },
     /// The file could not be read or written.
     #[error("cannot access `{path}`: {message}")]
     Io {

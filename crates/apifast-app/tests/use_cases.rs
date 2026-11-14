@@ -150,7 +150,7 @@ fn users_world() -> World {
         value: Some(VariableValue::text("s3cr3t")),
         ..Variable::secret("token")
     };
-    world.environments.environments = vec![
+    world.environments = MemoryEnvironments::new(vec![
         env(
             "base",
             None,
@@ -161,7 +161,7 @@ fn users_world() -> World {
             Some("base"),
             vec![Variable::text("host", "https://api.test"), token],
         ),
-    ];
+    ]);
     world
 }
 
@@ -261,7 +261,8 @@ fn basic_auth_is_base64_encoded_and_replaces_authorization() {
     }));
     let mut world =
         World::new(MemoryCollections::new(Collection::new("c")).with_request("r.yml", request));
-    world.environments.environments = vec![env("e", None, vec![Variable::text("user", "ana")])];
+    world.environments =
+        MemoryEnvironments::new(vec![env("e", None, vec![Variable::text("user", "ana")])]);
 
     world
         .send(
@@ -342,10 +343,7 @@ fn process_env_comes_from_the_environment_repository() {
     let request = get("https://api.test/{{process.env.TENANT}}");
     let mut world =
         World::new(MemoryCollections::new(Collection::new("c")).with_request("r.yml", request));
-    world
-        .environments
-        .process_env
-        .insert("TENANT".into(), "acme".into());
+    world.environments = MemoryEnvironments::default().with_process_env("TENANT", "acme");
 
     world.send("r.yml", &SendOptions::default()).unwrap();
     assert_eq!(world.last_sent().url(), "https://api.test/acme");
@@ -394,13 +392,17 @@ fn opening_a_collection_returns_a_sorted_tree() {
                 let names: Vec<_> = children
                     .iter()
                     .map(|c| match c {
-                        TreeItem::Request { name, .. } => name.as_str(),
+                        TreeItem::Request { name, .. } | TreeItem::Other { name, .. } => {
+                            name.as_str()
+                        }
                         TreeItem::Folder { folder, .. } => folder.name.as_str(),
+                        TreeItem::Invalid { path, .. } => path.as_str(),
                     })
                     .collect();
                 format!("{}{names:?}", folder.name)
             }
-            TreeItem::Request { name, .. } => name.clone(),
+            TreeItem::Request { name, .. } | TreeItem::Other { name, .. } => name.clone(),
+            TreeItem::Invalid { path, .. } => path.to_string(),
         })
         .collect();
     assert_eq!(top, ["users[\"A\", \"B\"]", "Health"]);

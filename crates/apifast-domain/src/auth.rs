@@ -21,6 +21,10 @@ pub enum AuthScheme {
     Bearer(BearerAuth),
     /// Key sent in a header or in the query.
     ApiKey(ApiKeyAuth),
+    /// A scheme of the file format that apifast cannot send yet, such as
+    /// `digest` or `oauth2`, by its `type`. It is kept so that reading and
+    /// saving a collection never loses it; sending a request with it fails.
+    Unsupported(String),
 }
 
 /// HTTP Basic credentials.

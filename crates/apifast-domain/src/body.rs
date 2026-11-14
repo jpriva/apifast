@@ -55,6 +55,6 @@ pub struct MultipartPart {
 pub enum MultipartValue {
     /// Text (template).
     Text(String),
-    /// A file, by its path relative to the collection.
-    File(String),
+    /// One or more files, by their paths relative to the collection.
+    Files(Vec<String>),
 }
