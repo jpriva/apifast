@@ -1,0 +1,6 @@
+# Versión fija de Rust para desarrollo y CI. Se sube a propósito cada 2 o 3
+# versiones, en un commit que también corrige los lints nuevos.
+[toolchain]
+channel = "1.99.1"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

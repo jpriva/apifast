@@ -93,7 +93,7 @@ En cada cambio:
 | Seguridad | `cargo deny check advisories` (misma base RustSec que `cargo audit`) |
 | Documentación | `cargo doc --no-deps` sin advertencias |
 
-El CI está en `.github/workflows/ci.yml`. Los lints están en `[workspace.lints]` del `Cargo.toml` raíz, y las reglas de licencias y orígenes en `deny.toml`. La versión mínima de Rust (MSRV) es la 1.95, la que exige egui 0.37, y el CI la comprueba con `cargo check`.
+El CI está en `.github/workflows/ci.yml`. Los lints están en `[workspace.lints]` del `Cargo.toml` raíz, y las reglas de licencias y orígenes en `deny.toml`. La versión de Rust está fijada en `rust-toolchain.toml` (ahora 1.99.1) y es la misma en local y en el CI, para que una versión nueva con lints nuevos no rompa el CI sin cambios en el código. `rust-version` coincide con ella: apifast se distribuye como binario y no necesita compilar con versiones antiguas. Se sube a propósito cada 2 o 3 versiones, en un commit `build: bump Rust to 1.xx` que también corrige los lints nuevos.
 
 En la rama principal, además: benchmarks con comparación, compilación en Linux, macOS y Windows, y tamaño del binario.
 

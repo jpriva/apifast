@@ -55,7 +55,7 @@ Tras F1, las fases F2 a F6 son en gran parte independientes entre sí. El orden 
 - [x] **Spike 4: compatibilidad con Bruno.** Resuelto leyendo su código: Bruno descarta las claves desconocidas al guardar. Los datos de apifast van en `.apifast/` ([ADR 0002](adr/0002-formato-yaml-opencollection.md)).
 - [ ] Comprobar en Bruno real que respeta `extensions.bruno.ignore` para `.apifast`.
 - [ ] Medir Bruno y Yaak en la misma máquina (RAM en reposo, arranque) como línea base.
-- [x] Crear el workspace de Cargo vacío con CI: formato, lints, pruebas, `cargo deny`; compilación en Linux, macOS y Windows. Esqueletos de los crates de F1, test de reglas de arquitectura (`apifast-arch-tests`) y MSRV 1.95 (el que exige egui 0.37).
+- [x] Crear el workspace de Cargo vacío con CI: formato, lints, pruebas, `cargo deny`; compilación en Linux, macOS y Windows. Esqueletos de los crates de F1, test de reglas de arquitectura (`apifast-arch-tests`) y Rust fijado en `rust-toolchain.toml`.
 - [x] Repositorio git inicializado y archivos de licencia (MIT y Apache-2.0).
 
 ### Criterio de salida
