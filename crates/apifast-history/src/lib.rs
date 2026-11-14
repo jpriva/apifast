@@ -5,6 +5,8 @@
 //! `responses/<collection-id>/`. Bodies are written in chunks through a fixed
 //! buffer and read back in windows, so memory never grows with their size.
 
+pub mod dirs;
+
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};

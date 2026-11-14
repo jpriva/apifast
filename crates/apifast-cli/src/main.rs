@@ -103,7 +103,7 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
     let located = locate::locate(&args.file, args.collection.as_deref())?;
     let repo = FsCollection::open(&located.root)?;
     let collection = repo.collection()?;
-    let responses = FsResponseStore::new(locate::responses_dir(
+    let responses = FsResponseStore::new(apifast_history::dirs::responses_dir(
         &located.root,
         collection
             .id
