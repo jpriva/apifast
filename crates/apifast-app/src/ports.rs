@@ -284,20 +284,22 @@ pub trait ResponseStore {
     fn read(&self, id: &ResponseId, offset: u64, len: usize) -> Result<Vec<u8>, StoreError>;
 }
 
-/// Current time.
-pub trait Clock {
+/// Current time. `Send + Sync` so use cases can run as tasks on any thread.
+pub trait Clock: Send + Sync {
     /// Milliseconds since the Unix epoch.
     fn unix_millis(&self) -> i64;
 }
 
-/// Source of randomness for dynamic variables.
-pub trait Random {
+/// Source of randomness for dynamic variables. `Send + Sync` so use cases
+/// can run as tasks on any thread.
+pub trait Random: Send + Sync {
     /// A uniformly random number.
     fn next_u64(&self) -> u64;
 }
 
-/// Asks the user for `{{?Label}}` values.
-pub trait Prompter {
+/// Asks the user for `{{?Label}}` values. `Send + Sync` so use cases can run
+/// as tasks on any thread.
+pub trait Prompter: Send + Sync {
     /// The value typed for `label`, or `None` if the user gave none.
     fn prompt(&self, label: &str) -> Option<String>;
 }

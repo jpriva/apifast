@@ -412,7 +412,7 @@ fn opening_a_collection_returns_a_sorted_tree() {
 #[test]
 fn problems_are_reported_before_sending_even_if_the_send_fails() {
     let world = users_world();
-    let reported = std::cell::RefCell::new(Vec::new());
+    let reported = std::sync::Mutex::new(Vec::new());
     let cancel = CancelToken::new();
     cancel.cancel();
     let ports = SendPorts {
@@ -423,7 +423,7 @@ fn problems_are_reported_before_sending_even_if_the_send_fails() {
         clock: &world.clock,
         random: &world.random,
         prompter: &world.prompter,
-        report: &|problem: &Problem| reported.borrow_mut().push(problem.clone()),
+        report: &|problem: &Problem| reported.lock().unwrap().push(problem.clone()),
     };
     let options = SendOptions {
         allow_unresolved: true,
@@ -437,11 +437,33 @@ fn problems_are_reported_before_sending_even_if_the_send_fails() {
     ));
     assert_eq!(result, Err(AppError::Transport(TransportError::Cancelled)));
     assert_eq!(
-        reported.into_inner(),
+        reported.into_inner().unwrap(),
         [
             Problem::MissingVariable("host".into()),
             Problem::MissingVariable("user_id".into()),
             Problem::MissingVariable("token".into()),
         ]
     );
+}
+
+/// Use cases run as tasks on multi-threaded runtimes, so their futures must
+/// be `Send`. This does not compile otherwise.
+#[test]
+fn send_request_can_run_on_any_thread() {
+    fn assert_send<T: Send>(_: &T) {}
+    let world = users_world();
+    let ports = SendPorts {
+        collections: &world.collections,
+        environments: &world.environments,
+        transport: &world.transport,
+        responses: &world.responses,
+        clock: &world.clock,
+        random: &world.random,
+        prompter: &world.prompter,
+        report: &|_| {},
+    };
+    let options = SendOptions::default();
+    let cancel = CancelToken::new();
+    let path = RequestPath::new("users/create.yml");
+    assert_send(&send_request(ports, &path, &options, &cancel));
 }

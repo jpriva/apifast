@@ -95,7 +95,7 @@ pub struct SendPorts<'a, C, E, T, S> {
     /// Called with each template problem right after rendering, before
     /// sending, when `allow_unresolved` lets the send go ahead. So a driver
     /// can show the warnings even if the send then fails.
-    pub report: &'a dyn Fn(&Problem),
+    pub report: &'a (dyn Fn(&Problem) + Sync),
 }
 
 /// Options for [`send_request`].
