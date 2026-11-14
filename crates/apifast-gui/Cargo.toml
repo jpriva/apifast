@@ -1,0 +1,22 @@
+[package]
+name = "apifast-gui"
+description = "Desktop interface of apifast (egui) and composition root."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "apifast-gui"
+path = "src/main.rs"
+
+[dependencies]
+apifast-domain.workspace = true
+eframe = { version = "0.37.0", default-features = false, features = ["default_fonts", "wayland", "x11", "accesskit", "clipboard", "wgpu"] }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+egui_kittest = "0.37.0"

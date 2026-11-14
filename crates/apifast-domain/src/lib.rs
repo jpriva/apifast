@@ -21,6 +21,7 @@ mod request;
 mod resolve;
 mod setting;
 mod settings;
+mod status;
 mod variable;
 
 pub use auth::{ApiKeyAuth, ApiKeyPlacement, Auth, AuthScheme, BasicAuth, BearerAuth};
@@ -32,6 +33,7 @@ pub use request::{Header, HttpRequest, Method, Param, ParamKind, Request};
 pub use resolve::{Chain, ResolvedRequest, resolve};
 pub use setting::{Resolved, Setting};
 pub use settings::{ResolvedSettings, Settings};
+pub use status::reason_phrase;
 pub use variable::{
     ResolvedVariable, ResolvedVariables, ValueKind, Variable, VariableValue, resolve_variables,
 };

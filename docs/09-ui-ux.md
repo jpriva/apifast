@@ -166,7 +166,7 @@ En macOS, `Ctrl` se sustituye por `Cmd`. Todos los atajos se pueden reasignar; s
 - Tema claro y oscuro, siguiendo el del sistema por defecto.
 - Escala de interfaz y tamaño de fuente configurables.
 - Los colores de método y de estado nunca son el único indicador: siempre van con texto.
-- Contraste suficiente en ambos temas.
+- Contraste WCAG AA (4,5:1) en ambos temas, comprobado por un test sobre los tokens de `theme/`: cada color de texto sobre cada fondo, y el texto de los badges sobre su propio tinte.
 
 ## Organización del código de la interfaz
 
@@ -199,6 +199,8 @@ Reglas:
 Herramientas:
 
 - **Galería de componentes:** un binario de desarrollo (`cargo run -p apifast-gui --example gallery`) muestra cada átomo, molécula y organismo en todos sus estados y en ambos temas, como Storybook. Cada componente nuevo se añade a la galería.
-- **Pruebas por componente** con `egui_kittest` (de la misma versión que egui): interacción simulada (pulsar, escribir, navegar con teclado) y comparación de capturas, sin levantar la aplicación entera.
+- **Pruebas por componente** con `egui_kittest` (de la misma versión que egui): interacción simulada (pulsar, escribir, navegar con teclado) y consultas al árbol de accesibilidad, sin levantar la aplicación entera ni necesitar GPU.
+
+Trampa conocida: `ui.set_visuals(..)` compila, pero a través de `Deref<Target = Context>` cambia el tema de toda la aplicación desde el frame siguiente. Para una zona se usa `*ui.visuals_mut() = ..`. `clippy.toml` prohíbe `Context::set_visuals`.
 
 Más detalles de rendimiento en [rendimiento y memoria](10-rendimiento-y-memoria.md).
