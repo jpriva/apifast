@@ -17,7 +17,13 @@ pub fn data_dir() -> PathBuf {
 /// [`data_dir`]. The key is the collection id when it has one, or a hash of
 /// its path, so opening or sending never writes into the collection.
 pub fn responses_dir(root: &Path, collection_id: Option<&str>) -> PathBuf {
-    data_dir()
+    responses_dir_in(&data_dir(), root, collection_id)
+}
+
+/// [`responses_dir`] under an explicit data directory, for callers that
+/// choose it (such as tests).
+pub fn responses_dir_in(data_dir: &Path, root: &Path, collection_id: Option<&str>) -> PathBuf {
+    data_dir
         .join("responses")
         .join(collection_key(root, collection_id))
 }
