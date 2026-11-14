@@ -9,6 +9,10 @@ publish.workspace = true
 
 [dependencies]
 apifast-domain.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+proptest = "1.12.0"

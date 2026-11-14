@@ -71,7 +71,9 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
 ### Tareas
 
 - [x] `apifast-domain`: entidades, `Auth`, `Body`, `Setting<T>`, resolución de herencia con procedencia. Solo lo de F1: request HTTP y auth Basic, Bearer y API key; el resto llega en su fase.
-- [ ] `apifast-template`: parser, árbol reversible, render recursivo, variables dinámicas básicas.
+- [x] `apifast-template`: parser, árbol reversible, render recursivo, variables dinámicas básicas (`$randomUUID`, `$timestamp`, `$isoTimestamp`, `$randomInt`).
+- [ ] Rutas en variables de tipo objeto (`{{user.address.city}}`): requiere leer JSON fuera del dominio o un lector propio en `apifast-template`.
+- [ ] Variables dinámicas de datos de prueba (`$randomEmail`, `$randomFullName`, `$randomWord`).
 - [ ] `apifast-app`: puertos, `OpenCollection`, `LoadRequest`, `SaveRequest`, `ResolveVariables`, `SendRequest`.
 - [ ] `apifast-storage-fs`: lectura con `oneyaml` (serde) y guardado con JSON Patch por elemento sobre el documento releído del disco; lectura y escritura de `opencollection.yml`, `folder.yml`, requests y entornos; carpeta `.apifast/` con el identificador de colección; escritura atómica; conservación de claves desconocidas.
 - [ ] `apifast-http`: envío con reqwest y rustls, redirecciones manuales, timeout, cancelación, cuerpo en streaming a disco.

@@ -144,8 +144,10 @@ Si una variable no existe en ningún ámbito:
 - **Parser manual** que produce una lista de tokens: `Texto`, `Etiqueta` o `Fin`. Una etiqueta contiene un valor: cadena, booleano, nulo, variable, variable dinámica, pregunta o función con argumentos.
 - **Árbol reversible:** convertir los tokens de vuelta a texto reproduce la plantilla original. Esto permite renombrar variables y reescribir plantillas sin alterar el resto.
 - **Render recursivo:** el valor de una variable puede contener otras plantillas. Hay un límite de profundidad (50) para cortar ciclos.
-- **Funciones por trait:** el renderer recibe un `FunctionResolver`. Las funciones puras se resuelven dentro del crate; las que necesitan entrada/salida (`response`, `file`) las aporta la capa de aplicación.
-- **Dos modos:** estricto (falla si falta una variable) y permisivo (deja vacío), este último para la vista previa.
+- **Entrada/salida por trait:** el renderer recibe un `Host` que aporta la hora, la aleatoriedad, `process.env`, las preguntas y las funciones. Así el crate sigue siendo de dominio y las pruebas usan un `Host` falso. Las funciones puras podrán vivir en el crate; las que necesitan entrada/salida (`response`, `file`) las aporta la capa de aplicación.
+- **Dos modos:** estricto (falla en el primer problema) y permisivo (deja vacío y devuelve la lista de problemas), este último para la vista previa. Los problemas nunca incluyen el valor de un secreto, solo su nombre.
+- **Ciclos:** además del límite de profundidad, un ciclo entre variables (`a → b → a`) se informa como tal.
+- **Escape:** `\{{` siempre produce `{{` literal.
 - **Sin asignaciones innecesarias:** un texto sin etiquetas se devuelve tal cual, sin copiar.
 
 ## Ejemplo completo
