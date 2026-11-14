@@ -32,6 +32,9 @@ dependencies = [
 [[package]]
 name = "apifast-domain"
 version = "0.0.0"
+dependencies = [
+ "thiserror",
+]
 
 [[package]]
 name = "apifast-history"

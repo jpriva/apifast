@@ -19,6 +19,9 @@ apifast-storage-fs = { path = "crates/apifast-storage-fs" }
 apifast-http = { path = "crates/apifast-http" }
 apifast-history = { path = "crates/apifast-history" }
 
+# Externas
+thiserror = "2.0.21"
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

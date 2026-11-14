@@ -88,15 +88,22 @@ Tipos principales de `apifast-domain`:
 | `Request` | Enum: `Http`, `GraphQl`, `WebSocket`, `Grpc` |
 | `Environment` | Lista de variables, `extends`, color |
 | `Variable` | Nombre, valor, tipo (`String`, `Number`, `Bool`, `Object`), habilitada, clase de secreto |
-| `Auth` | Enum: `Inherit`, `None`, `Basic`, `Bearer`, `ApiKey`, `Digest`, `OAuth2`, `AwsSigV4`, `Ntlm` |
+| `Auth` | `Setting<AuthScheme>`: `Inherit` o un esquema (`None`, `Basic`, `Bearer`, `ApiKey`, `Digest`, `OAuth2`, `AwsSigV4`, `Ntlm`). Una request resuelta nunca tiene auth heredada |
 | `Body` | Enum: `None`, `Json`, `Text`, `Xml`, `FormUrlEncoded`, `Multipart`, `File`, `GraphQl` |
 | `Assertion` | Expresión, operador, valor esperado |
 | `Capture` | Selector sobre la respuesta, variable de destino y ámbito |
 | `Setting<T>` | Valor heredable: `Inherit` o `Set(T)` |
-| `Resolved<T>` | Valor resuelto más su procedencia (colección, carpeta o request) |
+| `Resolved<T>` | Valor resuelto más su procedencia (`Origin`: por defecto, global, colección, entorno, carpeta, request, runtime o pregunta) |
 | `Secret` | Envoltorio que no implementa `Debug` ni `Display` con el valor y se borra al liberarse |
 
 La resolución de herencia es una función pura: recibe la cadena `colección → carpetas → request` y devuelve una `ResolvedRequest`. Ese tipo es el único que acepta el transporte, de modo que enviar una request sin resolver herencia no compila (patrón tomado de `ResolvedHttpRequest` en Yaak).
+
+Reglas de herencia:
+
+- **Headers:** se acumulan de la colección a la request. Un header sustituye a los de niveles anteriores con el mismo nombre, **sin distinguir mayúsculas** (Bruno solo lo hace con `content-type`, pero en HTTP los nombres de header no distinguen mayúsculas). Dentro de un mismo nivel se conservan los repetidos.
+- **Auth y cada ajuste:** por separado, gana el nivel más cercano que lo defina; si nadie lo hace, el valor por defecto (sin auth y los ajustes de [motor de red](07-motor-de-red.md)). Una colección con auth `inherit` equivale a sin auth.
+- **Parámetros y body:** son propios de la request.
+- **Variables:** precedencia de [variables y plantillas](05-variables-y-plantillas.md); cada variable resuelta indica qué ámbitos sobrescribe.
 
 ## Puertos
 
