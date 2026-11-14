@@ -2,7 +2,7 @@
 
 A desktop client for testing APIs, written in Rust with an egui interface. It takes the best ideas from [Bruno](https://github.com/usebruno/bruno) and [Yaak](https://github.com/mountain-loop/yaak) and combines them into a native, lightweight, file-based application.
 
-> **Status: phase F1 (headless core) in progress.** The design is complete and the domain crate is in place. There is no usable application yet.
+> **Status: phase F1 (headless core) done.** `apifast send` sends requests from Bruno-compatible YAML collections. The GUI comes in F2.
 
 ## What it is
 
@@ -45,6 +45,19 @@ The design documents and ADRs are written in Spanish.
 12. [Roadmap](docs/12-roadmap.md)
 
 Architecture decisions live in [docs/adr/](docs/adr/).
+
+## Usage
+
+```
+apifast send users/get.yml --env production
+apifast send users/get.yml -e production -i          # status line and headers too
+apifast send users/create.yml --var name=Ana --fail  # exit code 4 on HTTP 4xx/5xx
+apifast send users/get.yml -e production | jq .      # the body goes to stdout
+```
+
+The collection is the nearest folder above the file with an `opencollection.yml` (or `--collection`). A summary and any warnings go to stderr. Responses are kept under the user's data directory (`APIFAST_DATA_DIR` overrides it); `send` never writes into the collection.
+
+Exit codes: 0 when a response arrived, 1 on errors, 2 on usage errors, 4 with `--fail` when the status is 400 or more.
 
 ## Development
 

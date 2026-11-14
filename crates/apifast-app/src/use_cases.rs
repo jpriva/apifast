@@ -92,6 +92,10 @@ pub struct SendPorts<'a, C, E, T, S> {
     pub random: &'a dyn Random,
     /// Answers for `{{?Label}}`.
     pub prompter: &'a dyn Prompter,
+    /// Called with each template problem right after rendering, before
+    /// sending, when `allow_unresolved` lets the send go ahead. So a driver
+    /// can show the warnings even if the send then fails.
+    pub report: &'a dyn Fn(&Problem),
 }
 
 /// Options for [`send_request`].
@@ -160,6 +164,7 @@ where
         Mode::Strict
     };
     let rendered = render_request(&resolved, &variables, &mut host, mode)?;
+    rendered.problems.iter().for_each(ports.report);
 
     let mut writer = ports.responses.create()?;
     let head = ports

@@ -72,6 +72,7 @@ impl World {
             clock: &self.clock,
             random: &self.random,
             prompter: &self.prompter,
+            report: &|_| {},
         };
         block_on(send_request(
             ports,
@@ -406,4 +407,41 @@ fn opening_a_collection_returns_a_sorted_tree() {
         })
         .collect();
     assert_eq!(top, ["users[\"A\", \"B\"]", "Health"]);
+}
+
+#[test]
+fn problems_are_reported_before_sending_even_if_the_send_fails() {
+    let world = users_world();
+    let reported = std::cell::RefCell::new(Vec::new());
+    let cancel = CancelToken::new();
+    cancel.cancel();
+    let ports = SendPorts {
+        collections: &world.collections,
+        environments: &world.environments,
+        transport: &world.transport,
+        responses: &world.responses,
+        clock: &world.clock,
+        random: &world.random,
+        prompter: &world.prompter,
+        report: &|problem: &Problem| reported.borrow_mut().push(problem.clone()),
+    };
+    let options = SendOptions {
+        allow_unresolved: true,
+        ..SendOptions::default()
+    };
+    let result = block_on(send_request(
+        ports,
+        &RequestPath::new("users/create.yml"),
+        &options,
+        &cancel,
+    ));
+    assert_eq!(result, Err(AppError::Transport(TransportError::Cancelled)));
+    assert_eq!(
+        reported.into_inner(),
+        [
+            Problem::MissingVariable("host".into()),
+            Problem::MissingVariable("user_id".into()),
+            Problem::MissingVariable("token".into()),
+        ]
+    );
 }

@@ -18,6 +18,12 @@ apifast-app.workspace = true
 apifast-storage-fs.workspace = true
 apifast-http.workspace = true
 apifast-history.workspace = true
+clap = { version = "4.6.7", features = ["derive"] }
+anyhow = "1.0.104"
+tokio = { version = "1.54.1", features = ["rt", "time", "signal", "macros"] }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
