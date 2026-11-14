@@ -175,4 +175,30 @@ En macOS, `Ctrl` se sustituye por `Cmd`. Todos los atajos se pueden reasignar; s
 - Las acciones del usuario se convierten en comandos que se envían al núcleo; la interfaz nunca hace entrada/salida.
 - El núcleo publica instantáneas inmutables del estado y pide el repintado.
 
+### Componentes: atomic design
+
+`apifast-gui` organiza sus componentes con atomic design, adaptado al modo inmediato de egui. En egui no hay un árbol de componentes que persista entre frames: un componente es una función o un struct que dibuja y devuelve una `egui::Response`, y el estado vive en el modelo de la aplicación, no dentro del componente.
+
+| Nivel | Carpeta | Forma en egui | Ejemplos |
+|---|---|---|---|
+| Tokens | `theme/` | Constantes y funciones que construyen `egui::Style` y `Visuals` | Colores por método HTTP, por estado y por entorno; espaciados; radios; tipografías |
+| Átomos | `atoms/` | Structs que implementan `egui::Widget`: `ui.add(MethodBadge::new(&method))` | Badge de método, chip de estado, botón con icono, campo con resaltado de `{{variables}}` |
+| Moléculas | `molecules/` | Funciones o structs que combinan átomos y reciben `&mut` solo de su parte del estado | Fila clave/valor con checkbox, método + URL, selector de entorno |
+| Organismos | `organisms/` | Componentes con lógica propia que **devuelven eventos** en lugar de modificar el modelo | Tabla clave/valor, árbol de la colección, pestañas de request, visor de respuesta |
+| Plantillas | `layout/` | La disposición de paneles (`SidePanel`, `TopBottomPanel`, `CentralPanel`) | Barra lateral, editor y respuesta |
+| Pantallas | `screens/` | La plantilla con datos reales y la traducción de eventos a comandos del núcleo | Ventana principal, pantalla inicial |
+
+Reglas:
+
+- **Los colores y medidas salen solo de `theme/`.** Ningún componente escribe un color o un espaciado a mano, así los temas claro y oscuro son un cambio de valores.
+- **Los organismos devuelven eventos** (`HeaderEdited`, `RowRemoved`, `RequestSelected`...). La pantalla los traduce a comandos del núcleo. Ningún componente hace entrada/salida ni conoce los puertos.
+- **Los textos visibles llegan ya traducidos** como parámetros; los componentes no eligen idioma.
+- **Coste por frame:** todo se ejecuta en cada frame, así que los átomos no asignan memoria ni formatean texto si no cambió. Los organismos de listas largas (árbol, visor de respuesta) dibujan solo lo visible.
+- **Sin abstraer de más:** un componente se crea cuando se repite o tiene reglas propias. Un envoltorio de `ui.label()` sin nada más no es un átomo.
+
+Herramientas:
+
+- **Galería de componentes:** un binario de desarrollo (`cargo run -p apifast-gui --example gallery`) muestra cada átomo, molécula y organismo en todos sus estados y en ambos temas, como Storybook. Cada componente nuevo se añade a la galería.
+- **Pruebas por componente** con `egui_kittest` (de la misma versión que egui): interacción simulada (pulsar, escribir, navegar con teclado) y comparación de capturas, sin levantar la aplicación entera.
+
 Más detalles de rendimiento en [rendimiento y memoria](10-rendimiento-y-memoria.md).
