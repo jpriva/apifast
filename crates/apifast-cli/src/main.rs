@@ -7,7 +7,7 @@ mod locate;
 mod system;
 
 use std::fmt::Write as _;
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -161,9 +161,12 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
 }
 
 /// Writes the optional head and the body to stdout. A closed pipe (as in
-/// `| head`) is not an error.
+/// `| head`) is not an error. On a terminal, a final newline is added if the
+/// body lacks one, so the prompt does not stick to it; pipes and files get
+/// the body's exact bytes.
 fn print_response(outcome: &SendOutcome, responses: &FsResponseStore, include: bool) -> Result<()> {
     let stdout = std::io::stdout();
+    let on_terminal = stdout.is_terminal();
     let mut out = stdout.lock();
     let result = (|| -> std::io::Result<()> {
         if include {
@@ -179,6 +182,7 @@ fn print_response(outcome: &SendOutcome, responses: &FsResponseStore, include: b
             writeln!(out)?;
         }
         let mut offset = 0u64;
+        let mut last_byte = None;
         loop {
             let window = responses
                 .read(&outcome.body.id, offset, COPY_WINDOW)
@@ -188,6 +192,10 @@ fn print_response(outcome: &SendOutcome, responses: &FsResponseStore, include: b
             }
             out.write_all(&window)?;
             offset += window.len() as u64;
+            last_byte = window.last().copied();
+        }
+        if needs_final_newline(on_terminal, last_byte) {
+            writeln!(out)?;
         }
         out.flush()
     })();
@@ -195,6 +203,11 @@ fn print_response(outcome: &SendOutcome, responses: &FsResponseStore, include: b
         Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
         other => other.context("cannot write the response"),
     }
+}
+
+/// Whether to end the output with a newline the body does not have.
+fn needs_final_newline(on_terminal: bool, last_byte: Option<u8>) -> bool {
+    on_terminal && last_byte.is_some_and(|b| b != b'\n')
 }
 
 fn summary(outcome: &SendOutcome) -> String {
@@ -271,6 +284,16 @@ mod tests {
         assert_eq!(parse_var("empty="), Ok(("empty".into(), String::new())));
         assert!(parse_var("noequals").is_err());
         assert!(parse_var("=x").is_err());
+    }
+
+    #[test]
+    fn a_final_newline_is_added_only_on_a_terminal() {
+        assert!(needs_final_newline(true, Some(b'}')));
+        assert!(!needs_final_newline(true, Some(b'\n')));
+        // An empty body prints nothing, so it needs no newline.
+        assert!(!needs_final_newline(true, None));
+        // Pipes and files get the exact bytes.
+        assert!(!needs_final_newline(false, Some(b'}')));
     }
 
     #[test]
