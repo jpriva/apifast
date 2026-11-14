@@ -54,7 +54,13 @@ Convenciones de código, estrategia de pruebas y comprobaciones automáticas del
 
 Las reglas de dependencia de [arquitectura](03-arquitectura.md) se comprueban automáticamente:
 
-- Un test lee `cargo metadata` y falla si `apifast-domain` depende de otro crate del workspace, si `apifast-app` depende de un adaptador o si un adaptador depende de otro.
+- `apifast-arch-tests` lee `cargo metadata` y falla si:
+  - `apifast-domain` depende de otro crate del workspace, si `apifast-app` depende de un adaptador o si un adaptador depende de otro;
+  - el dominio usa tokio, serde, reqwest, egui u oneyaml;
+  - un crate externo se usa fuera de su dueño (reqwest, hyper y rustls solo en `apifast-http`; oneyaml solo en `apifast-storage-fs`; egui, eframe y wgpu solo en `apifast-gui`; etc.). Así cada tecnología se cambia en un solo sitio y `apifast-app` queda sin entrada/salida;
+  - un crate que no es driver usa `anyhow`;
+  - un crate no tiene capa asignada, no hereda los lints del workspace (`[lints] workspace = true`), no tiene README o no usa la licencia del proyecto.
+- Un doctest `compile_fail` comprueba que `ResolvedRequest` no se puede construir fuera de `resolve()`.
 - `cargo deny` controla licencias, avisos de seguridad y dependencias duplicadas.
 
 ## Estrategia de pruebas

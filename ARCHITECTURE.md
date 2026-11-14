@@ -59,7 +59,9 @@ These rules are checked by CI or by the type system. Breaking one needs an ADR.
 
 - **The domain has no I/O.** `apifast-domain` and `apifast-template` depend on no other workspace crate (except template → domain) and on none of tokio, serde, reqwest, egui or oneyaml. Serialization DTOs live in the adapters.
 - **Dependencies point inwards.** The application depends only on the domain; an adapter depends only on the domain and the application, never on another adapter. `apifast-arch-tests` enforces this from `cargo metadata`, and every new crate must be given a layer there.
-- **Only resolved requests are sent.** `ResolvedRequest` has private fields and is built only by `resolve`, so sending a request without applying inheritance does not compile.
+- **Each technology has one owner.** reqwest, hyper and rustls live only in `apifast-http`, oneyaml only in `apifast-storage-fs`, egui, eframe and wgpu only in `apifast-gui`, and so on (`EXCLUSIVE_OWNERS` in the architecture tests). Only drivers use `anyhow`.
+- **Every crate inherits the workspace lints** (`[lints] workspace = true`) and has a README and the project license.
+- **Only resolved requests are sent.** `ResolvedRequest` has private fields and is built only by `resolve`, so sending a request without applying inheritance does not compile. A `compile_fail` doctest guards this.
 - **Files are the source of truth** ([ADR 0003](docs/adr/0003-archivos-como-fuente-de-verdad.md)). Collections are plain OpenCollection YAML that Bruno can open; unknown keys are preserved on save. apifast's own data goes in `.apifast/`, never inside OpenCollection files ([ADR 0002](docs/adr/0002-formato-yaml-opencollection.md)).
 - **Secrets never leak.** No error message, log line or `Debug` output contains a secret value; auth fields hold templates such as `{{token}}`, not the secret itself.
 - **No `unsafe`, no `unwrap`.** `unsafe_code` is forbidden workspace-wide; `unwrap` and `expect` are denied outside tests.

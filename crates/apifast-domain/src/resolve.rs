@@ -90,6 +90,33 @@ impl<'a> Chain<'a> {
 ///
 /// It can only be obtained through [`resolve`], so a request cannot be sent
 /// without resolving its inheritance. Texts are still unrendered templates.
+///
+/// Building one by hand must not compile. This guards the invariant: if the
+/// fields ever become public, this doctest fails. Stable rustdoc does not
+/// check the error code, so keep the example in sync with the fields: if it
+/// stops compiling for another reason, the test passes without guarding
+/// anything.
+///
+/// ```compile_fail,E0451
+/// use apifast_domain::{
+///     AuthScheme, Body, Method, Origin, Resolved, ResolvedRequest, ResolvedSettings,
+/// };
+///
+/// let forged = ResolvedRequest {
+///     method: Method::Get,
+///     url: String::new(),
+///     params: Vec::new(),
+///     headers: Vec::new(),
+///     body: Body::None,
+///     auth: Resolved::new(AuthScheme::None, Origin::Default),
+///     settings: ResolvedSettings {
+///         timeout_ms: Resolved::new(0, Origin::Default),
+///         follow_redirects: Resolved::new(true, Origin::Default),
+///         max_redirects: Resolved::new(0, Origin::Default),
+///         encode_url: Resolved::new(true, Origin::Default),
+///     },
+/// };
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedRequest {
     method: Method,
