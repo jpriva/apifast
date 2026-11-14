@@ -163,7 +163,7 @@ docs: |-
 
 Cualquier entrada de lista (`params`, `headers`, variables, aserciones) admite `disabled: true`.
 
-Los parámetros de query se envían desde la URL. Bruno los duplica en `http.params` para su interfaz; apifast hace lo mismo al guardar y nunca los envía dos veces. Los parámetros de ruta (`type: path`) sustituyen los segmentos `:nombre` de la URL.
+Los parámetros de query se envían desde la URL. Bruno los duplica en `http.params` para su interfaz; apifast nunca los envía dos veces, y el editor de F2 mantendrá sincronizadas la URL y la lista, como Bruno. Los parámetros de ruta (`type: path`) sustituyen los segmentos `:nombre` de la URL.
 
 ### Tipos de body
 
@@ -179,6 +179,38 @@ Los parámetros de query se envían desde la URL. Bruno los duplica en `http.par
 `inherit`, `none`, `basic`, `bearer`, `apikey`, `digest`, `oauth2`, `awsv4`, `ntlm`. Los campos de cada uno siguen los nombres de OpenCollection (por ejemplo `username` y `password` en `basic`).
 
 Los campos sensibles de auth **no guardan el secreto**: referencian una variable secreta, por ejemplo `token: "{{access_token}}"`.
+
+### Semántica al leer (igual que Bruno)
+
+`apifast-storage-fs` lee los archivos como los lee Bruno (`bruno-filestore/src/formats/yml`), para que una colección se comporte igual en las dos herramientas:
+
+| Caso | Significado |
+|---|---|
+| Request o carpeta sin `auth` | Sin autenticación. Solo `auth: inherit` hereda |
+| `folder.yml` sin `auth` | Anula la auth de la colección en esa carpeta. Una carpeta sin `folder.yml` hereda |
+| Colección sin `auth` | Sin autenticación (valor por defecto) |
+| Auth en `runtime.auth` (OpenCollection v3 rc1) | Se lee; al cambiar la auth se escribe en `http.auth` |
+| Auth de un tipo no implementado (`digest`, `oauth2`...) | Se conserva intacta; enviar la request da un error claro |
+| Request sin bloque `settings` | Todos los ajustes se heredan |
+| `settings` con `timeout: 0` | Sin límite de tiempo |
+| `settings` con `timeout: inherit` | Se hereda |
+| `settings` sin `timeout` | 0 (sin límite), como en Bruno |
+| Request `graphql`, `grpc` o `websocket` | Aparece en el árbol; abrirla da "no soportado todavía" |
+| Archivo YAML inválido | Aparece en el árbol como inválido; no impide abrir el resto |
+
+OpenCollection no tiene ajustes de envío en carpetas ni en la colección, así que en archivos de Bruno solo la request los define. Sin bloque `settings`, apifast usa su valor por defecto de 30 s; Bruno usa su preferencia global (0, sin límite).
+
+### Guardado
+
+Guardar nunca reescribe un archivo desde cero:
+
+1. Se relee el archivo del disco.
+2. Se escriben solo los campos que cambiaron. Los elementos de las listas se alinean por LCS, así que cada uno conserva sus claves desconocidas (por ejemplo `description`) aunque se añadan o quiten otros.
+3. La diferencia se aplica como JSON Patch por elemento sobre el texto original, de modo que los comentarios y el formato del resto se conservan.
+4. Se relee el resultado y se comprueba que es exactamente lo que se quería guardar; si no, se devuelve un error y no se escribe nada.
+5. Se escribe de forma atómica (archivo temporal, `fsync` y `rename`), conservando los permisos.
+
+Guardar una request sin cambios no toca el archivo. Los archivos nuevos se escriben como Bruno: comillas dobles y una línea en blanco entre bloques. El corpus de 436 archivos de Bruno se relee y se guarda sin cambiar un byte (`crates/apifast-storage-fs/tests/corpus`).
 
 ## Entornos
 

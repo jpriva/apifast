@@ -75,13 +75,13 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
 - [ ] Rutas en variables de tipo objeto (`{{user.address.city}}`): requiere leer JSON fuera del dominio o un lector propio en `apifast-template`.
 - [ ] Variables dinámicas de datos de prueba (`$randomEmail`, `$randomFullName`, `$randomWord`).
 - [x] `apifast-app`: puertos, `OpenCollection`, `LoadRequest`, `SaveRequest`, `ResolveVariables`, `SendRequest`. `RenderedRequest` es el único tipo que acepta el transporte. El watcher de `OpenCollection` llega en F2 y el timeline por canal en F5.
-- [ ] `apifast-storage-fs`: lectura con `oneyaml` (serde) y guardado con JSON Patch por elemento sobre el documento releído del disco; lectura y escritura de `opencollection.yml`, `folder.yml`, requests y entornos; carpeta `.apifast/` con el identificador de colección; escritura atómica; conservación de claves desconocidas.
+- [x] `apifast-storage-fs`: lectura con `oneyaml` y guardado con JSON Patch por elemento sobre el documento releído del disco; lectura y escritura de `opencollection.yml`, `folder.yml`, requests y entornos; carpeta `.apifast/` con el identificador de colección; escritura atómica; conservación de claves desconocidas. Cada guardado se verifica releyendo el resultado antes de escribir.
 - [ ] `apifast-http`: envío con reqwest y rustls, redirecciones manuales, timeout, cancelación, cuerpo en streaming a disco.
 - [x] Autenticación básica: Basic, Bearer, API key, heredada. Se aplica al renderizar, en `apifast-app`; un esquema sin implementar da error en vez de enviar sin auth.
 - [ ] `apifast-history`: almacén de respuestas en archivos.
 - [ ] `apifast-cli`: `apifast send <archivo> --env <nombre>`.
 - [x] Implementaciones en memoria de todos los puertos (`apifast_app::memory`).
-- [ ] Corpus de round-trip con colecciones YAML de Bruno, incluidos archivos reescritos por Bruno al guardar (con `config.proxy`, `bundled` y `settings` por defecto).
+- [x] Corpus de round-trip con colecciones YAML de Bruno: 436 archivos copiados al repositorio (los fixtures de Bruno y una colección guardada por la aplicación Bruno 4.3.0), que se guardan sin cambiar un byte, y 1028 ediciones verificadas. Incluye archivos con `config.proxy`, `bundled` y `settings` por defecto.
 - [x] Test de reglas de arquitectura (adelantado en F0, `apifast-arch-tests`).
 
 ### Criterio de salida

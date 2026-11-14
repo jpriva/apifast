@@ -1,0 +1,6 @@
+name: produccion
+variables:
+  - name: host
+    value: https://httpbintest.org
+  - secret: true
+    name: api_key
