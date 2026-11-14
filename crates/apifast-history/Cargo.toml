@@ -1,6 +1,6 @@
 [package]
 name = "apifast-history"
-description = "Historial y cuerpos de respuesta en disco."
+description = "Response history and bodies on disk."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

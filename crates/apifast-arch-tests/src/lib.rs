@@ -1,1 +1,1 @@
-//! Comprueba las reglas de dependencia entre los crates de apifast. El código está en `tests/`.
+//! Checks the dependency rules between apifast crates. The code lives in `tests/`.

@@ -1,16 +1,16 @@
-//! Entidades, value objects y reglas de herencia de apifast, sin entrada/salida.
+//! Entities, value objects and inheritance rules of apifast, with no I/O.
 //!
-//! Los textos de URL, headers, bodies y auth se guardan **sin renderizar**: pueden
-//! contener plantillas como `{{host}}`. El renderizado ocurre después de resolver
-//! la herencia, en `apifast-template`.
+//! URL, header, body and auth texts are stored **unrendered**: they may contain
+//! templates such as `{{host}}`. Rendering happens after inheritance is
+//! resolved, in `apifast-template`.
 //!
-//! El flujo es:
+//! The flow is:
 //!
-//! 1. Se construye una [`Chain`] con la colección, sus carpetas y la request.
-//! 2. [`resolve`] aplica la herencia y devuelve un [`ResolvedRequest`], con la
-//!    procedencia ([`Origin`]) de cada header, de la auth y de cada ajuste.
-//! 3. [`resolve_variables`] combina las variables de todos los ámbitos según su
-//!    precedencia, también con procedencia.
+//! 1. Build a [`Chain`] with the collection, its folders and the request.
+//! 2. [`resolve`] applies inheritance and returns a [`ResolvedRequest`], with the
+//!    [`Origin`] of every header, of the auth and of every setting.
+//! 3. [`resolve_variables`] merges the variables of every scope by precedence,
+//!    also recording where each one comes from.
 
 mod auth;
 mod body;

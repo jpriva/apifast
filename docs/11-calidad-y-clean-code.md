@@ -6,9 +6,10 @@ Convenciones de código, estrategia de pruebas y comprobaciones automáticas del
 
 ### Idioma
 
-- **Código, identificadores, comentarios y mensajes de commit:** inglés.
-- **Documentación de diseño (`docs/`):** español.
-- **Textos de la interfaz:** preparados para traducción desde el inicio; español e inglés.
+- **Código, identificadores, comentarios, rustdoc, nombres de tests, mensajes de error y de log, y mensajes de commit:** inglés.
+- **README del repositorio y de cada crate, comentarios de configuración (`Cargo.toml`, `deny.toml`, CI):** inglés.
+- **Documentación de diseño (`docs/`), ADRs y resultados de spikes:** español. Se traducirán si el proyecto busca colaboradores.
+- **Textos de la interfaz:** en español e inglés, siempre a través del sistema de traducción, nunca escritos directamente en el código.
 
 ### Nombres
 

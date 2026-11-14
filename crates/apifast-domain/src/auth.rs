@@ -1,61 +1,61 @@
 use crate::Setting;
 
-/// Autenticación de una colección, carpeta o request.
+/// Authentication of a collection, folder or request.
 ///
-/// `Setting::Inherit` es la auth `inherit` del formato: se toma la del padre más
-/// cercano. Si nadie la define, se resuelve como [`AuthScheme::None`].
+/// `Setting::Inherit` is the file format's `inherit` auth: the closest parent's
+/// auth is used. If nobody sets one, it resolves to [`AuthScheme::None`].
 pub type Auth = Setting<AuthScheme>;
 
-/// Esquema de autenticación concreto.
+/// A concrete authentication scheme.
 ///
-/// Los campos sensibles no guardan el secreto, sino una plantilla que lo
-/// referencia, por ejemplo `{{access_token}}`.
+/// Sensitive fields never hold the secret itself, only a template that
+/// references it, such as `{{access_token}}`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum AuthScheme {
-    /// Sin autenticación.
+    /// No authentication.
     None,
     /// HTTP Basic.
     Basic(BasicAuth),
-    /// Token Bearer en el header `Authorization`.
+    /// Bearer token in the `Authorization` header.
     Bearer(BearerAuth),
-    /// Clave en un header o en la query.
+    /// Key sent in a header or in the query.
     ApiKey(ApiKeyAuth),
 }
 
-/// Credenciales de HTTP Basic.
+/// HTTP Basic credentials.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BasicAuth {
-    /// Usuario (plantilla).
+    /// User name (template).
     pub username: String,
-    /// Contraseña (plantilla).
+    /// Password (template).
     pub password: String,
 }
 
-/// Token Bearer.
+/// Bearer token.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BearerAuth {
-    /// Token (plantilla).
+    /// Token (template).
     pub token: String,
 }
 
-/// Clave de API.
+/// API key.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApiKeyAuth {
-    /// Nombre del header o del parámetro.
+    /// Header or parameter name.
     pub key: String,
-    /// Valor (plantilla).
+    /// Value (template).
     pub value: String,
-    /// Dónde se envía.
+    /// Where it is sent.
     pub placement: ApiKeyPlacement,
 }
 
-/// Dónde se envía una clave de API.
+/// Where an API key is sent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ApiKeyPlacement {
-    /// En un header.
+    /// In a header.
     #[default]
     Header,
-    /// En un parámetro de la query.
+    /// In a query parameter.
     Query,
 }

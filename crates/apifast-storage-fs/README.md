@@ -1,7 +1,7 @@
 # apifast-storage-fs
 
-**Capa:** Adaptador
+**Layer:** Adapter
 
-Lectura y escritura de colecciones YAML en disco.
+Reads and writes YAML collections on disk.
 
-**Dependencias permitidas del workspace:** `apifast-domain`, `apifast-app`. Ver [arquitectura](../../docs/03-arquitectura.md).
+**Allowed workspace dependencies:** `apifast-domain`, `apifast-app`. See the [architecture](../../docs/03-arquitectura.md) (in Spanish).

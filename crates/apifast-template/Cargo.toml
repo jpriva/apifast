@@ -1,6 +1,6 @@
 [package]
 name = "apifast-template"
-description = "Parser y renderer de plantillas de apifast."
+description = "Template parser and renderer of apifast."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

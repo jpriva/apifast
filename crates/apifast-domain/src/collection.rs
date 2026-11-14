@@ -1,50 +1,50 @@
 use crate::{Auth, Header, Settings, Variable};
 
-/// Identificador estable de una colección, guardado en `.apifast/collection.yml`.
+/// Stable identifier of a collection, stored in `.apifast/collection.yml`.
 ///
-/// No cambia al mover la carpeta. Lo usa la bóveda para asociar claves.
+/// It does not change when the folder moves. The vault uses it to match keys.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct CollectionId(String);
 
 impl CollectionId {
-    /// Envuelve un identificador ya existente.
+    /// Wraps an existing identifier.
     pub fn new(id: impl Into<String>) -> Self {
         Self(id.into())
     }
 
-    /// El identificador como texto.
+    /// The identifier as text.
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
-/// Valores que una colección o carpeta define para todas sus requests
-/// (el bloque `request` de `opencollection.yml` y `folder.yml`).
+/// Values a collection or folder defines for all of its requests
+/// (the `request` block of `opencollection.yml` and `folder.yml`).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RequestDefaults {
-    /// Headers que se añaden a cada request.
+    /// Headers added to every request.
     pub headers: Vec<Header>,
-    /// Autenticación por defecto.
+    /// Default authentication.
     pub auth: Auth,
-    /// Variables de este ámbito.
+    /// Variables of this scope.
     pub variables: Vec<Variable>,
-    /// Ajustes de envío.
+    /// Send settings.
     pub settings: Settings,
 }
 
-/// Raíz de una colección (`opencollection.yml`).
+/// Root of a collection (`opencollection.yml`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Collection {
-    /// Identificador de `.apifast/`; `None` en una colección de Bruno sin esa carpeta.
+    /// Identifier from `.apifast/`; `None` for a Bruno collection without that folder.
     pub id: Option<CollectionId>,
-    /// Nombre visible.
+    /// Display name.
     pub name: String,
-    /// Valores heredados por todas las requests.
+    /// Values inherited by every request.
     pub defaults: RequestDefaults,
 }
 
 impl Collection {
-    /// Colección sin identificador ni valores por defecto.
+    /// Collection with no identifier and no defaults.
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             id: None,
@@ -54,19 +54,19 @@ impl Collection {
     }
 }
 
-/// Carpeta de una colección (`folder.yml`).
+/// Folder of a collection (`folder.yml`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Folder {
-    /// Nombre visible.
+    /// Display name.
     pub name: String,
-    /// Posición entre sus hermanos.
+    /// Position among its siblings.
     pub seq: Option<u32>,
-    /// Valores heredados por las requests de la carpeta.
+    /// Values inherited by the folder's requests.
     pub defaults: RequestDefaults,
 }
 
 impl Folder {
-    /// Carpeta sin posición ni valores por defecto.
+    /// Folder with no position and no defaults.
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),

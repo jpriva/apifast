@@ -1,38 +1,38 @@
 use crate::{Resolved, Setting};
 
-/// Ajustes de envío heredables (colección → carpeta → request).
+/// Inheritable send settings (collection → folder → request).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Settings {
-    /// Tiempo máximo en milisegundos; 0 es sin límite.
+    /// Timeout in milliseconds; 0 means no limit.
     pub timeout_ms: Setting<u64>,
-    /// Si se siguen las redirecciones.
+    /// Whether redirects are followed.
     pub follow_redirects: Setting<bool>,
-    /// Máximo de redirecciones seguidas.
+    /// Maximum number of redirects followed.
     pub max_redirects: Setting<u32>,
-    /// Si se codifica la URL antes de enviarla.
+    /// Whether the URL is encoded before sending.
     pub encode_url: Setting<bool>,
 }
 
 impl Settings {
-    /// Tiempo máximo por defecto: 30 segundos.
+    /// Default timeout: 30 seconds.
     pub const DEFAULT_TIMEOUT_MS: u64 = 30_000;
-    /// Se siguen las redirecciones por defecto.
+    /// Redirects are followed by default.
     pub const DEFAULT_FOLLOW_REDIRECTS: bool = true;
-    /// Máximo de redirecciones por defecto.
+    /// Default maximum number of redirects.
     pub const DEFAULT_MAX_REDIRECTS: u32 = 5;
-    /// La URL se codifica por defecto.
+    /// The URL is encoded by default.
     pub const DEFAULT_ENCODE_URL: bool = true;
 }
 
-/// Ajustes resueltos, cada uno con su procedencia.
+/// Resolved settings, each with its origin.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedSettings {
-    /// Tiempo máximo en milisegundos; 0 es sin límite.
+    /// Timeout in milliseconds; 0 means no limit.
     pub timeout_ms: Resolved<u64>,
-    /// Si se siguen las redirecciones.
+    /// Whether redirects are followed.
     pub follow_redirects: Resolved<bool>,
-    /// Máximo de redirecciones seguidas.
+    /// Maximum number of redirects followed.
     pub max_redirects: Resolved<u32>,
-    /// Si se codifica la URL antes de enviarla.
+    /// Whether the URL is encoded before sending.
     pub encode_url: Resolved<bool>,
 }

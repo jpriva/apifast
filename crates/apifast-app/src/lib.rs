@@ -1,1 +1,1 @@
-//! Casos de uso y puertos (traits) de apifast.
+//! Use cases and ports (traits) of apifast.

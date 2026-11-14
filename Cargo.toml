@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
-# Los spikes de F0 son prototipos desechables con su propio Cargo.lock.
+# The F0 spikes are throwaway prototypes with their own Cargo.lock.
 exclude = ["spikes"]
 
 [workspace.package]
@@ -19,7 +19,7 @@ apifast-storage-fs = { path = "crates/apifast-storage-fs" }
 apifast-http = { path = "crates/apifast-http" }
 apifast-history = { path = "crates/apifast-history" }
 
-# Externas
+# External
 thiserror = "2.0.21"
 
 [workspace.lints.rust]

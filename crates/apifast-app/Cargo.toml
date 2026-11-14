@@ -1,6 +1,6 @@
 [package]
 name = "apifast-app"
-description = "Casos de uso y puertos (traits) de apifast."
+description = "Use cases and ports (traits) of apifast."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

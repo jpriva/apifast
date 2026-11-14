@@ -3,19 +3,19 @@ use crate::{
     RequestDefaults, Resolved, ResolvedSettings, Setting, Settings, Variable,
 };
 
-/// Cadena de herencia de una request: colección → carpetas → request.
+/// Inheritance chain of a request: collection → folders → request.
 #[derive(Debug, Clone, Copy)]
 pub struct Chain<'a> {
-    /// La colección.
+    /// The collection.
     pub collection: &'a Collection,
-    /// Carpetas que contienen la request, **de la más externa a la más interna**.
+    /// Folders that contain the request, **from outermost to innermost**.
     pub folders: &'a [Folder],
-    /// La request.
+    /// The request.
     pub request: &'a HttpRequest,
 }
 
 impl<'a> Chain<'a> {
-    /// Crea la cadena. `folders` va de la carpeta más externa a la más interna.
+    /// Creates the chain. `folders` goes from the outermost folder to the innermost.
     pub fn new(
         collection: &'a Collection,
         folders: &'a [Folder],
@@ -28,12 +28,12 @@ impl<'a> Chain<'a> {
         }
     }
 
-    /// Ámbitos de variables de esta request, de menor a mayor prioridad:
-    /// colección, entorno (`environment`, del más general al más específico),
-    /// carpetas y request.
+    /// Variable scopes of this request, from lowest to highest precedence:
+    /// collection, environment (`environment`, from most general to most
+    /// specific), folders and request.
     ///
-    /// El global va antes y el runtime y las preguntas después; los añade quien
-    /// llama, porque no forman parte de la colección.
+    /// Global goes before them and runtime and prompts after; the caller adds
+    /// those, since they are not part of the collection.
     pub fn variable_layers(
         &self,
         environment: &[&'a Environment],
@@ -58,7 +58,7 @@ impl<'a> Chain<'a> {
         layers
     }
 
-    /// Niveles que pueden definir valores por defecto, del más externo al más interno.
+    /// Levels that can define defaults, from outermost to innermost.
     fn defaults(&self) -> impl DoubleEndedIterator<Item = (Origin, &'a RequestDefaults)> {
         std::iter::once((Origin::Collection, &self.collection.defaults)).chain(
             self.folders
@@ -68,8 +68,8 @@ impl<'a> Chain<'a> {
         )
     }
 
-    /// Valor efectivo de un ajuste: el de la request, si lo define; si no, el del
-    /// padre más cercano; si nadie lo define, `default`.
+    /// Effective value of a setting: the request's own if set; otherwise the
+    /// closest parent's; `default` if nobody sets it.
     fn setting<T: Clone>(
         &self,
         own: &Setting<T>,
@@ -86,10 +86,10 @@ impl<'a> Chain<'a> {
     }
 }
 
-/// Request con la herencia ya aplicada.
+/// A request with inheritance already applied.
 ///
-/// Solo se obtiene con [`resolve`], así que no se puede enviar una request sin
-/// resolver su herencia. Los textos siguen siendo plantillas sin renderizar.
+/// It can only be obtained through [`resolve`], so a request cannot be sent
+/// without resolving its inheritance. Texts are still unrendered templates.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedRequest {
     method: Method,
@@ -102,7 +102,7 @@ pub struct ResolvedRequest {
 }
 
 impl ResolvedRequest {
-    /// Método.
+    /// Method.
     pub fn method(&self) -> &Method {
         &self.method
     }
@@ -112,41 +112,40 @@ impl ResolvedRequest {
         &self.url
     }
 
-    /// Parámetros habilitados.
+    /// Enabled parameters.
     pub fn params(&self) -> &[Param] {
         &self.params
     }
 
-    /// Headers habilitados de todos los niveles, con su procedencia.
+    /// Enabled headers from every level, with their origin.
     pub fn headers(&self) -> &[Resolved<Header>] {
         &self.headers
     }
 
-    /// Cuerpo.
+    /// Body.
     pub fn body(&self) -> &Body {
         &self.body
     }
 
-    /// Autenticación efectiva y el nivel que la define.
+    /// Effective authentication and the level that defines it.
     pub fn auth(&self) -> &Resolved<AuthScheme> {
         &self.auth
     }
 
-    /// Ajustes de envío efectivos.
+    /// Effective send settings.
     pub fn settings(&self) -> &ResolvedSettings {
         &self.settings
     }
 }
 
-/// Aplica la herencia de headers, auth y ajustes a una request.
+/// Applies header, auth and settings inheritance to a request.
 ///
-/// - **Headers:** se acumulan de la colección a la request. Un header sustituye a
-///   los de niveles anteriores con el mismo nombre, sin distinguir mayúsculas.
-///   Dentro de un mismo nivel se conservan los repetidos. Los deshabilitados se
-///   ignoran.
-/// - **Auth y ajustes:** se toma el valor del nivel más cercano que lo defina; si
-///   nadie lo hace, el valor por defecto (sin auth, y los de [`Settings`]).
-/// - **Parámetros y body:** son propios de la request; no se heredan.
+/// - **Headers:** accumulate from the collection down to the request. A header
+///   replaces those with the same name from earlier levels, case-insensitively.
+///   Repeated headers within one level are kept. Disabled ones are ignored.
+/// - **Auth and settings:** the value of the closest level that sets it wins; if
+///   nobody does, the default applies (no auth, and those of [`Settings`]).
+/// - **Parameters and body:** belong to the request; they are not inherited.
 pub fn resolve(chain: Chain<'_>) -> ResolvedRequest {
     let request = chain.request;
     let settings = &request.settings;
@@ -244,7 +243,7 @@ mod tests {
     }
 
     #[test]
-    fn sin_valores_heredados_usa_los_valores_por_defecto() {
+    fn uses_defaults_when_nothing_is_inherited() {
         let collection = Collection::new("c");
         let request = get("{{host}}/users");
         let resolved = resolve(Chain::new(&collection, &[], &request));
@@ -262,12 +261,12 @@ mod tests {
     }
 
     #[test]
-    fn la_auth_heredada_viene_de_la_carpeta_mas_cercana_que_la_define() {
+    fn inherited_auth_comes_from_the_closest_folder_that_sets_it() {
         let mut collection = Collection::new("c");
         collection.defaults.auth = bearer("col");
         let mut outer = Folder::new("outer");
         outer.defaults.auth = bearer("outer");
-        let inner = Folder::new("inner"); // hereda
+        let inner = Folder::new("inner"); // inherits
         let folders = [outer, inner];
         let request = get("/");
 
@@ -282,7 +281,7 @@ mod tests {
     }
 
     #[test]
-    fn la_auth_propia_de_la_request_gana_aunque_sea_none() {
+    fn the_request_own_auth_wins_even_when_none() {
         let mut collection = Collection::new("c");
         collection.defaults.auth = bearer("col");
         let mut request = get("/");
@@ -296,7 +295,7 @@ mod tests {
     }
 
     #[test]
-    fn cada_ajuste_se_hereda_por_separado() {
+    fn each_setting_is_inherited_independently() {
         let mut collection = Collection::new("c");
         collection.defaults.settings.timeout_ms = Setting::Set(1_000);
         collection.defaults.settings.max_redirects = Setting::Set(10);
@@ -316,7 +315,7 @@ mod tests {
     }
 
     #[test]
-    fn los_headers_se_acumulan_y_se_sobrescriben_sin_distinguir_mayusculas() {
+    fn headers_accumulate_and_override_case_insensitively() {
         let mut collection = Collection::new("c");
         collection.defaults.headers = vec![
             Header::new("Accept", "application/json"),
@@ -340,7 +339,7 @@ mod tests {
     }
 
     #[test]
-    fn los_headers_repetidos_en_un_nivel_se_conservan() {
+    fn repeated_headers_within_a_level_are_kept() {
         let collection = Collection::new("c");
         let mut request = get("/");
         request.headers = vec![Header::new("Accept", "a"), Header::new("accept", "b")];
@@ -350,7 +349,7 @@ mod tests {
     }
 
     #[test]
-    fn un_header_deshabilitado_ni_se_envia_ni_sobrescribe() {
+    fn a_disabled_header_is_neither_sent_nor_overrides() {
         let mut collection = Collection::new("c");
         collection.defaults.headers = vec![Header::new("Accept", "json")];
         let mut request = get("/");
@@ -366,7 +365,7 @@ mod tests {
     }
 
     #[test]
-    fn solo_se_conservan_los_parametros_habilitados() {
+    fn only_enabled_params_are_kept() {
         let collection = Collection::new("c");
         let mut request = get("/users/:id");
         request.params = vec![
@@ -390,7 +389,7 @@ mod tests {
     }
 
     #[test]
-    fn las_variables_siguen_la_precedencia_de_la_documentacion() {
+    fn variables_follow_the_documented_precedence() {
         let mut collection = Collection::new("c");
         collection.defaults.variables = vec![
             Variable::text("a", "col"),

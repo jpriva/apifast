@@ -1,6 +1,6 @@
 [package]
 name = "apifast-storage-fs"
-description = "Lectura y escritura de colecciones YAML en disco."
+description = "Reads and writes YAML collections on disk."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

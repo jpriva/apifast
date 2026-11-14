@@ -1,7 +1,7 @@
 # apifast-http
 
-**Capa:** Adaptador
+**Layer:** Adapter
 
-Transporte HTTP de apifast.
+HTTP transport of apifast.
 
-**Dependencias permitidas del workspace:** `apifast-domain`, `apifast-app`. Ver [arquitectura](../../docs/03-arquitectura.md).
+**Allowed workspace dependencies:** `apifast-domain`, `apifast-app`. See the [architecture](../../docs/03-arquitectura.md) (in Spanish).

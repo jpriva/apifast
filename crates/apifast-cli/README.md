@@ -1,7 +1,7 @@
 # apifast-cli
 
-**Capa:** Driver
+**Layer:** Driver
 
-Binario `apifast`: línea de comandos y raíz de composición. Conecta los casos de uso de `apifast-app` con los adaptadores concretos.
+The `apifast` binary: command line and composition root. Wires the use cases of `apifast-app` to the concrete adapters.
 
-**Dependencias permitidas del workspace:** cualquiera. Ver [arquitectura](../../docs/03-arquitectura.md).
+**Allowed workspace dependencies:** any. See the [architecture](../../docs/03-arquitectura.md) (in Spanish).

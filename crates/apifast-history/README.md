@@ -1,7 +1,7 @@
 # apifast-history
 
-**Capa:** Adaptador
+**Layer:** Adapter
 
-Historial y cuerpos de respuesta en disco.
+Response history and bodies on disk.
 
-**Dependencias permitidas del workspace:** `apifast-domain`, `apifast-app`. Ver [arquitectura](../../docs/03-arquitectura.md).
+**Allowed workspace dependencies:** `apifast-domain`, `apifast-app`. See the [architecture](../../docs/03-arquitectura.md) (in Spanish).

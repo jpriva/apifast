@@ -1,6 +1,6 @@
 [package]
 name = "apifast-arch-tests"
-description = "Comprueba las reglas de dependencia entre los crates de apifast."
+description = "Checks the dependency rules between apifast crates."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

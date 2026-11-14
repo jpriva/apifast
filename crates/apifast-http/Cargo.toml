@@ -1,6 +1,6 @@
 [package]
 name = "apifast-http"
-description = "Transporte HTTP de apifast."
+description = "HTTP transport of apifast."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

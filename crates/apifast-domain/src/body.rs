@@ -1,60 +1,60 @@
-/// Cuerpo de una request HTTP. Los textos son plantillas sin renderizar.
+/// Body of an HTTP request. Texts are unrendered templates.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub enum Body {
-    /// Sin cuerpo.
+    /// No body.
     #[default]
     None,
     /// JSON.
     Json(String),
-    /// Texto plano.
+    /// Plain text.
     Text(String),
     /// XML.
     Xml(String),
-    /// Consulta SPARQL.
+    /// SPARQL query.
     Sparql(String),
     /// `application/x-www-form-urlencoded`.
     FormUrlEncoded(Vec<FormField>),
     /// `multipart/form-data`.
     Multipart(Vec<MultipartPart>),
-    /// Contenido de un archivo.
+    /// Contents of a file.
     File {
-        /// Ruta relativa a la colección.
+        /// Path relative to the collection.
         path: String,
-        /// `Content-Type` que se envía, si se indica.
+        /// `Content-Type` to send, if given.
         content_type: Option<String>,
     },
 }
 
-/// Campo de un formulario `form-urlencoded`.
+/// Field of a `form-urlencoded` form.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FormField {
-    /// Nombre.
+    /// Name.
     pub name: String,
-    /// Valor (plantilla).
+    /// Value (template).
     pub value: String,
-    /// Si es `false`, no se envía.
+    /// When `false`, it is not sent.
     pub enabled: bool,
 }
 
-/// Parte de un formulario `multipart`.
+/// Part of a `multipart` form.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MultipartPart {
-    /// Nombre de la parte.
+    /// Part name.
     pub name: String,
-    /// Contenido.
+    /// Contents.
     pub value: MultipartValue,
-    /// `Content-Type` de la parte, si se indica.
+    /// `Content-Type` of the part, if given.
     pub content_type: Option<String>,
-    /// Si es `false`, no se envía.
+    /// When `false`, it is not sent.
     pub enabled: bool,
 }
 
-/// Contenido de una parte `multipart`.
+/// Contents of a `multipart` part.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MultipartValue {
-    /// Texto (plantilla).
+    /// Text (template).
     Text(String),
-    /// Archivo, por su ruta relativa a la colección.
+    /// A file, by its path relative to the collection.
     File(String),
 }

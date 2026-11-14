@@ -1,24 +1,24 @@
-/// De dónde sale un valor resuelto.
+/// Where a resolved value comes from.
 ///
-/// La interfaz lo usa para mostrar el origen de cada valor, indicar cuándo uno
-/// sobrescribe a otro y saltar al archivo que lo define.
+/// The UI uses it to show the source of each value, flag when one value
+/// overrides another and jump to the file that defines it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum Origin {
-    /// Valor por defecto de apifast: nadie lo definió.
+    /// apifast's built-in default: nobody defined it.
     Default,
-    /// Entorno global del workspace.
+    /// The workspace's global environment.
     Global,
     /// `opencollection.yml`.
     Collection,
-    /// Entorno con ese nombre. Con `extends`, es el entorno que define el valor.
+    /// The environment with this name. With `extends`, the one that defines the value.
     Environment(String),
-    /// Carpeta, por su posición en [`Chain::folders`](crate::Chain): 0 es la más externa.
+    /// A folder, by its position in [`Chain::folders`](crate::Chain): 0 is the outermost.
     Folder(usize),
-    /// El archivo de la request.
+    /// The request file.
     Request,
-    /// Capturas de respuestas anteriores, en memoria.
+    /// Captures from previous responses, in memory.
     Runtime,
-    /// Valor introducido por el usuario para este envío.
+    /// A value the user typed in for this send.
     Prompt,
 }

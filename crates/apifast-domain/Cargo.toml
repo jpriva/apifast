@@ -1,6 +1,6 @@
 [package]
 name = "apifast-domain"
-description = "Entidades, value objects y reglas de herencia de apifast, sin entrada/salida."
+description = "Entities, value objects and inheritance rules of apifast, with no I/O."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

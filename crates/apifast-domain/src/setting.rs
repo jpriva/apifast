@@ -1,17 +1,17 @@
 use crate::Origin;
 
-/// Valor heredable: lo define este nivel o lo toma del padre más cercano.
+/// Inheritable value: either set at this level or taken from the closest parent.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum Setting<T> {
-    /// Se usa el valor del padre más cercano que lo defina.
+    /// Use the value of the closest parent that sets it.
     #[default]
     Inherit,
-    /// Valor propio de este nivel.
+    /// This level's own value.
     Set(T),
 }
 
 impl<T> Setting<T> {
-    /// El valor propio, si lo hay.
+    /// The own value, if any.
     pub fn as_set(&self) -> Option<&T> {
         match self {
             Self::Inherit => None,
@@ -20,17 +20,17 @@ impl<T> Setting<T> {
     }
 }
 
-/// Valor ya resuelto junto con el nivel que lo definió.
+/// A resolved value together with the level that defined it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Resolved<T> {
-    /// El valor efectivo.
+    /// The effective value.
     pub value: T,
-    /// De dónde sale.
+    /// Where it comes from.
     pub origin: Origin,
 }
 
 impl<T> Resolved<T> {
-    /// Crea un valor resuelto.
+    /// Creates a resolved value.
     pub fn new(value: T, origin: Origin) -> Self {
         Self { value, origin }
     }

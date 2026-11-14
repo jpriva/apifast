@@ -19,11 +19,11 @@ env:
 
 jobs:
   fmt:
-    name: Formato
+    name: Format
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      # Instala la versión fijada en rust-toolchain.toml.
+      # Installs the version pinned in rust-toolchain.toml.
       - run: rustup toolchain install
       - run: cargo fmt --all --check
 
@@ -32,13 +32,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      # Instala la versión fijada en rust-toolchain.toml.
+      # Installs the version pinned in rust-toolchain.toml.
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
   test:
-    name: Pruebas (${{ matrix.os }})
+    name: Tests (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -46,23 +46,23 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
-      # Instala la versión fijada en rust-toolchain.toml.
+      # Installs the version pinned in rust-toolchain.toml.
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace --locked
 
   doc:
-    name: Documentación
+    name: Docs
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      # Instala la versión fijada en rust-toolchain.toml.
+      # Installs the version pinned in rust-toolchain.toml.
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
       - run: cargo doc --workspace --no-deps --locked
 
   deny:
-    name: Dependencias (cargo deny)
+    name: Dependencies (cargo deny)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

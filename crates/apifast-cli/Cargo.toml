@@ -1,6 +1,6 @@
 [package]
 name = "apifast-cli"
-description = "Línea de comandos de apifast y raíz de composición."
+description = "Command line of apifast and composition root."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

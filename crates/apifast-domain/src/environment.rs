@@ -1,20 +1,20 @@
 use crate::Variable;
 
-/// Entorno de una colección (`environments/<nombre>.yml`).
+/// Environment of a collection (`environments/<name>.yml`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Environment {
-    /// Nombre.
+    /// Name.
     pub name: String,
-    /// Color en la interfaz, por ejemplo `#d9534f`.
+    /// Color in the UI, such as `#d9534f`.
     pub color: Option<String>,
-    /// Nombre del entorno del que hereda variables.
+    /// Name of the environment it inherits variables from.
     pub extends: Option<String>,
-    /// Variables propias.
+    /// Own variables.
     pub variables: Vec<Variable>,
 }
 
 impl Environment {
-    /// Entorno sin `extends` ni color.
+    /// Environment with no `extends` and no color.
     pub fn new(name: impl Into<String>, variables: Vec<Variable>) -> Self {
         Self {
             name: name.into(),
@@ -25,26 +25,26 @@ impl Environment {
     }
 }
 
-/// Error al resolver la herencia entre entornos.
+/// Error while resolving inheritance between environments.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum EnvironmentError {
-    /// No existe un entorno con ese nombre.
-    #[error("no existe el entorno «{0}»")]
+    /// There is no environment with that name.
+    #[error("environment `{0}` does not exist")]
     NotFound(String),
-    /// La cadena de `extends` vuelve a un entorno ya visitado.
-    #[error("ciclo en extends: {}", .0.join(" → "))]
+    /// The `extends` chain comes back to an environment already visited.
+    #[error("cycle in extends: {}", .0.join(" -> "))]
     Cycle(Vec<String>),
 }
 
-/// Cadena de herencia del entorno `name`, **del más general al más específico**.
+/// Inheritance chain of environment `name`, **from most general to most specific**.
 ///
-/// El resultado se pasa a [`Chain::variable_layers`](crate::Chain::variable_layers):
-/// las variables del padre se aplican primero y las del hijo las sobrescriben.
+/// Pass the result to [`Chain::variable_layers`](crate::Chain::variable_layers):
+/// the parent's variables apply first and the child's override them.
 ///
 /// # Errors
 ///
-/// [`EnvironmentError::NotFound`] si falta `name` o algún entorno de su `extends`,
-/// y [`EnvironmentError::Cycle`] si la cadena forma un ciclo.
+/// [`EnvironmentError::NotFound`] if `name` or any environment in its `extends`
+/// chain is missing, and [`EnvironmentError::Cycle`] if the chain forms a cycle.
 pub fn environment_chain<'a>(
     name: &str,
     environments: &'a [Environment],
@@ -85,7 +85,7 @@ mod tests {
     }
 
     #[test]
-    fn la_cadena_va_del_padre_al_hijo() {
+    fn chain_goes_from_parent_to_child() {
         let all = [
             env("prod", Some("base")),
             env("base", None),
@@ -96,7 +96,7 @@ mod tests {
     }
 
     #[test]
-    fn detecta_ciclos() {
+    fn detects_cycles() {
         let all = [env("a", Some("b")), env("b", Some("a"))];
         assert_eq!(
             environment_chain("a", &all),
@@ -109,7 +109,7 @@ mod tests {
     }
 
     #[test]
-    fn falla_si_falta_el_padre() {
+    fn fails_when_the_parent_is_missing() {
         let all = [env("prod", Some("base"))];
         assert_eq!(
             environment_chain("prod", &all),

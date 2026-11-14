@@ -1,7 +1,7 @@
 # apifast-app
 
-**Capa:** Aplicación
+**Layer:** Application
 
-Casos de uso y puertos (traits) de apifast.
+Use cases and ports (traits) of apifast.
 
-**Dependencias permitidas del workspace:** `apifast-domain`, `apifast-template`. Ver [arquitectura](../../docs/03-arquitectura.md).
+**Allowed workspace dependencies:** `apifast-domain`, `apifast-template`. See the [architecture](../../docs/03-arquitectura.md) (in Spanish).

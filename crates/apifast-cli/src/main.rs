@@ -1,6 +1,6 @@
-//! Línea de comandos de apifast y raíz de composición.
+//! Command line of apifast and composition root.
 
-// La CLI es el único crate que escribe directamente en la terminal.
+// The CLI is the only crate that writes straight to the terminal.
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
 fn main() {

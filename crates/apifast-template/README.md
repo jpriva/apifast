@@ -1,7 +1,7 @@
 # apifast-template
 
-**Capa:** Dominio
+**Layer:** Domain
 
-Parser y renderer de plantillas de apifast.
+Template parser and renderer of apifast.
 
-**Dependencias permitidas del workspace:** `apifast-domain`. Ver [arquitectura](../../docs/03-arquitectura.md).
+**Allowed workspace dependencies:** `apifast-domain`. See the [architecture](../../docs/03-arquitectura.md) (in Spanish).

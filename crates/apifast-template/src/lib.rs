@@ -1,1 +1,1 @@
-//! Parser y renderer de plantillas de apifast.
+//! Template parser and renderer of apifast.

@@ -1,7 +1,7 @@
 # apifast-domain
 
-**Capa:** Dominio
+**Layer:** Domain
 
-Entidades, value objects y reglas de herencia de apifast, sin entrada/salida.
+Entities, value objects and inheritance rules of apifast, with no I/O.
 
-**Dependencias permitidas del workspace:** ninguna del workspace. Ver [arquitectura](../../docs/03-arquitectura.md).
+**Allowed workspace dependencies:** none. See the [architecture](../../docs/03-arquitectura.md) (in Spanish).

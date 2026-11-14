@@ -1,5 +1,5 @@
 # apifast-arch-tests
 
-Test que lee `cargo metadata` y falla si se rompe alguna regla de dependencia de la [arquitectura](../../docs/03-arquitectura.md). Todo crate nuevo del workspace debe clasificarse en una capa en `tests/dependencias.rs`.
+A test that reads `cargo metadata` and fails when a dependency rule of the [architecture](../../docs/03-arquitectura.md) (in Spanish) is broken. Every new workspace crate must be assigned a layer in `tests/architecture.rs`.
 
-**Dependencias permitidas del workspace:** ninguna.
+**Allowed workspace dependencies:** none.

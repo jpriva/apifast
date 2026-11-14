@@ -1,1 +1,1 @@
-//! Lectura y escritura de colecciones YAML en disco.
+//! Reads and writes YAML collections on disk.

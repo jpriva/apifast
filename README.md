@@ -1,71 +1,83 @@
 # apifast
 
-Cliente de escritorio para probar APIs, escrito en Rust con interfaz en egui. Toma las mejores ideas de [Bruno](https://github.com/usebruno/bruno) y de [Yaak](https://github.com/mountain-loop/yaak) y las combina en una aplicación nativa, liviana y basada en archivos.
+A desktop client for testing APIs, written in Rust with an egui interface. It takes the best ideas from [Bruno](https://github.com/usebruno/bruno) and [Yaak](https://github.com/mountain-loop/yaak) and combines them into a native, lightweight, file-based application.
 
-> **Estado: fase F0 (diseño).** Este repositorio contiene solo documentación y roadmap. Todavía no hay código.
+> **Status: phase F1 (headless core) in progress.** The design is complete and the domain crate is in place. There is no usable application yet.
 
-## Qué es
+## What it is
 
-- **Colecciones como archivos.** Un archivo YAML por request, carpetas como directorios. Se versiona con git sin sorpresas.
-- **Nativo y liviano.** Un único binario Rust, sin Electron, sin webview y sin procesos auxiliares.
-- **Secretos cifrados.** Bóveda con XChaCha20-Poly1305: secretos compartibles dentro del repositorio o guardados solo en la máquina.
-- **Un solo motor.** La interfaz gráfica y la línea de comandos ejecutan exactamente el mismo núcleo.
-- **Arquitectura hexagonal.** Dominio puro, puertos explícitos y adaptadores intercambiables.
+- **Collections as files.** One YAML file per request, folders as directories. Works with git without surprises.
+- **Native and lightweight.** A single Rust binary: no Electron, no webview and no helper processes.
+- **Encrypted secrets.** An XChaCha20-Poly1305 vault: secrets can be shared inside the repository or kept on the local machine only.
+- **One engine.** The GUI and the command line run exactly the same core.
+- **Hexagonal architecture.** A pure domain, explicit ports and swappable adapters.
 
-## Decisiones principales
+## Key decisions
 
-| Tema | Decisión | Detalle |
+| Topic | Decision | Details |
 |---|---|---|
-| Lenguaje y UI | Rust + egui (eframe) con wgpu | [ADR 0004](docs/adr/0004-egui-como-ui.md) |
-| Arquitectura | Hexagonal, workspace de crates | [ADR 0001](docs/adr/0001-arquitectura-hexagonal.md) |
-| Formato en disco | YAML OpenCollection puro; datos propios en `.apifast/` | [ADR 0002](docs/adr/0002-formato-yaml-opencollection.md) |
-| Persistencia | Los archivos son la fuente de verdad | [ADR 0003](docs/adr/0003-archivos-como-fuente-de-verdad.md) |
-| Secretos | Bóveda híbrida: solo locales por defecto, compartidos cifrados si se elige | [ADR 0005](docs/adr/0005-boveda-hibrida.md) |
-| Tests | Aserciones declarativas primero, JavaScript después | [ADR 0006](docs/adr/0006-scripting-diferido.md) |
-| Red | reqwest/hyper + rustls, una sola pila TLS | [ADR 0007](docs/adr/0007-pila-http-tls.md) |
-| Estado local | Archivos planos, sin base de datos | [ADR 0008](docs/adr/0008-estado-local.md) |
-| Plataformas | Linux primero; macOS y Windows compilados en CI | [Visión](docs/01-vision-y-alcance.md) |
-| Idioma | Código en inglés, interfaz en español e inglés | [Calidad](docs/11-calidad-y-clean-code.md) |
+| Language and UI | Rust + egui (eframe) with wgpu | [ADR 0004](docs/adr/0004-egui-como-ui.md) |
+| Architecture | Hexagonal, workspace of crates | [ADR 0001](docs/adr/0001-arquitectura-hexagonal.md) |
+| On-disk format | Plain OpenCollection YAML; apifast's own data in `.apifast/` | [ADR 0002](docs/adr/0002-formato-yaml-opencollection.md) |
+| Persistence | Files are the source of truth | [ADR 0003](docs/adr/0003-archivos-como-fuente-de-verdad.md) |
+| Secrets | Hybrid vault: local-only by default, shared and encrypted by choice | [ADR 0005](docs/adr/0005-boveda-hibrida.md) |
+| Tests | Declarative assertions first, JavaScript later | [ADR 0006](docs/adr/0006-scripting-diferido.md) |
+| Network | reqwest/hyper + rustls, a single TLS stack | [ADR 0007](docs/adr/0007-pila-http-tls.md) |
+| Local state | Plain files, no database | [ADR 0008](docs/adr/0008-estado-local.md) |
+| Platforms | Linux first; macOS and Windows built in CI | [Vision](docs/01-vision-y-alcance.md) |
+| Language | Code in English; UI in English and Spanish | [Quality](docs/11-calidad-y-clean-code.md) |
 
-## Documentación
+## Documentation
 
-1. [Visión y alcance](docs/01-vision-y-alcance.md)
-2. [Análisis de Bruno y Yaak](docs/02-analisis-bruno-y-yaak.md)
-3. [Arquitectura](docs/03-arquitectura.md)
-4. [Formato de archivos](docs/04-formato-de-archivos.md)
-5. [Variables y plantillas](docs/05-variables-y-plantillas.md)
-6. [Bóveda de secretos](docs/06-boveda-de-secretos.md)
-7. [Motor de red](docs/07-motor-de-red.md)
-8. [Tests y runner](docs/08-tests-y-runner.md)
-9. [UI y UX](docs/09-ui-ux.md)
-10. [Rendimiento y memoria](docs/10-rendimiento-y-memoria.md)
-11. [Calidad y clean code](docs/11-calidad-y-clean-code.md)
+The design documents and ADRs are written in Spanish.
+
+1. [Vision and scope](docs/01-vision-y-alcance.md)
+2. [Analysis of Bruno and Yaak](docs/02-analisis-bruno-y-yaak.md)
+3. [Architecture](docs/03-arquitectura.md)
+4. [File format](docs/04-formato-de-archivos.md)
+5. [Variables and templates](docs/05-variables-y-plantillas.md)
+6. [Secret vault](docs/06-boveda-de-secretos.md)
+7. [Network engine](docs/07-motor-de-red.md)
+8. [Tests and runner](docs/08-tests-y-runner.md)
+9. [UI and UX](docs/09-ui-ux.md)
+10. [Performance and memory](docs/10-rendimiento-y-memoria.md)
+11. [Quality and clean code](docs/11-calidad-y-clean-code.md)
 12. [Roadmap](docs/12-roadmap.md)
 
-Las decisiones de arquitectura están en [docs/adr/](docs/adr/).
+Architecture decisions live in [docs/adr/](docs/adr/).
 
-## Roadmap en una tabla
+## Development
 
-| Fase | Resultado |
+```
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+cargo deny check
+```
+
+The Rust version is pinned in `rust-toolchain.toml`; rustup installs it automatically.
+
+## Roadmap at a glance
+
+| Phase | Outcome |
 |---|---|
-| F0 | Documentación, ADRs y spikes técnicos |
-| F1 | Núcleo sin interfaz: enviar una request desde un archivo por CLI |
-| F2 | Interfaz gráfica mínima usable a diario |
-| F3 | Bóveda de secretos |
-| F4 | Aserciones, capturas, runner y reporters |
-| F5 | Autenticación avanzada, proxy, certificados, cookies, timeline |
-| F6 | Importación y exportación |
-| F7 | GraphQL, SSE y WebSocket |
+| F0 | Documentation, ADRs and technical spikes |
+| F1 | Headless core: send a request from a file via the CLI |
+| F2 | Minimal GUI, usable day to day |
+| F3 | Secret vault |
+| F4 | Assertions, captures, runner and reporters |
+| F5 | Advanced auth, proxy, certificates, cookies, timeline |
+| F6 | Import and export |
+| F7 | GraphQL, SSE and WebSocket |
 | F8 | gRPC |
-| F9 | Scripting en JavaScript |
-| F10 | Versión 1.0 |
+| F9 | JavaScript scripting |
+| F10 | Version 1.0 |
 
-El detalle de cada fase está en [docs/12-roadmap.md](docs/12-roadmap.md).
+Each phase is detailed in [docs/12-roadmap.md](docs/12-roadmap.md).
 
-## Licencia
+## License
 
-Licencia dual **MIT OR Apache-2.0**, a elección de quien lo use. Ver [LICENSE-MIT](LICENSE-MIT) y [LICENSE-APACHE](LICENSE-APACHE).
+Dual-licensed under **MIT OR Apache-2.0**, at your option. See [LICENSE-MIT](LICENSE-MIT) and [LICENSE-APACHE](LICENSE-APACHE).
 
-## Referencias
+## References
 
-El análisis se hizo sobre copias locales de ambos proyectos, ubicadas junto a este repositorio (`../bruno` y `../yaak`). Los dos tienen licencia MIT; si se adapta código de alguno, hay que conservar su aviso de copyright.
+The analysis was done on local copies of both projects, placed next to this repository (`../bruno` and `../yaak`). Both are MIT-licensed; any code adapted from them must keep its copyright notice.

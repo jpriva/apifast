@@ -1,1 +1,1 @@
-//! Transporte HTTP de apifast.
+//! HTTP transport of apifast.

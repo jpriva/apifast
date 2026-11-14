@@ -1,44 +1,44 @@
 use crate::{Auth, Body, Settings, Variable};
 
-/// Request de una colección, según su protocolo.
+/// A request of a collection, by protocol.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Request {
-    /// Request HTTP.
+    /// HTTP request.
     Http(HttpRequest),
 }
 
-/// Request HTTP. Los textos son plantillas sin renderizar.
+/// HTTP request. Texts are unrendered templates.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HttpRequest {
-    /// Nombre visible (`info.name`).
+    /// Display name (`info.name`).
     pub name: String,
-    /// Posición entre sus hermanos.
+    /// Position among its siblings.
     pub seq: Option<u32>,
-    /// Etiquetas.
+    /// Tags.
     pub tags: Vec<String>,
-    /// Método.
+    /// Method.
     pub method: Method,
     /// URL.
     pub url: String,
-    /// Parámetros de query y de ruta.
+    /// Query and path parameters.
     pub params: Vec<Param>,
-    /// Headers propios.
+    /// Own headers.
     pub headers: Vec<Header>,
-    /// Cuerpo.
+    /// Body.
     pub body: Body,
-    /// Autenticación.
+    /// Authentication.
     pub auth: Auth,
-    /// Variables de la request (`runtime.variables`).
+    /// Request variables (`runtime.variables`).
     pub variables: Vec<Variable>,
-    /// Ajustes de envío.
+    /// Send settings.
     pub settings: Settings,
-    /// Documentación en Markdown.
+    /// Markdown documentation.
     pub docs: Option<String>,
 }
 
 impl HttpRequest {
-    /// Request sin headers, body ni ajustes propios, con auth heredada.
+    /// Request with no own headers, body or settings, and inherited auth.
     pub fn new(name: impl Into<String>, method: Method, url: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -57,7 +57,7 @@ impl HttpRequest {
     }
 }
 
-/// Método HTTP.
+/// HTTP method.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Method {
     /// `GET`
@@ -78,14 +78,13 @@ pub enum Method {
     Trace,
     /// `CONNECT`
     Connect,
-    /// Método propio; se envía tal cual.
+    /// A custom method, sent as is.
     Custom(String),
 }
 
 impl Method {
-    /// Interpreta un método. Los estándar se reconocen sin distinguir mayúsculas;
-    /// cualquier otro se conserva tal cual, porque los métodos propios distinguen
-    /// mayúsculas.
+    /// Parses a method. Standard methods are matched case-insensitively; any
+    /// other is kept as is, because custom methods are case-sensitive.
     pub fn parse(method: &str) -> Self {
         match method.to_ascii_uppercase().as_str() {
             "GET" => Self::Get,
@@ -101,7 +100,7 @@ impl Method {
         }
     }
 
-    /// El método tal como se envía.
+    /// The method as sent on the wire.
     pub fn as_str(&self) -> &str {
         match self {
             Self::Get => "GET",
@@ -118,19 +117,19 @@ impl Method {
     }
 }
 
-/// Header HTTP.
+/// HTTP header.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Header {
-    /// Nombre.
+    /// Name.
     pub name: String,
-    /// Valor (plantilla).
+    /// Value (template).
     pub value: String,
-    /// Si es `false`, no se envía.
+    /// When `false`, it is not sent.
     pub enabled: bool,
 }
 
 impl Header {
-    /// Header habilitado.
+    /// Enabled header.
     pub fn new(name: impl Into<String>, value: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -140,25 +139,25 @@ impl Header {
     }
 }
 
-/// Parámetro de query o de ruta.
+/// Query or path parameter.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Param {
-    /// Nombre.
+    /// Name.
     pub name: String,
-    /// Valor (plantilla).
+    /// Value (template).
     pub value: String,
-    /// Query (`?a=1`) o ruta (`/:id`).
+    /// Query (`?a=1`) or path (`/:id`).
     pub kind: ParamKind,
-    /// Si es `false`, no se envía.
+    /// When `false`, it is not sent.
     pub enabled: bool,
 }
 
-/// Tipo de parámetro.
+/// Kind of parameter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParamKind {
-    /// Parámetro de la query.
+    /// Query parameter.
     Query,
-    /// Segmento `:nombre` de la ruta.
+    /// `:name` path segment.
     Path,
 }
 
@@ -167,7 +166,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn los_metodos_estandar_se_normalizan_y_los_propios_se_conservan() {
+    fn standard_methods_are_normalized_and_custom_ones_kept() {
         assert_eq!(Method::parse("get"), Method::Get);
         assert_eq!(Method::parse("Post").as_str(), "POST");
         assert_eq!(Method::parse("purge"), Method::Custom("purge".into()));

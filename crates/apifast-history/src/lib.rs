@@ -1,1 +1,1 @@
-//! Historial y cuerpos de respuesta en disco.
+//! Response history and bodies on disk.

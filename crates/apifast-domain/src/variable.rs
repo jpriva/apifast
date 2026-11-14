@@ -2,21 +2,21 @@ use std::collections::BTreeMap;
 
 use crate::Origin;
 
-/// Variable de una colección, carpeta, entorno o request.
+/// Variable of a collection, folder, environment or request.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Variable {
-    /// Nombre, tal como se usa en `{{nombre}}`.
+    /// Name, as used in `{{name}}`.
     pub name: String,
-    /// Valor. Un secreto se declara sin valor: el valor está en la bóveda.
+    /// Value. A secret is declared without one: its value lives in the vault.
     pub value: Option<VariableValue>,
-    /// Si es `false`, la variable se ignora.
+    /// When `false`, the variable is ignored.
     pub enabled: bool,
-    /// Si es un secreto.
+    /// Whether it is a secret.
     pub secret: bool,
 }
 
 impl Variable {
-    /// Variable de texto habilitada.
+    /// Enabled text variable.
     pub fn text(name: impl Into<String>, value: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -26,7 +26,7 @@ impl Variable {
         }
     }
 
-    /// Secreto habilitado, sin valor.
+    /// Enabled secret, with no value.
     pub fn secret(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -37,20 +37,20 @@ impl Variable {
     }
 }
 
-/// Valor tipado de una variable.
+/// Typed value of a variable.
 ///
-/// Se guarda el texto tal como está en el archivo (`data`), para reescribirlo
-/// sin cambios. La conversión al tipo real se hace al usarlo.
+/// The text is kept exactly as written in the file (`data`), so it can be
+/// written back unchanged. It is converted to its real type when used.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VariableValue {
-    /// Tipo declarado.
+    /// Declared type.
     pub kind: ValueKind,
-    /// Texto del valor.
+    /// Text of the value.
     pub data: String,
 }
 
 impl VariableValue {
-    /// Valor de texto.
+    /// Text value.
     pub fn text(data: impl Into<String>) -> Self {
         Self {
             kind: ValueKind::String,
@@ -59,66 +59,66 @@ impl VariableValue {
     }
 }
 
-/// Tipo de una variable.
+/// Type of a variable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ValueKind {
-    /// Texto.
+    /// Text.
     #[default]
     String,
-    /// Número.
+    /// Number.
     Number,
-    /// Booleano.
+    /// Boolean.
     Bool,
-    /// Objeto JSON.
+    /// JSON object.
     Object,
 }
 
-/// Variable resuelta, con su procedencia.
+/// A resolved variable, with its origin.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedVariable {
-    /// Valor efectivo. `None` en un secreto cuyo valor aún no se descifró.
+    /// Effective value. `None` for a secret that has not been decrypted yet.
     pub value: Option<VariableValue>,
-    /// Si es un secreto.
+    /// Whether it is a secret.
     pub secret: bool,
-    /// Ámbito que define el valor efectivo.
+    /// Scope that defines the effective value.
     pub origin: Origin,
-    /// Ámbitos sobrescritos, del de menor al de mayor prioridad.
+    /// Overridden scopes, from lowest to highest precedence.
     pub overridden: Vec<Origin>,
 }
 
-/// Variables resueltas de todos los ámbitos, por nombre.
+/// Resolved variables from every scope, by name.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ResolvedVariables {
     by_name: BTreeMap<String, ResolvedVariable>,
 }
 
 impl ResolvedVariables {
-    /// Busca una variable por nombre.
+    /// Looks a variable up by name.
     pub fn get(&self, name: &str) -> Option<&ResolvedVariable> {
         self.by_name.get(name)
     }
 
-    /// Recorre las variables ordenadas por nombre.
+    /// Iterates over the variables, sorted by name.
     pub fn iter(&self) -> impl Iterator<Item = (&str, &ResolvedVariable)> {
         self.by_name.iter().map(|(name, var)| (name.as_str(), var))
     }
 
-    /// Número de variables.
+    /// Number of variables.
     pub fn len(&self) -> usize {
         self.by_name.len()
     }
 
-    /// Si no hay ninguna variable.
+    /// Whether there are no variables.
     pub fn is_empty(&self) -> bool {
         self.by_name.is_empty()
     }
 }
 
-/// Combina las variables de varios ámbitos.
+/// Merges the variables of several scopes.
 ///
-/// `layers` va **de menor a mayor prioridad**: si un nombre se repite, gana el
-/// último. Las variables deshabilitadas se ignoran. Para el orden de los ámbitos
-/// de una request, ver [`Chain::variable_layers`](crate::Chain::variable_layers).
+/// `layers` goes **from lowest to highest precedence**: when a name repeats, the
+/// last one wins. Disabled variables are ignored. For the scope order of a
+/// request, see [`Chain::variable_layers`](crate::Chain::variable_layers).
 pub fn resolve_variables<'a>(
     layers: impl IntoIterator<Item = (Origin, &'a [Variable])>,
 ) -> ResolvedVariables {
@@ -152,7 +152,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn gana_el_ambito_de_mayor_prioridad_y_registra_los_sobrescritos() {
+    fn highest_precedence_scope_wins_and_records_overridden_ones() {
         let collection = [Variable::text("host", "a")];
         let env = [Variable::text("host", "b")];
         let request = [Variable::text("host", "c")];
@@ -172,7 +172,7 @@ mod tests {
     }
 
     #[test]
-    fn las_variables_deshabilitadas_no_sobrescriben() {
+    fn disabled_variables_do_not_override() {
         let collection = [Variable::text("host", "a")];
         let mut disabled = Variable::text("host", "b");
         disabled.enabled = false;
@@ -188,7 +188,7 @@ mod tests {
     }
 
     #[test]
-    fn un_secreto_conserva_su_marca_y_no_tiene_valor() {
+    fn a_secret_keeps_its_flag_and_has_no_value() {
         let env = [Variable::secret("api_key")];
         let vars = resolve_variables([(Origin::Environment("prod".into()), &env[..])]);
 

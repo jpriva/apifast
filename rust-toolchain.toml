@@ -1,5 +1,5 @@
-# Versión fija de Rust para desarrollo y CI. Se sube a propósito cada 2 o 3
-# versiones, en un commit que también corrige los lints nuevos.
+# Pinned Rust for development and CI. Bumped on purpose every 2 or 3
+# releases, in a commit that also fixes any new lints.
 [toolchain]
 channel = "1.99.1"
 components = ["rustfmt", "clippy"]
