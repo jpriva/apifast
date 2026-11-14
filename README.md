@@ -16,7 +16,7 @@ Cliente de escritorio para probar APIs, escrito en Rust con interfaz en egui. To
 
 | Tema | Decisión | Detalle |
 |---|---|---|
-| Lenguaje y UI | Rust + egui (eframe) | [ADR 0004](docs/adr/0004-egui-como-ui.md) |
+| Lenguaje y UI | Rust + egui (eframe) con wgpu | [ADR 0004](docs/adr/0004-egui-como-ui.md) |
 | Arquitectura | Hexagonal, workspace de crates | [ADR 0001](docs/adr/0001-arquitectura-hexagonal.md) |
 | Formato en disco | YAML OpenCollection puro; datos propios en `.apifast/` | [ADR 0002](docs/adr/0002-formato-yaml-opencollection.md) |
 | Persistencia | Los archivos son la fuente de verdad | [ADR 0003](docs/adr/0003-archivos-como-fuente-de-verdad.md) |

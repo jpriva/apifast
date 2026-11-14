@@ -51,8 +51,7 @@ Tras F1, las fases F2 a F6 son en gran parte independientes entre sí. El orden 
 - [x] Análisis de Bruno y Yaak.
 - [x] Documentación de diseño y ADRs.
 - [x] **Spike 1: librería YAML.** Elegida `oneyaml`, guardando con JSON Patch sobre el documento original. Resultados: [spikes/01-libreria-yaml.md](spikes/01-libreria-yaml.md).
-- [ ] **Spike 2: editor de código en egui.** Prototipo con resaltado JSON, variables resaltadas y un texto de 1 MB. Medir fluidez y memoria. El mismo prototipo se hace en iced para comparar. **Si egui no cumple los criterios del [ADR 0004](adr/0004-egui-como-ui.md), se cambia a iced.**
-- [ ] **Spike 3: renderer y memoria.** Ventana vacía y ventana con árbol de 5000 filas: egui con glow y con wgpu, e iced con wgpu y con su renderer por software. Medir RSS y arranque.
+- [x] **Spikes 2 y 3: interfaz y renderer.** Elegido egui con wgpu; presupuesto de memoria medido en PSS; edición con resaltado limitada a unos 200 KB. Resultados: [spikes/02-interfaz-egui-vs-iced.md](spikes/02-interfaz-egui-vs-iced.md).
 - [x] **Spike 4: compatibilidad con Bruno.** Resuelto leyendo su código: Bruno descarta las claves desconocidas al guardar. Los datos de apifast van en `.apifast/` ([ADR 0002](adr/0002-formato-yaml-opencollection.md)).
 - [ ] Comprobar en Bruno real que respeta `extensions.bruno.ignore` para `.apifast`.
 - [ ] Medir Bruno y Yaak en la misma máquina (RAM en reposo, arranque) como línea base.
@@ -103,7 +102,8 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
 - [ ] Barra de URL con resaltado de variables.
 - [ ] Panel de request: Params, Headers, Body (JSON, texto, formulario), Auth, Ajustes.
 - [ ] Tablas clave/valor con edición masiva.
-- [ ] Editor de código con resaltado y formateo.
+- [ ] Editor de código con resaltado y formateo, con límite de unos 200 KB para la edición con resaltado.
+- [ ] Visor de respuestas por ventanas; si el texto de egui no alcanza el presupuesto, dibujo wgpu propio con `PaintCallback`.
 - [ ] Panel de respuesta: Body por ventanas, Headers, Timeline básico.
 - [ ] Selector y editor de entornos; vista de variables con procedencia.
 - [ ] `apifast-watch`: recarga ante cambios externos y resolución de conflictos con borradores.
@@ -295,7 +295,8 @@ Ideas sin compromiso:
 
 | Riesgo | Impacto | Fase | Mitigación |
 |---|---|---|---|
-| El editor de código en egui no alcanza la calidad esperada | Alto | F0, F2 | Spike 2 con criterios medibles; si falla, se reconsidera el toolkit antes de F2 |
+| Escribir en bodies grandes es lento en egui (41 ms por tecla con 1 MB) | Medio | F2 | Límite de 200 KB para la edición con resaltado; visor de solo lectura para lo demás |
+| Sin GPU, egui usa unos 98 MB y mucha CPU | Bajo | F2, F10 | Aceptado; se revisa si el uso sin GPU pasa a ser requisito ([ADR 0004](adr/0004-egui-como-ui.md)) |
 | `oneyaml` es reciente y puede tener errores o quedar sin mantenimiento | Medio | F1 | Aislada en `apifast-storage-fs`; corpus de round-trip; plan alternativo con `serde-saphyr` |
 | Bruno renombra entornos o variables y deja secretos compartidos huérfanos | Bajo | F3 | Detección y reasignación en el editor de entornos |
 | OpenCollection cambia de forma incompatible | Medio | Todas | Fijar la versión soportada y añadir migraciones |

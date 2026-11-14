@@ -85,7 +85,7 @@ Los paneles de request y respuesta se pueden disponer uno encima del otro o lado
 - Las variables se resaltan: un color si se resuelven, otro si no existen.
 - Al pasar el cursor sobre una variable: valor, ámbito de origen y enlace para editarla.
 
-El editor de código es el componente más delicado en egui y tiene un spike propio en la fase F0 (ver [roadmap](12-roadmap.md)).
+La edición con resaltado se limita a unos 200 KB: con más texto, egui tarda demasiado en cada tecla ([spike 2](spikes/02-interfaz-egui-vs-iced.md)). Por encima de ese tamaño, el body se edita como texto plano o se abre en el visor de solo lectura.
 
 ## Panel de respuesta
 

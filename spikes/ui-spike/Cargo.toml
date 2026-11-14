@@ -1,0 +1,9 @@
+[workspace]
+resolver = "3"
+members = ["common", "egui-proto", "iced-proto"]
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true

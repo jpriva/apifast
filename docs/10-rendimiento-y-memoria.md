@@ -4,13 +4,16 @@ El bajo consumo es un objetivo de producto, no una optimización tardía. Este d
 
 ## Presupuestos
 
-Son objetivos iniciales. Se validan con los spikes de la fase F0 y se ajustan con datos reales.
+La memoria se mide en **PSS** (memoria proporcional, de `/proc/<pid>/smaps_rollup`), no en RSS. RSS cuenta enteras las bibliotecas del driver de GPU que el sistema ya tiene cargadas y exagera el consumo en unos 45 MB ([spike 3](spikes/02-interfaz-egui-vs-iced.md)).
+
+Referencia medida en el spike, con egui y wgpu: 35 MB con la ventana vacía y 47 MB con un árbol de 5000 filas y un body de 100 KB.
 
 | Métrica | Objetivo | Cómo se mide |
 |---|---|---|
-| RAM en reposo, colección de 100 requests | < 60 MB RSS | Lectura de `/proc/<pid>/status` tras 10 s inactivo |
-| RAM con colección de 5000 requests | < 120 MB RSS | Igual, con colección sintética |
-| RAM extra al recibir 100 MB de respuesta | < 10 MB | Diferencia de RSS durante la descarga |
+| RAM en reposo, colección de 100 requests | < 60 MB PSS | `/proc/<pid>/smaps_rollup` tras 10 s inactivo |
+| RAM con colección de 5000 requests | < 120 MB PSS | Igual, con colección sintética |
+| RAM extra al recibir 100 MB de respuesta | < 10 MB | Diferencia de PSS durante la descarga |
+| CPU por tecla en un body de 200 KB | < 10 ms | Escenario automático como el del spike |
 | Arranque en frío hasta primera ventana | < 300 ms | Marca de tiempo interna |
 | Abrir colección de 1000 requests | < 200 ms hasta ver el árbol | Marca de tiempo interna |
 | Sobrecarga de envío (sin red) | < 2 ms | Benchmark contra servidor local |
@@ -28,7 +31,7 @@ Como referencia, las aplicaciones sobre Electron o webview suelen consumir vario
 - **Caché de layout.** El resultado del resaltado de sintaxis se guarda y se invalida solo cuando cambia el texto.
 - **Resaltado ligero.** Tokenizadores propios para JSON, XML y GraphQL en lugar de un motor genérico con gramáticas pesadas.
 - **La interfaz no guarda el modelo.** Solo identificadores, borradores y la vista actual.
-- **Renderer.** Se elige entre glow y wgpu según la memoria medida en F0.
+- **Renderer.** wgpu: usó menos memoria que glow en el spike y permite dibujo propio con `PaintCallback` para los componentes donde el texto de egui no rinda.
 
 ### Modelo en memoria
 
@@ -99,7 +102,7 @@ Las micro-optimizaciones se aplican **donde un benchmark muestra que importan**:
 |---|---|
 | `criterion` | Benchmarks de plantillas, parseo, resolución de herencia |
 | Colecciones sintéticas | Generador de colecciones de 100, 1000 y 5000 requests |
-| Script de RSS | Arranca la aplicación con una colección y registra la memoria |
+| Script de memoria | Arranca la aplicación con una colección y registra PSS y memoria privada |
 | `heaptrack` o similar | Perfil de asignaciones cuando un presupuesto se rompe |
 | `cargo bloat` | Tamaño del binario por crate |
 | Servidor local de pruebas | Respuestas grandes, lentas y en streaming |
@@ -114,8 +117,8 @@ Las micro-optimizaciones se aplican **donde un benchmark muestra que importan**:
 
 | Riesgo | Mitigación |
 |---|---|
-| El editor de texto de egui no escala con cuerpos grandes | Visor propio por ventanas; editor con límite de tamaño y aviso |
-| El renderer con GPU consume más memoria de la prevista | Comparar glow y wgpu en F0; elegir por medición |
+| El editor de texto de egui no escala con cuerpos grandes (41 ms por tecla con 1 MB) | Límite de 200 KB para la edición con resaltado; visor propio por ventanas |
+| Sin GPU, el driver por software consume unos 98 MB y mucha CPU | Aceptado; documentado en el [ADR 0004](adr/0004-egui-como-ui.md) |
 | Las fuentes con muchos glifos aumentan la memoria | Cargar fuentes adicionales solo si se necesitan |
 | tonic y prost-reflect aumentan el binario | Feature opcional e inicialización diferida |
 | El parseo de YAML es lento en colecciones grandes | Carga perezosa, parseo en paralelo y caché de metadatos |

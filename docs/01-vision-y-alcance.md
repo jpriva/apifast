@@ -15,7 +15,7 @@ Un cliente de API **nativo, rápido y basado en archivos**, donde la colección 
 ## Objetivos
 
 1. **Archivos primero.** La colección en disco es la única fuente de verdad. Es legible, se revisa en un pull request y funciona sin la aplicación abierta.
-2. **Bajo consumo.** Objetivos iniciales, a validar con mediciones: menos de 60 MB de RAM en reposo, arranque en frío en menos de 300 ms y binario de menos de 25 MB.
+2. **Bajo consumo.** Objetivos iniciales, a validar con mediciones: menos de 60 MB de RAM en reposo (memoria proporcional, PSS), arranque en frío en menos de 300 ms y binario de menos de 25 MB.
 3. **Secretos seguros por defecto.** Ningún secreto en claro en disco, en el historial ni en los logs.
 4. **Interfaz intuitiva.** Quien venga de Postman, Bruno o Yaak debe poder enviar su primera request sin leer documentación.
 5. **Un solo motor.** La GUI y la CLI comparten los mismos casos de uso, para que una colección se comporte igual en el escritorio y en CI.
