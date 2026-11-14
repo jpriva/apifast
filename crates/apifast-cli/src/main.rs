@@ -216,7 +216,7 @@ fn summary(outcome: &SendOutcome) -> String {
         "{} · {} ms · {}",
         status_text(head.status),
         head.elapsed_ms,
-        human_size(outcome.body.size)
+        apifast_domain::human_size(outcome.body.size)
     );
     if head.redirects > 0 {
         let plural = if head.redirects == 1 { "" } else { "s" };
@@ -230,21 +230,6 @@ fn status_text(status: u16) -> String {
         Some(reason) => format!("{status} {reason}"),
         None => status.to_string(),
     }
-}
-
-#[expect(clippy::cast_precision_loss, reason = "a rounded size for people")]
-fn human_size(bytes: u64) -> String {
-    const UNITS: [&str; 4] = ["KB", "MB", "GB", "TB"];
-    if bytes < 1024 {
-        return format!("{bytes} B");
-    }
-    let mut size = bytes as f64 / 1024.0;
-    let mut unit = 0;
-    while size >= 1024.0 && unit < UNITS.len() - 1 {
-        size /= 1024.0;
-        unit += 1;
-    }
-    format!("{size:.1} {}", UNITS[unit])
 }
 
 #[cfg(test)]
@@ -271,11 +256,7 @@ mod tests {
     }
 
     #[test]
-    fn sizes_and_statuses_read_well() {
-        assert_eq!(human_size(0), "0 B");
-        assert_eq!(human_size(1023), "1023 B");
-        assert_eq!(human_size(1536), "1.5 KB");
-        assert_eq!(human_size(5 * 1024 * 1024), "5.0 MB");
+    fn statuses_read_well() {
         assert_eq!(status_text(404), "404 Not Found");
         assert_eq!(status_text(599), "599");
     }
