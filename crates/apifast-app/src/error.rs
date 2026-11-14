@@ -36,16 +36,33 @@ pub enum RepositoryError {
     },
 }
 
-/// Error from an [`HttpTransport`](crate::HttpTransport).
+/// Error from an [`HttpTransport`](crate::HttpTransport). Messages never
+/// contain the URL, which may carry secrets in its query.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum TransportError {
     /// The URL cannot be sent.
     #[error("invalid URL: {0}")]
     InvalidUrl(String),
-    /// The connection could not be made (DNS, refused, TLS...).
-    #[error("connection failed: {0}")]
+    /// Something else in the request cannot be sent, such as a header name
+    /// or a file to upload.
+    #[error("invalid request: {0}")]
+    InvalidRequest(String),
+    /// The host name could not be resolved.
+    #[error("{0}")]
+    Dns(String),
+    /// The connection could not be made.
+    #[error("{0}")]
     Connect(String),
+    /// The TLS handshake failed, for example because of the certificate.
+    #[error("TLS error: {0}")]
+    Tls(String),
+    /// The server's answer is not valid HTTP, or broke off.
+    #[error("protocol error: {0}")]
+    Protocol(String),
+    /// More redirects than allowed.
+    #[error("stopped after {0} redirects")]
+    TooManyRedirects(u32),
     /// The configured timeout elapsed.
     #[error("timed out after {0} ms")]
     Timeout(u64),

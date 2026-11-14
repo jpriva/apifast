@@ -11,6 +11,7 @@ Bruno usa axios en el proceso principal de Electron. Yaak usa reqwest sobre hype
 
 - **Cliente:** reqwest sobre hyper, con tokio.
 - **TLS:** solo rustls, con el verificador de la plataforma. La opción de no validar certificados se implementa con un verificador permisivo de rustls.
+- **Proveedor criptográfico:** ring, no aws-lc-rs (el que reqwest 0.13 trae por defecto). ring compila con un compilador de C en Linux, macOS y Windows; aws-lc-rs puede pedir cmake y NASM en Windows y produce un binario mayor. reqwest se compila con `rustls-no-provider` y el transporte instala ring como proveedor del proceso.
 - **Pool de conexiones activo.** Los tiempos se obtienen con un conector instrumentado que emite eventos al abrir una conexión nueva; las reutilizadas se señalan como tales.
 - **Redirecciones y descompresión manuales**, para registrarlas en el timeline.
 - **Autenticación nativa** en Rust con un enum tipado.

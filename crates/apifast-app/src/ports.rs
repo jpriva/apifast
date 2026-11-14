@@ -205,6 +205,12 @@ pub trait EnvironmentRepository {
 pub struct ResponseHead {
     /// HTTP status code.
     pub status: u16,
+    /// HTTP version, such as `HTTP/1.1` or `HTTP/2.0`.
+    pub version: String,
+    /// URL of the response, after any redirects.
+    pub url: String,
+    /// How many redirects were followed.
+    pub redirects: u32,
     /// Header names and values, in order.
     pub headers: Vec<(String, String)>,
     /// Time from sending to the end of the body, in milliseconds.

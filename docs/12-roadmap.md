@@ -76,7 +76,7 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
 - [ ] Variables dinámicas de datos de prueba (`$randomEmail`, `$randomFullName`, `$randomWord`).
 - [x] `apifast-app`: puertos, `OpenCollection`, `LoadRequest`, `SaveRequest`, `ResolveVariables`, `SendRequest`. `RenderedRequest` es el único tipo que acepta el transporte. El watcher de `OpenCollection` llega en F2 y el timeline por canal en F5.
 - [x] `apifast-storage-fs`: lectura con `oneyaml` y guardado con JSON Patch por elemento sobre el documento releído del disco; lectura y escritura de `opencollection.yml`, `folder.yml`, requests y entornos; carpeta `.apifast/` con el identificador de colección; escritura atómica; conservación de claves desconocidas. Cada guardado se verifica releyendo el resultado antes de escribir.
-- [ ] `apifast-http`: envío con reqwest y rustls, redirecciones manuales, timeout, cancelación, cuerpo en streaming a disco.
+- [x] `apifast-http`: envío con reqwest y rustls, redirecciones manuales, timeout, cancelación, cuerpo en streaming a disco. Errores clasificados (DNS, conexión, TLS, timeout, protocolo) sin la URL en el mensaje.
 - [x] Autenticación básica: Basic, Bearer, API key, heredada. Se aplica al renderizar, en `apifast-app`; un esquema sin implementar da error en vez de enviar sin auth.
 - [ ] `apifast-history`: almacén de respuestas en archivos.
 - [ ] `apifast-cli`: `apifast send <archivo> --env <nombre>`.
@@ -182,6 +182,8 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
 - [ ] Tarro de cookies con editor.
 - [ ] Sobrescrituras de DNS.
 - [ ] Timeline completo con conector instrumentado (DNS, conexión, TLS, reutilización).
+- [ ] Descompresión manual, para registrar el tamaño comprimido y el descomprimido (en F1 la hace reqwest).
+- [ ] Respetar `encodeUrl: false` (en F1 la URL siempre se normaliza al enviarla).
 - [ ] Multipart y cuerpos de archivo en streaming.
 - [ ] Ejemplos de respuesta guardados.
 

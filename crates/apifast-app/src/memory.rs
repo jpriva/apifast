@@ -210,6 +210,9 @@ impl MemoryTransport {
         Self {
             head: ResponseHead {
                 status,
+                version: "HTTP/1.1".into(),
+                url: String::new(),
+                redirects: 0,
                 headers: Vec::new(),
                 elapsed_ms: 0,
             },
@@ -241,7 +244,9 @@ impl MemoryTransport {
             body.write(chunk)
                 .map_err(|e| TransportError::Other(e.to_string()))?;
         }
-        Ok(self.head.clone())
+        let mut head = self.head.clone();
+        request.url().clone_into(&mut head.url);
+        Ok(head)
     }
 }
 

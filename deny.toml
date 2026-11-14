@@ -20,6 +20,9 @@ allow = [
     "ISC",
     "Zlib",
     "Unicode-3.0",
+    # Mozilla's root certificates (webpki-root-certs), a permissive data
+    # license; rustls-platform-verifier falls back to them.
+    "CDLA-Permissive-2.0",
 ]
 confidence-threshold = 0.9
 # The list covers planned dependencies, not only the current ones.

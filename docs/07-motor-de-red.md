@@ -50,6 +50,23 @@ Todos son heredables (colección → carpeta → request) y el timeline indica d
 | Enviar y guardar cookies | Sí |
 | Guardar respuesta en el historial | Sí |
 
+## Implementación en F1
+
+`apifast-http` (`ReqwestTransport`) cubre:
+
+- **Envío** con reqwest, rustls (proveedor ring) y el verificador de la plataforma. HTTP/1.1 y HTTP/2 por ALPN. Descompresión gzip, deflate, brotli y zstd.
+- **URL sin esquema:** se añade `http://`, como en Bruno.
+- **`User-Agent`:** `apifast/<versión>` si la request no define uno.
+- **Timeout** de todo el intercambio (headers y cuerpo); 0 es sin límite.
+- **Cancelación** que corta también la espera de la respuesta.
+- **Cuerpo de la respuesta** por partes hacia el `ResponseStore`; nunca entero en memoria.
+- **Bodies de archivo y partes multipart** leídos del disco en streaming, relativos a la carpeta de la colección.
+- **Errores clasificados** como en la tabla de abajo. Los mensajes nunca incluyen la URL, que puede llevar secretos en la query, ni el valor de un header.
+
+Pendiente para F5: proxy, certificados, cookies, timeline instrumentado, descompresión manual y `encodeUrl: false`.
+
+Se prueba contra un servidor HTTP local escrito en los propios tests, sin red externa.
+
 ## Redirecciones
 
 Se gestionan manualmente para poder registrarlas:
