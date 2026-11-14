@@ -78,7 +78,7 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
 - [x] `apifast-storage-fs`: lectura con `oneyaml` y guardado con JSON Patch por elemento sobre el documento releído del disco; lectura y escritura de `opencollection.yml`, `folder.yml`, requests y entornos; carpeta `.apifast/` con el identificador de colección; escritura atómica; conservación de claves desconocidas. Cada guardado se verifica releyendo el resultado antes de escribir.
 - [x] `apifast-http`: envío con reqwest y rustls, redirecciones manuales, timeout, cancelación, cuerpo en streaming a disco. Errores clasificados (DNS, conexión, TLS, timeout, protocolo) sin la URL en el mensaje.
 - [x] Autenticación básica: Basic, Bearer, API key, heredada. Se aplica al renderizar, en `apifast-app`; un esquema sin implementar da error en vez de enviar sin auth.
-- [ ] `apifast-history`: almacén de respuestas en archivos.
+- [x] `apifast-history`: almacén de respuestas en archivos (`FsResponseStore`): escritura por partes con búfer fijo, lectura por ventanas, archivos parciales invisibles hasta terminar y borrados si el envío falla, y limpieza por número, tamaño y antigüedad. El historial de ejecuciones en JSON Lines queda en F2, con su panel.
 - [ ] `apifast-cli`: `apifast send <archivo> --env <nombre>`.
 - [x] Implementaciones en memoria de todos los puertos (`apifast_app::memory`).
 - [x] Corpus de round-trip con colecciones YAML de Bruno: 436 archivos copiados al repositorio (los fixtures de Bruno y una colección guardada por la aplicación Bruno 4.3.0), que se guardan sin cambiar un byte, y 1028 ediciones verificadas. Incluye archivos con `config.proxy`, `bundled` y `settings` por defecto.
@@ -107,6 +107,7 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
 - [ ] Editor de código con resaltado y formateo, con límite de unos 200 KB para la edición con resaltado.
 - [ ] Visor de respuestas por ventanas; si el texto de egui no alcanza el presupuesto, dibujo wgpu propio con `PaintCallback`.
 - [ ] Panel de respuesta: Body por ventanas, Headers, Timeline básico.
+- [ ] Historial de ejecuciones en JSON Lines (`HistoryStore` en `apifast-history`, ADR 0008) y su panel; limpieza de respuestas al arrancar con `FsResponseStore::prune`.
 - [ ] Selector y editor de entornos; vista de variables con procedencia.
 - [ ] `apifast-watch`: recarga ante cambios externos y resolución de conflictos con borradores.
 - [ ] Paleta de comandos y atajos reasignables.

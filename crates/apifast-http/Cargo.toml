@@ -20,7 +20,7 @@ form_urlencoded = "1.2.2"
 workspace = true
 
 [dev-dependencies]
-apifast-template = { path = "../apifast-template" }
+apifast-template.workspace = true
 flate2 = "1.1.11"
 tempfile.workspace = true
 tokio = { version = "1.54.1", features = ["rt", "macros", "net", "io-util", "time"] }
