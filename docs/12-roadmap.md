@@ -1,0 +1,311 @@
+# 12. Roadmap
+
+El desarrollo se divide en once fases. Cada una entrega algo utilizable y tiene un criterio de salida comprobable. No se fijan fechas: el tamaño relativo (S, M, L, XL) orienta el esfuerzo.
+
+## Resumen
+
+| Fase | Nombre | Tamaño | Depende de | Entrega |
+|---|---|---|---|---|
+| F0 | Fundaciones | S | — | Documentación, ADRs y spikes |
+| F1 | Núcleo sin interfaz | L | F0 | `apifast send` desde un archivo |
+| F2 | GUI mínima | XL | F1 | Aplicación usable a diario |
+| F3 | Bóveda | M | F1 | Secretos cifrados |
+| F4 | Tests y runner | L | F1 | Colecciones ejecutables en CI |
+| F5 | Red avanzada | L | F1 | Autenticación completa, proxy, certificados |
+| F6 | Importación y exportación | M | F1 | Migración desde otras herramientas |
+| F7 | GraphQL, SSE y WebSocket | L | F2 | Tres protocolos más |
+| F8 | gRPC | L | F2 | gRPC completo |
+| F9 | Scripting JavaScript | L | F4 | Scripts compatibles con Bruno |
+| F10 | Versión 1.0 | M | Todas | Release estable |
+
+```mermaid
+flowchart LR
+    F0 --> F1
+    F1 --> F2
+    F1 --> F3
+    F1 --> F4
+    F1 --> F5
+    F1 --> F6
+    F2 --> F7
+    F2 --> F8
+    F4 --> F9
+    F2 --> F10
+    F3 --> F10
+    F5 --> F10
+    F6 --> F10
+    F7 --> F10
+    F8 --> F10
+    F9 --> F10
+```
+
+Tras F1, las fases F2 a F6 son en gran parte independientes entre sí. El orden recomendado para una sola persona es el numérico. **Hito "MVP":** F1 + F2 + F3.
+
+---
+
+## F0 — Fundaciones
+
+**Objetivo:** cerrar el diseño y eliminar las incógnitas técnicas antes de escribir código de producto.
+
+### Tareas
+
+- [x] Análisis de Bruno y Yaak.
+- [x] Documentación de diseño y ADRs.
+- [ ] **Spike 1: librería YAML.** Comparar `yaml_serde`, `serde-saphyr` y `oneyaml` (ver [ADR 0002](adr/0002-formato-yaml-opencollection.md)). Criterios: conservación de comentarios escritos a mano, round-trip sin pérdida, conservación del orden y de claves desconocidas, bloques de texto multilínea, velocidad.
+- [ ] **Spike 2: editor de código en egui.** Prototipo con resaltado JSON, variables resaltadas y un texto de 1 MB. Medir fluidez y memoria. El mismo prototipo se hace en iced para comparar. **Si egui no cumple los criterios del [ADR 0004](adr/0004-egui-como-ui.md), se cambia a iced.**
+- [ ] **Spike 3: renderer y memoria.** Ventana vacía y ventana con árbol de 5000 filas: egui con glow y con wgpu, e iced con wgpu y con su renderer por software. Medir RSS y arranque.
+- [x] **Spike 4: compatibilidad con Bruno.** Resuelto leyendo su código: Bruno descarta las claves desconocidas al guardar. Los datos de apifast van en `.apifast/` ([ADR 0002](adr/0002-formato-yaml-opencollection.md)).
+- [ ] Comprobar en Bruno real que respeta `extensions.bruno.ignore` para `.apifast`.
+- [ ] Medir Bruno y Yaak en la misma máquina (RAM en reposo, arranque) como línea base.
+- [ ] Crear el workspace de Cargo vacío con CI: formato, lints, pruebas, `cargo deny`; compilación en Linux, macOS y Windows.
+- [x] Repositorio git inicializado y archivos de licencia (MIT y Apache-2.0).
+
+### Criterio de salida
+
+Cada spike tiene un resultado escrito con cifras, la librería YAML está elegida y el ADR 0004 está confirmado o sustituido.
+
+---
+
+## F1 — Núcleo sin interfaz
+
+**Objetivo:** un esqueleto funcional de extremo a extremo, sin GUI.
+
+### Tareas
+
+- [ ] `apifast-domain`: entidades, `Auth`, `Body`, `Setting<T>`, resolución de herencia con procedencia.
+- [ ] `apifast-template`: parser, árbol reversible, render recursivo, variables dinámicas básicas.
+- [ ] `apifast-app`: puertos, `OpenCollection`, `LoadRequest`, `SaveRequest`, `ResolveVariables`, `SendRequest`.
+- [ ] `apifast-storage-fs`: lectura y escritura de `opencollection.yml`, `folder.yml`, requests y entornos; carpeta `.apifast/` con el identificador de colección; escritura atómica; conservación de claves desconocidas.
+- [ ] `apifast-http`: envío con reqwest y rustls, redirecciones manuales, timeout, cancelación, cuerpo en streaming a disco.
+- [ ] Autenticación básica: Basic, Bearer, API key, heredada.
+- [ ] `apifast-history`: almacén de respuestas en archivos.
+- [ ] `apifast-cli`: `apifast send <archivo> --env <nombre>`.
+- [ ] Implementaciones en memoria de todos los puertos.
+- [ ] Corpus de round-trip con colecciones YAML de Bruno.
+- [ ] Test de reglas de arquitectura.
+
+### Criterio de salida
+
+- `apifast send` envía una request leída de un archivo, con variables de entorno, y muestra la respuesta.
+- Todos los archivos del corpus se leen y se reescriben sin diferencias.
+- El dominio no depende de ningún crate de entrada/salida.
+
+---
+
+## F2 — GUI mínima
+
+**Objetivo:** una aplicación de escritorio con la que trabajar a diario.
+
+### Tareas
+
+- [ ] `apifast-gui`: ventana, bucle reactivo, canal de comandos y de instantáneas con el núcleo.
+- [ ] Barra lateral: árbol virtualizado, crear, renombrar, mover, borrar, reordenar.
+- [ ] Pestañas con borradores y restauración al abrir.
+- [ ] Barra de URL con resaltado de variables.
+- [ ] Panel de request: Params, Headers, Body (JSON, texto, formulario), Auth, Ajustes.
+- [ ] Tablas clave/valor con edición masiva.
+- [ ] Editor de código con resaltado y formateo.
+- [ ] Panel de respuesta: Body por ventanas, Headers, Timeline básico.
+- [ ] Selector y editor de entornos; vista de variables con procedencia.
+- [ ] `apifast-watch`: recarga ante cambios externos y resolución de conflictos con borradores.
+- [ ] Paleta de comandos y atajos reasignables.
+- [ ] Temas claro y oscuro.
+- [ ] Ajustes de la aplicación.
+
+### Criterio de salida
+
+- El flujo crear → editar → guardar → enviar → inspeccionar funciona sin tocar archivos a mano.
+- Se cumplen los presupuestos de RAM en reposo y de arranque.
+- Un cambio hecho con otro editor o con git se refleja sin reiniciar.
+
+---
+
+## F3 — Bóveda
+
+**Objetivo:** ningún secreto en claro.
+
+### Tareas
+
+- [ ] `apifast-vault`: sobre XChaCha20-Poly1305 con datos asociados y vector fijo de prueba.
+- [ ] `KeyStore` sobre keyring, con respaldo en archivo `0600` e indicador en la interfaz.
+- [ ] Clave de colección: generación, envoltura, *challenge*.
+- [ ] Secretos solo locales (por defecto) y secretos compartidos en `.apifast/secrets/`; detección de entradas huérfanas.
+- [ ] Clave compartible: exportar, importar y validar.
+- [ ] Rotación de clave y conversión entre modelos.
+- [ ] Tipo `Secret` y enmascarado en timeline, historial, logs y CLI.
+- [ ] Interfaz: columna de clase de secreto, revelar, diálogos de clave, estado de la bóveda.
+- [ ] CLI: `apifast vault` y `APIFAST_COLLECTION_KEY`.
+- [ ] Cifrado del tarro de cookies.
+
+### Criterio de salida
+
+- Buscar un secreto conocido en la colección, el directorio de datos y los logs no devuelve resultados.
+- Una clave incorrecta se detecta y un valor manipulado no se descifra.
+- Dos usuarios comparten una colección con secretos intercambiando solo la clave.
+
+---
+
+## F4 — Tests y runner
+
+**Objetivo:** usar una colección como suite de pruebas.
+
+### Tareas
+
+- [ ] Evaluador de aserciones con todos los operadores.
+- [ ] Capturas con selector JSON; variables de runtime.
+- [ ] Funciones de plantilla `response` y `header`, con política de refresco y detección de ciclos.
+- [ ] JSONPath y XPath.
+- [ ] Caso de uso `RunCollection`: orden, tags, pausa, `--bail`, iteraciones.
+- [ ] Ejecución dirigida por datos (CSV y JSON).
+- [ ] `apifast run` con reporters de consola, JSON, JUnit y HTML.
+- [ ] Interfaz: pestaña Tests, resultados en la respuesta, vista del runner.
+- [ ] Filtro de respuesta por JSONPath o XPath en el visor.
+
+### Criterio de salida
+
+- Una colección de ejemplo se ejecuta en un pipeline de CI y falla con código 1 cuando una aserción falla.
+- El informe JUnit se muestra correctamente en un sistema de CI.
+
+---
+
+## F5 — Red avanzada
+
+**Objetivo:** cubrir los escenarios de red de entornos corporativos.
+
+### Tareas
+
+- [ ] Digest, NTLM y AWS SigV4.
+- [ ] OAuth 2.0: authorization code con PKCE, client credentials, password; caché cifrada y refresco.
+- [ ] Proxy: sistema y manual (HTTP, HTTPS, SOCKS5), exclusiones, por colección.
+- [ ] Autoridades certificadoras adicionales y certificados cliente por host.
+- [ ] Tarro de cookies con editor.
+- [ ] Sobrescrituras de DNS.
+- [ ] Timeline completo con conector instrumentado (DNS, conexión, TLS, reutilización).
+- [ ] Multipart y cuerpos de archivo en streaming.
+- [ ] Ejemplos de respuesta guardados.
+
+### Criterio de salida
+
+- Cada tipo de autenticación tiene una prueba de integración contra un servidor local.
+- El timeline muestra tiempos de DNS, conexión y TLS con el pool de conexiones activo.
+
+---
+
+## F6 — Importación y exportación
+
+**Objetivo:** que migrar a apifast sea sencillo.
+
+### Tareas
+
+- [ ] Importadores: Bruno `.bru`, Postman (colecciones y entornos), Insomnia, OpenAPI 3, cURL.
+- [ ] Plan de importación revisable: qué se crea, avisos, elementos no soportados.
+- [ ] Reimportación que actualiza en lugar de duplicar.
+- [ ] Pegar un comando cURL en la barra de URL crea la request.
+- [ ] Copiar como cURL.
+- [ ] Exportar a Postman.
+- [ ] Generación de código para los lenguajes más usados (a decidir según demanda).
+
+### Criterio de salida
+
+Una colección real de cada origen se importa y sus requests se envían correctamente; lo no soportado se informa de forma explícita.
+
+---
+
+## F7 — GraphQL, SSE y WebSocket
+
+### Tareas
+
+- [ ] GraphQL: editores de query y variables, introspección en caché, explorador de esquema, autocompletado.
+- [ ] SSE: parseo en vivo y visor de eventos.
+- [ ] `apifast-ws`: conectar, enviar, cerrar; historial de mensajes; herencia de headers y autenticación.
+- [ ] Formato de archivo para requests `graphql` y `websocket`.
+
+### Criterio de salida
+
+Cada protocolo tiene su editor y su visor, y sus archivos pasan el round-trip.
+
+---
+
+## F8 — gRPC
+
+### Tareas
+
+- [ ] `apifast-grpc`: reflection (v1 y v1alpha) y carga de `.proto`.
+- [ ] Decidir cómo compilar `.proto` sin un `protoc` externo.
+- [ ] Unario, streaming de servidor, de cliente y bidireccional.
+- [ ] Editor de mensajes JSON con esquema para autocompletar.
+- [ ] Metadata, TLS y autenticación reutilizando el motor.
+- [ ] Inicialización diferida y feature de Cargo.
+
+### Criterio de salida
+
+Los cuatro modos funcionan contra un servidor de pruebas, y abrir la aplicación sin usar gRPC no aumenta la memoria.
+
+---
+
+## F9 — Scripting JavaScript
+
+### Tareas
+
+- [ ] `apifast-script-js` con QuickJS, límites de tiempo y memoria.
+- [ ] API `req`, `res`, `bru`, `test` y `expect`.
+- [ ] Scripts de colección, carpeta y request con orden "sándwich".
+- [ ] Editor de scripts con resaltado.
+- [ ] Traducción de scripts de Postman en el importador.
+- [ ] Carga del motor solo al ejecutar el primer script.
+
+### Criterio de salida
+
+Las colecciones de prueba de Bruno con scripts se ejecutan con los mismos resultados, y una colección sin scripts no carga el motor.
+
+---
+
+## F10 — Versión 1.0
+
+### Tareas
+
+- [ ] Integración con git: estado, diff semántico por request, commit, cambio de rama.
+- [ ] Empaquetado para Linux (AppImage, Flatpak, paquetes); pulido y empaquetado de macOS y Windows.
+- [ ] Actualizaciones.
+- [ ] Traducciones: español e inglés.
+- [ ] Guía de usuario.
+- [ ] Auditoría de seguridad de la bóveda.
+- [ ] Revisión final de presupuestos de rendimiento.
+
+### Criterio de salida
+
+Todos los presupuestos de [rendimiento](10-rendimiento-y-memoria.md) se cumplen en las tres plataformas, y no quedan errores críticos abiertos.
+
+---
+
+## Después de la 1.0
+
+Ideas sin compromiso:
+
+- Extensiones mediante WebAssembly (nunca un proceso auxiliar permanente).
+- Integración con gestores de secretos externos (Vault, 1Password, gestores de nube).
+- Passphrase como alternativa al archivo `0600` cuando no hay keyring.
+- HTTP/3.
+- Servidor MCP para que asistentes de IA usen las colecciones.
+- Pruebas de carga básicas.
+- Servidor de mocks a partir de los ejemplos guardados.
+
+---
+
+## Riesgos principales
+
+| Riesgo | Impacto | Fase | Mitigación |
+|---|---|---|---|
+| El editor de código en egui no alcanza la calidad esperada | Alto | F0, F2 | Spike 2 con criterios medibles; si falla, se reconsidera el toolkit antes de F2 |
+| La librería YAML no conserva el formato | Alto | F0, F1 | Spike 1; serializador propio para la escritura si hace falta |
+| Bruno renombra entornos o variables y deja secretos compartidos huérfanos | Bajo | F3 | Detección y reasignación en el editor de entornos |
+| OpenCollection cambia de forma incompatible | Medio | Todas | Fijar la versión soportada y añadir migraciones |
+| El keyring no está disponible en algunos entornos Linux | Medio | F3 | Respaldo en archivo `0600`, señalado en la interfaz |
+| OAuth 2.0 tiene demasiadas variantes | Medio | F5 | Empezar por los tres flujos más usados |
+| gRPC aumenta mucho el binario | Medio | F8 | Feature opcional |
+| El alcance crece antes del MVP | Alto | F1–F3 | El MVP es F1 + F2 + F3; lo demás espera |
+
+## Cómo se actualiza este documento
+
+- Las casillas se marcan al completar cada tarea.
+- Un cambio de alcance o de orden se anota aquí con su motivo.
+- Los resultados de los spikes se enlazan desde la fase F0.

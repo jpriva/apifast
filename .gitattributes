@@ -1,0 +1,20 @@
+# Normalize line endings to LF in the repository
+* text=auto eol=lf
+
+# Source and docs
+*.rs    text diff=rust
+*.toml  text
+*.md    text diff=markdown
+*.yml   text
+*.yaml  text
+*.json  text
+
+# Lockfile: generated, collapsed in code review
+Cargo.lock text linguist-generated
+
+# Binary assets
+*.png   binary
+*.ico   binary
+*.ttf   binary
+*.otf   binary
+*.woff2 binary

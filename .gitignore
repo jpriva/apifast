@@ -1,0 +1,35 @@
+# Rust build output
+/target/
+**/*.rs.bk
+*.pdb
+
+# Cargo.lock IS committed (apifast ships binaries)
+
+# Profiling and benchmarks
+/flamegraph.svg
+perf.data*
+heaptrack.*
+/criterion/
+
+# Fuzzing artifacts
+/fuzz/target/
+/fuzz/corpus/
+/fuzz/artifacts/
+
+# Local secrets and environment files (never commit)
+.env
+.env.*
+!.env.example
+*.key
+*.vault
+
+# Throwaway prototypes from phase F0 (results are kept in docs/)
+/spikes/**/target/
+
+# Editors and OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db

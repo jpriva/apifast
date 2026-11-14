@@ -1,0 +1,126 @@
+# 11. Calidad y clean code
+
+Convenciones de código, estrategia de pruebas y comprobaciones automáticas del proyecto.
+
+## Convenciones de código
+
+### Idioma
+
+- **Código, identificadores, comentarios y mensajes de commit:** inglés.
+- **Documentación de diseño (`docs/`):** español.
+- **Textos de la interfaz:** preparados para traducción desde el inicio; español e inglés.
+
+### Nombres
+
+- Tipos del dominio con el vocabulario del producto: `Collection`, `Folder`, `Request`, `Environment`, `Variable`, `Secret`.
+- Casos de uso con verbo: `SendRequest`, `SaveRequest`, `RunCollection`.
+- Puertos con el rol que cumplen: `CollectionRepository`, `HttpTransport`, `SecretVault`.
+- Adaptadores con la tecnología: `YamlCollectionRepository`, `ReqwestTransport`, `KeyringKeyStore`.
+
+### Tamaño y forma
+
+- Funciones cortas que hacen una cosa. Si necesita un comentario para separar secciones, se divide.
+- Un módulo por concepto. Como guía, un archivo que pasa de unas 400 líneas se revisa para dividirlo.
+- Sin módulos "utils" genéricos; cada función auxiliar vive junto a lo que ayuda.
+- Dependencias explícitas por constructor; sin estado global.
+
+### Tipos
+
+- **Estados inválidos irrepresentables.** `Auth` y `Body` son enums; no hay mapas de cadenas.
+- **Newtypes** para identificadores y valores con reglas (`CollectionId`, `VariableName`, `HeaderName`).
+- **Transiciones en el tipo.** `ResolvedRequest` solo se obtiene resolviendo la herencia, y es lo único que acepta el transporte.
+- **`Secret`** no se puede imprimir ni serializar por accidente.
+
+### Errores
+
+- `thiserror` en las librerías; `anyhow` solo en los binarios.
+- Sin `unwrap` ni `expect` en código de producción, salvo invariantes documentadas.
+- Sin `panic` como control de flujo.
+- Cada error lleva contexto suficiente para mostrar un mensaje útil (qué archivo, qué variable).
+- Ningún error contiene el valor de un secreto.
+
+### `unsafe`
+
+- `#![forbid(unsafe_code)]` en todos los crates, salvo donde sea imprescindible (por ejemplo, mapear un archivo en memoria), aislado en un módulo pequeño y comentado.
+
+### Comentarios y documentación
+
+- Los comentarios explican el porqué, no el qué.
+- Todo elemento público de un crate tiene documentación.
+- Cada crate tiene un `README` breve con su responsabilidad y sus dependencias permitidas.
+
+## Reglas de arquitectura
+
+Las reglas de dependencia de [arquitectura](03-arquitectura.md) se comprueban automáticamente:
+
+- Un test lee `cargo metadata` y falla si `apifast-domain` depende de otro crate del workspace, si `apifast-app` depende de un adaptador o si un adaptador depende de otro.
+- `cargo deny` controla licencias, avisos de seguridad y dependencias duplicadas.
+
+## Estrategia de pruebas
+
+| Nivel | Qué cubre | Herramientas |
+|---|---|---|
+| Unitarias | Dominio, plantillas, aserciones, herencia | Tests de Rust; rápidas y sin entrada/salida |
+| De propiedades | Round-trip de plantillas y de archivos; el parser no entra en pánico | `proptest` |
+| De instantáneas | Serialización YAML, reporters | `insta` |
+| De contrato | Cada adaptador cumple su puerto; la misma batería se ejecuta contra la implementación real y la de memoria | Tests genéricos sobre el trait |
+| De integración | Casos de uso con adaptadores reales contra un servidor local | Servidor HTTP de pruebas, directorios temporales |
+| De extremo a extremo | CLI sobre colecciones de ejemplo; se comparan salida y código de retorno | Colecciones en `tests/` |
+| De interfaz | Lógica de paneles sin ventana; pruebas visuales de los componentes clave | Utilidades de pruebas de egui |
+| De compatibilidad | Colecciones reales de Bruno se leen y se reescriben sin pérdida | Corpus tomado de `bruno/packages/bruno-tests/` |
+| Criptográficas | Vectores fijos del sobre, manipulación detectada, clave incorrecta | Tests con valores conocidos |
+| Fuzzing | Parser de plantillas, lector YAML, importadores | `cargo fuzz` |
+| Rendimiento | Presupuestos de [rendimiento](10-rendimiento-y-memoria.md) | `criterion`, scripts de memoria |
+
+### Criterios
+
+- El dominio y las plantillas se desarrollan con las pruebas primero.
+- Toda corrección de un bug llega con una prueba que lo reproduce.
+- Las pruebas no dependen de la red externa ni del keyring real.
+- Se prioriza cubrir comportamientos, no alcanzar un porcentaje.
+
+## Comprobaciones automáticas
+
+En cada cambio:
+
+| Comprobación | Comando |
+|---|---|
+| Formato | `cargo fmt --check` |
+| Lints | `cargo clippy --all-targets -- -D warnings` |
+| Pruebas | `cargo test --workspace` |
+| Arquitectura | Test de reglas de dependencia |
+| Dependencias | `cargo deny check` |
+| Seguridad | `cargo audit` |
+| Documentación | `cargo doc --no-deps` sin advertencias |
+
+En la rama principal, además: benchmarks con comparación, compilación en Linux, macOS y Windows, y tamaño del binario.
+
+### Lints
+
+- `clippy::pedantic` activado de forma selectiva.
+- Prohibidos: `unwrap_used`, `expect_used`, `dbg_macro`, `print_stdout` fuera de la CLI, `todo`.
+- `missing_docs` en los crates de dominio y aplicación.
+
+## Flujo de trabajo
+
+- Ramas cortas y cambios pequeños, cada uno con sus pruebas.
+- Mensajes de commit con formato convencional (`feat:`, `fix:`, `docs:`, `refactor:`).
+- Una decisión que cambia la arquitectura se registra como ADR en `docs/adr/`.
+- Los cambios en el formato de archivos actualizan [formato de archivos](04-formato-de-archivos.md) y añaden casos al corpus de round-trip.
+
+## Seguridad
+
+- Revisión específica de todo cambio en `apifast-vault`.
+- Los secretos nunca aparecen en pruebas con valores reales.
+- Las dependencias criptográficas se actualizan de forma deliberada, comprobando los vectores fijos.
+- Los registros de la aplicación no incluyen headers de autorización, cookies ni cuerpos, salvo en un modo de depuración explícito y con enmascarado.
+
+## Definición de terminado
+
+Una tarea está terminada cuando:
+
+1. El comportamiento tiene pruebas y pasan.
+2. Las comprobaciones automáticas pasan.
+3. No rompe ningún presupuesto de rendimiento.
+4. La documentación afectada está actualizada.
+5. No introduce `unwrap`, `unsafe` ni dependencias nuevas sin justificar.
