@@ -56,6 +56,8 @@ cargo deny check
 
 The Rust version is pinned in `rust-toolchain.toml`; rustup installs it automatically.
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the conventions and [ARCHITECTURE.md](ARCHITECTURE.md) for a map of the code.
+
 ## Roadmap at a glance
 
 | Phase | Outcome |
