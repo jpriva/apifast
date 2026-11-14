@@ -1,0 +1,20 @@
+[package]
+name = "yaml-spike"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+indexmap = { version = "2.14.2", features = ["serde"] }
+oneyaml = "1.2.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde-saphyr = "2.1.1"
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
+similar = "3.2.1"
+yaml_serde = "0.10.7"
+
+[profile.size]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true

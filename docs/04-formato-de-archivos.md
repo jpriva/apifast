@@ -267,6 +267,8 @@ Los bloques `runtime.scripts` de Bruno se conservan intactos aunque apifast no l
 
 - **Escritura atómica:** se escribe en un archivo temporal del mismo directorio y se renombra sobre el destino, conservando permisos.
 - **Round-trip sin pérdida:** leer un archivo y guardarlo sin cambios produce exactamente el mismo contenido. Se comprueba con tests sobre un corpus de archivos.
+- **Guardado por edición, no por reescritura:** al guardar, se relee el archivo del disco como documento, se calcula un JSON Patch por elemento entre los datos leídos y los nuevos, y se aplica. Solo cambian las líneas editadas; se conservan comentarios, líneas en blanco, comillas y estilos de bloque. Ver el [spike 1](spikes/01-libreria-yaml.md).
+- **Archivos nuevos:** se escriben con el mismo estilo que Bruno (listas indentadas y una línea en blanco entre bloques).
 - **Orden de claves estable:** el serializador escribe siempre en el mismo orden.
 - **Claves desconocidas:** se guardan en un mapa de "extras" del DTO y se vuelven a escribir.
 - **Errores de parseo:** el archivo aparece en el árbol marcado con error y se puede abrir como texto; nunca se sobrescribe automáticamente.

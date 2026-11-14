@@ -1,6 +1,6 @@
 # ADR 0002: Formato en disco YAML compatible con OpenCollection
 
-- **Estado:** aceptado; la librería YAML se confirma con el spike 1 de F0
+- **Estado:** aceptado; librería YAML elegida en el [spike 1](../spikes/01-libreria-yaml.md)
 - **Fecha:** 2026-11-14
 
 ## Contexto
@@ -31,12 +31,19 @@ Bruno no ignora las carpetas ocultas, así que apifast añade `.apifast` a `exte
 **En contra**
 
 - YAML tiene ambigüedades conocidas (tipos implícitos, indentación). Se mitiga escribiendo siempre las cadenas problemáticas entre comillas.
-- El ecosistema YAML en Rust es menos sólido que el de TOML: la librería histórica está sin mantenimiento y hay que elegir entre sus sucesoras (spike 1).
+- El ecosistema YAML en Rust es menos sólido que el de TOML: la librería histórica está sin mantenimiento y la elegida es reciente.
 - Se depende de una especificación externa que puede cambiar.
 - El valor cifrado de un secreto queda separado de la definición de su variable; apifast debe mantenerlos sincronizados al renombrar, y detectar entradas huérfanas si el cambio se hizo con Bruno.
-- La librería YAML queda por elegir en el spike 1.
 
-## Librería YAML: candidatas
+## Librería YAML
+
+Se elige **`oneyaml`** tras medir las tres candidatas con 430 archivos reales de Bruno ([spike 1](../spikes/01-libreria-yaml.md)):
+
+- Lee con serde hacia los DTO.
+- Guarda editando el documento original con JSON Patch por elemento. Una edición de un campo cambia exactamente 2 líneas del archivo, y se conservan comentarios, líneas en blanco y estilos. Con serde puro, las otras librerías cambian de 4,5 a 22 líneas de media.
+- Plan alternativo: `serde-saphyr` ajustada.
+
+Candidatas evaluadas:
 
 | Crate | A favor | En contra |
 |---|---|---|

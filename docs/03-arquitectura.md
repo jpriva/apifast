@@ -55,7 +55,7 @@ flowchart TB
 | `apifast-domain` | Dominio | Entidades, value objects, reglas de herencia, aserciones | Solo `std` y utilidades puras |
 | `apifast-template` | Dominio | Parser y renderer de plantillas | `apifast-domain` |
 | `apifast-app` | Aplicación | Casos de uso y definición de puertos | Dominio, `async-trait`/futures |
-| `apifast-storage-fs` | Adaptador | Lectura y escritura YAML, escritura atómica | Aplicación, serde, librería YAML |
+| `apifast-storage-fs` | Adaptador | Lectura y escritura YAML, escritura atómica | Aplicación, serde, oneyaml |
 | `apifast-http` | Adaptador | Transporte HTTP, TLS, proxy, cookies, autenticación | Aplicación, reqwest, rustls |
 | `apifast-vault` | Adaptador | Cifrado, claves, keyring | Aplicación, chacha20poly1305, keyring |
 | `apifast-watch` | Adaptador | Observación del sistema de archivos | Aplicación, notify |

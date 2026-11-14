@@ -50,7 +50,7 @@ Tras F1, las fases F2 a F6 son en gran parte independientes entre sí. El orden 
 
 - [x] Análisis de Bruno y Yaak.
 - [x] Documentación de diseño y ADRs.
-- [ ] **Spike 1: librería YAML.** Comparar `yaml_serde`, `serde-saphyr` y `oneyaml` (ver [ADR 0002](adr/0002-formato-yaml-opencollection.md)). Criterios: conservación de comentarios escritos a mano, round-trip sin pérdida, conservación del orden y de claves desconocidas, bloques de texto multilínea, velocidad.
+- [x] **Spike 1: librería YAML.** Elegida `oneyaml`, guardando con JSON Patch sobre el documento original. Resultados: [spikes/01-libreria-yaml.md](spikes/01-libreria-yaml.md).
 - [ ] **Spike 2: editor de código en egui.** Prototipo con resaltado JSON, variables resaltadas y un texto de 1 MB. Medir fluidez y memoria. El mismo prototipo se hace en iced para comparar. **Si egui no cumple los criterios del [ADR 0004](adr/0004-egui-como-ui.md), se cambia a iced.**
 - [ ] **Spike 3: renderer y memoria.** Ventana vacía y ventana con árbol de 5000 filas: egui con glow y con wgpu, e iced con wgpu y con su renderer por software. Medir RSS y arranque.
 - [x] **Spike 4: compatibilidad con Bruno.** Resuelto leyendo su código: Bruno descarta las claves desconocidas al guardar. Los datos de apifast van en `.apifast/` ([ADR 0002](adr/0002-formato-yaml-opencollection.md)).
@@ -74,7 +74,7 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
 - [ ] `apifast-domain`: entidades, `Auth`, `Body`, `Setting<T>`, resolución de herencia con procedencia.
 - [ ] `apifast-template`: parser, árbol reversible, render recursivo, variables dinámicas básicas.
 - [ ] `apifast-app`: puertos, `OpenCollection`, `LoadRequest`, `SaveRequest`, `ResolveVariables`, `SendRequest`.
-- [ ] `apifast-storage-fs`: lectura y escritura de `opencollection.yml`, `folder.yml`, requests y entornos; carpeta `.apifast/` con el identificador de colección; escritura atómica; conservación de claves desconocidas.
+- [ ] `apifast-storage-fs`: lectura con `oneyaml` (serde) y guardado con JSON Patch por elemento sobre el documento releído del disco; lectura y escritura de `opencollection.yml`, `folder.yml`, requests y entornos; carpeta `.apifast/` con el identificador de colección; escritura atómica; conservación de claves desconocidas.
 - [ ] `apifast-http`: envío con reqwest y rustls, redirecciones manuales, timeout, cancelación, cuerpo en streaming a disco.
 - [ ] Autenticación básica: Basic, Bearer, API key, heredada.
 - [ ] `apifast-history`: almacén de respuestas en archivos.
@@ -296,7 +296,7 @@ Ideas sin compromiso:
 | Riesgo | Impacto | Fase | Mitigación |
 |---|---|---|---|
 | El editor de código en egui no alcanza la calidad esperada | Alto | F0, F2 | Spike 2 con criterios medibles; si falla, se reconsidera el toolkit antes de F2 |
-| La librería YAML no conserva el formato | Alto | F0, F1 | Spike 1; serializador propio para la escritura si hace falta |
+| `oneyaml` es reciente y puede tener errores o quedar sin mantenimiento | Medio | F1 | Aislada en `apifast-storage-fs`; corpus de round-trip; plan alternativo con `serde-saphyr` |
 | Bruno renombra entornos o variables y deja secretos compartidos huérfanos | Bajo | F3 | Detección y reasignación en el editor de entornos |
 | OpenCollection cambia de forma incompatible | Medio | Todas | Fijar la versión soportada y añadir migraciones |
 | El keyring no está disponible en algunos entornos Linux | Medio | F3 | Respaldo en archivo `0600`, señalado en la interfaz |
