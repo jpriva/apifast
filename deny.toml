@@ -1,0 +1,38 @@
+# Configuración de cargo-deny: https://embarkstudios.github.io/cargo-deny/
+
+[graph]
+all-features = true
+
+[advisories]
+# Avisos de seguridad de RustSec (cubre lo que comprobaría cargo audit).
+yanked = "deny"
+unmaintained = "workspace"
+ignore = []
+
+[licenses]
+# Licencias permisivas compatibles con MIT OR Apache-2.0. Añadir otra exige justificarla.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+]
+confidence-threshold = 0.9
+# La lista se escribe pensando en las dependencias previstas, no solo en las actuales.
+unused-allowed-license = "allow"
+
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

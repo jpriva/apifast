@@ -90,8 +90,10 @@ En cada cambio:
 | Pruebas | `cargo test --workspace` |
 | Arquitectura | Test de reglas de dependencia |
 | Dependencias | `cargo deny check` |
-| Seguridad | `cargo audit` |
+| Seguridad | `cargo deny check advisories` (misma base RustSec que `cargo audit`) |
 | Documentación | `cargo doc --no-deps` sin advertencias |
+
+El CI está en `.github/workflows/ci.yml`. Los lints están en `[workspace.lints]` del `Cargo.toml` raíz, y las reglas de licencias y orígenes en `deny.toml`. La versión mínima de Rust (MSRV) es la 1.95, la que exige egui 0.37, y el CI la comprueba con `cargo check`.
 
 En la rama principal, además: benchmarks con comparación, compilación en Linux, macOS y Windows, y tamaño del binario.
 

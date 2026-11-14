@@ -1,0 +1,40 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+# Los spikes de F0 son prototipos desechables con su propio Cargo.lock.
+exclude = ["spikes"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[workspace.dependencies]
+apifast-domain = { path = "crates/apifast-domain" }
+apifast-template = { path = "crates/apifast-template" }
+apifast-app = { path = "crates/apifast-app" }
+apifast-storage-fs = { path = "crates/apifast-storage-fs" }
+apifast-http = { path = "crates/apifast-http" }
+apifast-history = { path = "crates/apifast-history" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+unwrap_used = "deny"
+expect_used = "deny"
+dbg_macro = "deny"
+todo = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

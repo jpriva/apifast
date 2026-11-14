@@ -198,7 +198,8 @@ apifast/
 │   ├── apifast-grpc/
 │   ├── apifast-script-js/
 │   ├── apifast-gui/
-│   └── apifast-cli/
+│   ├── apifast-cli/
+│   └── apifast-arch-tests/ # test de reglas de dependencia
 ├── docs/
 └── tests/                  # colecciones de ejemplo y pruebas de extremo a extremo
 ```

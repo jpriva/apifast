@@ -1,0 +1,15 @@
+[package]
+name = "apifast-app"
+description = "Casos de uso y puertos (traits) de apifast."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+apifast-domain.workspace = true
+apifast-template.workspace = true
+
+[lints]
+workspace = true

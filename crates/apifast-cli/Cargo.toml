@@ -1,0 +1,23 @@
+[package]
+name = "apifast-cli"
+description = "Línea de comandos de apifast y raíz de composición."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "apifast"
+path = "src/main.rs"
+
+[dependencies]
+apifast-domain.workspace = true
+apifast-template.workspace = true
+apifast-app.workspace = true
+apifast-storage-fs.workspace = true
+apifast-http.workspace = true
+apifast-history.workspace = true
+
+[lints]
+workspace = true
