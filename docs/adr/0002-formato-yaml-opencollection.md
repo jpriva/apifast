@@ -17,7 +17,7 @@ Los datos propios de apifast (identificador de colección, *challenge* y secreto
 
 Se revisó el serializador de Bruno: al guardar reconstruye cada archivo desde su modelo interno y descarta toda clave desconocida, incluida cualquier extensión propia. Con claves `x-apifast` dentro de los archivos, abrir y guardar la colección con Bruno habría borrado los secretos cifrados y el identificador. Con `.apifast/` aparte, ambas herramientas conviven sobre la misma carpeta.
 
-Bruno no ignora las carpetas ocultas, así que apifast añade `.apifast` a `extensions.bruno.ignore`, que Bruno sí conserva.
+Bruno no ignora las carpetas ocultas, así que apifast añade `.apifast` a `extensions.bruno.ignore`, que Bruno sí conserva. Comprobado en Bruno 4.3.0: no muestra la carpeta, no la modifica y conserva la entrada al guardar ([spike](../spikes/03-bruno-ignora-apifast.md)).
 
 ## Consecuencias
 

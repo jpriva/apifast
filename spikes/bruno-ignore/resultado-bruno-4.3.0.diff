@@ -1,0 +1,68 @@
+diff --git a/environments/produccion.yml b/environments/produccion.yml
+index 66ab7df..894853e 100644
+--- a/environments/produccion.yml
++++ b/environments/produccion.yml
+@@ -1,6 +1,6 @@
+ name: produccion
+ variables:
+   - name: host
+-    value: https://httpbin.org
++    value: https://httpbintest.org
+   - secret: true
+     name: api_key
+diff --git a/opencollection.yml b/opencollection.yml
+index 4507dc6..866ac7f 100644
+--- a/opencollection.yml
++++ b/opencollection.yml
+@@ -2,12 +2,25 @@ opencollection: 1.0.0
+ 
+ info:
+   name: prueba-ignore-apifast
++config:
++  proxy:
++    inherit: true
++    config:
++      protocol: http
++      hostname: ""
++      port: ""
++      auth:
++        username: ""
++        password: ""
++      bypassProxy: ""
+ 
+ request:
+   headers:
+     - name: accept
+       value: application/json
+-
++    - name: x-prueba
++      value: "1"
++bundled: false
+ extensions:
+   bruno:
+     ignore:
+diff --git a/usuarios/listar.yml b/usuarios/listar.yml
+index e62d4d3..d9b606f 100644
+--- a/usuarios/listar.yml
++++ b/usuarios/listar.yml
+@@ -5,8 +5,19 @@ info:
+ 
+ http:
+   method: GET
+-  url: "{{host}}/get"
++  url: "{{host}}/get?x=1"
+   headers:
+     - name: x-api-key
+       value: "{{api_key}}"
++  params:
++    - name: x
++      value: "1"
++      type: query
+   auth: inherit
++
++settings:
++  encodeUrl: true
++  timeout: 0
++  followRedirects: true
++  maxRedirects: 5
++  forwardAuthorizationHeader: true

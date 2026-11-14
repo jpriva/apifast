@@ -53,7 +53,7 @@ Tras F1, las fases F2 a F6 son en gran parte independientes entre sí. El orden 
 - [x] **Spike 1: librería YAML.** Elegida `oneyaml`, guardando con JSON Patch sobre el documento original. Resultados: [spikes/01-libreria-yaml.md](spikes/01-libreria-yaml.md).
 - [x] **Spikes 2 y 3: interfaz y renderer.** Elegido egui con wgpu; presupuesto de memoria medido en PSS; edición con resaltado limitada a unos 200 KB. Resultados: [spikes/02-interfaz-egui-vs-iced.md](spikes/02-interfaz-egui-vs-iced.md).
 - [x] **Spike 4: compatibilidad con Bruno.** Resuelto leyendo su código: Bruno descarta las claves desconocidas al guardar. Los datos de apifast van en `.apifast/` ([ADR 0002](adr/0002-formato-yaml-opencollection.md)).
-- [ ] Comprobar en Bruno real que respeta `extensions.bruno.ignore` para `.apifast`.
+- [x] Comprobar en Bruno real que respeta `extensions.bruno.ignore` para `.apifast`. Confirmado en Bruno 4.3.0: [spikes/03-bruno-ignora-apifast.md](spikes/03-bruno-ignora-apifast.md).
 - [ ] Medir Bruno y Yaak en la misma máquina (RAM en reposo, arranque) como línea base.
 - [x] Crear el workspace de Cargo vacío con CI: formato, lints, pruebas, `cargo deny`; compilación en Linux, macOS y Windows. Esqueletos de los crates de F1, test de reglas de arquitectura (`apifast-arch-tests`) y Rust fijado en `rust-toolchain.toml`.
 - [x] Repositorio git inicializado y archivos de licencia (MIT y Apache-2.0).
@@ -79,7 +79,7 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
 - [ ] `apifast-history`: almacén de respuestas en archivos.
 - [ ] `apifast-cli`: `apifast send <archivo> --env <nombre>`.
 - [ ] Implementaciones en memoria de todos los puertos.
-- [ ] Corpus de round-trip con colecciones YAML de Bruno.
+- [ ] Corpus de round-trip con colecciones YAML de Bruno, incluidos archivos reescritos por Bruno al guardar (con `config.proxy`, `bundled` y `settings` por defecto).
 - [x] Test de reglas de arquitectura (adelantado en F0, `apifast-arch-tests`).
 
 ### Criterio de salida
