@@ -96,8 +96,8 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
 
 ### Tareas
 
-- [ ] `apifast-gui`: ventana, bucle reactivo, canal de comandos y de instantáneas con el núcleo.
-- [ ] Estructura de componentes con atomic design ([UI y UX](09-ui-ux.md#componentes-atomic-design)): tokens en `theme/`, átomos, moléculas, organismos que devuelven eventos, plantillas y pantallas.
+- [x] `apifast-gui`: ventana, bucle reactivo, canal de comandos y de instantáneas con el núcleo. La ventana abre una carpeta desde la pantalla de bienvenida o con `apifast-gui <carpeta>`; el selector de carpetas nativo llega con los ajustes.
+- [x] Estructura de componentes con atomic design ([UI y UX](09-ui-ux.md#componentes-atomic-design)): tokens en `theme/`, átomos, moléculas, organismos que devuelven eventos, plantillas y pantallas.
 - [x] Galería de componentes (`--example gallery`) y pruebas por componente con `egui_kittest`.
 - [ ] Barra lateral: árbol virtualizado, crear, renombrar, mover, borrar, reordenar.
 - [ ] Pestañas con borradores y restauración al abrir.
