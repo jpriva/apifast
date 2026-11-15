@@ -13,6 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 apifast-domain.workspace = true
+apifast-template.workspace = true
 apifast-history.workspace = true
 apifast-http.workspace = true
 apifast-storage-fs.workspace = true

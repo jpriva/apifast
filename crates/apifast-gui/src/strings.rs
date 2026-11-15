@@ -72,6 +72,28 @@ pub struct Strings {
     pub discard: &'static str,
     /// Marks a tab with unsaved changes.
     pub unsaved: &'static str,
+    /// Hover of a variable that is not defined.
+    pub variable_missing: &'static str,
+    /// Hover of a tag whose value is made when sending.
+    pub variable_generated: &'static str,
+    /// Shown instead of a secret's value.
+    pub secret_hidden: &'static str,
+    /// Origin: apifast's default.
+    pub origin_default: &'static str,
+    /// Origin: the global environment.
+    pub origin_global: &'static str,
+    /// Origin: the collection.
+    pub origin_collection: &'static str,
+    /// Origin: an environment, followed by its name.
+    pub origin_environment: &'static str,
+    /// Origin: a folder, followed by its name.
+    pub origin_folder: &'static str,
+    /// Origin: the request.
+    pub origin_request: &'static str,
+    /// Origin: captured from a response.
+    pub origin_runtime: &'static str,
+    /// Origin: typed in for this send.
+    pub origin_prompt: &'static str,
 }
 
 /// English.
@@ -110,4 +132,15 @@ pub const EN: Strings = Strings {
     save: "Save",
     discard: "Don't save",
     unsaved: "Unsaved changes",
+    variable_missing: "Not defined here. Pick an environment that defines it, or add it.",
+    variable_generated: "Made when the request is sent.",
+    secret_hidden: "secret (hidden)",
+    origin_default: "Default",
+    origin_global: "Global environment",
+    origin_collection: "Collection",
+    origin_environment: "Environment",
+    origin_folder: "Folder",
+    origin_request: "Request",
+    origin_runtime: "Captured from a response",
+    origin_prompt: "Typed in for this send",
 };

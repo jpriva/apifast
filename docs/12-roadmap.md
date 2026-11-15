@@ -101,7 +101,7 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
 - [x] Galería de componentes (`--example gallery`) y pruebas por componente con `egui_kittest`.
 - [x] Barra lateral: árbol virtualizado, crear, renombrar, mover, borrar, reordenar. Menú contextual, arrastrar y soltar, y "subir" y "bajar" para hacerlo sin ratón. Crear y renombrar ponen al archivo el *slug* del nombre; mover y reordenar reescriben solo los `seq` que cambian.
 - [x] Pestañas con borradores y restauración al abrir. Método y URL ya se editan; `Ctrl+S`, `Ctrl+Shift+S` y `Ctrl+W`; cerrar una pestaña con cambios pide confirmación. Enviar usa lo que hay en pantalla, guardado o no.
-- [ ] Barra de URL con resaltado de variables.
+- [x] Barra de URL con resaltado de variables. Las definidas van sobre un tinte de su color, las que faltan subrayadas y las que se generan al enviar en otro color. Al pasar el cursor se ven el valor (los secretos, ocultos) y el ámbito de origen. El átomo `TemplateField` sirve también para los demás campos con plantillas.
 - [ ] Panel de request: Params, Headers, Body (JSON, texto, formulario), Auth, Ajustes.
 - [ ] Tablas clave/valor con edición masiva.
 - [ ] Editor de código con resaltado y formateo, con límite de unos 200 KB para la edición con resaltado.

@@ -289,6 +289,7 @@ dependencies = [
  "apifast-history",
  "apifast-http",
  "apifast-storage-fs",
+ "apifast-template",
  "eframe",
  "egui_kittest",
  "tempfile",

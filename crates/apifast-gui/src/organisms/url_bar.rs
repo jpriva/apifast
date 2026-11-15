@@ -3,6 +3,7 @@
 use apifast_domain::Method;
 use eframe::egui::{self, Align, Layout, RichText};
 
+use crate::atoms::{TemplateField, TemplateFieldTexts, VariableHints};
 use crate::strings::Strings;
 use crate::theme;
 
@@ -35,21 +36,25 @@ pub enum UrlBarEvent {
 pub struct UrlBar<'a> {
     method: &'a mut Method,
     url: &'a mut String,
+    hints: &'a VariableHints,
     sending: bool,
     strings: &'a Strings,
 }
 
 impl<'a> UrlBar<'a> {
-    /// A bar over `method` and `url`. While `sending`, the button cancels.
+    /// A bar over `method` and `url`, highlighting the variables in
+    /// `hints`. While `sending`, the button cancels.
     pub fn new(
         method: &'a mut Method,
         url: &'a mut String,
+        hints: &'a VariableHints,
         sending: bool,
         strings: &'a Strings,
     ) -> Self {
         Self {
             method,
             url,
+            hints,
             sending,
             strings,
         }
@@ -60,6 +65,7 @@ impl<'a> UrlBar<'a> {
         let Self {
             method,
             url,
+            hints,
             sending,
             strings,
         } = self;
@@ -77,12 +83,14 @@ impl<'a> UrlBar<'a> {
                 if ui.button(text).clicked() {
                     event = Some(action);
                 }
-                let field = ui.add(
-                    egui::TextEdit::singleline(url)
-                        .font(egui::TextStyle::Monospace)
-                        .hint_text(strings.url_placeholder)
-                        .desired_width(ui.available_width()),
-                );
+                let texts = TemplateFieldTexts {
+                    placeholder: strings.url_placeholder,
+                    missing: strings.variable_missing,
+                    generated: strings.variable_generated,
+                };
+                let field = TemplateField::new(url, hints, texts)
+                    .desired_width(ui.available_width())
+                    .show(ui);
                 if field.changed() {
                     event = Some(UrlBarEvent::Edited);
                 }

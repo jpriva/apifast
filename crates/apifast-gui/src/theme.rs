@@ -78,6 +78,13 @@ pub struct Palette {
     pub warning: Color32,
     /// 5xx and errors
     pub danger: Color32,
+    /// A `{{variable}}` that is defined, drawn on a tint of itself.
+    pub variable: Color32,
+    /// A `{{variable}}` that is not defined, underlined.
+    pub variable_missing: Color32,
+    /// A tag whose value is made when sending: `{{$random}}`, `{{?Ask}}`,
+    /// `{{process.env.X}}` and functions.
+    pub variable_generated: Color32,
 }
 
 /// The light theme.
@@ -98,6 +105,9 @@ pub const LIGHT: Palette = Palette {
     info: Color32::from_rgb(0x1b, 0x55, 0xb3),
     warning: Color32::from_rgb(0x8a, 0x51, 0x00),
     danger: Color32::from_rgb(0xa8, 0x24, 0x24),
+    variable: Color32::from_rgb(0x0b, 0x6e, 0x74),
+    variable_missing: Color32::from_rgb(0xa8, 0x24, 0x24),
+    variable_generated: Color32::from_rgb(0x7a, 0x3e, 0xc0),
 };
 
 /// The dark theme.
@@ -118,6 +128,9 @@ pub const DARK: Palette = Palette {
     info: Color32::from_rgb(0x6c, 0xa6, 0xff),
     warning: Color32::from_rgb(0xf2, 0xb5, 0x4a),
     danger: Color32::from_rgb(0xff, 0x7b, 0x72),
+    variable: Color32::from_rgb(0x5c, 0xcf, 0xd4),
+    variable_missing: Color32::from_rgb(0xff, 0x7b, 0x72),
+    variable_generated: Color32::from_rgb(0xc3, 0x9b, 0xff),
 };
 
 /// The palette for the theme `ui` is drawn with.
@@ -229,6 +242,9 @@ mod tests {
                 ("info", p.info),
                 ("warning", p.warning),
                 ("danger", p.danger),
+                ("variable", p.variable),
+                ("variable_missing", p.variable_missing),
+                ("variable_generated", p.variable_generated),
             ];
             for (text, color) in texts {
                 for (bg, background) in [("background", p.background), ("surface", p.surface)] {
@@ -265,6 +281,7 @@ mod tests {
                 ("info", p.info),
                 ("warning", p.warning),
                 ("danger", p.danger),
+                ("variable", p.variable),
             ] {
                 for background in [p.background, p.surface] {
                     let ratio = contrast(color, over(color, BADGE_TINT, background));

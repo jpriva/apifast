@@ -23,6 +23,20 @@ pub enum Token {
     Invalid(Invalid),
 }
 
+impl Token {
+    /// How many bytes of the template source this token covers. Parsing is
+    /// lossless, so the lengths of the tokens add up to the source's: an
+    /// editor uses them to find where each token is.
+    pub fn source_len(&self) -> usize {
+        match self {
+            Self::Text(text) => text.len(),
+            Self::Escape => 3,
+            Self::Tag(tag) => tag.inner.len() + 4,
+            Self::Invalid(invalid) => invalid.raw.len(),
+        }
+    }
+}
+
 /// A well-formed tag.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Tag {
@@ -564,6 +578,20 @@ mod tests {
         #[test]
         fn parsing_is_lossless_with_many_braces(input in "[a-z {}'\\\\$?.()=,]*") {
             prop_assert_eq!(Template::parse(&input).to_string(), input);
+        }
+
+        /// Each token covers exactly its own part of the source.
+        #[test]
+        fn token_lengths_cover_the_source(input in "[a-z {}'\\\\$?.()=,ñ]*") {
+            let template = Template::parse(&input);
+            let mut at = 0;
+            for token in template.tokens() {
+                let end = at + token.source_len();
+                let one = Template { tokens: vec![token.clone()] }.to_string();
+                prop_assert_eq!(&input[at..end], one.as_str());
+                at = end;
+            }
+            prop_assert_eq!(at, input.len());
         }
     }
 }

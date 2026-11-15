@@ -23,6 +23,7 @@ fn tab(path: &str, name: &str, dirty: bool) -> Tab {
         saved,
         response: ResponseState::Idle,
         revision: 0,
+        variables: std::sync::Arc::default(),
     }
 }
 

@@ -480,7 +480,9 @@ fn tabs_drafts_and_environment_come_back_after_a_restart() {
         request: edited(&snapshot, "{{host}}/unsaved"),
     });
     core.send(Command::ActivateTab(RequestPath::new("users/get.yml")));
-    wait(&core, "the draft", |s| s.tabs.iter().any(apifast_gui::core::Tab::is_dirty));
+    wait(&core, "the draft", |s| {
+        s.tabs.iter().any(apifast_gui::core::Tab::is_dirty)
+    });
     // Dropping writes the session at once, without waiting for the delay.
     drop(core);
 
@@ -520,4 +522,41 @@ fn a_renamed_request_keeps_its_tab_and_draft() {
         (draft.name.as_str(), draft.url.as_str()),
         ("Fetch", "{{host}}/edited")
     );
+}
+
+#[test]
+fn each_tab_knows_its_variables_and_where_they_come_from() {
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    let snapshot = wait(&core, "the tab", |s| s.active_tab().is_some());
+    let variables = snapshot.active_tab().unwrap().variables.clone();
+    assert!(variables.resolved.get("host").is_none());
+
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    let snapshot = next(&core, snapshot.version);
+    let tab = snapshot.active_tab().unwrap();
+    let host = tab.variables.resolved.get("host").unwrap();
+    assert_eq!(
+        host.origin,
+        apifast_domain::Origin::Environment("local".into())
+    );
+    assert!(
+        host.value
+            .as_ref()
+            .unwrap()
+            .data
+            .starts_with("http://127.0.0.1:")
+    );
+    assert_ne!(tab.variables.revision, variables.revision);
+
+    // Typing in the URL does not work them out again.
+    let revision = tab.variables.revision;
+    core.send(Command::Edit {
+        path: RequestPath::new("health.yml"),
+        request: edited(&snapshot, "{{host}}/other"),
+    });
+    let snapshot = next(&core, snapshot.version);
+    assert_eq!(snapshot.active_tab().unwrap().variables.revision, revision);
 }

@@ -1,4 +1,12 @@
-//! Atoms: the smallest components, each an [`egui::Widget`].
+//! Atoms: the smallest components, each an [`egui::Widget`] or a builder
+//! with a `show` method.
+
+mod template_field;
+
+pub use template_field::{
+    HintsCache, Span, SpanKind, TemplateField, TemplateFieldTexts, VariableHint, VariableHints,
+    spans,
+};
 
 use apifast_domain::{Method, reason_phrase};
 use eframe::egui::{self, Align, Layout, RichText, Sense, Widget};

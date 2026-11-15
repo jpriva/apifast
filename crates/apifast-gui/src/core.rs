@@ -19,9 +19,9 @@ use apifast_app::{
     AppError, CancelToken, CollectionTree, EnvironmentRepository, ItemPath, NoPrompter, Placement,
     RequestPath, ResponseHead, ResponseStore, SendOptions, SendPorts, Session, SessionStore,
     SessionTab, TransportError, create_folder, create_request, delete_item, load_request,
-    move_item, open_collection, rename_item, save_request, send_request,
+    move_item, open_collection, rename_item, resolve_request_variables, save_request, send_request,
 };
-use apifast_domain::HttpRequest;
+use apifast_domain::{HttpRequest, ResolvedVariables};
 use apifast_history::FsResponseStore;
 use apifast_http::ReqwestTransport;
 use apifast_storage_fs::{FsCollection, FsSessionStore};
@@ -151,6 +151,22 @@ pub struct Tab {
     /// Changes whenever the contents change for any reason other than an
     /// [`Command::Edit`] (loaded, saved, renamed), so the interface knows
     /// to drop its own copy of them.
+    pub revision: u64,
+    /// The variables its request sees.
+    pub variables: Arc<TabVariables>,
+}
+
+/// The variables a tab's request sees in the active environment, with the
+/// scope each comes from.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TabVariables {
+    /// By name. Empty when they cannot be worked out, such as with a broken
+    /// environment.
+    pub resolved: ResolvedVariables,
+    /// Names of the request's folders, outermost first, for
+    /// [`apifast_domain::Origin::Folder`].
+    pub folders: Vec<String>,
+    /// Changes whenever they are worked out again.
     pub revision: u64,
 }
 
@@ -358,7 +374,10 @@ impl State {
                     self.snapshot.error = Some(message);
                 }
             }
-            Command::SelectEnvironment(name) => self.snapshot.environment = name,
+            Command::SelectEnvironment(name) => {
+                self.snapshot.environment = name;
+                self.refresh_variables(None);
+            }
             Command::OpenRequest(path) => self.open_request(path),
             Command::ActivateTab(path) => {
                 if self.tab(&path).is_some() {
@@ -367,8 +386,15 @@ impl State {
             }
             Command::CloseTab(path) => self.close_tab(&path),
             Command::Edit { path, request } => {
-                if let Some(tab) = self.tab_mut(&path) {
-                    tab.draft = (*request != tab.saved).then_some(*request);
+                let Some(tab) = self.tab_mut(&path) else {
+                    return;
+                };
+                // Only the request's own variables change what it sees; the
+                // URL or a header do not, so typing reads no files.
+                let variables_changed = request.variables != tab.request().variables;
+                tab.draft = (*request != tab.saved).then_some(*request);
+                if variables_changed {
+                    self.refresh_variables(Some(&path));
                 }
             }
             Command::Save(path) => self.save(&path),
@@ -490,6 +516,7 @@ impl State {
                 draft,
                 response: ResponseState::Idle,
                 revision: self.next_revision(),
+                variables: Arc::default(),
             });
         }
         let active = (session.active)
@@ -512,6 +539,7 @@ impl State {
             active,
             error,
         };
+        self.refresh_variables(None);
         Ok(())
     }
 
@@ -529,12 +557,14 @@ impl State {
                     draft: None,
                     response: ResponseState::Idle,
                     revision: self.next_revision(),
+                    variables: Arc::default(),
                 };
                 // New tabs go right after the active one.
                 let at = (self.snapshot.active.as_ref())
                     .and_then(|active| self.snapshot.tabs.iter().position(|t| t.path == *active))
                     .map_or(self.snapshot.tabs.len(), |i| i + 1);
                 self.snapshot.tabs.insert(at, tab);
+                self.refresh_variables(Some(&path));
                 self.snapshot.active = Some(path);
                 self.snapshot.error = None;
             }
@@ -577,8 +607,53 @@ impl State {
             tab.revision = revision;
         }
         self.snapshot.error = None;
+        self.refresh_variables(Some(path));
         // The name or method shown in the tree may have changed.
         self.reload_tree();
+    }
+
+    /// Works out again the variables of the tab at `only`, or of every tab.
+    fn refresh_variables(&mut self, only: Option<&RequestPath>) {
+        for index in 0..self.snapshot.tabs.len() {
+            let tab = &self.snapshot.tabs[index];
+            if only.is_some_and(|path| *path != tab.path) {
+                continue;
+            }
+            let (resolved, folders) = self.resolve(&tab.path, tab.request());
+            let revision = self.next_revision();
+            self.snapshot.tabs[index].variables = Arc::new(TabVariables {
+                resolved,
+                folders,
+                revision,
+            });
+        }
+    }
+
+    /// The variables `request` sees at `path`, with its folders' names.
+    fn resolve(
+        &self,
+        path: &RequestPath,
+        request: &HttpRequest,
+    ) -> (ResolvedVariables, Vec<String>) {
+        let Some(open) = &self.open else {
+            return Default::default();
+        };
+        // A request whose file is gone has no folders to read: it shows no
+        // variables until it is saved again.
+        let Ok(mut loaded) = load_request(&*open.repo, path) else {
+            return Default::default();
+        };
+        loaded.request = request.clone();
+        let folders = loaded.folders.iter().map(|f| f.name.clone()).collect();
+        let resolved = resolve_request_variables(
+            &*open.repo,
+            &*open.repo,
+            &loaded,
+            self.snapshot.environment.as_deref(),
+            &[],
+        )
+        .unwrap_or_default();
+        (resolved, folders)
     }
 
     fn reload_tree(&mut self) {
@@ -660,8 +735,9 @@ impl State {
                 }
                 Err(e) => self.snapshot.error = Some(e.to_string()),
             }
-            tab.path = to;
+            tab.path = to.clone();
             tab.revision = revision;
+            self.refresh_variables(Some(&to));
         }
     }
 

@@ -82,7 +82,7 @@ Los paneles de request y respuesta se pueden disponer uno encima del otro o lado
 
 - Resaltado para JSON, XML, GraphQL y texto con plantillas.
 - Formatear (`Alt+Shift+F`), buscar y reemplazar.
-- Las variables se resaltan: un color si se resuelven, otro si no existen.
+- Las variables se resaltan: las que se resuelven, sobre un tinte de su color; las que no existen, en otro color y subrayadas, para que el color no sea la única señal; las que se generan al enviar (`{{$...}}`, `{{?...}}`, `process.env`, funciones), en un tercer color.
 - Al pasar el cursor sobre una variable: valor, ámbito de origen y enlace para editarla.
 
 La edición con resaltado se limita a unos 200 KB: con más texto, egui tarda demasiado en cada tecla ([spike 2](spikes/02-interfaz-egui-vs-iced.md)). Por encima de ese tamaño, el body se edita como texto plano o se abre en el visor de solo lectura.

@@ -3,6 +3,7 @@
 
 use apifast_app::{CollectionTree, RequestPath, ResponseHead, TreeItem};
 use apifast_domain::{Collection, Folder, Method};
+use apifast_gui::atoms::VariableHints;
 use apifast_gui::core::{Received, ResponseState};
 use apifast_gui::molecules::EnvironmentSelector;
 use apifast_gui::organisms::{ResponseView, TreeEvent, TreeView, UrlBar, UrlBarEvent};
@@ -85,7 +86,9 @@ fn the_url_bar_sends_or_cancels() {
         let mut events = Vec::new();
         let (mut method, mut url) = (Method::Get, "{{host}}/users".to_owned());
         let mut harness = Harness::new_ui(|ui| {
-            if let Some(event) = UrlBar::new(&mut method, &mut url, sending, &EN).show(ui) {
+            if let Some(event) =
+                UrlBar::new(&mut method, &mut url, &VariableHints::new(), sending, &EN).show(ui)
+            {
                 events.push(event);
             }
         });
@@ -101,7 +104,9 @@ fn the_url_bar_edits_the_method_and_the_url() {
     let mut events = Vec::new();
     let (mut method, mut url) = (Method::Get, "{{host}}/users".to_owned());
     let mut harness = Harness::new_ui(|ui| {
-        if let Some(event) = UrlBar::new(&mut method, &mut url, false, &EN).show(ui) {
+        if let Some(event) =
+            UrlBar::new(&mut method, &mut url, &VariableHints::new(), false, &EN).show(ui)
+        {
             events.push(event);
         }
     });

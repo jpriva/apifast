@@ -5,6 +5,7 @@
 
 use apifast_app::{CollectionTree, RequestPath, ResponseHead, TreeItem};
 use apifast_domain::{Collection, Folder, HttpRequest, Method};
+use apifast_gui::atoms::{VariableHint, VariableHints};
 use apifast_gui::core::{Received, ResponseState, Tab};
 use apifast_gui::molecules::EnvironmentSelector;
 use apifast_gui::organisms::{ResponseView, TabBar, TreeView, UrlBar};
@@ -18,6 +19,7 @@ struct Gallery {
     environments: Vec<String>,
     responses: Vec<ResponseState>,
     tabs: Vec<Tab>,
+    hints: VariableHints,
     columns: [Column; 2],
 }
 
@@ -37,7 +39,10 @@ impl Default for Column {
             environment: None,
             urls: [
                 (Method::Get, "{{host}}/users?page=2".into()),
-                (Method::Post, "{{host}}/users".into()),
+                (
+                    Method::Post,
+                    "{{host}}/users/{{user_id}}?t={{$timestamp}}".into(),
+                ),
             ],
             responses: Vec::new(),
         }
@@ -51,6 +56,7 @@ impl eframe::App for Gallery {
             environments,
             responses,
             tabs,
+            hints,
             columns: state,
         } = self;
         egui::CentralPanel::default().show(ui, |ui| {
@@ -62,7 +68,7 @@ impl eframe::App for Gallery {
                         .zip(state.iter_mut())
                     {
                         themed(column, theme, |ui| {
-                            showcase(ui, tree, environments, responses, tabs, state);
+                            showcase(ui, tree, environments, responses, tabs, hints, state);
                         });
                     }
                 });
@@ -105,6 +111,7 @@ fn showcase(
     environments: &[String],
     responses: &[ResponseState],
     tabs: &[Tab],
+    hints: &VariableHints,
     state: &mut Column,
 ) {
     section(ui, "MethodBadge", |ui| {
@@ -146,7 +153,7 @@ fn showcase(
     });
     section(ui, "UrlBar", |ui| {
         for ((method, url), sending) in state.urls.iter_mut().zip([false, true]) {
-            let _ = UrlBar::new(method, url, sending, &EN).show(ui);
+            let _ = UrlBar::new(method, url, hints, sending, &EN).show(ui);
         }
     });
     section(ui, "TabBar", |ui| {
@@ -208,6 +215,17 @@ fn sample_tree() -> CollectionTree {
     }
 }
 
+/// `host` is defined; `user_id` is not.
+fn sample_hints() -> VariableHints {
+    VariableHints::from([(
+        "host".to_owned(),
+        VariableHint {
+            value: "http://localhost:8080".into(),
+            origin: "Environment local".into(),
+        },
+    )])
+}
+
 fn sample_tabs() -> Vec<Tab> {
     let tab = |path: &str, name: &str, method, dirty: bool| {
         let saved = HttpRequest::new(name, method, "{{host}}");
@@ -218,6 +236,7 @@ fn sample_tabs() -> Vec<Tab> {
             draft,
             response: ResponseState::Idle,
             revision: 0,
+            variables: std::sync::Arc::default(),
         }
     };
     vec![
@@ -273,6 +292,7 @@ fn main() -> eframe::Result {
                 environments: vec!["local".into(), "staging".into(), "production".into()],
                 responses: sample_responses(),
                 tabs: sample_tabs(),
+                hints: sample_hints(),
                 columns: Default::default(),
             }))
         }),

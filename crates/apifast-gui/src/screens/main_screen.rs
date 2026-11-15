@@ -1,11 +1,14 @@
 //! The main screen: collection tree, environment, tabs, URL bar and
 //! response.
 
+use std::sync::Arc;
+
 use apifast_app::RequestPath;
-use apifast_domain::HttpRequest;
+use apifast_domain::{HttpRequest, Origin};
 use eframe::egui::{self, Key, KeyboardShortcut, Modifiers, RichText};
 
-use crate::core::{Command, ResponseState, Snapshot, Tab};
+use crate::atoms::{HintsCache, VariableHint, VariableHints};
+use crate::core::{Command, ResponseState, Snapshot, Tab, TabVariables};
 use crate::layout;
 use crate::molecules::EnvironmentSelector;
 use crate::organisms::{ResponseView, TabBar, TabEvent, TreeEvent, TreeView, UrlBar, UrlBarEvent};
@@ -26,6 +29,7 @@ pub struct MainScreen {
     tabs: TabBar,
     response: ResponseView,
     editor: Option<Editor>,
+    hints: HintsCache,
 }
 
 /// The interface's own copy of the active tab's contents. Edits change it
@@ -57,17 +61,7 @@ impl MainScreen {
             return Vec::new();
         };
         let active = snapshot.active_tab();
-        match (active, &self.editor) {
-            (Some(tab), Some(editor)) if editor.follows(tab) => {}
-            (Some(tab), _) => {
-                self.editor = Some(Editor {
-                    path: tab.path.clone(),
-                    revision: tab.revision,
-                    request: tab.request().clone(),
-                });
-            }
-            (None, _) => self.editor = None,
-        }
+        let hints = self.follow(active, strings);
         let sending = active.is_some_and(|tab| tab.response == ResponseState::Sending);
         let selected = snapshot.active.as_ref();
         let (tree, tabs, response, editor) = (
@@ -109,8 +103,14 @@ impl MainScreen {
                     return (tab_event, None);
                 };
                 let request = &mut editor.request;
-                let event =
-                    UrlBar::new(&mut request.method, &mut request.url, sending, strings).show(ui);
+                let event = UrlBar::new(
+                    &mut request.method,
+                    &mut request.url,
+                    &hints,
+                    sending,
+                    strings,
+                )
+                .show(ui);
                 ui.separator();
                 response.show(ui, &tab.response, strings);
                 (tab_event, event)
@@ -149,6 +149,30 @@ impl MainScreen {
         commands
     }
 
+    /// Keeps the editor on the active tab, and returns the hints for its
+    /// variables.
+    fn follow(&mut self, active: Option<&Tab>, strings: &Strings) -> Arc<VariableHints> {
+        match (active, &self.editor) {
+            (Some(tab), Some(editor)) if editor.follows(tab) => {}
+            (Some(tab), _) => {
+                self.editor = Some(Editor {
+                    path: tab.path.clone(),
+                    revision: tab.revision,
+                    request: tab.request().clone(),
+                });
+            }
+            (None, _) => self.editor = None,
+        }
+        match active {
+            Some(tab) => {
+                let variables = &tab.variables;
+                self.hints
+                    .get(variables.revision, || hints(variables, strings))
+            }
+            None => Arc::default(),
+        }
+    }
+
     /// `Ctrl+W` closes the active tab, asking first if it has changes.
     fn close_shortcut(&mut self, ui: &egui::Ui, active: Option<&Tab>) -> Option<TabEvent> {
         let tab = active?;
@@ -158,6 +182,37 @@ impl MainScreen {
             None
         }
     }
+}
+
+/// What the fields show about each variable: its value (hidden if secret)
+/// and its origin, in the interface's language.
+fn hints(variables: &TabVariables, strings: &Strings) -> VariableHints {
+    variables
+        .resolved
+        .iter()
+        .map(|(name, variable)| {
+            let value = match (&variable.value, variable.secret) {
+                (Some(value), false) => value.data.clone(),
+                _ => strings.secret_hidden.to_owned(),
+            };
+            let origin = match &variable.origin {
+                Origin::Default => strings.origin_default.to_owned(),
+                Origin::Global => strings.origin_global.to_owned(),
+                Origin::Collection => strings.origin_collection.to_owned(),
+                Origin::Environment(env) => format!("{} {env}", strings.origin_environment),
+                Origin::Folder(index) => {
+                    let folder = variables.folders.get(*index).map_or("", String::as_str);
+                    format!("{} {folder}", strings.origin_folder)
+                }
+                Origin::Request => strings.origin_request.to_owned(),
+                Origin::Runtime => strings.origin_runtime.to_owned(),
+                Origin::Prompt => strings.origin_prompt.to_owned(),
+                // A scope added after this version: say nothing wrong.
+                _ => String::new(),
+            };
+            (name.to_owned(), VariableHint { value, origin })
+        })
+        .collect()
 }
 
 fn tree_command(event: TreeEvent) -> Command {
@@ -194,4 +249,37 @@ fn shortcuts(ui: &egui::Ui, active: Option<&Tab>, sending: bool) -> Vec<Command>
         }
         commands
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use apifast_domain::{Variable, VariableValue, resolve_variables};
+
+    use super::*;
+    use crate::strings::EN;
+
+    #[test]
+    fn hints_hide_secrets_and_name_folders() {
+        let folder = [Variable::text("resource", "users")];
+        let env = [
+            Variable::text("host", "http://x"),
+            Variable {
+                value: Some(VariableValue::text("s3cr3t")),
+                ..Variable::secret("token")
+            },
+        ];
+        let variables = TabVariables {
+            resolved: resolve_variables(vec![
+                (Origin::Environment("local".into()), &env[..]),
+                (Origin::Folder(0), &folder[..]),
+            ]),
+            folders: vec!["Users".into()],
+            revision: 1,
+        };
+        let hints = hints(&variables, &EN);
+        assert_eq!(hints["host"].origin, "Environment local");
+        assert_eq!(hints["resource"].origin, "Folder Users");
+        assert_eq!(hints["token"].value, EN.secret_hidden);
+        assert!(hints.values().all(|h| !h.value.contains("s3cr3t")));
+    }
 }
