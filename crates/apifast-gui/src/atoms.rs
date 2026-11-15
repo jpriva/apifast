@@ -1,11 +1,13 @@
 //! Atoms: the smallest components, each an [`egui::Widget`] or a builder
 //! with a `show` method.
 
+mod suggestions;
 mod template_field;
 
+pub use suggestions::{MAX_SUGGESTIONS, completions, refocus, suggestions};
 pub use template_field::{
     HintsCache, Span, SpanKind, TemplateField, TemplateFieldTexts, VariableHint, VariableHints,
-    spans,
+    complete_variable, spans, variable_prefix,
 };
 
 use apifast_domain::{Method, reason_phrase};

@@ -62,6 +62,12 @@ pub struct Strings {
     pub url_placeholder: &'static str,
     /// Accessible name of the URL field.
     pub url: &'static str,
+    /// Switch between a table and its bulk text.
+    pub bulk_edit: &'static str,
+    /// How the bulk text is written.
+    pub bulk_hint: &'static str,
+    /// Accessible name of the bulk text editor.
+    pub bulk_text: &'static str,
     /// Accessible name of the method selector.
     pub method: &'static str,
     /// Hover text of a tab's close button.
@@ -218,6 +224,9 @@ pub const EN: Strings = Strings {
     delete_warning: "Its files are deleted from disk, with everything inside.",
     url_placeholder: "https://example.com or {{host}}/path",
     url: "URL",
+    bulk_edit: "Bulk edit",
+    bulk_text: "Rows as text",
+    bulk_hint: "One per line, as `name: value`. Start a line with // to keep it but not send it.",
     method: "Method",
     close_tab: "Close tab",
     unsaved_title: "Save changes?",

@@ -10,6 +10,7 @@ use std::sync::Arc;
 use apifast_template::{Expr, Template, Token};
 use eframe::egui::{self, FontId, RichText, Stroke, TextFormat, TextStyle, text::LayoutJob};
 
+use crate::atoms::{completions, refocus, suggestions};
 use crate::theme;
 
 /// What the field shows when a defined variable is hovered.
@@ -195,10 +196,21 @@ impl<'a> TemplateField<'a> {
         if let Some(name) = name {
             output.response.response.clone().accessible_name(name);
         }
+        let mut response = output.response.response.clone();
         if password {
-            return output.response.response;
+            return response;
         }
-        let response = output.response.response.clone();
+        // Completes `{{na` with the variables it can be.
+        let cursor = output.state.cursor.char_range().map(|r| r.primary.index.0);
+        if let Some(prefix) = cursor.and_then(|at| variable_prefix(text, at)) {
+            let names = completions(prefix, hints.keys().map(String::as_str));
+            if let (Some(index), Some(at)) = (suggestions(ui, &response, text, &names), cursor) {
+                let (completed, at) = complete_variable(text, at, names[index]);
+                *text = completed;
+                refocus(ui, &response, at);
+                response.mark_changed();
+            }
+        }
         if let Some(pointer) = response.hover_pos() {
             let index = output
                 .galley
@@ -213,6 +225,49 @@ impl<'a> TemplateField<'a> {
         }
         response
     }
+}
+
+/// The start of a variable name being typed at character `cursor`: the
+/// text after an unclosed `{{` up to the cursor, if it can be a name.
+pub fn variable_prefix(text: &str, cursor: usize) -> Option<&str> {
+    let byte = byte_at(text, cursor);
+    let before = &text[..byte];
+    let open = before.rfind("{{")?;
+    if before[..open].ends_with('\\') {
+        return None; // `\{{` is not a tag.
+    }
+    let typed = before[open + 2..].trim_start();
+    typed
+        .chars()
+        .all(|c| c.is_alphanumeric() || matches!(c, '_' | '-' | '.'))
+        .then_some(typed)
+}
+
+/// `text` with the name being typed at character `cursor` completed to
+/// `name` and the tag closed, and the character the cursor goes to: after
+/// the `}}`.
+pub fn complete_variable(text: &str, cursor: usize, name: &str) -> (String, usize) {
+    let byte = byte_at(text, cursor);
+    let typed = variable_prefix(text, cursor).unwrap_or_default();
+    let start = byte - typed.len();
+    let after = &text[byte..];
+    // Keep a `}}` that is already there, and what follows it.
+    let rest =
+        after.trim_start_matches(|c: char| c.is_alphanumeric() || matches!(c, '_' | '-' | '.'));
+    let rest = rest.strip_prefix("}}").unwrap_or(rest);
+    let mut out = String::with_capacity(text.len() + name.len() + 2);
+    out.push_str(&text[..start]);
+    out.push_str(name);
+    out.push_str("}}");
+    let cursor = out.chars().count();
+    out.push_str(rest);
+    (out, cursor)
+}
+
+fn byte_at(text: &str, chars: usize) -> usize {
+    text.char_indices()
+        .nth(chars)
+        .map_or(text.len(), |(byte, _)| byte)
 }
 
 /// The variable or generated tag under character `index`, if any.

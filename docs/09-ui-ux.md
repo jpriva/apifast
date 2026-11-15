@@ -75,7 +75,7 @@ Los paneles de request y respuesta se pueden disponer uno encima del otro o lado
 
 - Casilla para habilitar o deshabilitar cada fila.
 - Siempre hay una fila vacía al final para añadir.
-- Modo de edición masiva: la tabla como texto, una línea por entrada.
+- Modo de edición masiva: la tabla como texto, una línea por entrada con el formato `nombre: valor`; las que empiezan por `//` se conservan sin enviarse.
 - Autocompletado de nombres de header y de variables.
 
 ### Editor de código

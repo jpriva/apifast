@@ -8,7 +8,7 @@ mod tabs;
 mod tree;
 mod url_bar;
 
-pub use kv_table::{KvRow, KvTable};
+pub use kv_table::{BulkRow, KvRow, KvTable, from_bulk, to_bulk};
 pub use request_panel::{RequestChange, RequestPanel, RequestTab};
 pub use response::{ResponseTab, ResponseView};
 pub use tabs::{TabBar, TabEvent};

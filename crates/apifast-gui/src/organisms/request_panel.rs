@@ -12,6 +12,7 @@ use crate::core::TabContext;
 use crate::organisms::KvTable;
 use crate::strings::Strings;
 use crate::theme;
+use crate::vocabulary::HEADER_NAMES;
 
 /// Rows the body editor shows before scrolling.
 const BODY_ROWS: usize = 12;
@@ -174,6 +175,7 @@ fn headers(
         hints,
         strings,
     )
+    .name_suggestions(HEADER_NAMES)
     .show(ui);
     if !context.inherited_headers.is_empty() {
         ui.add_space(theme::space::L);

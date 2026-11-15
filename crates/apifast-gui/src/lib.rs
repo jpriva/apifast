@@ -15,3 +15,4 @@ pub mod screens;
 pub mod strings;
 mod system;
 pub mod theme;
+pub mod vocabulary;
