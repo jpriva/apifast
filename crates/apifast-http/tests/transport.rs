@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 use apifast_app::memory::{CountingRandom, FixedClock};
 use apifast_app::{
     AppHost, BodyWriter, CancelToken, HttpTransport, NoPrompter, RenderedRequest, ResponseHead,
-    StoreError, StoredBody, TransportError, render_request,
+    StoreError, StoredBody, TimelineKind, TransportError, render_request,
 };
 use apifast_domain::{
     Body, Chain, Collection, FormField, Header, HttpRequest, Method, MultipartPart, MultipartValue,
@@ -463,6 +463,30 @@ async fn redirects_301_to_303_become_get_without_body() {
         ]
     );
     assert!(!received[1].headers.contains_key("content-type"));
+
+    // The timeline tells each hop, in order and with growing times.
+    let kinds: Vec<_> = head.timeline.iter().map(|e| e.kind.clone()).collect();
+    let request = |method: &str, path: &str| TimelineKind::Request {
+        method: method.into(),
+        url: server.url(path),
+    };
+    let redirect = |status, location: &str| TimelineKind::Redirect {
+        status,
+        location: location.into(),
+    };
+    assert_eq!(
+        kinds,
+        [
+            request("POST", "/start"),
+            redirect(302, "/middle"),
+            request("GET", "/middle"),
+            redirect(303, "end?x=1"),
+            request("GET", "/end?x=1"),
+            TimelineKind::Headers { status: 200 },
+            TimelineKind::Body { bytes: 4 },
+        ]
+    );
+    assert!(head.timeline.windows(2).all(|w| w[0].at_us <= w[1].at_us));
 }
 
 #[tokio::test]

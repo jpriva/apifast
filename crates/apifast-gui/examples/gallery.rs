@@ -3,7 +3,9 @@
 //!
 //! Every new component is added here.
 
-use apifast_app::{CollectionTree, RequestPath, ResponseHead, TreeItem};
+use apifast_app::{
+    CollectionTree, RequestPath, ResponseHead, TimelineEvent, TimelineKind, TreeItem,
+};
 use apifast_domain::{Body, Collection, Folder, Header, HttpRequest, Method};
 use apifast_gui::atoms::{VariableHint, VariableHints};
 use apifast_gui::body::BodyHandle;
@@ -290,6 +292,25 @@ fn sample_responses() -> Vec<ResponseState> {
                     ("content-length".into(), preview.len().to_string()),
                 ],
                 elapsed_ms: 182,
+                timeline: vec![
+                    TimelineEvent {
+                        at_us: 0,
+                        kind: TimelineKind::Request {
+                            method: "GET".into(),
+                            url: "http://localhost:8080/users".into(),
+                        },
+                    },
+                    TimelineEvent {
+                        at_us: 151_400,
+                        kind: TimelineKind::Headers { status },
+                    },
+                    TimelineEvent {
+                        at_us: 182_000,
+                        kind: TimelineKind::Body {
+                            bytes: preview.len() as u64,
+                        },
+                    },
+                ],
             },
             size: preview.len() as u64,
             body: BodyHandle::memory(format!("sample-{status}"), preview),

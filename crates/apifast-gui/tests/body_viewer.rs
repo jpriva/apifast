@@ -24,7 +24,7 @@ fn harness(body: BodyHandle) -> Harness<'static, State> {
         .with_size(egui::vec2(800.0, 400.0))
         .with_max_steps(1)
         .build_ui_state(
-            |ui, state: &mut State| state.viewer.show(ui, &state.body, &EN),
+            |ui, state: &mut State| state.viewer.show(ui, &state.body, None, &EN),
             State {
                 viewer: BodyViewer::default(),
                 body,

@@ -115,7 +115,10 @@ fn open_select_send_and_see_the_status() {
     wait_for(&mut harness, "Send");
     harness.get_by_label("Send").click();
     wait_for(&mut harness, "200 OK");
-    harness.get_by_label(r#"{"ok":true}"#);
+    // JSON is shown pretty; raw shows it as received.
+    wait_for(&mut harness, r#"  "ok": true"#);
+    harness.get_by_label("Raw").click();
+    wait_for(&mut harness, r#"{"ok":true}"#);
     harness.get_by_label("Headers (3)");
 }
 

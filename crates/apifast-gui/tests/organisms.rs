@@ -1,7 +1,9 @@
 //! Molecules and organisms on their own: what they show and the events they
 //! return, through the accessibility tree.
 
-use apifast_app::{CollectionTree, RequestPath, ResponseHead, TreeItem};
+use apifast_app::{
+    CollectionTree, RequestPath, ResponseHead, TimelineEvent, TimelineKind, TreeItem,
+};
 use apifast_domain::{Collection, Folder, Method};
 use apifast_gui::atoms::VariableHints;
 use apifast_gui::body::BodyHandle;
@@ -176,6 +178,19 @@ fn the_response_view_shows_each_state() {
             redirects: 0,
             headers: vec![("content-type".into(), "text/plain".into())],
             elapsed_ms: 12,
+            timeline: vec![
+                TimelineEvent {
+                    at_us: 0,
+                    kind: TimelineKind::Request {
+                        method: "GET".into(),
+                        url: "http://localhost/x".into(),
+                    },
+                },
+                TimelineEvent {
+                    at_us: 11_250,
+                    kind: TimelineKind::Headers { status: 404 },
+                },
+            ],
         },
         size: 8,
         body: BodyHandle::memory("r1", "not\nhere"),

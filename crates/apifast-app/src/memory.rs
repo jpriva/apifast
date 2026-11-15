@@ -270,6 +270,7 @@ impl MemoryTransport {
                 redirects: 0,
                 headers: Vec::new(),
                 elapsed_ms: 0,
+                timeline: Vec::new(),
             },
             body: body.into(),
             sent: Mutex::new(Vec::new()),

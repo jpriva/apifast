@@ -48,6 +48,48 @@ impl Language {
     }
 }
 
+/// The language of a response: from its `Content-Type`, or else from how
+/// its body starts. `None` for plain text or what cannot be told.
+pub fn detect(content_type: Option<&str>, start: &[u8]) -> Option<Language> {
+    if let Some(content_type) = content_type {
+        let essence = content_type
+            .split(';')
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase();
+        if essence.ends_with("json") || essence.ends_with("+json") {
+            return Some(Language::Json);
+        }
+        if essence.ends_with("xml") || essence == "text/html" {
+            return Some(Language::Xml);
+        }
+        if essence == "application/sparql-query" {
+            return Some(Language::Sparql);
+        }
+        if essence.starts_with("text/") {
+            return None;
+        }
+    }
+    match start.iter().find(|b| !b.is_ascii_whitespace()) {
+        Some(b'{' | b'[') => Some(Language::Json),
+        Some(b'<') => Some(Language::Xml),
+        _ => None,
+    }
+}
+
+/// Whether bytes look like binary data rather than text: a NUL byte, or
+/// many bytes that are neither text nor UTF-8.
+pub fn looks_binary(start: &[u8]) -> bool {
+    if start.contains(&0) {
+        return true;
+    }
+    // The end may cut a character in two: that is not a sign of binary.
+    let text = String::from_utf8_lossy(start);
+    let replaced = text.matches('\u{FFFD}').count();
+    replaced > 4 && replaced * 20 > start.len().min(text.len())
+}
+
 /// The 1-based line of byte `offset` in `text`.
 pub fn line_of(text: &str, offset: usize) -> usize {
     let offset = offset.min(text.len());
@@ -63,4 +105,44 @@ fn tag_len(rest: &str) -> Option<usize> {
     }
     let line = rest.find('\n').unwrap_or(rest.len());
     Some(rest[..line].find("}}").map_or(line, |end| end + 2))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_content_type_tells_the_language_and_else_the_body() {
+        let cases = [
+            (
+                Some("application/json; charset=utf-8"),
+                "x",
+                Some(Language::Json),
+            ),
+            (Some("application/problem+json"), "", Some(Language::Json)),
+            (Some("text/xml"), "", Some(Language::Xml)),
+            (Some("text/html"), "", Some(Language::Xml)),
+            (Some("text/plain"), "{}", None),
+            (None, "  [1]", Some(Language::Json)),
+            (None, "<a/>", Some(Language::Xml)),
+            (Some("application/octet-stream"), "{}", Some(Language::Json)),
+            (None, "hello", None),
+        ];
+        for (content_type, body, expected) in cases {
+            assert_eq!(
+                detect(content_type, body.as_bytes()),
+                expected,
+                "{content_type:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn binary_is_told_from_text() {
+        assert!(looks_binary(b"\x89PNG\r\n\x1a\n\0\0"));
+        assert!(!looks_binary("héllo wörld".as_bytes()));
+        // A character cut at the end of the window is still text.
+        assert!(!looks_binary(&"é".as_bytes()[..1]));
+        assert!(looks_binary(&[0xff; 64]));
+    }
 }

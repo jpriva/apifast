@@ -325,6 +325,46 @@ pub struct ResponseHead {
     pub headers: Vec<(String, String)>,
     /// Time from sending to the end of the body, in milliseconds.
     pub elapsed_ms: u64,
+    /// What happened while sending, in order.
+    pub timeline: Vec<TimelineEvent>,
+}
+
+/// Something that happened while sending, and when.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TimelineEvent {
+    /// Microseconds since the send started.
+    pub at_us: u64,
+    /// What happened.
+    pub kind: TimelineKind,
+}
+
+/// What happened while sending.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TimelineKind {
+    /// A request went out: the first one, or the next after a redirect.
+    Request {
+        /// Its method.
+        method: String,
+        /// Its URL.
+        url: String,
+    },
+    /// The server answered with a redirect, which was followed.
+    Redirect {
+        /// The redirect's status.
+        status: u16,
+        /// Where it pointed, as sent by the server.
+        location: String,
+    },
+    /// The status and headers of the final response arrived.
+    Headers {
+        /// The status.
+        status: u16,
+    },
+    /// The whole body arrived.
+    Body {
+        /// Its size in bytes.
+        bytes: u64,
+    },
 }
 
 /// Sends rendered requests.

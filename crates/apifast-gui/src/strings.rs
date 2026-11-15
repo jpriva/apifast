@@ -34,6 +34,30 @@ pub struct Strings {
     pub body: &'static str,
     /// Response tab with the headers.
     pub headers: &'static str,
+    /// Response tab with the events of the send.
+    pub timeline: &'static str,
+    /// Shown when a response has no timeline.
+    pub timeline_empty: &'static str,
+    /// Timeline event: a redirect was followed.
+    pub event_redirect: &'static str,
+    /// Timeline event: the status and headers arrived.
+    pub event_headers: &'static str,
+    /// Timeline event: the whole body arrived.
+    pub event_body: &'static str,
+    /// Body view: formatted and colored.
+    pub pretty: &'static str,
+    /// Body view: as received.
+    pub raw: &'static str,
+    /// Copy button.
+    pub copy: &'static str,
+    /// Hover of the button that copies the body.
+    pub copy_body: &'static str,
+    /// Shown when a body is too large to show pretty.
+    pub pretty_off: &'static str,
+    /// Shown over a pretty body that could not be formatted.
+    pub not_formatted: &'static str,
+    /// Shown, with its size, instead of a binary body.
+    pub body_binary: &'static str,
     /// Shown with a percentage while a large body is being read.
     pub indexing: &'static str,
     /// Shown before the reason a body cannot be read.
@@ -220,6 +244,18 @@ pub const EN: Strings = Strings {
     no_request: "Select a request in the sidebar.",
     body: "Body",
     headers: "Headers",
+    timeline: "Timeline",
+    timeline_empty: "This response has no timeline.",
+    event_redirect: "Redirect",
+    event_headers: "Headers received",
+    event_body: "Body received",
+    pretty: "Pretty",
+    raw: "Raw",
+    copy: "Copy",
+    copy_body: "Copy the whole body",
+    pretty_off: "Shown raw: bodies over 2 MB are not formatted.",
+    not_formatted: "Could not be formatted; shown as received.",
+    body_binary: "Binary body, not shown:",
     indexing: "Reading the body:",
     body_unreadable: "The body cannot be read:",
     unsupported_kind: "This kind of request cannot be opened yet",

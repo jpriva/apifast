@@ -52,6 +52,27 @@ pub fn code_layout(
     job
 }
 
+/// The layout of `text` with only its syntax colored: for responses, where
+/// `{{...}}` is not a variable.
+pub fn syntax_layout(
+    text: &str,
+    language: Language,
+    font: &FontId,
+    palette: &theme::Palette,
+    text_color: egui::Color32,
+) -> LayoutJob {
+    let mut job = LayoutJob::default();
+    for token in tokens(text, language) {
+        let plain = TextFormat::simple(font.clone(), text_color);
+        job.append(
+            &text[token.range],
+            0.0,
+            syntax_format(token.kind, plain, palette),
+        );
+    }
+    job
+}
+
 fn syntax_format(kind: TokenKind, plain: TextFormat, palette: &theme::Palette) -> TextFormat {
     let color = match kind {
         TokenKind::Plain => return plain,

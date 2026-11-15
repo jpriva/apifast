@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use apifast_app::{
     BodyWriter, CancelToken, HttpTransport, RenderedBody, RenderedRequest, ResponseHead,
-    TransportError,
+    TimelineEvent, TimelineKind, TransportError,
 };
 use apifast_domain::MultipartValue;
 use reqwest::header::{
@@ -75,6 +75,8 @@ impl ReqwestTransport {
         }
         let mut send_body = true;
         let mut redirects = 0;
+        let mut timeline = Vec::new();
+        let at = || u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
 
         loop {
             let mut builder = self
@@ -84,6 +86,13 @@ impl ReqwestTransport {
             if send_body {
                 builder = self.attach_body(builder, request.body()).await?;
             }
+            timeline.push(TimelineEvent {
+                at_us: at(),
+                kind: TimelineKind::Request {
+                    method: method.as_str().to_owned(),
+                    url: url.to_string(),
+                },
+            });
             let response = builder.send().await.map_err(|e| classify(&e, &url))?;
             let status = response.status().as_u16();
 
@@ -100,6 +109,13 @@ impl ReqwestTransport {
                 let next = url.join(location).map_err(|e| {
                     TransportError::Protocol(format!("invalid redirect location: {e}"))
                 })?;
+                timeline.push(TimelineEvent {
+                    at_us: at(),
+                    kind: TimelineKind::Redirect {
+                        status,
+                        location: location.to_owned(),
+                    },
+                });
                 if matches!(status, 301..=303) {
                     // Browsers and Bruno turn these into a GET without body.
                     if method != Method::HEAD {
@@ -119,30 +135,25 @@ impl ReqwestTransport {
                 continue;
             }
 
-            let mut head = ResponseHead {
-                status,
-                version: format!("{:?}", response.version()),
-                url: response.url().to_string(),
-                redirects,
-                headers: response
-                    .headers()
-                    .iter()
-                    .map(|(name, value)| {
-                        (
-                            name.as_str().to_owned(),
-                            String::from_utf8_lossy(value.as_bytes()).into_owned(),
-                        )
-                    })
-                    .collect(),
-                elapsed_ms: 0,
-            };
+            let mut head = response_head(&response, redirects);
+            timeline.push(TimelineEvent {
+                at_us: at(),
+                kind: TimelineKind::Headers { status },
+            });
             let mut response = response;
+            let mut bytes = 0;
             while let Some(chunk) = response.chunk().await.map_err(|e| classify(&e, &url))? {
                 writer.write(&chunk).map_err(|e| {
                     TransportError::Other(format!("cannot store the response body: {e}"))
                 })?;
+                bytes += chunk.len() as u64;
             }
+            timeline.push(TimelineEvent {
+                at_us: at(),
+                kind: TimelineKind::Body { bytes },
+            });
             head.elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+            head.timeline = timeline;
             return Ok(head);
         }
     }
@@ -289,6 +300,29 @@ fn header_map(headers: &[(String, String)]) -> Result<HeaderMap, TransportError>
         map.append(header, value);
     }
     Ok(map)
+}
+
+/// Status, version, URL and headers of `response`; its times are set
+/// once the body has arrived.
+fn response_head(response: &reqwest::Response, redirects: u32) -> ResponseHead {
+    ResponseHead {
+        status: response.status().as_u16(),
+        version: format!("{:?}", response.version()),
+        url: response.url().to_string(),
+        redirects,
+        headers: response
+            .headers()
+            .iter()
+            .map(|(name, value)| {
+                (
+                    name.as_str().to_owned(),
+                    String::from_utf8_lossy(value.as_bytes()).into_owned(),
+                )
+            })
+            .collect(),
+        elapsed_ms: 0,
+        timeline: Vec::new(),
+    }
 }
 
 /// Scheme, host and port: what decides whether credentials may follow.

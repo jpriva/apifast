@@ -5,7 +5,7 @@ mod code_editor;
 mod suggestions;
 mod template_field;
 
-pub use code_editor::{CodeEditor, code_layout};
+pub use code_editor::{CodeEditor, code_layout, syntax_layout};
 pub use suggestions::{MAX_SUGGESTIONS, completions, refocus, suggestions};
 pub use template_field::{
     HintsCache, Span, SpanKind, TemplateField, TemplateFieldTexts, VariableHint, VariableHints,

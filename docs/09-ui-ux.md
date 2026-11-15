@@ -98,7 +98,8 @@ La edición con resaltado se limita a unos 200 KB: con más texto, egui tarda de
 | Timeline | Eventos del envío con sus tiempos |
 | Tests | Aserciones con valor esperado y real |
 
-- Los cuerpos grandes se muestran por ventanas; el formateo se desactiva por encima de un umbral y se ofrece verlos en crudo o guardarlos.
+- Los cuerpos grandes se muestran por ventanas; el formateo se desactiva por encima de un umbral (2 MB) y se ofrece verlos en crudo o guardarlos. La vista "Pretty" formatea y colorea JSON y XML; si no se pueden formatear (HTML con `<br>`, JSON roto), se muestran tal cual, coloreados y con un aviso. Los bodies binarios no se dibujan: se indica su tamaño.
+- El Timeline básico lista, con su tiempo desde el inicio, cada request que sale, cada redirección seguida, la llegada de los headers y el final del body. Las fases de DNS, conexión y TLS llegarán cuando el transporte las exponga.
 - Acciones: copiar, guardar a archivo, guardar como ejemplo, "guardar como variable" desde un valor seleccionado.
 - Selector de respuestas anteriores de la misma request.
 

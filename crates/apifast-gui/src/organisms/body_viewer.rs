@@ -6,7 +6,9 @@ use std::ops::Range;
 
 use eframe::egui::{self, RichText, TextStyle};
 
+use crate::atoms::syntax_layout;
 use crate::body::{BodyHandle, Row, RowIndex};
+use crate::code::Language;
 use crate::strings::Strings;
 use crate::theme;
 
@@ -53,8 +55,15 @@ impl BodyViewer {
         self.scroll_to = Some(row);
     }
 
-    /// Draws `body`, filling the space available.
-    pub fn show(&mut self, ui: &mut egui::Ui, body: &BodyHandle, strings: &Strings) {
+    /// Draws `body`, filling the space available, with its syntax colored
+    /// row by row when `language` is given.
+    pub fn show(
+        &mut self,
+        ui: &mut egui::Ui,
+        body: &BodyHandle,
+        language: Option<Language>,
+        strings: &Strings,
+    ) {
         if self.key.as_deref() != Some(body.key()) {
             *self = Self {
                 key: Some(body.key().to_owned()),
@@ -85,7 +94,7 @@ impl BodyViewer {
             area = area.vertical_scroll_offset(offset);
         }
         area.show_rows(ui, row_height, self.rows(), |ui, rows| {
-            self.draw(ui, body, rows, row_height, digits, muted);
+            self.draw(ui, body, rows, language, row_height, digits);
         });
     }
 
@@ -110,10 +119,13 @@ impl BodyViewer {
         ui: &mut egui::Ui,
         body: &BodyHandle,
         rows: Range<usize>,
+        language: Option<Language>,
         row_height: f32,
         digits: usize,
-        muted: egui::Color32,
     ) {
+        let palette = theme::palette(ui);
+        let font = TextStyle::Monospace.resolve(ui.style());
+        let text_color = ui.visuals().text_color();
         let window = match self.window.take() {
             // Indexing may still add rows: a window is kept only while it
             // has all of its own.
@@ -147,14 +159,20 @@ impl BodyViewer {
                     egui::Label::new(
                         RichText::new(format!("{line:>digits$}"))
                             .monospace()
-                            .color(muted),
+                            .color(palette.text_muted),
                     )
                     .selectable(false),
                 );
                 // An empty label has nothing to name for screen readers.
                 if !bytes.is_empty() {
                     let text = String::from_utf8_lossy(bytes);
-                    ui.add(egui::Label::new(RichText::new(text).monospace()).extend());
+                    let label = match language {
+                        Some(language) => egui::Label::new(syntax_layout(
+                            &text, language, &font, palette, text_color,
+                        )),
+                        None => egui::Label::new(RichText::new(text).monospace()),
+                    };
+                    ui.add(label.extend());
                 }
             });
         }
