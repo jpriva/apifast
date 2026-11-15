@@ -36,6 +36,26 @@ pub struct Strings {
     pub truncated: &'static str,
     /// Hover text of a request kind this version cannot open.
     pub unsupported_kind: &'static str,
+    /// Action and dialog title: new request.
+    pub new_request: &'static str,
+    /// Action and dialog title: new folder.
+    pub new_folder: &'static str,
+    /// Action and dialog title: rename.
+    pub rename: &'static str,
+    /// Action: delete.
+    pub delete: &'static str,
+    /// Action: move one place up.
+    pub move_up: &'static str,
+    /// Action: move one place down.
+    pub move_down: &'static str,
+    /// Placeholder of the name field.
+    pub name_placeholder: &'static str,
+    /// Button that confirms a new item.
+    pub create: &'static str,
+    /// Title of the delete confirmation.
+    pub delete_title: &'static str,
+    /// What deleting does, under the item's name.
+    pub delete_warning: &'static str,
 }
 
 /// English.
@@ -56,4 +76,14 @@ pub const EN: Strings = Strings {
     headers: "Headers",
     truncated: "Only the start of the body is shown.",
     unsupported_kind: "This kind of request cannot be opened yet",
+    new_request: "New request",
+    new_folder: "New folder",
+    rename: "Rename",
+    delete: "Delete",
+    move_up: "Move up",
+    move_down: "Move down",
+    name_placeholder: "Name",
+    create: "Create",
+    delete_title: "Delete this?",
+    delete_warning: "Its files are deleted from disk, with everything inside.",
 };

@@ -145,3 +145,69 @@ fn a_folder_that_is_not_a_collection_shows_the_error() {
     // Still on the welcome screen, ready to try another folder.
     harness.get_by_label("Open");
 }
+
+/// Steps the interface until `done` holds, failing after 10 seconds.
+fn wait_until(harness: &mut Harness<'_, App>, what: &str, done: impl Fn() -> bool) {
+    let start = Instant::now();
+    loop {
+        harness.step();
+        if done() {
+            return;
+        }
+        assert!(
+            start.elapsed() < Duration::from_secs(10),
+            "timed out waiting for {what}"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
+/// Opens the context menu of `row` and picks `entry` (the last match: the
+/// toolbar has some of the same labels).
+fn menu(harness: &mut Harness<'_, App>, row: &str, entry: &str) {
+    harness.get_by_label(row).click_secondary();
+    harness.run_steps(2);
+    harness.get_all_by_label(entry).last().unwrap().click();
+    harness.run_steps(2);
+}
+
+#[test]
+fn the_sidebar_creates_renames_and_deletes_files() {
+    let dir = collection(server());
+    let data = tempfile::tempdir().unwrap();
+    let app = App::new(Core::start(data.path().to_path_buf(), || {}));
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(1280.0, 800.0))
+        .build_ui_state(|ui, app: &mut App| app.show(ui), app);
+    type_folder(&mut harness, dir.path());
+    harness.get_by_label("Open").click();
+    wait_for(&mut harness, "Shop API");
+
+    harness.get_by_label("New request").click();
+    harness.run_steps(2);
+    harness.get_by_role(Role::TextInput).type_text("Ping");
+    harness.step();
+    harness.get_by_label("Create").click();
+    wait_for(&mut harness, "Ping");
+    let file = dir.path().join("ping.yml");
+    assert!(file.exists());
+    // The new request is open.
+    harness.get_by_label("Send");
+
+    menu(&mut harness, "Ping", "Rename");
+    harness.get_by_role(Role::TextInput).type_text(" again");
+    harness.step();
+    harness.key_press(egui::Key::Enter);
+    wait_for(&mut harness, "Ping again");
+    assert!(!file.exists());
+    assert!(dir.path().join("ping-again.yml").exists());
+
+    menu(&mut harness, "Ping again", "Delete");
+    harness.get_by_label("Delete").click();
+    let gone = dir.path().join("ping-again.yml");
+    wait_until(&mut harness, "the file to go", || !gone.exists());
+    harness.run_steps(2);
+    assert!(harness.query_by_label("Ping again").is_none());
+    // The deleted request was open: now nothing is.
+    harness.get_by_label(apifast_gui::strings::EN.no_request);
+}

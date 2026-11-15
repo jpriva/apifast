@@ -173,6 +173,77 @@ pub trait CollectionRepository {
     ///
     /// If the file cannot be written.
     fn save_collection(&self, collection: &Collection) -> Result<(), RepositoryError>;
+
+    /// Whether a request file or folder exists at `path` (relative to the
+    /// root, such as `users/list.yml` or `users`).
+    ///
+    /// # Errors
+    ///
+    /// If `path` is not a valid path inside the collection.
+    fn exists(&self, path: &str) -> Result<bool, RepositoryError>;
+
+    /// Moves the request file or folder at `from` to `to`, with everything
+    /// inside it. Never replaces something that already exists at `to`.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] if nothing is at `from`,
+    /// [`RepositoryError::Invalid`] if something is already at `to`, or the
+    /// error of the move.
+    fn rename_path(&self, from: &str, to: &str) -> Result<(), RepositoryError>;
+
+    /// Deletes the request file or folder at `path`, with everything inside
+    /// it.
+    ///
+    /// # Errors
+    ///
+    /// [`RepositoryError::NotFound`] if nothing is at `path`, or the error
+    /// of the deletion.
+    fn delete_path(&self, path: &str) -> Result<(), RepositoryError>;
+}
+
+/// A request file or a folder of the collection: what the sidebar creates,
+/// renames, moves and deletes.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ItemPath {
+    /// A request file, of any kind (also one that cannot be read).
+    Request(RequestPath),
+    /// A folder, such as `users/admin`.
+    Folder(String),
+}
+
+impl ItemPath {
+    /// The path relative to the collection root.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Request(path) => path.as_str(),
+            Self::Folder(path) => path,
+        }
+    }
+
+    /// The folder that holds the item, `""` for the root.
+    pub fn parent(&self) -> &str {
+        self.as_str()
+            .rsplit_once('/')
+            .map_or("", |(parent, _)| parent)
+    }
+
+    /// The last part of the path: the file or folder name.
+    pub fn file_name(&self) -> &str {
+        let path = self.as_str();
+        path.rsplit_once('/').map_or(path, |(_, name)| name)
+    }
+
+    /// Whether this item is `other` or is inside it.
+    pub fn is_within(&self, other: &ItemPath) -> bool {
+        is_within(self.as_str(), other.as_str())
+    }
+}
+
+/// Whether `path` is `folder` or is inside it.
+pub(crate) fn is_within(path: &str, folder: &str) -> bool {
+    path.strip_prefix(folder)
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
 }
 
 /// Environments and process variables of a collection.

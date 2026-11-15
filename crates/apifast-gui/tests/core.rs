@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
-use apifast_app::{RequestPath, TreeItem};
+use apifast_app::{ItemPath, Placement, RequestPath, TreeItem};
 use apifast_gui::core::{Command, Core, ResponseState, Snapshot};
 
 /// Answers every request after `delay`, with the request line as the body.
@@ -262,4 +262,97 @@ fn responses_are_stored_in_the_given_data_directory() {
         .collect();
     assert_eq!(folders.len(), 1);
     assert_eq!(std::fs::read_dir(folders[0].path()).unwrap().count(), 1);
+}
+
+/// Waits until a change made after `version` is published.
+fn next(core: &Core, version: u64) -> Arc<Snapshot> {
+    wait(core, "the change", |s| s.version > version)
+}
+
+fn names(items: &[TreeItem]) -> Vec<String> {
+    items
+        .iter()
+        .map(|i| match i {
+            TreeItem::Folder { folder, .. } => folder.name.clone(),
+            TreeItem::Request { name, .. } => name.clone(),
+            other => format!("{other:?}"),
+        })
+        .collect()
+}
+
+#[test]
+fn a_created_request_appears_in_the_tree_and_opens() {
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    let snapshot = open(&core, dir.path());
+    core.send(Command::CreateRequest {
+        folder: String::new(),
+        name: "New one".into(),
+    });
+    let snapshot = next(&core, snapshot.version);
+    assert_eq!(snapshot.error, None);
+    let tree = &snapshot.collection.as_ref().unwrap().tree;
+    assert_eq!(names(&tree.items), ["Users", "Health", "New one"]);
+    let open = snapshot.request.as_ref().unwrap();
+    assert_eq!(open.path.as_str(), "new-one.yml");
+    assert!(dir.path().join("new-one.yml").exists());
+}
+
+#[test]
+fn renaming_the_folder_of_the_open_request_keeps_it_open() {
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::OpenRequest(RequestPath::new("users/get.yml")));
+    let snapshot = wait(&core, "the request", |s| s.request.is_some());
+    core.send(Command::Rename {
+        item: ItemPath::Folder("users".into()),
+        name: "People".into(),
+    });
+    let snapshot = next(&core, snapshot.version);
+    assert_eq!(snapshot.error, None);
+    let open = snapshot.request.as_ref().unwrap();
+    assert_eq!(open.path.as_str(), "people/get.yml");
+    assert_eq!(open.request.name, "Get");
+}
+
+#[test]
+fn deleting_the_open_request_closes_it() {
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    let snapshot = wait(&core, "the request", |s| s.request.is_some());
+    core.send(Command::Delete(ItemPath::Request(RequestPath::new(
+        "health.yml",
+    ))));
+    let snapshot = next(&core, snapshot.version);
+    assert!(snapshot.request.is_none());
+    let tree = &snapshot.collection.as_ref().unwrap().tree;
+    assert_eq!(names(&tree.items), ["Users"]);
+}
+
+#[test]
+fn moving_reorders_the_tree_and_errors_are_reported() {
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    let snapshot = open(&core, dir.path());
+    core.send(Command::Move {
+        item: ItemPath::Request(RequestPath::new("health.yml")),
+        placement: Placement::Before(ItemPath::Folder("users".into())),
+    });
+    let snapshot = next(&core, snapshot.version);
+    let tree = &snapshot.collection.as_ref().unwrap().tree;
+    assert_eq!(names(&tree.items), ["Health", "Users"]);
+
+    core.send(Command::CreateFolder {
+        parent: "missing".into(),
+        name: "X".into(),
+    });
+    let snapshot = next(&core, snapshot.version);
+    assert!(
+        snapshot.error.as_ref().unwrap().contains("missing"),
+        "{:?}",
+        snapshot.error
+    );
 }

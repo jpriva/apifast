@@ -106,6 +106,20 @@ impl FsCollection {
         })
     }
 
+    /// The full path of a request file or folder. Refuses the collection's
+    /// own files (`opencollection.yml`, `environments`, `.env`) and reserved
+    /// folders, so moving or deleting can never touch them.
+    fn item_path(&self, relative: &str) -> Result<PathBuf, RepositoryError> {
+        let full = self.path(relative)?;
+        if fs::is_ignored(relative, &[]) {
+            return Err(RepositoryError::Invalid {
+                path: relative.to_owned(),
+                message: "this is not a request or folder of the collection".into(),
+            });
+        }
+        Ok(full)
+    }
+
     /// The file's text, or `None` if it does not exist. `relative` is trusted
     /// (built by this crate), so it is not validated again.
     fn read_text(&self, relative: &str) -> Result<Option<String>, RepositoryError> {
@@ -412,6 +426,42 @@ impl CollectionRepository for FsCollection {
                 doc
             },
         )
+    }
+
+    fn exists(&self, path: &str) -> Result<bool, RepositoryError> {
+        Ok(std::fs::symlink_metadata(self.item_path(path)?).is_ok())
+    }
+
+    fn rename_path(&self, from: &str, to: &str) -> Result<(), RepositoryError> {
+        let (source, target) = (self.item_path(from)?, self.item_path(to)?);
+        if std::fs::symlink_metadata(&source).is_err() {
+            return Err(RepositoryError::NotFound(from.to_owned()));
+        }
+        // `rename` would silently replace a file at `target`.
+        if std::fs::symlink_metadata(&target).is_ok() {
+            return Err(RepositoryError::Invalid {
+                path: to.to_owned(),
+                message: "something already exists there".into(),
+            });
+        }
+        if let Some(dir) = target.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| io_error(to, &e))?;
+        }
+        std::fs::rename(&source, &target).map_err(|e| io_error(from, &e))
+    }
+
+    fn delete_path(&self, path: &str) -> Result<(), RepositoryError> {
+        let full = self.item_path(path)?;
+        let kind = std::fs::symlink_metadata(&full)
+            .map_err(|_| RepositoryError::NotFound(path.to_owned()))?
+            .file_type();
+        // A symlink is removed itself, never what it points to.
+        if kind.is_dir() {
+            std::fs::remove_dir_all(&full)
+        } else {
+            std::fs::remove_file(&full)
+        }
+        .map_err(|e| io_error(path, &e))
     }
 }
 

@@ -11,16 +11,20 @@
 mod error;
 mod host;
 pub mod memory;
+mod organize;
 mod ports;
 mod render;
 mod use_cases;
 
 pub use error::{AppError, RepositoryError, StoreError, TransportError};
 pub use host::AppHost;
+pub use organize::{
+    Placement, create_folder, create_request, delete_item, move_item, rename_item, slug,
+};
 pub use ports::{
     BodyWriter, CancelToken, Clock, CollectionRepository, CollectionTree, EnvironmentRepository,
-    HttpTransport, LoadedRequest, NoPrompter, Prompter, Random, RequestPath, ResponseHead,
-    ResponseId, ResponseStore, StoredBody, TreeItem, sort_tree,
+    HttpTransport, ItemPath, LoadedRequest, NoPrompter, Prompter, Random, RequestPath,
+    ResponseHead, ResponseId, ResponseStore, StoredBody, TreeItem, sort_tree,
 };
 pub use render::{RenderOutcome, RenderedBody, RenderedPart, RenderedRequest, render_request};
 pub use use_cases::{

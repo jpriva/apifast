@@ -10,9 +10,10 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
 
 use apifast_app::{
-    AppError, CancelToken, CollectionTree, EnvironmentRepository, NoPrompter, RequestPath,
-    ResponseHead, ResponseStore, SendOptions, SendPorts, TransportError, load_request,
-    open_collection, send_request,
+    AppError, CancelToken, CollectionTree, EnvironmentRepository, ItemPath, NoPrompter, Placement,
+    RequestPath, ResponseHead, ResponseStore, SendOptions, SendPorts, TransportError,
+    create_folder, create_request, delete_item, load_request, move_item, open_collection,
+    rename_item, send_request,
 };
 use apifast_domain::HttpRequest;
 use apifast_history::FsResponseStore;
@@ -39,6 +40,37 @@ pub enum Command {
     Send,
     /// Cancels the send in progress.
     Cancel,
+    /// Creates a request called `name` in `folder` (`""` for the root) and
+    /// opens it.
+    CreateRequest {
+        /// Where.
+        folder: String,
+        /// Its name.
+        name: String,
+    },
+    /// Creates a folder called `name` in `parent` (`""` for the root).
+    CreateFolder {
+        /// Where.
+        parent: String,
+        /// Its name.
+        name: String,
+    },
+    /// Renames a request or folder.
+    Rename {
+        /// What.
+        item: ItemPath,
+        /// The new name.
+        name: String,
+    },
+    /// Deletes a request or folder, with everything inside it.
+    Delete(ItemPath),
+    /// Moves a request or folder.
+    Move {
+        /// What.
+        item: ItemPath,
+        /// Where to.
+        placement: Placement,
+    },
 }
 
 /// Everything the interface shows, as of one moment.
@@ -249,6 +281,92 @@ impl State {
                     token.cancel();
                 }
             }
+            Command::CreateRequest { folder, name } => {
+                if let Some(path) = self.organize(|repo| create_request(repo, &folder, &name)) {
+                    self.open_request(path);
+                }
+            }
+            Command::CreateFolder { parent, name } => {
+                self.organize(|repo| create_folder(repo, &parent, &name));
+            }
+            Command::Rename { item, name } => {
+                if let Some(new) = self.organize(|repo| rename_item(repo, &item, &name)) {
+                    self.follow_move(&item, &new);
+                }
+            }
+            Command::Delete(item) => {
+                if self.organize(|repo| delete_item(repo, &item)).is_some() {
+                    let open_inside = (self.snapshot.request.as_ref())
+                        .is_some_and(|open| ItemPath::Request(open.path.clone()).is_within(&item));
+                    if open_inside {
+                        self.cancel_send();
+                        self.snapshot.request = None;
+                        self.snapshot.response = ResponseState::Idle;
+                    }
+                }
+            }
+            Command::Move { item, placement } => {
+                if let Some(new) = self.organize(|repo| move_item(repo, &item, &placement)) {
+                    self.follow_move(&item, &new);
+                }
+            }
+        }
+    }
+
+    /// Runs a use case that changes the collection's files, then reloads the
+    /// tree. Returns the use case's result, or `None` after reporting its
+    /// error.
+    fn organize<T>(
+        &mut self,
+        change: impl FnOnce(&FsCollection) -> Result<T, AppError>,
+    ) -> Option<T> {
+        let session = self.session.as_ref()?;
+        let result = change(&session.repo);
+        // Reload even after an error: part of the change may have happened.
+        match open_collection(&*session.repo) {
+            Ok(tree) => {
+                if let Some(collection) = &mut self.snapshot.collection {
+                    collection.tree = tree;
+                }
+            }
+            Err(e) => self.snapshot.error = Some(e.to_string()),
+        }
+        match result {
+            Ok(value) => {
+                self.snapshot.error = None;
+                Some(value)
+            }
+            Err(e) => {
+                self.snapshot.error = Some(e.to_string());
+                None
+            }
+        }
+    }
+
+    /// After `old` moved to `new`, keeps the open request open if it was
+    /// `old` or inside it, reloading it (its name may have changed) but
+    /// keeping the response.
+    fn follow_move(&mut self, old: &ItemPath, new: &ItemPath) {
+        let Some(open) = &self.snapshot.request else {
+            return;
+        };
+        if !ItemPath::Request(open.path.clone()).is_within(old) {
+            return;
+        }
+        let path = RequestPath::new(format!(
+            "{}{}",
+            new.as_str(),
+            &open.path.as_str()[old.as_str().len()..]
+        ));
+        let Some(session) = &self.session else { return };
+        match load_request(&*session.repo, &path) {
+            Ok(loaded) => {
+                self.snapshot.request = Some(OpenRequest {
+                    path,
+                    request: loaded.request,
+                });
+            }
+            Err(e) => self.snapshot.error = Some(e.to_string()),
         }
     }
 

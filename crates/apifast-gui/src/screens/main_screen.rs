@@ -75,8 +75,17 @@ impl MainScreen {
         if let Some(choice) = environment {
             commands.push(Command::SelectEnvironment(choice));
         }
-        if let Some(TreeEvent::RequestSelected(path)) = tree_event {
-            commands.push(Command::OpenRequest(path));
+        if let Some(event) = tree_event {
+            commands.push(match event {
+                TreeEvent::RequestSelected(path) => Command::OpenRequest(path),
+                TreeEvent::CreateRequest { folder, name } => {
+                    Command::CreateRequest { folder, name }
+                }
+                TreeEvent::CreateFolder { parent, name } => Command::CreateFolder { parent, name },
+                TreeEvent::Rename { item, name } => Command::Rename { item, name },
+                TreeEvent::Delete(item) => Command::Delete(item),
+                TreeEvent::Move { item, placement } => Command::Move { item, placement },
+            });
         }
         let url_event = url_event.or_else(|| shortcut(ui, snapshot, sending));
         match url_event {

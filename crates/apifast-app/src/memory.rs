@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use apifast_domain::{Collection, Environment, Folder, HttpRequest};
 
+use crate::ports::is_within;
 use crate::{
     BodyWriter, CancelToken, Clock, CollectionRepository, CollectionTree, EnvironmentRepository,
     HttpTransport, LoadedRequest, Prompter, Random, RenderedRequest, RepositoryError, RequestPath,
@@ -148,6 +149,59 @@ impl CollectionRepository for MemoryCollections {
 
     fn save_collection(&self, collection: &Collection) -> Result<(), RepositoryError> {
         collection.clone_into(&mut lock(&self.collection));
+        Ok(())
+    }
+
+    fn exists(&self, path: &str) -> Result<bool, RepositoryError> {
+        let folders = lock(&self.folders);
+        let requests = lock(&self.requests);
+        // A folder exists while it has a `folder.yml` or anything inside.
+        Ok(folders.keys().any(|f| is_within(f, path))
+            || requests.keys().any(|r| is_within(r.as_str(), path)))
+    }
+
+    fn rename_path(&self, from: &str, to: &str) -> Result<(), RepositoryError> {
+        if !self.exists(from)? {
+            return Err(RepositoryError::NotFound(from.to_owned()));
+        }
+        if self.exists(to)? {
+            return Err(RepositoryError::Invalid {
+                path: to.to_owned(),
+                message: "something already exists there".into(),
+            });
+        }
+        let moved = |path: &str| format!("{to}{}", &path[from.len()..]);
+        let mut folders = lock(&self.folders);
+        let keys: Vec<String> = folders
+            .keys()
+            .filter(|f| is_within(f, from))
+            .cloned()
+            .collect();
+        for key in keys {
+            if let Some(folder) = folders.remove(&key) {
+                folders.insert(moved(&key), folder);
+            }
+        }
+        let mut requests = lock(&self.requests);
+        let keys: Vec<RequestPath> = requests
+            .keys()
+            .filter(|r| is_within(r.as_str(), from))
+            .cloned()
+            .collect();
+        for key in keys {
+            if let Some(request) = requests.remove(&key) {
+                requests.insert(RequestPath::new(moved(key.as_str())), request);
+            }
+        }
+        Ok(())
+    }
+
+    fn delete_path(&self, path: &str) -> Result<(), RepositoryError> {
+        if !self.exists(path)? {
+            return Err(RepositoryError::NotFound(path.to_owned()));
+        }
+        lock(&self.folders).retain(|f, _| !is_within(f, path));
+        lock(&self.requests).retain(|r, _| !is_within(r.as_str(), path));
         Ok(())
     }
 }
