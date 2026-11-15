@@ -6,6 +6,7 @@
 use apifast_app::{CollectionTree, RequestPath, ResponseHead, TreeItem};
 use apifast_domain::{Body, Collection, Folder, Header, HttpRequest, Method};
 use apifast_gui::atoms::{VariableHint, VariableHints};
+use apifast_gui::body::BodyHandle;
 use apifast_gui::core::{Received, ResponseState, Tab, TabContext};
 use apifast_gui::molecules::EnvironmentSelector;
 use apifast_gui::organisms::{RequestPanel, ResponseView, TabBar, TreeView, UrlBar};
@@ -291,8 +292,7 @@ fn sample_responses() -> Vec<ResponseState> {
                 elapsed_ms: 182,
             },
             size: preview.len() as u64,
-            preview: preview.into(),
-            truncated: false,
+            body: BodyHandle::memory(format!("sample-{status}"), preview),
         })
     };
     vec![

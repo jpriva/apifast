@@ -171,9 +171,14 @@ fn sends_the_open_request_with_the_active_environment() {
         panic!("{:?}", response(&snapshot));
     };
     assert_eq!(received.head.status, 200);
-    assert_eq!(received.preview, "GET /users/1 HTTP/1.1");
     assert_eq!(received.size, 21);
-    assert!(!received.truncated);
+    assert_eq!(received.body.len(), 21);
+    // The body is read from the response store, by windows.
+    assert_eq!(
+        received.body.read(0, 100).unwrap(),
+        b"GET /users/1 HTTP/1.1"
+    );
+    assert_eq!(received.body.read(4, 6).unwrap(), b"/users");
 }
 
 #[test]
@@ -430,7 +435,7 @@ fn edits_are_a_draft_that_is_sent_and_saved() {
     let ResponseState::Received(received) = response(&snapshot) else {
         unreachable!()
     };
-    assert_eq!(received.preview, "GET /draft HTTP/1.1");
+    assert_eq!(received.body.read(0, 100).unwrap(), b"GET /draft HTTP/1.1");
     let file = dir.path().join("health.yml");
     assert!(!std::fs::read_to_string(&file).unwrap().contains("draft"));
 

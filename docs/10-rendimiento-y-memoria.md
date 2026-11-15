@@ -43,7 +43,12 @@ Como referencia, las aplicaciones sobre Electron o webview suelen consumir vario
 ### Respuestas
 
 - **Streaming a disco** con búfer fijo; la memoria no depende del tamaño de la respuesta.
-- **Visor por ventanas.** El visor mapea el archivo y dibuja solo las líneas visibles, con un índice de saltos de línea construido de forma incremental.
+- **Visor por ventanas.** El visor lee del archivo solo las filas visibles y las dibuja con el texto de egui. Lo guía un índice construido de forma incremental, 8 MB por frame, que guarda dónde empieza una fila de cada 64. Las filas intermedias se vuelven a encontrar en los bytes de la ventana. Las líneas de más de 2 KB se parten en filas, sin cortar caracteres. Medido en release con un body de 100 MB de líneas cortas (7,5 millones de filas):
+  - indexado en 9 frames;
+  - unos 3 MB de índice;
+  - desplazarse cuesta 0,23 ms de CPU por frame en la mediana y 0,4 ms como máximo, sin contar teselación ni GPU.
+
+  Se repite con `cargo test --release -p apifast-gui --test body_viewer -- --ignored --nocapture`. Límite conocido: el desplazamiento usa `f32`, así que por encima de unos 10 millones de filas el salto a una fila puede caer una fila antes o después.
 - **Formateo con umbral.** Por encima de un tamaño configurable no se formatea ni se resalta automáticamente.
 - **Límites del historial.** Tamaño total y antigüedad máximos; limpieza al arrancar y periódica.
 

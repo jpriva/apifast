@@ -17,10 +17,10 @@ use std::time::Duration;
 
 use apifast_app::{
     AppError, CancelToken, CollectionRepository, CollectionTree, EnvironmentRepository, ItemPath,
-    NoPrompter, Placement, RequestPath, ResponseHead, ResponseStore, SendOptions, SendPorts,
-    Session, SessionStore, SessionTab, TransportError, create_folder, create_request, delete_item,
-    load_request, move_item, open_collection, rename_item, resolve_request_variables, save_request,
-    send_request,
+    NoPrompter, Placement, RequestPath, ResponseHead, ResponseId, ResponseStore, SendOptions,
+    SendPorts, Session, SessionStore, SessionTab, TransportError, create_folder, create_request,
+    delete_item, load_request, move_item, open_collection, rename_item, resolve_request_variables,
+    save_request, send_request,
 };
 use apifast_domain::{
     AuthScheme, Chain, Collection, Header, HttpRequest, Origin, Resolved, ResolvedSettings,
@@ -31,11 +31,27 @@ use apifast_http::ReqwestTransport;
 use apifast_storage_fs::{FsCollection, FsSessionStore};
 use tokio::sync::mpsc;
 
+use crate::body::{BodyHandle, BodySource};
 use crate::system::{SystemClock, SystemRandom};
 
-/// How much of a response body the snapshot carries for display. The viewer
-/// that reads bodies in windows replaces this.
-pub const BODY_PREVIEW_BYTES: usize = 256 * 1024;
+/// A body kept in the response store, read by windows from disk.
+struct StoredBody {
+    store: Arc<FsResponseStore>,
+    id: ResponseId,
+    size: u64,
+}
+
+impl BodySource for StoredBody {
+    fn len(&self) -> u64 {
+        self.size
+    }
+
+    fn read(&self, offset: u64, len: usize) -> Result<Vec<u8>, String> {
+        self.store
+            .read(&self.id, offset, len)
+            .map_err(|error| error.to_string())
+    }
+}
 
 /// How long the core waits after a change before writing the session, so
 /// that typing does not write a file per key.
@@ -234,10 +250,8 @@ pub struct Received {
     pub head: ResponseHead,
     /// Size of the whole body.
     pub size: u64,
-    /// The start of the body as text (invalid UTF-8 replaced).
-    pub preview: String,
-    /// Whether the body is longer than the preview.
-    pub truncated: bool,
+    /// The body, read by windows where it is kept.
+    pub body: BodyHandle,
 }
 
 /// Messages the core thread handles: commands from the interface and
@@ -818,14 +832,17 @@ impl State {
             };
             let result = send_request(ports, &path, &options, &cancel)
                 .await
-                .and_then(|outcome| {
-                    let window = responses.read(&outcome.body.id, 0, BODY_PREVIEW_BYTES)?;
-                    Ok(Received {
+                .map(|outcome| {
+                    let stored = StoredBody {
+                        store: responses,
+                        id: outcome.body.id.clone(),
+                        size: outcome.body.size,
+                    };
+                    Received {
                         head: outcome.head,
                         size: outcome.body.size,
-                        truncated: outcome.body.size > window.len() as u64,
-                        preview: String::from_utf8_lossy(&window).into_owned(),
-                    })
+                        body: BodyHandle::new(outcome.body.id.0, Arc::new(stored)),
+                    }
                 });
             // Gone only when the core is stopping, and then nobody waits.
             if let Some(messages) = messages.upgrade() {

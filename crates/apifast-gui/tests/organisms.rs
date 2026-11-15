@@ -4,6 +4,7 @@
 use apifast_app::{CollectionTree, RequestPath, ResponseHead, TreeItem};
 use apifast_domain::{Collection, Folder, Method};
 use apifast_gui::atoms::VariableHints;
+use apifast_gui::body::BodyHandle;
 use apifast_gui::core::{Received, ResponseState};
 use apifast_gui::molecules::EnvironmentSelector;
 use apifast_gui::organisms::{ResponseView, TreeEvent, TreeView, UrlBar, UrlBarEvent};
@@ -176,9 +177,8 @@ fn the_response_view_shows_each_state() {
             headers: vec![("content-type".into(), "text/plain".into())],
             elapsed_ms: 12,
         },
-        size: 2048,
-        preview: "not here".into(),
-        truncated: true,
+        size: 8,
+        body: BodyHandle::memory("r1", "not\nhere"),
     });
     let cases = [
         (ResponseState::Idle, EN.response_idle),
@@ -198,7 +198,7 @@ fn the_response_view_shows_each_state() {
         harness.run_steps(2);
         harness.get_by_label(label);
         if matches!(state, ResponseState::Received(_)) {
-            for label in ["12 ms", "2.0 KB", "not here", EN.truncated] {
+            for label in ["12 ms", "8 B", "not", "here"] {
                 harness.get_by_label(label);
             }
             harness.get_by_label("Headers (1)").click();

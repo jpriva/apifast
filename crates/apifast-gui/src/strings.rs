@@ -34,8 +34,10 @@ pub struct Strings {
     pub body: &'static str,
     /// Response tab with the headers.
     pub headers: &'static str,
-    /// Shown under a body that is longer than what is displayed.
-    pub truncated: &'static str,
+    /// Shown with a percentage while a large body is being read.
+    pub indexing: &'static str,
+    /// Shown before the reason a body cannot be read.
+    pub body_unreadable: &'static str,
     /// Hover text of a request kind this version cannot open.
     pub unsupported_kind: &'static str,
     /// Action and dialog title: new request.
@@ -218,7 +220,8 @@ pub const EN: Strings = Strings {
     no_request: "Select a request in the sidebar.",
     body: "Body",
     headers: "Headers",
-    truncated: "Only the start of the body is shown.",
+    indexing: "Reading the body:",
+    body_unreadable: "The body cannot be read:",
     unsupported_kind: "This kind of request cannot be opened yet",
     new_request: "New request",
     new_folder: "New folder",

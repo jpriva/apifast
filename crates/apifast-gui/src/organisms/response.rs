@@ -5,6 +5,7 @@ use eframe::egui::{self, RichText};
 
 use crate::atoms::StatusBadge;
 use crate::core::{Received, ResponseState};
+use crate::organisms::BodyViewer;
 use crate::strings::Strings;
 use crate::theme;
 
@@ -23,6 +24,8 @@ pub enum ResponseTab {
 pub struct ResponseView {
     /// The open tab.
     pub tab: ResponseTab,
+    /// The body, read by windows.
+    pub viewer: BodyViewer,
 }
 
 impl ResponseView {
@@ -63,20 +66,7 @@ impl ResponseView {
         });
         ui.separator();
         match self.tab {
-            ResponseTab::Body => {
-                if received.truncated {
-                    ui.label(RichText::new(strings.truncated).color(muted));
-                }
-                egui::ScrollArea::both()
-                    .id_salt("response-body")
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        ui.add(
-                            egui::Label::new(RichText::new(received.preview.as_str()).monospace())
-                                .extend(),
-                        );
-                    });
-            }
+            ResponseTab::Body => self.viewer.show(ui, &received.body, strings),
             ResponseTab::Headers => {
                 egui::ScrollArea::vertical()
                     .id_salt("response-headers")

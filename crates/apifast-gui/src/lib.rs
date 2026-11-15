@@ -7,6 +7,7 @@
 
 pub mod app;
 pub mod atoms;
+pub mod body;
 pub mod code;
 pub mod core;
 pub mod layout;
