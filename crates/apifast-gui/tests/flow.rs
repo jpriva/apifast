@@ -257,10 +257,11 @@ fn open_app(dir: &std::path::Path, data: &std::path::Path) -> Harness<'static, A
     harness
 }
 
-/// Puts the cursor at the end of the URL field (the only text field on
-/// the main screen) and types `text`.
+/// Puts the cursor at the end of the URL field and types `text`.
 fn type_in_url(harness: &mut Harness<'_, App>, text: &str) {
-    harness.get_by_role(Role::TextInput).focus();
+    harness
+        .get_by_role_and_label(Role::TextInput, "URL")
+        .focus();
     harness.step();
     harness.key_press(egui::Key::End);
     type_into_focus(harness, text);
@@ -296,7 +297,9 @@ fn edits_are_saved_with_ctrl_s_and_drafts_survive_a_restart() {
     );
 
     // An unsaved change, then the app closes.
-    harness.get_by_role(Role::TextInput).focus();
+    harness
+        .get_by_role_and_label(Role::TextInput, "URL")
+        .focus();
     harness.step();
     harness.key_press(egui::Key::End);
     type_into_focus(&mut harness, "?draft=1");
@@ -306,8 +309,48 @@ fn edits_are_saved_with_ctrl_s_and_drafts_survive_a_restart() {
     let mut harness = open_app(dir.path(), data.path());
     wait_for(&mut harness, apifast_gui::strings::EN.unsaved);
     assert_eq!(
-        harness.get_by_role(Role::TextInput).value().as_deref(),
+        harness
+            .get_by_role_and_label(Role::TextInput, "URL")
+            .value()
+            .as_deref(),
         Some("{{host}}/health/v2?draft=1")
     );
     assert!(!std::fs::read_to_string(&file).unwrap().contains("draft"));
+}
+
+#[test]
+fn the_query_table_and_the_url_follow_each_other() {
+    let dir = collection(server());
+    let data = tempfile::tempdir().unwrap();
+    let mut harness = open_app(dir.path(), data.path());
+    harness
+        .get_by_role_and_label(Role::TreeItem, "Health")
+        .click();
+    wait_for(&mut harness, "Send");
+
+    // Typing in the URL fills the table.
+    type_in_url(&mut harness, "?page=2");
+    harness.run_steps(2);
+    let names: Vec<String> = harness
+        .get_all_by_role_and_label(Role::TextInput, apifast_gui::strings::EN.name)
+        .filter_map(|node| node.value())
+        .collect();
+    assert!(names.contains(&"page".to_owned()), "{names:?}");
+
+    // Typing in the table's empty row extends the URL's query.
+    harness
+        .get_all_by_role_and_label(Role::TextInput, apifast_gui::strings::EN.name)
+        .last()
+        .unwrap()
+        .focus();
+    harness.step();
+    type_into_focus(&mut harness, "q");
+    harness.run_steps(2);
+    assert_eq!(
+        harness
+            .get_by_role_and_label(Role::TextInput, "URL")
+            .value()
+            .as_deref(),
+        Some("{{host}}/health?page=2&q")
+    );
 }

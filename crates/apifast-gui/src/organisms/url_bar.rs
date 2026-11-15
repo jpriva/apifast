@@ -89,6 +89,7 @@ impl<'a> UrlBar<'a> {
                     generated: strings.variable_generated,
                 };
                 let field = TemplateField::new(url, hints, texts)
+                    .accessible_name(strings.url)
                     .desired_width(ui.available_width())
                     .show(ui);
                 if field.changed() {

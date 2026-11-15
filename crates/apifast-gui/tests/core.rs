@@ -531,13 +531,13 @@ fn each_tab_knows_its_variables_and_where_they_come_from() {
     open(&core, dir.path());
     core.send(Command::OpenRequest(RequestPath::new("health.yml")));
     let snapshot = wait(&core, "the tab", |s| s.active_tab().is_some());
-    let variables = snapshot.active_tab().unwrap().variables.clone();
-    assert!(variables.resolved.get("host").is_none());
+    let context = snapshot.active_tab().unwrap().context.clone();
+    assert!(context.variables.get("host").is_none());
 
     core.send(Command::SelectEnvironment(Some("local".into())));
     let snapshot = next(&core, snapshot.version);
     let tab = snapshot.active_tab().unwrap();
-    let host = tab.variables.resolved.get("host").unwrap();
+    let host = tab.context.variables.get("host").unwrap();
     assert_eq!(
         host.origin,
         apifast_domain::Origin::Environment("local".into())
@@ -549,14 +549,43 @@ fn each_tab_knows_its_variables_and_where_they_come_from() {
             .data
             .starts_with("http://127.0.0.1:")
     );
-    assert_ne!(tab.variables.revision, variables.revision);
+    assert_ne!(tab.context.revision, context.revision);
 
     // Typing in the URL does not work them out again.
-    let revision = tab.variables.revision;
+    let revision = tab.context.revision;
     core.send(Command::Edit {
         path: RequestPath::new("health.yml"),
         request: edited(&snapshot, "{{host}}/other"),
     });
     let snapshot = next(&core, snapshot.version);
-    assert_eq!(snapshot.active_tab().unwrap().variables.revision, revision);
+    assert_eq!(snapshot.active_tab().unwrap().context.revision, revision);
+}
+
+#[test]
+fn each_tab_knows_what_it_inherits_from_its_folders() {
+    let dir = collection(server(Duration::ZERO));
+    std::fs::write(
+        dir.path().join("users/folder.yml"),
+        "info:\n  name: Users\n  type: folder\n  seq: 1\nrequest:\n  headers:\n    - name: x-team\n      value: core\n  auth:\n    type: bearer\n    token: \"{{token}}\"\n",
+    )
+    .unwrap();
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::OpenRequest(RequestPath::new("users/get.yml")));
+    let snapshot = wait(&core, "the tab", |s| s.active_tab().is_some());
+    let context = &snapshot.active_tab().unwrap().context;
+    assert_eq!(context.folders, ["Users"]);
+    let header = &context.inherited_headers[0];
+    assert_eq!(
+        (header.value.name.as_str(), &header.origin),
+        ("x-team", &apifast_domain::Origin::Folder(0))
+    );
+    assert!(matches!(
+        context.inherited_auth.value,
+        apifast_domain::AuthScheme::Bearer(_)
+    ));
+    assert_eq!(
+        context.inherited_settings.timeout_ms.origin,
+        apifast_domain::Origin::Default
+    );
 }

@@ -16,12 +16,16 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use apifast_app::{
-    AppError, CancelToken, CollectionTree, EnvironmentRepository, ItemPath, NoPrompter, Placement,
-    RequestPath, ResponseHead, ResponseStore, SendOptions, SendPorts, Session, SessionStore,
-    SessionTab, TransportError, create_folder, create_request, delete_item, load_request,
-    move_item, open_collection, rename_item, resolve_request_variables, save_request, send_request,
+    AppError, CancelToken, CollectionRepository, CollectionTree, EnvironmentRepository, ItemPath,
+    NoPrompter, Placement, RequestPath, ResponseHead, ResponseStore, SendOptions, SendPorts,
+    Session, SessionStore, SessionTab, TransportError, create_folder, create_request, delete_item,
+    load_request, move_item, open_collection, rename_item, resolve_request_variables, save_request,
+    send_request,
 };
-use apifast_domain::{HttpRequest, ResolvedVariables};
+use apifast_domain::{
+    AuthScheme, Chain, Collection, Header, HttpRequest, Origin, Resolved, ResolvedSettings,
+    ResolvedVariables, Setting, Settings, resolve,
+};
 use apifast_history::FsResponseStore;
 use apifast_http::ReqwestTransport;
 use apifast_storage_fs::{FsCollection, FsSessionStore};
@@ -152,22 +156,47 @@ pub struct Tab {
     /// [`Command::Edit`] (loaded, saved, renamed), so the interface knows
     /// to drop its own copy of them.
     pub revision: u64,
-    /// The variables its request sees.
-    pub variables: Arc<TabVariables>,
+    /// What its request sees from its folders, collection and environment.
+    pub context: Arc<TabContext>,
 }
 
-/// The variables a tab's request sees in the active environment, with the
-/// scope each comes from.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct TabVariables {
-    /// By name. Empty when they cannot be worked out, such as with a broken
-    /// environment.
-    pub resolved: ResolvedVariables,
+/// What a tab's request sees from outside itself: the variables of the
+/// active environment and every scope, and the headers, auth and settings
+/// it inherits, each with the level it comes from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TabContext {
+    /// Variables by name. Empty when they cannot be worked out, such as
+    /// with a broken environment.
+    pub variables: ResolvedVariables,
     /// Names of the request's folders, outermost first, for
-    /// [`apifast_domain::Origin::Folder`].
+    /// [`Origin::Folder`].
     pub folders: Vec<String>,
-    /// Changes whenever they are worked out again.
+    /// Headers from the collection and folders.
+    pub inherited_headers: Vec<Resolved<Header>>,
+    /// The auth the request gets when it inherits.
+    pub inherited_auth: Resolved<AuthScheme>,
+    /// The settings the request gets for each one it inherits.
+    pub inherited_settings: ResolvedSettings,
+    /// Changes whenever it is worked out again.
     pub revision: u64,
+}
+
+impl Default for TabContext {
+    fn default() -> Self {
+        let nothing = resolve(Chain::new(
+            &Collection::new(""),
+            &[],
+            &HttpRequest::new("", apifast_domain::Method::Get, ""),
+        ));
+        Self {
+            variables: ResolvedVariables::default(),
+            folders: Vec::new(),
+            inherited_headers: Vec::new(),
+            inherited_auth: Resolved::new(AuthScheme::None, Origin::Default),
+            inherited_settings: nothing.settings().clone(),
+            revision: 0,
+        }
+    }
 }
 
 impl Tab {
@@ -516,7 +545,7 @@ impl State {
                 draft,
                 response: ResponseState::Idle,
                 revision: self.next_revision(),
-                variables: Arc::default(),
+                context: Arc::default(),
             });
         }
         let active = (session.active)
@@ -557,7 +586,7 @@ impl State {
                     draft: None,
                     response: ResponseState::Idle,
                     revision: self.next_revision(),
-                    variables: Arc::default(),
+                    context: Arc::default(),
                 };
                 // New tabs go right after the active one.
                 let at = (self.snapshot.active.as_ref())
@@ -612,40 +641,34 @@ impl State {
         self.reload_tree();
     }
 
-    /// Works out again the variables of the tab at `only`, or of every tab.
+    /// Works out again the context of the tab at `only`, or of every tab.
     fn refresh_variables(&mut self, only: Option<&RequestPath>) {
         for index in 0..self.snapshot.tabs.len() {
             let tab = &self.snapshot.tabs[index];
             if only.is_some_and(|path| *path != tab.path) {
                 continue;
             }
-            let (resolved, folders) = self.resolve(&tab.path, tab.request());
-            let revision = self.next_revision();
-            self.snapshot.tabs[index].variables = Arc::new(TabVariables {
-                resolved,
-                folders,
-                revision,
-            });
+            let mut context = self.context(&tab.path, tab.request());
+            context.revision = self.next_revision();
+            self.snapshot.tabs[index].context = Arc::new(context);
         }
     }
 
-    /// The variables `request` sees at `path`, with its folders' names.
-    fn resolve(
-        &self,
-        path: &RequestPath,
-        request: &HttpRequest,
-    ) -> (ResolvedVariables, Vec<String>) {
+    /// What `request` sees at `path` from outside itself.
+    fn context(&self, path: &RequestPath, request: &HttpRequest) -> TabContext {
         let Some(open) = &self.open else {
-            return Default::default();
+            return TabContext::default();
         };
-        // A request whose file is gone has no folders to read: it shows no
-        // variables until it is saved again.
-        let Ok(mut loaded) = load_request(&*open.repo, path) else {
-            return Default::default();
+        // A request whose file is gone has no folders to read: it shows
+        // nothing inherited until it is saved again.
+        let (Ok(mut loaded), Ok(collection)) = (
+            load_request(&*open.repo, path),
+            CollectionRepository::collection(&*open.repo),
+        ) else {
+            return TabContext::default();
         };
         loaded.request = request.clone();
-        let folders = loaded.folders.iter().map(|f| f.name.clone()).collect();
-        let resolved = resolve_request_variables(
+        let variables = resolve_request_variables(
             &*open.repo,
             &*open.repo,
             &loaded,
@@ -653,7 +676,20 @@ impl State {
             &[],
         )
         .unwrap_or_default();
-        (resolved, folders)
+        // The request with nothing of its own shows what it inherits.
+        let mut bare = request.clone();
+        bare.headers.clear();
+        bare.auth = Setting::Inherit;
+        bare.settings = Settings::default();
+        let inherited = resolve(Chain::new(&collection, &loaded.folders, &bare));
+        TabContext {
+            variables,
+            folders: loaded.folders.iter().map(|f| f.name.clone()).collect(),
+            inherited_headers: inherited.headers().to_vec(),
+            inherited_auth: inherited.auth().clone(),
+            inherited_settings: inherited.settings().clone(),
+            revision: 0,
+        }
     }
 
     fn reload_tree(&mut self) {

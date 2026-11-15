@@ -100,6 +100,9 @@ pub struct TemplateField<'a> {
     hints: &'a VariableHints,
     texts: TemplateFieldTexts<'a>,
     width: f32,
+    id: Option<egui::Id>,
+    password: bool,
+    name: Option<&'a str>,
 }
 
 impl<'a> TemplateField<'a> {
@@ -114,7 +117,32 @@ impl<'a> TemplateField<'a> {
             hints,
             texts,
             width: f32::INFINITY,
+            id: None,
+            password: false,
+            name: None,
         }
+    }
+
+    /// Names the field for screen readers, when no visible label does.
+    #[must_use]
+    pub fn accessible_name(mut self, name: &'a str) -> Self {
+        self.name = Some(name);
+        self
+    }
+
+    /// A fixed id, so the field keeps its focus when the rows around it
+    /// change (a table that adds a row while typing).
+    #[must_use]
+    pub fn id(mut self, id: egui::Id) -> Self {
+        self.id = Some(id);
+        self
+    }
+
+    /// Hides the text, for passwords.
+    #[must_use]
+    pub fn password(mut self, password: bool) -> Self {
+        self.password = password;
+        self
     }
 
     /// The width it takes, at most the space available.
@@ -132,6 +160,9 @@ impl<'a> TemplateField<'a> {
             hints,
             texts,
             width,
+            id,
+            password,
+            name,
         } = self;
         let font = TextStyle::Monospace.resolve(ui.style());
         let palette = theme::palette(ui);
@@ -148,11 +179,25 @@ impl<'a> TemplateField<'a> {
             job.wrap.max_width = wrap;
             ui.fonts_mut(|f| f.layout_job(job))
         };
-        let output = egui::TextEdit::singleline(text)
+        let mut edit = egui::TextEdit::singleline(text)
             .hint_text(texts.placeholder)
-            .desired_width(width.min(ui.available_width()))
-            .layouter(&mut layouter)
-            .show(ui);
+            .desired_width(width.min(ui.available_width()));
+        if let Some(id) = id {
+            edit = edit.id(id);
+        }
+        // A hidden text is drawn as dots: highlighting it would show its
+        // shape, and hovering would show the value.
+        let output = if password {
+            edit.password(true).show(ui)
+        } else {
+            edit.layouter(&mut layouter).show(ui)
+        };
+        if let Some(name) = name {
+            output.response.response.clone().accessible_name(name);
+        }
+        if password {
+            return output.response.response;
+        }
         let response = output.response.response.clone();
         if let Some(pointer) = response.hover_pos() {
             let index = output

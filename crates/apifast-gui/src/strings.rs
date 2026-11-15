@@ -1,6 +1,8 @@
 //! Visible texts. Components receive them as parameters and never choose a
 //! language; the screens pass the active [`Strings`].
 
+use apifast_domain::Origin;
+
 /// Every text the interface shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Strings {
@@ -58,6 +60,8 @@ pub struct Strings {
     pub delete_warning: &'static str,
     /// Placeholder of the URL field.
     pub url_placeholder: &'static str,
+    /// Accessible name of the URL field.
+    pub url: &'static str,
     /// Accessible name of the method selector.
     pub method: &'static str,
     /// Hover text of a tab's close button.
@@ -94,6 +98,94 @@ pub struct Strings {
     pub origin_runtime: &'static str,
     /// Origin: typed in for this send.
     pub origin_prompt: &'static str,
+    /// Request tab: query and path parameters.
+    pub params: &'static str,
+    /// Heading of the query parameters.
+    pub query_params: &'static str,
+    /// Heading of the path parameters.
+    pub path_params: &'static str,
+    /// How path parameters are added.
+    pub path_params_hint: &'static str,
+    /// Request tab: authentication.
+    pub auth: &'static str,
+    /// Request tab: send settings.
+    pub settings: &'static str,
+    /// Heading of what the request inherits.
+    pub inherited: &'static str,
+    /// Hover of an inherited header that the request replaces.
+    pub overridden: &'static str,
+    /// Placeholder of a name cell.
+    pub name: &'static str,
+    /// Placeholder of a value cell.
+    pub value: &'static str,
+    /// Hover of a row's remove button.
+    pub remove_row: &'static str,
+    /// Hover of a row's checkbox.
+    pub enabled: &'static str,
+    /// Accessible name of the body type selector.
+    pub body_type: &'static str,
+    /// Body type: none.
+    pub body_none: &'static str,
+    /// Body type: JSON.
+    pub body_json: &'static str,
+    /// Body type: text.
+    pub body_text: &'static str,
+    /// Body type: XML.
+    pub body_xml: &'static str,
+    /// Body type: SPARQL.
+    pub body_sparql: &'static str,
+    /// Body type: URL-encoded form.
+    pub body_form: &'static str,
+    /// Body type: multipart.
+    pub body_multipart: &'static str,
+    /// Body type: file.
+    pub body_file: &'static str,
+    /// Shown for body types this version cannot edit.
+    pub body_not_editable: &'static str,
+    /// Accessible name of the auth type selector.
+    pub auth_type: &'static str,
+    /// Auth type: inherit.
+    pub auth_inherit: &'static str,
+    /// Auth type: none.
+    pub auth_none: &'static str,
+    /// Auth type: basic.
+    pub auth_basic: &'static str,
+    /// Auth type: bearer token.
+    pub auth_bearer: &'static str,
+    /// Auth type: API key.
+    pub auth_api_key: &'static str,
+    /// Shown for an auth type this version does not support.
+    pub auth_unsupported: &'static str,
+    /// Before the origin of an inherited value.
+    pub inherited_from: &'static str,
+    /// Basic auth field.
+    pub username: &'static str,
+    /// Basic auth field.
+    pub password: &'static str,
+    /// Bearer auth field.
+    pub token: &'static str,
+    /// API key field: the name.
+    pub key: &'static str,
+    /// API key field: where it goes.
+    pub add_to: &'static str,
+    /// API key placement: header.
+    pub in_header: &'static str,
+    /// API key placement: query.
+    pub in_query: &'static str,
+    /// Checkbox next to each setting.
+    pub inherit: &'static str,
+    /// Setting: timeout.
+    pub timeout: &'static str,
+    /// Setting: follow redirects.
+    pub follow_redirects: &'static str,
+    /// Setting: maximum redirects.
+    pub max_redirects: &'static str,
+    /// Setting: encode the URL.
+    pub encode_url: &'static str,
+    /// A setting that is on.
+    pub yes: &'static str,
+    /// A setting that is off.
+    pub no: &'static str,
 }
 
 /// English.
@@ -125,6 +217,7 @@ pub const EN: Strings = Strings {
     delete_title: "Delete this?",
     delete_warning: "Its files are deleted from disk, with everything inside.",
     url_placeholder: "https://example.com or {{host}}/path",
+    url: "URL",
     method: "Method",
     close_tab: "Close tab",
     unsaved_title: "Save changes?",
@@ -143,4 +236,70 @@ pub const EN: Strings = Strings {
     origin_request: "Request",
     origin_runtime: "Captured from a response",
     origin_prompt: "Typed in for this send",
+    params: "Params",
+    query_params: "Query",
+    path_params: "Path",
+    path_params_hint: "Add `:name` to the URL's path to get one here.",
+    auth: "Auth",
+    settings: "Settings",
+    inherited: "Inherited",
+    overridden: "Replaced by this request's own header",
+    name: "name",
+    value: "value",
+    remove_row: "Remove",
+    enabled: "Send this row",
+    body_type: "Body type",
+    body_none: "No body",
+    body_json: "JSON",
+    body_text: "Text",
+    body_xml: "XML",
+    body_sparql: "SPARQL",
+    body_form: "Form (URL-encoded)",
+    body_multipart: "Multipart form",
+    body_file: "File",
+    body_not_editable: "This body type cannot be edited here yet; it is sent and saved as it is.",
+    auth_type: "Auth type",
+    auth_inherit: "Inherit",
+    auth_none: "No auth",
+    auth_basic: "Basic",
+    auth_bearer: "Bearer token",
+    auth_api_key: "API key",
+    auth_unsupported: "This auth type is not supported yet; it is kept as it is.",
+    inherited_from: "Inherited from",
+    username: "Username",
+    password: "Password",
+    token: "Token",
+    key: "Key",
+    add_to: "Add to",
+    in_header: "Header",
+    in_query: "Query",
+    inherit: "Inherit",
+    timeout: "Timeout",
+    follow_redirects: "Follow redirects",
+    max_redirects: "Maximum redirects",
+    encode_url: "Encode URL",
+    yes: "Yes",
+    no: "No",
 };
+
+impl Strings {
+    /// Where a value comes from, ready to show. `folders` names the
+    /// request's folders, outermost first, for [`Origin::Folder`].
+    pub fn origin(&self, origin: &Origin, folders: &[String]) -> String {
+        match origin {
+            Origin::Default => self.origin_default.to_owned(),
+            Origin::Global => self.origin_global.to_owned(),
+            Origin::Collection => self.origin_collection.to_owned(),
+            Origin::Environment(env) => format!("{} {env}", self.origin_environment),
+            Origin::Folder(index) => {
+                let folder = folders.get(*index).map_or("", String::as_str);
+                format!("{} {folder}", self.origin_folder)
+            }
+            Origin::Request => self.origin_request.to_owned(),
+            Origin::Runtime => self.origin_runtime.to_owned(),
+            Origin::Prompt => self.origin_prompt.to_owned(),
+            // A scope added after this version: say nothing wrong.
+            _ => String::new(),
+        }
+    }
+}

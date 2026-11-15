@@ -1,17 +1,20 @@
-//! The main screen: collection tree, environment, tabs, URL bar and
-//! response.
+//! The main screen: collection tree, environment, tabs, URL bar, request
+//! panel and response.
 
 use std::sync::Arc;
 
 use apifast_app::RequestPath;
-use apifast_domain::{HttpRequest, Origin};
+use apifast_domain::{HttpRequest, sync_params_from_url, sync_url_from_params};
 use eframe::egui::{self, Key, KeyboardShortcut, Modifiers, RichText};
 
 use crate::atoms::{HintsCache, VariableHint, VariableHints};
-use crate::core::{Command, ResponseState, Snapshot, Tab, TabVariables};
+use crate::core::{Command, ResponseState, Snapshot, Tab, TabContext};
 use crate::layout;
 use crate::molecules::EnvironmentSelector;
-use crate::organisms::{ResponseView, TabBar, TabEvent, TreeEvent, TreeView, UrlBar, UrlBarEvent};
+use crate::organisms::{
+    RequestChange, RequestPanel, ResponseView, TabBar, TabEvent, TreeEvent, TreeView, UrlBar,
+    UrlBarEvent,
+};
 use crate::strings::Strings;
 use crate::theme;
 
@@ -22,11 +25,17 @@ const SAVE_ALL: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::S);
 const CLOSE_TAB: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::W);
 
+/// Default height of the request panel, above the response, in points.
+const REQUEST_PANEL_HEIGHT: f32 = 280.0;
+/// Lowest the request panel can be resized to, in points.
+const REQUEST_PANEL_MIN_HEIGHT: f32 = 120.0;
+
 /// The state the main screen keeps between frames.
 #[derive(Debug, Default)]
 pub struct MainScreen {
     tree: TreeView,
     tabs: TabBar,
+    request: RequestPanel,
     response: ResponseView,
     editor: Option<Editor>,
     hints: HintsCache,
@@ -64,14 +73,14 @@ impl MainScreen {
         let hints = self.follow(active, strings);
         let sending = active.is_some_and(|tab| tab.response == ResponseState::Sending);
         let selected = snapshot.active.as_ref();
-        let (tree, tabs, response, editor) = (
+        let (tree, tabs, panels, editor) = (
             &mut self.tree,
             &mut self.tabs,
-            &mut self.response,
+            (&mut self.request, &mut self.response),
             &mut self.editor,
         );
 
-        let (environment, tree_event, (tab_event, url_event)) = layout::workbench(
+        let (environment, tree_event, (tab_event, (url_event, edited))) = layout::workbench(
             ui,
             |ui| {
                 ui.horizontal(|ui| {
@@ -100,20 +109,18 @@ impl MainScreen {
                 let (Some(tab), Some(editor)) = (active, editor.as_mut()) else {
                     let muted = theme::palette(ui).text_muted;
                     ui.label(RichText::new(strings.no_request).color(muted));
-                    return (tab_event, None);
+                    return (tab_event, (None, false));
                 };
-                let request = &mut editor.request;
-                let event = UrlBar::new(
-                    &mut request.method,
-                    &mut request.url,
+                let edits = editor_area(
+                    ui,
+                    tab,
+                    &mut editor.request,
+                    panels,
                     &hints,
                     sending,
                     strings,
-                )
-                .show(ui);
-                ui.separator();
-                response.show(ui, &tab.response, strings);
-                (tab_event, event)
+                );
+                (tab_event, edits)
             },
         );
 
@@ -124,7 +131,7 @@ impl MainScreen {
         if let Some(event) = tree_event {
             commands.push(tree_command(event));
         }
-        if let (Some(UrlBarEvent::Edited), Some(editor)) = (url_event, &self.editor) {
+        if let (true, Some(editor)) = (edited, &self.editor) {
             commands.push(Command::Edit {
                 path: editor.path.clone(),
                 request: Box::new(editor.request.clone()),
@@ -165,9 +172,8 @@ impl MainScreen {
         }
         match active {
             Some(tab) => {
-                let variables = &tab.variables;
-                self.hints
-                    .get(variables.revision, || hints(variables, strings))
+                let context = &tab.context;
+                self.hints.get(context.revision, || hints(context, strings))
             }
             None => Arc::default(),
         }
@@ -184,32 +190,63 @@ impl MainScreen {
     }
 }
 
+/// The URL bar, the request panel and the response, one under the other.
+/// Returns the URL bar's event and whether the request was edited, with the
+/// URL and the parameter list kept in step.
+fn editor_area(
+    ui: &mut egui::Ui,
+    tab: &Tab,
+    request: &mut HttpRequest,
+    (panel, response): (&mut RequestPanel, &mut ResponseView),
+    hints: &VariableHints,
+    sending: bool,
+    strings: &Strings,
+) -> (Option<UrlBarEvent>, bool) {
+    let event = UrlBar::new(
+        &mut request.method,
+        &mut request.url,
+        hints,
+        sending,
+        strings,
+    )
+    .show(ui);
+    let mut edited = event == Some(UrlBarEvent::Edited);
+    if edited {
+        sync_params_from_url(request);
+    }
+    ui.separator();
+    let change = egui::Panel::top("request-panel")
+        .resizable(true)
+        .default_size(REQUEST_PANEL_HEIGHT)
+        .min_size(REQUEST_PANEL_MIN_HEIGHT)
+        .show(ui, |ui| {
+            panel.show(ui, request, &tab.context, hints, strings)
+        })
+        .inner;
+    match change {
+        Some(RequestChange::Params) => {
+            sync_url_from_params(request);
+            edited = true;
+        }
+        Some(RequestChange::Other) => edited = true,
+        None => {}
+    }
+    response.show(ui, &tab.response, strings);
+    (event, edited)
+}
+
 /// What the fields show about each variable: its value (hidden if secret)
 /// and its origin, in the interface's language.
-fn hints(variables: &TabVariables, strings: &Strings) -> VariableHints {
-    variables
-        .resolved
+fn hints(context: &TabContext, strings: &Strings) -> VariableHints {
+    context
+        .variables
         .iter()
         .map(|(name, variable)| {
             let value = match (&variable.value, variable.secret) {
                 (Some(value), false) => value.data.clone(),
                 _ => strings.secret_hidden.to_owned(),
             };
-            let origin = match &variable.origin {
-                Origin::Default => strings.origin_default.to_owned(),
-                Origin::Global => strings.origin_global.to_owned(),
-                Origin::Collection => strings.origin_collection.to_owned(),
-                Origin::Environment(env) => format!("{} {env}", strings.origin_environment),
-                Origin::Folder(index) => {
-                    let folder = variables.folders.get(*index).map_or("", String::as_str);
-                    format!("{} {folder}", strings.origin_folder)
-                }
-                Origin::Request => strings.origin_request.to_owned(),
-                Origin::Runtime => strings.origin_runtime.to_owned(),
-                Origin::Prompt => strings.origin_prompt.to_owned(),
-                // A scope added after this version: say nothing wrong.
-                _ => String::new(),
-            };
+            let origin = strings.origin(&variable.origin, &context.folders);
             (name.to_owned(), VariableHint { value, origin })
         })
         .collect()
@@ -253,7 +290,7 @@ fn shortcuts(ui: &egui::Ui, active: Option<&Tab>, sending: bool) -> Vec<Command>
 
 #[cfg(test)]
 mod tests {
-    use apifast_domain::{Variable, VariableValue, resolve_variables};
+    use apifast_domain::{Origin, Variable, VariableValue, resolve_variables};
 
     use super::*;
     use crate::strings::EN;
@@ -268,15 +305,16 @@ mod tests {
                 ..Variable::secret("token")
             },
         ];
-        let variables = TabVariables {
-            resolved: resolve_variables(vec![
+        let context = TabContext {
+            variables: resolve_variables(vec![
                 (Origin::Environment("local".into()), &env[..]),
                 (Origin::Folder(0), &folder[..]),
             ]),
             folders: vec!["Users".into()],
             revision: 1,
+            ..TabContext::default()
         };
-        let hints = hints(&variables, &EN);
+        let hints = hints(&context, &EN);
         assert_eq!(hints["host"].origin, "Environment local");
         assert_eq!(hints["resource"].origin, "Folder Users");
         assert_eq!(hints["token"].value, EN.secret_hidden);

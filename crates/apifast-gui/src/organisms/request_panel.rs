@@ -1,0 +1,581 @@
+//! The request panel: tabs to edit the parameters, headers, body, auth and
+//! settings of the request, each showing what it inherits.
+
+use apifast_domain::{
+    ApiKeyAuth, ApiKeyPlacement, AuthScheme, BasicAuth, BearerAuth, Body, FormField, Header,
+    HttpRequest, Param, ParamKind, Resolved, Setting,
+};
+use eframe::egui::{self, RichText};
+
+use crate::atoms::{TemplateField, TemplateFieldTexts, VariableHints};
+use crate::core::TabContext;
+use crate::organisms::KvTable;
+use crate::strings::Strings;
+use crate::theme;
+
+/// Rows the body editor shows before scrolling.
+const BODY_ROWS: usize = 12;
+
+/// Which part of the request is shown.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum RequestTab {
+    /// Query and path parameters.
+    #[default]
+    Params,
+    /// Headers.
+    Headers,
+    /// Body.
+    Body,
+    /// Authentication.
+    Auth,
+    /// Send settings.
+    Settings,
+}
+
+/// What the user changed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RequestChange {
+    /// The parameters: the URL's query must follow them.
+    Params,
+    /// Anything else.
+    Other,
+}
+
+/// The request panel and its open tab.
+#[derive(Debug, Default)]
+pub struct RequestPanel {
+    /// The open tab.
+    pub tab: RequestTab,
+}
+
+impl RequestPanel {
+    /// Draws the panel over `request`, which it edits in place. `context`
+    /// is what the request inherits.
+    pub fn show(
+        &mut self,
+        ui: &mut egui::Ui,
+        request: &mut HttpRequest,
+        context: &TabContext,
+        hints: &VariableHints,
+        strings: &Strings,
+    ) -> Option<RequestChange> {
+        ui.horizontal(|ui| {
+            let params = request.params.iter().filter(|p| p.enabled).count();
+            let headers = request.headers.iter().filter(|h| h.enabled).count();
+            for (tab, label) in [
+                (RequestTab::Params, counted(strings.params, params)),
+                (RequestTab::Headers, counted(strings.headers, headers)),
+                (RequestTab::Body, strings.body.to_owned()),
+                (RequestTab::Auth, strings.auth.to_owned()),
+                (RequestTab::Settings, strings.settings.to_owned()),
+            ] {
+                ui.selectable_value(&mut self.tab, tab, label);
+            }
+        });
+        ui.separator();
+        egui::ScrollArea::vertical()
+            .id_salt("request-panel")
+            .auto_shrink([false, true])
+            .show(ui, |ui| match self.tab {
+                RequestTab::Params => params(ui, request, hints, strings),
+                RequestTab::Headers => {
+                    headers(ui, request, context, hints, strings).then_some(RequestChange::Other)
+                }
+                RequestTab::Body => {
+                    body(ui, &mut request.body, hints, strings).then_some(RequestChange::Other)
+                }
+                RequestTab::Auth => auth(ui, &mut request.auth, context, hints, strings)
+                    .then_some(RequestChange::Other),
+                RequestTab::Settings => {
+                    settings(ui, request, context, strings).then_some(RequestChange::Other)
+                }
+            })
+            .inner
+    }
+}
+
+fn counted(label: &str, count: usize) -> String {
+    if count == 0 {
+        label.to_owned()
+    } else {
+        format!("{label} ({count})")
+    }
+}
+
+fn muted(ui: &egui::Ui, text: &str) -> RichText {
+    RichText::new(text).color(theme::palette(ui).text_muted)
+}
+
+fn texts(strings: &Strings) -> TemplateFieldTexts<'_> {
+    TemplateFieldTexts {
+        placeholder: strings.value,
+        missing: strings.variable_missing,
+        generated: strings.variable_generated,
+    }
+}
+
+fn params(
+    ui: &mut egui::Ui,
+    request: &mut HttpRequest,
+    hints: &VariableHints,
+    strings: &Strings,
+) -> Option<RequestChange> {
+    ui.label(RichText::new(strings.query_params).strong());
+    let mut changed = KvTable::new(
+        "query-params",
+        &mut request.params,
+        |p| p.kind == ParamKind::Query,
+        |name, value| Param {
+            name,
+            value,
+            kind: ParamKind::Query,
+            enabled: true,
+        },
+        hints,
+        strings,
+    )
+    .show(ui);
+    ui.add_space(theme::space::L);
+    ui.label(RichText::new(strings.path_params).strong());
+    if request.params.iter().any(|p| p.kind == ParamKind::Path) {
+        changed |= KvTable::new(
+            "path-params",
+            &mut request.params,
+            |p| p.kind == ParamKind::Path,
+            |name, value| Param {
+                name,
+                value,
+                kind: ParamKind::Path,
+                enabled: true,
+            },
+            hints,
+            strings,
+        )
+        .fixed_names()
+        .show(ui);
+    } else {
+        ui.label(muted(ui, strings.path_params_hint));
+    }
+    changed.then_some(RequestChange::Params)
+}
+
+fn headers(
+    ui: &mut egui::Ui,
+    request: &mut HttpRequest,
+    context: &TabContext,
+    hints: &VariableHints,
+    strings: &Strings,
+) -> bool {
+    let changed = KvTable::new(
+        "headers",
+        &mut request.headers,
+        |_| true,
+        Header::new,
+        hints,
+        strings,
+    )
+    .show(ui);
+    if !context.inherited_headers.is_empty() {
+        ui.add_space(theme::space::L);
+        ui.label(RichText::new(strings.inherited).strong());
+        egui::Grid::new("inherited-headers")
+            .num_columns(3)
+            .show(ui, |ui| {
+                for Resolved { value, origin } in &context.inherited_headers {
+                    let replaced = request
+                        .headers
+                        .iter()
+                        .any(|own| own.enabled && own.name.eq_ignore_ascii_case(&value.name));
+                    let mut name = muted(ui, &value.name).monospace();
+                    let mut text = muted(ui, &value.value).monospace();
+                    if replaced {
+                        name = name.strikethrough();
+                        text = text.strikethrough();
+                    }
+                    let response = ui.label(name);
+                    if replaced {
+                        response.on_hover_text(strings.overridden);
+                    }
+                    ui.label(text);
+                    ui.label(muted(ui, &strings.origin(origin, &context.folders)));
+                    ui.end_row();
+                }
+            });
+    }
+    changed
+}
+
+/// The kinds of body the selector offers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BodyKind {
+    None,
+    Json,
+    Text,
+    Xml,
+    Sparql,
+    Form,
+    Multipart,
+    File,
+}
+
+impl BodyKind {
+    /// Kinds that can be picked; multipart and file bodies are shown but
+    /// cannot be made here yet.
+    const EDITABLE: [Self; 5] = [Self::None, Self::Json, Self::Text, Self::Xml, Self::Form];
+
+    fn of(body: &Body) -> Self {
+        match body {
+            Body::Json(_) => Self::Json,
+            Body::Text(_) => Self::Text,
+            Body::Xml(_) => Self::Xml,
+            Body::Sparql(_) => Self::Sparql,
+            Body::FormUrlEncoded(_) => Self::Form,
+            Body::Multipart(_) => Self::Multipart,
+            Body::File { .. } => Self::File,
+            // `None`, and kinds added after this version.
+            _ => Self::None,
+        }
+    }
+
+    fn label(self, strings: &Strings) -> &str {
+        match self {
+            Self::None => strings.body_none,
+            Self::Json => strings.body_json,
+            Self::Text => strings.body_text,
+            Self::Xml => strings.body_xml,
+            Self::Sparql => strings.body_sparql,
+            Self::Form => strings.body_form,
+            Self::Multipart => strings.body_multipart,
+            Self::File => strings.body_file,
+        }
+    }
+
+    /// `body` as this kind, keeping its text when both are text.
+    fn convert(self, body: &mut Body) {
+        let text = match std::mem::take(body) {
+            Body::Json(t) | Body::Text(t) | Body::Xml(t) | Body::Sparql(t) => t,
+            _ => String::new(),
+        };
+        *body = match self {
+            Self::None | Self::Multipart | Self::File => Body::None,
+            Self::Json => Body::Json(text),
+            Self::Text => Body::Text(text),
+            Self::Xml => Body::Xml(text),
+            Self::Sparql => Body::Sparql(text),
+            Self::Form => Body::FormUrlEncoded(Vec::new()),
+        };
+    }
+}
+
+fn body(ui: &mut egui::Ui, body: &mut Body, hints: &VariableHints, strings: &Strings) -> bool {
+    let current = BodyKind::of(body);
+    let mut chosen = None;
+    egui::ComboBox::from_id_salt("body-type")
+        .selected_text(current.label(strings))
+        .show_ui(ui, |ui| {
+            let mut kinds = BodyKind::EDITABLE.to_vec();
+            if !kinds.contains(&current) {
+                kinds.push(current);
+            }
+            for kind in kinds {
+                if ui
+                    .selectable_label(kind == current, kind.label(strings))
+                    .clicked()
+                {
+                    chosen = Some(kind);
+                }
+            }
+        })
+        .response
+        .on_hover_text(strings.body_type);
+    let mut changed = false;
+    if let Some(kind) = chosen.filter(|kind| *kind != current) {
+        kind.convert(body);
+        changed = true;
+    }
+    ui.add_space(theme::space::S);
+    match body {
+        Body::None => {}
+        Body::Json(text) | Body::Text(text) | Body::Xml(text) | Body::Sparql(text) => {
+            changed |= ui
+                .add(
+                    egui::TextEdit::multiline(text)
+                        .id_salt("body-text")
+                        .code_editor()
+                        .desired_rows(BODY_ROWS)
+                        .desired_width(f32::INFINITY),
+                )
+                .accessible_name(strings.body)
+                .changed();
+        }
+        Body::FormUrlEncoded(fields) => {
+            changed |= KvTable::new(
+                "form-fields",
+                fields,
+                |_| true,
+                |name, value| FormField {
+                    name,
+                    value,
+                    enabled: true,
+                },
+                hints,
+                strings,
+            )
+            .show(ui);
+        }
+        _ => {
+            ui.label(muted(ui, strings.body_not_editable));
+        }
+    }
+    changed
+}
+
+/// The kinds of auth the selector offers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AuthKind {
+    Inherit,
+    None,
+    Basic,
+    Bearer,
+    ApiKey,
+    Unsupported,
+}
+
+impl AuthKind {
+    const CHOICES: [Self; 5] = [
+        Self::Inherit,
+        Self::None,
+        Self::Basic,
+        Self::Bearer,
+        Self::ApiKey,
+    ];
+
+    fn of(auth: &Setting<AuthScheme>) -> Self {
+        match auth {
+            Setting::Inherit => Self::Inherit,
+            Setting::Set(AuthScheme::None) => Self::None,
+            Setting::Set(AuthScheme::Basic(_)) => Self::Basic,
+            Setting::Set(AuthScheme::Bearer(_)) => Self::Bearer,
+            Setting::Set(AuthScheme::ApiKey(_)) => Self::ApiKey,
+            // `Unsupported`, and schemes added after this version.
+            Setting::Set(_) => Self::Unsupported,
+        }
+    }
+
+    fn label(self, strings: &Strings) -> &str {
+        match self {
+            Self::Inherit => strings.auth_inherit,
+            Self::None => strings.auth_none,
+            Self::Basic => strings.auth_basic,
+            Self::Bearer => strings.auth_bearer,
+            Self::ApiKey => strings.auth_api_key,
+            Self::Unsupported => strings.auth_unsupported,
+        }
+    }
+
+    fn empty(self) -> Setting<AuthScheme> {
+        match self {
+            Self::Inherit => Setting::Inherit,
+            Self::None | Self::Unsupported => Setting::Set(AuthScheme::None),
+            Self::Basic => Setting::Set(AuthScheme::Basic(BasicAuth {
+                username: String::new(),
+                password: String::new(),
+            })),
+            Self::Bearer => Setting::Set(AuthScheme::Bearer(BearerAuth {
+                token: String::new(),
+            })),
+            Self::ApiKey => Setting::Set(AuthScheme::ApiKey(ApiKeyAuth {
+                key: String::new(),
+                value: String::new(),
+                placement: ApiKeyPlacement::Header,
+            })),
+        }
+    }
+}
+
+fn scheme_label<'a>(scheme: &AuthScheme, strings: &'a Strings) -> &'a str {
+    AuthKind::of(&Setting::Set(scheme.clone())).label(strings)
+}
+
+fn auth(
+    ui: &mut egui::Ui,
+    auth: &mut Setting<AuthScheme>,
+    context: &TabContext,
+    hints: &VariableHints,
+    strings: &Strings,
+) -> bool {
+    let current = AuthKind::of(auth);
+    let mut chosen = None;
+    egui::ComboBox::from_id_salt("auth-type")
+        .selected_text(current.label(strings))
+        .show_ui(ui, |ui| {
+            for kind in AuthKind::CHOICES {
+                if ui
+                    .selectable_label(kind == current, kind.label(strings))
+                    .clicked()
+                {
+                    chosen = Some(kind);
+                }
+            }
+        })
+        .response
+        .on_hover_text(strings.auth_type);
+    let mut changed = false;
+    if let Some(kind) = chosen.filter(|kind| *kind != current) {
+        *auth = kind.empty();
+        changed = true;
+    }
+    ui.add_space(theme::space::S);
+    let texts = texts(strings);
+    let field = |ui: &mut egui::Ui, label: &str, text: &mut String, hidden: bool| {
+        ui.label(label);
+        let response = TemplateField::new(text, hints, texts)
+            .password(hidden)
+            .show(ui);
+        ui.end_row();
+        response.changed()
+    };
+    egui::Grid::new("auth-fields")
+        .num_columns(2)
+        .show(ui, |ui| match auth {
+            Setting::Inherit => {
+                let inherited = &context.inherited_auth;
+                ui.label(muted(
+                    ui,
+                    &format!(
+                        "{} {}: {}",
+                        strings.inherited_from,
+                        strings.origin(&inherited.origin, &context.folders),
+                        scheme_label(&inherited.value, strings)
+                    ),
+                ));
+                ui.end_row();
+            }
+            Setting::Set(AuthScheme::Basic(basic)) => {
+                changed |= field(ui, strings.username, &mut basic.username, false);
+                changed |= field(ui, strings.password, &mut basic.password, true);
+            }
+            Setting::Set(AuthScheme::Bearer(bearer)) => {
+                changed |= field(ui, strings.token, &mut bearer.token, true);
+            }
+            Setting::Set(AuthScheme::ApiKey(key)) => {
+                changed |= field(ui, strings.key, &mut key.key, false);
+                changed |= field(ui, strings.value, &mut key.value, true);
+                ui.label(strings.add_to);
+                ui.horizontal(|ui| {
+                    for (placement, label) in [
+                        (ApiKeyPlacement::Header, strings.in_header),
+                        (ApiKeyPlacement::Query, strings.in_query),
+                    ] {
+                        changed |= ui
+                            .radio_value(&mut key.placement, placement, label)
+                            .changed();
+                    }
+                });
+                ui.end_row();
+            }
+            Setting::Set(AuthScheme::None) => {}
+            Setting::Set(_) => {
+                ui.label(muted(ui, strings.auth_unsupported));
+                ui.end_row();
+            }
+        });
+    changed
+}
+
+fn settings(
+    ui: &mut egui::Ui,
+    request: &mut HttpRequest,
+    context: &TabContext,
+    strings: &Strings,
+) -> bool {
+    let inherited = &context.inherited_settings;
+    let settings = &mut request.settings;
+    let yes_no = |on: &bool| if *on { strings.yes } else { strings.no }.to_owned();
+    let mut changed = false;
+    egui::Grid::new("settings")
+        .num_columns(3)
+        .spacing([theme::space::L, theme::space::S])
+        .show(ui, |ui| {
+            changed |= setting_row(
+                ui,
+                strings.timeout,
+                &mut settings.timeout_ms,
+                &inherited.timeout_ms,
+                |ui, ms| {
+                    ui.add(egui::DragValue::new(ms).range(0..=3_600_000).suffix(" ms"))
+                        .changed()
+                },
+                |ms| format!("{ms} ms"),
+                context,
+                strings,
+            );
+            changed |= setting_row(
+                ui,
+                strings.follow_redirects,
+                &mut settings.follow_redirects,
+                &inherited.follow_redirects,
+                |ui, on| ui.checkbox(on, "").changed(),
+                yes_no,
+                context,
+                strings,
+            );
+            changed |= setting_row(
+                ui,
+                strings.max_redirects,
+                &mut settings.max_redirects,
+                &inherited.max_redirects,
+                |ui, n| ui.add(egui::DragValue::new(n).range(0..=100)).changed(),
+                u32::to_string,
+                context,
+                strings,
+            );
+            changed |= setting_row(
+                ui,
+                strings.encode_url,
+                &mut settings.encode_url,
+                &inherited.encode_url,
+                |ui, on| ui.checkbox(on, "").changed(),
+                yes_no,
+                context,
+                strings,
+            );
+        });
+    changed
+}
+
+/// One setting: its name, an "inherit" checkbox, and its editor or the
+/// inherited value with where it comes from.
+#[expect(clippy::too_many_arguments, reason = "one row of a grid, kept flat")]
+fn setting_row<T: Clone>(
+    ui: &mut egui::Ui,
+    label: &str,
+    setting: &mut Setting<T>,
+    inherited: &Resolved<T>,
+    edit: impl FnOnce(&mut egui::Ui, &mut T) -> bool,
+    show: impl Fn(&T) -> String,
+    context: &TabContext,
+    strings: &Strings,
+) -> bool {
+    ui.label(label);
+    let mut inherits = matches!(setting, Setting::Inherit);
+    let mut changed = false;
+    if ui.checkbox(&mut inherits, strings.inherit).changed() {
+        *setting = if inherits {
+            Setting::Inherit
+        } else {
+            // Start from the value it had.
+            Setting::Set(inherited.value.clone())
+        };
+        changed = true;
+    }
+    match setting {
+        Setting::Inherit => {
+            let origin = strings.origin(&inherited.origin, &context.folders);
+            ui.label(muted(ui, &format!("{} ({origin})", show(&inherited.value))));
+        }
+        Setting::Set(value) => changed |= edit(ui, value),
+    }
+    ui.end_row();
+    changed
+}

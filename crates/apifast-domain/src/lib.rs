@@ -22,6 +22,7 @@ mod resolve;
 mod setting;
 mod settings;
 mod status;
+mod url_params;
 mod variable;
 
 pub use auth::{ApiKeyAuth, ApiKeyPlacement, Auth, AuthScheme, BasicAuth, BearerAuth};
@@ -34,6 +35,7 @@ pub use resolve::{Chain, ResolvedRequest, resolve};
 pub use setting::{Resolved, Setting};
 pub use settings::{ResolvedSettings, Settings};
 pub use status::{human_size, reason_phrase};
+pub use url_params::{path_param_names, query_params, sync_params_from_url, sync_url_from_params};
 pub use variable::{
     ResolvedVariable, ResolvedVariables, ValueKind, Variable, VariableValue, resolve_variables,
 };

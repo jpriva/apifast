@@ -4,11 +4,11 @@
 //! Every new component is added here.
 
 use apifast_app::{CollectionTree, RequestPath, ResponseHead, TreeItem};
-use apifast_domain::{Collection, Folder, HttpRequest, Method};
+use apifast_domain::{Body, Collection, Folder, Header, HttpRequest, Method};
 use apifast_gui::atoms::{VariableHint, VariableHints};
-use apifast_gui::core::{Received, ResponseState, Tab};
+use apifast_gui::core::{Received, ResponseState, Tab, TabContext};
 use apifast_gui::molecules::EnvironmentSelector;
-use apifast_gui::organisms::{ResponseView, TabBar, TreeView, UrlBar};
+use apifast_gui::organisms::{RequestPanel, ResponseView, TabBar, TreeView, UrlBar};
 use apifast_gui::strings::EN;
 use apifast_gui::{atoms, theme};
 use eframe::egui::{self, Theme};
@@ -28,6 +28,8 @@ struct Column {
     tab_bar: TabBar,
     environment: Option<String>,
     urls: [(Method, String); 2],
+    request: HttpRequest,
+    request_panel: RequestPanel,
     responses: Vec<ResponseView>,
 }
 
@@ -44,6 +46,8 @@ impl Default for Column {
                     "{{host}}/users/{{user_id}}?t={{$timestamp}}".into(),
                 ),
             ],
+            request: sample_request(),
+            request_panel: RequestPanel::default(),
             responses: Vec::new(),
         }
     }
@@ -156,6 +160,17 @@ fn showcase(
             let _ = UrlBar::new(method, url, hints, sending, &EN).show(ui);
         }
     });
+    section(ui, "RequestPanel", |ui| {
+        ui.allocate_ui(egui::vec2(ui.available_width(), 260.0), |ui| {
+            let _ = state.request_panel.show(
+                ui,
+                &mut state.request,
+                &TabContext::default(),
+                hints,
+                &EN,
+            );
+        });
+    });
     section(ui, "TabBar", |ui| {
         let _ = state.tab_bar.show(ui, tabs, Some(&tabs[1].path), &EN);
     });
@@ -215,6 +230,18 @@ fn sample_tree() -> CollectionTree {
     }
 }
 
+fn sample_request() -> HttpRequest {
+    let mut request = HttpRequest::new(
+        "Create user",
+        Method::Post,
+        "{{host}}/users/:id?notify=true",
+    );
+    request.headers.push(Header::new("x-trace", "{{$uuid}}"));
+    request.body = Body::Json("{ \"name\": \"{{name}}\" }".into());
+    apifast_domain::sync_params_from_url(&mut request);
+    request
+}
+
 /// `host` is defined; `user_id` is not.
 fn sample_hints() -> VariableHints {
     VariableHints::from([(
@@ -236,7 +263,7 @@ fn sample_tabs() -> Vec<Tab> {
             draft,
             response: ResponseState::Idle,
             revision: 0,
-            variables: std::sync::Arc::default(),
+            context: std::sync::Arc::default(),
         }
     };
     vec![
