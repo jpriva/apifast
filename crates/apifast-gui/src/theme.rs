@@ -158,6 +158,16 @@ pub fn palette(ui: &egui::Ui) -> &'static Palette {
     }
 }
 
+/// A color written as `#rrggbb`, such as an environment's.
+pub fn parse_color(color: &str) -> Option<Color32> {
+    let hex = color.trim().strip_prefix('#')?;
+    if hex.len() != 6 || !hex.is_ascii() {
+        return None;
+    }
+    let channel = |at: usize| u8::from_str_radix(&hex[at..at + 2], 16).ok();
+    Some(Color32::from_rgb(channel(0)?, channel(2)?, channel(4)?))
+}
+
 /// Color of a method badge.
 pub fn method_color(palette: &Palette, method: &Method) -> Color32 {
     match method {
@@ -308,6 +318,17 @@ mod tests {
                     assert!(ratio >= 4.5, "{name}: {status} badge is {ratio:.2}:1");
                 }
             }
+        }
+    }
+
+    #[test]
+    fn colors_are_read_from_hex() {
+        assert_eq!(
+            parse_color(" #22aa5F "),
+            Some(Color32::from_rgb(0x22, 0xaa, 0x5f))
+        );
+        for bad in ["22aa55", "#22aa5", "#gg0000", "#ééé", ""] {
+            assert_eq!(parse_color(bad), None, "{bad}");
         }
     }
 

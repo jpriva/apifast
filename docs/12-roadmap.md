@@ -112,7 +112,13 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
   - Al abrir la colección, una tarea aparte recorta el historial (1000 entradas, 30 días) y las respuestas (1000, 512 MB, 30 días). Después restaura la última respuesta de cada pestaña abierta.
   - La barra lateral tiene una pestaña History, filtrable, con las entradas más nuevas arriba; elegir una muestra esa respuesta en la pestaña de su request.
   - Las líneas ilegibles se saltan y desaparecen al recortar.
-- [ ] Selector y editor de entornos; vista de variables con procedencia.
+- [x] Selector y editor de entornos; vista de variables con procedencia.
+  - El selector muestra el color del entorno activo.
+  - El editor se abre con `Ctrl+E` o con el botón Environments. Tiene la lista de entornos a la izquierda (crear) y, a la derecha, el entorno elegido: nombre (Enter para renombrar), color, `extends` y la tabla de variables (casilla, nombre, valor con resaltado, tipo, secreto, quitar).
+  - Los cambios van a una copia que se guarda con Save o se descarta con Revert. Borrar pide confirmación.
+  - Renombrar sigue a los entornos que lo extienden, y su archivo pasa a llamarse como el entorno, como en Bruno. No se puede borrar un entorno que otro extiende, ni guardar un `extends` que no existe o forma un ciclo.
+  - La vista All variables muestra cada variable que ve la request activa, con su valor, de dónde viene y qué ámbitos sustituye.
+  - Marcar una variable como secreta espera a la bóveda (F3): sin ella, solo borraría el valor del archivo.
 - [ ] `apifast-watch`: recarga ante cambios externos y resolución de conflictos con borradores.
 - [ ] Paleta de comandos y atajos reasignables.
 - [ ] Temas claro y oscuro.

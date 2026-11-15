@@ -8,6 +8,7 @@
 //! a request file → [`apifast_domain::ResolvedRequest`] (inheritance applied)
 //! → [`RenderedRequest`] (templates and auth applied) → the [`HttpTransport`].
 
+mod environments;
 mod error;
 mod history;
 mod host;
@@ -17,6 +18,9 @@ mod ports;
 mod render;
 mod use_cases;
 
+pub use environments::{
+    create_environment, delete_environment, rename_environment, save_environment,
+};
 pub use error::{AppError, RepositoryError, StoreError, TransportError};
 pub use history::{
     HIDDEN, HistoryEntry, HistoryLimits, HistoryOutcome, HistoryStore, hide_query, within_limits,

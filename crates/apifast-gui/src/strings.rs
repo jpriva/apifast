@@ -34,6 +34,58 @@ pub struct Strings {
     pub body: &'static str,
     /// Response tab with the headers.
     pub headers: &'static str,
+    /// Title of the environment editor, and its tab of environments.
+    pub environments: &'static str,
+    /// Button that opens the environment editor, with its shortcut.
+    pub edit_environments: &'static str,
+    /// Tab with every variable the active request sees.
+    pub all_variables: &'static str,
+    /// Explains the all-variables view.
+    pub all_variables_hint: &'static str,
+    /// Shown when the collection has no environments.
+    pub no_environments: &'static str,
+    /// Shown when a request sees no variables.
+    pub no_variables: &'static str,
+    /// Field for the name of a new environment.
+    pub new_environment: &'static str,
+    /// Button that adds what was typed.
+    pub add: &'static str,
+    /// Accessible name of the environment's name field.
+    pub environment_name: &'static str,
+    /// Hover of the environment's name field.
+    pub rename_hint: &'static str,
+    /// Label of the environment's color.
+    pub color: &'static str,
+    /// Label of the environment it inherits from.
+    pub extends: &'static str,
+    /// No environment to inherit from.
+    pub extends_none: &'static str,
+    /// Button that drops changes not saved.
+    pub revert: &'static str,
+    /// Asks to confirm, before the environment's name.
+    pub delete_environment: &'static str,
+    /// Column of a variable's type.
+    pub kind: &'static str,
+    /// Type: text.
+    pub kind_text: &'static str,
+    /// Type: number.
+    pub kind_number: &'static str,
+    /// Type: boolean.
+    pub kind_bool: &'static str,
+    /// Type: JSON object.
+    pub kind_object: &'static str,
+    /// Column telling whether a variable is secret.
+    pub secret: &'static str,
+    /// Shown instead of a secret's value in the editor.
+    pub secret_in_vault: &'static str,
+    /// Why secrets cannot be marked yet.
+    pub secret_later: &'static str,
+    /// Field that adds a variable.
+    pub new_variable: &'static str,
+    /// Column of where a variable comes from.
+    pub from: &'static str,
+    /// Column of the scopes a variable overrides.
+    pub overrides: &'static str,
     /// Sidebar tab with the collection's tree.
     pub sidebar_collection: &'static str,
     /// Sidebar tab with the history of sends.
@@ -264,6 +316,32 @@ pub const EN: Strings = Strings {
     no_request: "Select a request in the sidebar.",
     body: "Body",
     headers: "Headers",
+    environments: "Environments",
+    edit_environments: "Edit environments (Ctrl+E)",
+    all_variables: "All variables",
+    all_variables_hint: "What the active request sees, after every scope is applied.",
+    no_environments: "No environments yet.",
+    no_variables: "This request sees no variables.",
+    new_environment: "New environment",
+    add: "Add",
+    environment_name: "Environment name",
+    rename_hint: "Press Enter to rename",
+    color: "Color",
+    extends: "Extends",
+    extends_none: "Nothing",
+    revert: "Revert",
+    delete_environment: "Delete environment",
+    kind: "Type",
+    kind_text: "Text",
+    kind_number: "Number",
+    kind_bool: "Boolean",
+    kind_object: "Object",
+    secret: "Secret",
+    secret_in_vault: "in the vault",
+    secret_later: "Marking secrets comes with the vault",
+    new_variable: "New variable",
+    from: "From",
+    overrides: "Overrides",
     sidebar_collection: "Collection",
     sidebar_history: "History",
     filter: "Filter",

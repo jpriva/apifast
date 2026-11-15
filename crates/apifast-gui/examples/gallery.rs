@@ -152,6 +152,14 @@ fn showcase(
             }
         });
     });
+    section(ui, "ColorSwatch", |ui| {
+        ui.horizontal(|ui| {
+            for color in [Some("#22aa55"), Some("#d9534f"), Some("not a color"), None] {
+                ui.add(atoms::ColorSwatch::new(color));
+                ui.label(color.unwrap_or("none"));
+            }
+        });
+    });
     section(ui, "EnvironmentSelector", |ui| {
         let active = state.environment.as_deref();
         if let Some(choice) =

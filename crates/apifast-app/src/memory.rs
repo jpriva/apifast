@@ -245,6 +245,32 @@ impl EnvironmentRepository for MemoryEnvironments {
         Ok(())
     }
 
+    fn rename_environment(&self, from: &str, to: &str) -> Result<(), RepositoryError> {
+        let mut all = lock(&self.environments);
+        if all.iter().any(|e| e.name == to) {
+            return Err(RepositoryError::Invalid {
+                path: to.to_owned(),
+                message: "an environment with that name already exists".into(),
+            });
+        }
+        let environment = all
+            .iter_mut()
+            .find(|e| e.name == from)
+            .ok_or_else(|| RepositoryError::NotFound(from.to_owned()))?;
+        to.clone_into(&mut environment.name);
+        Ok(())
+    }
+
+    fn delete_environment(&self, name: &str) -> Result<(), RepositoryError> {
+        let mut all = lock(&self.environments);
+        let before = all.len();
+        all.retain(|e| e.name != name);
+        if all.len() == before {
+            return Err(RepositoryError::NotFound(name.to_owned()));
+        }
+        Ok(())
+    }
+
     fn process_env(&self) -> Result<BTreeMap<String, String>, RepositoryError> {
         Ok(self.process_env.clone())
     }

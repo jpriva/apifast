@@ -2,6 +2,7 @@
 //! changing the model. Screens turn the events into core commands.
 
 mod body_viewer;
+mod environments;
 mod history;
 mod kv_table;
 mod request_panel;
@@ -11,6 +12,7 @@ mod tree;
 mod url_bar;
 
 pub use body_viewer::BodyViewer;
+pub use environments::{EnvironmentEditor, EnvironmentEvent, EnvironmentsView};
 pub use history::{HistoryView, ago, matches};
 pub use kv_table::{BulkRow, KvRow, KvTable, from_bulk, to_bulk};
 pub use request_panel::{RequestChange, RequestPanel, RequestTab};

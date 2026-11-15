@@ -105,7 +105,8 @@ La edición con resaltado se limita a unos 200 KB: con más texto, egui tarda de
 
 ## Entornos y variables
 
-- El selector de entorno está siempre visible y muestra el color del entorno. Un entorno marcado como "de cuidado" (por ejemplo producción) tiñe la barra superior.
+- El selector de entorno está siempre visible y muestra el color del entorno. Un entorno marcado como "de cuidado" (por ejemplo producción) tiñe la barra superior (pendiente: OpenCollection no tiene esa marca; se decidirá dónde guardarla).
+- Los cambios del editor de entornos se acumulan en una copia y se escriben con Save. Así una tabla a medio editar no cambia lo que usa un envío en curso.
 - Editor de entornos (`Ctrl+E`): lista de entornos a la izquierda y tabla de variables a la derecha.
 - Columnas de la tabla: habilitada, nombre, valor, tipo y clase de secreto (normal, solo local, compartido).
 - Marcar una variable como secreta la hace **solo local**. Compartirla con el equipo es una acción aparte, con una explicación breve de lo que implica.

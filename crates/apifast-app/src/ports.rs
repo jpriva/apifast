@@ -301,6 +301,22 @@ pub trait EnvironmentRepository {
     /// If the file cannot be written.
     fn save_environment(&self, environment: &Environment) -> Result<(), RepositoryError>;
 
+    /// Renames environment `from` to `to`, keeping the rest of its file.
+    ///
+    /// # Errors
+    ///
+    /// `NotFound` if there is no `from`, `Invalid` if `to` already exists,
+    /// or if the file cannot be written.
+    fn rename_environment(&self, from: &str, to: &str) -> Result<(), RepositoryError>;
+
+    /// Removes an environment.
+    ///
+    /// # Errors
+    ///
+    /// `NotFound` if there is no such environment, or if its file cannot be
+    /// removed.
+    fn delete_environment(&self, name: &str) -> Result<(), RepositoryError>;
+
     /// Values for `{{process.env.NAME}}`: the collection's `.env` over the
     /// system environment.
     ///

@@ -98,7 +98,7 @@ pub enum AppError {
     /// Storing the response failed.
     #[error(transparent)]
     Store(#[from] StoreError),
-    /// The data does not pass validation.
-    #[error("invalid request: {0}")]
+    /// The data does not pass validation; the message says why.
+    #[error("{0}")]
     Validation(String),
 }

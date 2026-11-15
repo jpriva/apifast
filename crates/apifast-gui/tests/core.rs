@@ -741,3 +741,64 @@ fn old_history_is_pruned_when_the_collection_opens() {
     assert_ne!(snapshot.history[0].url, "old");
     assert_eq!(store.entries().unwrap().len(), 1, "the file was rewritten");
 }
+
+fn host(snapshot: &Snapshot) -> Option<String> {
+    let tab = snapshot.active_tab()?;
+    let variable = tab.context.variables.get("host")?;
+    Some(variable.value.as_ref()?.data.clone())
+}
+
+#[test]
+fn environments_are_created_renamed_saved_and_deleted() {
+    use apifast_domain::Variable;
+
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    wait(&core, "the request", |s| s.active_tab().is_some());
+
+    core.send(Command::CreateEnvironment("qa".into()));
+    let snapshot = wait(&core, "qa", |s| s.environments.contains(&"qa".to_owned()));
+    assert!(dir.path().join("environments/qa.yml").exists());
+    assert_eq!(snapshot.environment_files.len(), 3);
+
+    // Renaming the active environment keeps it active, by its new name.
+    core.send(Command::RenameEnvironment {
+        from: "local".into(),
+        to: "dev".into(),
+    });
+    let snapshot = wait(&core, "dev", |s| s.environments.contains(&"dev".to_owned()));
+    assert_eq!(snapshot.environment.as_deref(), Some("dev"));
+    assert!(dir.path().join("environments/dev.yml").exists());
+    assert!(!dir.path().join("environments/local.yml").exists());
+
+    // Saving a new value reaches what the open request sees.
+    let mut dev = snapshot
+        .environment_files
+        .iter()
+        .find(|e| e.name == "dev")
+        .unwrap()
+        .clone();
+    dev.variables = vec![Variable::text("host", "http://changed")];
+    core.send(Command::SaveEnvironment(Box::new(dev)));
+    let snapshot = wait(&core, "the new host", |s| {
+        host(s).as_deref() == Some("http://changed")
+    });
+    assert!(snapshot.error.is_none());
+
+    // A duplicate name is reported, and nothing changes.
+    core.send(Command::CreateEnvironment("dev".into()));
+    let snapshot = wait(&core, "the error", |s| s.error.is_some());
+    assert!(snapshot.error.as_ref().unwrap().contains("already exists"));
+    assert_eq!(snapshot.environment.as_deref(), Some("dev"));
+
+    // Deleting the active environment leaves none active.
+    core.send(Command::DeleteEnvironment("dev".into()));
+    let snapshot = wait(&core, "dev gone", |s| {
+        !s.environments.contains(&"dev".to_owned())
+    });
+    assert_eq!(snapshot.environment, None);
+    assert_eq!(host(&snapshot), None);
+}

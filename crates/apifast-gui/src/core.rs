@@ -19,13 +19,13 @@ use apifast_app::{
     AppError, CancelToken, Clock, CollectionRepository, CollectionTree, EnvironmentRepository,
     HistoryEntry, HistoryLimits, HistoryOutcome, HistoryStore, ItemPath, NoPrompter, Placement,
     RequestPath, ResponseHead, ResponseId, ResponseStore, SendOptions, SendPorts, Session,
-    SessionStore, SessionTab, TransportError, create_folder, create_request, delete_item,
-    load_request, move_item, open_collection, rename_item, resolve_request_variables, save_request,
-    send_request,
+    SessionStore, SessionTab, TransportError, create_environment, create_folder, create_request,
+    delete_environment, delete_item, load_request, move_item, open_collection, rename_environment,
+    rename_item, resolve_request_variables, save_environment, save_request, send_request,
 };
 use apifast_domain::{
-    AuthScheme, Chain, Collection, Header, HttpRequest, Origin, Resolved, ResolvedSettings,
-    ResolvedVariables, Setting, Settings, resolve,
+    AuthScheme, Chain, Collection, Environment, Header, HttpRequest, Origin, Resolved,
+    ResolvedSettings, ResolvedVariables, Setting, Settings, resolve,
 };
 use apifast_history::{FsHistoryStore, FsResponseStore, Limits};
 use apifast_http::ReqwestTransport;
@@ -177,6 +177,19 @@ pub enum Command {
     },
     /// Shows entry `index` of [`Snapshot::history`] in its request's tab.
     OpenHistory(usize),
+    /// Creates an empty environment.
+    CreateEnvironment(String),
+    /// Renames an environment, and the `extends` that name it.
+    RenameEnvironment {
+        /// Its name.
+        from: String,
+        /// The new name.
+        to: String,
+    },
+    /// Saves an environment, found by its name.
+    SaveEnvironment(Box<Environment>),
+    /// Deletes an environment.
+    DeleteEnvironment(String),
 }
 
 /// Everything the interface shows, as of one moment.
@@ -188,6 +201,9 @@ pub struct Snapshot {
     pub collection: Option<CollectionView>,
     /// Names of the collection's environments.
     pub environments: Vec<String>,
+    /// The collection's environments, as in their files, in the order of
+    /// [`Self::environments`].
+    pub environment_files: Arc<Vec<Environment>>,
     /// The active environment.
     pub environment: Option<String>,
     /// Open tabs, in order.
@@ -567,6 +583,63 @@ impl State {
                 }
             }
             Command::OpenHistory(index) => self.open_history(index),
+            Command::CreateEnvironment(_)
+            | Command::RenameEnvironment { .. }
+            | Command::SaveEnvironment(_)
+            | Command::DeleteEnvironment(_) => self.handle_environment(command),
+        }
+    }
+
+    fn handle_environment(&mut self, command: Command) {
+        match command {
+            Command::CreateEnvironment(name) => {
+                self.environments(|repo| create_environment(repo, &name).map(|_| ()));
+            }
+            Command::RenameEnvironment { from, to } => {
+                let was_active = self.snapshot.environment.as_deref() == Some(from.as_str());
+                let mut renamed = None;
+                self.environments(|repo| {
+                    renamed = Some(rename_environment(repo, &from, &to)?);
+                    Ok(())
+                });
+                if let (true, Some(to)) = (was_active, renamed) {
+                    self.snapshot.environment = Some(to);
+                }
+                self.refresh_variables(None);
+            }
+            Command::SaveEnvironment(environment) => {
+                self.environments(|repo| save_environment(repo, &environment));
+                self.refresh_variables(None);
+            }
+            Command::DeleteEnvironment(name) => {
+                self.environments(|repo| delete_environment(repo, &name));
+                self.refresh_variables(None);
+            }
+            _ => {}
+        }
+    }
+
+    /// Runs `change` on the environments, reports its error, and reads them
+    /// again.
+    fn environments(&mut self, change: impl FnOnce(&FsCollection) -> Result<(), AppError>) {
+        let Some(open) = &self.open else { return };
+        let repo = open.repo.clone();
+        match change(&repo) {
+            Ok(()) => self.snapshot.error = None,
+            Err(e) => self.snapshot.error = Some(e.to_string()),
+        }
+        match repo.environments() {
+            Ok(environments) => {
+                self.snapshot.environments = environments.iter().map(|e| e.name.clone()).collect();
+                self.snapshot.environment_files = Arc::new(environments);
+                // An active environment that is gone is no longer active.
+                if let Some(active) = &self.snapshot.environment
+                    && !self.snapshot.environments.contains(active)
+                {
+                    self.snapshot.environment = None;
+                }
+            }
+            Err(e) => self.snapshot.error = Some(e.to_string()),
         }
     }
 
@@ -581,12 +654,8 @@ impl State {
     fn open_collection(&mut self, root: PathBuf) -> Result<(), String> {
         let repo = FsCollection::open(&root).map_err(|e| e.to_string())?;
         let tree = open_collection(&repo).map_err(|e| e.to_string())?;
-        let environments: Vec<String> = repo
-            .environments()
-            .map_err(|e| e.to_string())?
-            .into_iter()
-            .map(|e| e.name)
-            .collect();
+        let environment_files = repo.environments().map_err(|e| e.to_string())?;
+        let environments: Vec<String> = environment_files.iter().map(|e| e.name.clone()).collect();
         let transport = ReqwestTransport::new(&root).map_err(|e| e.to_string())?;
         let id = tree
             .collection
@@ -667,6 +736,7 @@ impl State {
             version: self.snapshot.version,
             collection: Some(CollectionView { root, tree }),
             environments,
+            environment_files: Arc::new(environment_files),
             environment,
             tabs,
             active,

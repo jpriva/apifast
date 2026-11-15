@@ -7,13 +7,13 @@ use apifast_app::RequestPath;
 use apifast_domain::{HttpRequest, sync_params_from_url, sync_url_from_params};
 use eframe::egui::{self, Key, KeyboardShortcut, Modifiers, RichText};
 
-use crate::atoms::{HintsCache, VariableHint, VariableHints};
+use crate::atoms::{ColorSwatch, HintsCache, VariableHint, VariableHints};
 use crate::core::{Command, ResponseState, Snapshot, Tab, TabContext};
 use crate::layout;
 use crate::molecules::EnvironmentSelector;
 use crate::organisms::{
-    HistoryView, RequestChange, RequestPanel, ResponseView, TabBar, TabEvent, TreeEvent, TreeView,
-    UrlBar, UrlBarEvent,
+    EnvironmentEditor, EnvironmentEvent, HistoryView, RequestChange, RequestPanel, ResponseView,
+    TabBar, TabEvent, TreeEvent, TreeView, UrlBar, UrlBarEvent,
 };
 use crate::strings::Strings;
 use crate::theme;
@@ -23,6 +23,7 @@ const CANCEL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::Esc
 const SAVE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::S);
 const SAVE_ALL: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::S);
+const ENVIRONMENTS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::E);
 const CLOSE_TAB: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::W);
 
 /// Default height of the request panel, above the response, in points.
@@ -47,6 +48,8 @@ pub struct MainScreen {
     pub sidebar: Sidebar,
     tree: TreeView,
     history: HistoryView,
+    /// The environment editor window.
+    pub environments: EnvironmentEditor,
     tabs: TabBar,
     request: RequestPanel,
     response: ResponseView,
@@ -94,55 +97,52 @@ impl MainScreen {
             &mut self.editor,
         );
 
-        let (environment, (tree_event, picked), (tab_event, (url_event, edited))) =
-            layout::workbench(
-                ui,
-                |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new(&collection.tree.collection.name).strong());
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            EnvironmentSelector::new(
-                                &snapshot.environments,
-                                snapshot.environment.as_deref(),
-                                strings.no_environment,
-                                strings.environment,
-                            )
-                            .show(ui)
-                        })
-                        .inner
-                    })
-                    .inner
-                },
-                |ui| sidebar_area(ui, (sidebar, tree, history), snapshot, selected, strings),
-                |ui| {
-                    let tab_event = tabs.show(ui, &snapshot.tabs, selected, strings);
-                    ui.separator();
-                    if let Some(error) = &snapshot.error {
-                        ui.label(RichText::new(error.as_str()).color(theme::palette(ui).danger));
-                        ui.add_space(theme::space::M);
-                    }
-                    let (Some(tab), Some(editor)) = (active, editor.as_mut()) else {
-                        let muted = theme::palette(ui).text_muted;
-                        ui.label(RichText::new(strings.no_request).color(muted));
-                        return (tab_event, (None, false));
-                    };
-                    let edits = editor_area(
-                        ui,
-                        tab,
-                        &mut editor.request,
-                        panels,
-                        &hints,
-                        sending,
-                        strings,
-                    );
-                    (tab_event, edits)
-                },
-            );
+        let (
+            (environment, edit_environments),
+            (tree_event, picked),
+            (tab_event, (url_event, edited)),
+        ) = layout::workbench(
+            ui,
+            |ui| top_bar(ui, &collection.tree.collection.name, snapshot, strings),
+            |ui| sidebar_area(ui, (sidebar, tree, history), snapshot, selected, strings),
+            |ui| {
+                let tab_event = tabs.show(ui, &snapshot.tabs, selected, strings);
+                ui.separator();
+                if let Some(error) = &snapshot.error {
+                    ui.label(RichText::new(error.as_str()).color(theme::palette(ui).danger));
+                    ui.add_space(theme::space::M);
+                }
+                let (Some(tab), Some(editor)) = (active, editor.as_mut()) else {
+                    let muted = theme::palette(ui).text_muted;
+                    ui.label(RichText::new(strings.no_request).color(muted));
+                    return (tab_event, (None, false));
+                };
+                let edits = editor_area(
+                    ui,
+                    tab,
+                    &mut editor.request,
+                    panels,
+                    &hints,
+                    sending,
+                    strings,
+                );
+                (tab_event, edits)
+            },
+        );
 
         let mut commands = Vec::new();
-        if let Some(choice) = environment {
-            commands.push(Command::SelectEnvironment(choice));
+        if edit_environments || ui.input_mut(|i| i.consume_shortcut(&ENVIRONMENTS)) {
+            self.environments.open = !self.environments.open;
         }
+        let context = active.map(|tab| tab.context.as_ref());
+        let files = &snapshot.environment_files;
+        if let Some(event) = self
+            .environments
+            .show(ui.ctx(), files, context, &hints, strings)
+        {
+            commands.push(environment_command(event));
+        }
+        commands.extend(environment);
         if let Some(event) = tree_event {
             commands.push(tree_command(event));
         }
@@ -304,6 +304,49 @@ fn shortcuts(ui: &egui::Ui, active: Option<&Tab>, sending: bool) -> Vec<Command>
         }
         commands
     })
+}
+
+/// The top bar: the collection's name, then the environment, its color and
+/// the button of the editor. Returns the environment chosen and whether the
+/// editor was asked for.
+fn top_bar(
+    ui: &mut egui::Ui,
+    name: &str,
+    snapshot: &Snapshot,
+    strings: &Strings,
+) -> (Option<Command>, bool) {
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(name).strong());
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let edit = ui
+                .button(strings.environments)
+                .on_hover_text(strings.edit_environments)
+                .clicked();
+            let color = (snapshot.environment_files.iter())
+                .find(|e| Some(e.name.as_str()) == snapshot.environment.as_deref())
+                .and_then(|e| e.color.as_deref());
+            let choice = EnvironmentSelector::new(
+                &snapshot.environments,
+                snapshot.environment.as_deref(),
+                strings.no_environment,
+                strings.environment,
+            )
+            .show(ui);
+            ui.add(ColorSwatch::new(color));
+            (choice.map(Command::SelectEnvironment), edit)
+        })
+        .inner
+    })
+    .inner
+}
+
+fn environment_command(event: EnvironmentEvent) -> Command {
+    match event {
+        EnvironmentEvent::Create(name) => Command::CreateEnvironment(name),
+        EnvironmentEvent::Rename { from, to } => Command::RenameEnvironment { from, to },
+        EnvironmentEvent::Save(environment) => Command::SaveEnvironment(Box::new(environment)),
+        EnvironmentEvent::Delete(name) => Command::DeleteEnvironment(name),
+    }
 }
 
 /// The sidebar: a switch between the collection's tree and the history.

@@ -106,3 +106,27 @@ impl Widget for StatusBadge {
         response
     }
 }
+
+/// A small square of an environment's color; empty space without one, so
+/// names line up.
+#[derive(Debug, Clone, Copy)]
+pub struct ColorSwatch<'a> {
+    color: Option<&'a str>,
+}
+
+impl<'a> ColorSwatch<'a> {
+    /// A swatch of `color`, written as `#rrggbb`.
+    pub fn new(color: Option<&'a str>) -> Self {
+        Self { color }
+    }
+}
+
+impl Widget for ColorSwatch<'_> {
+    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+        let (rect, response) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), Sense::hover());
+        if let Some(color) = self.color.and_then(theme::parse_color) {
+            ui.painter().rect_filled(rect, theme::radius::SMALL, color);
+        }
+        response
+    }
+}

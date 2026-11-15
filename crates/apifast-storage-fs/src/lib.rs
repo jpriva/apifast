@@ -288,6 +288,27 @@ impl FsCollection {
     }
 
     /// Environment files with their parsed content, sorted by file name.
+    /// Writes `environment` to the file at `relative`, keeping what the file
+    /// has that the model does not.
+    fn save_environment_at(
+        &self,
+        relative: &str,
+        environment: &Environment,
+    ) -> Result<(), RepositoryError> {
+        let stem = relative
+            .trim_start_matches("environments/")
+            .rsplit_once('.')
+            .map_or(relative, |(s, _)| s)
+            .to_owned();
+        self.save_document(
+            relative,
+            environment,
+            |doc| Ok(read::environment(doc, &stem)),
+            write::update_environment,
+            write::new_environment,
+        )
+    }
+
     fn environment_files(&self) -> Result<Vec<(String, Environment)>, RepositoryError> {
         let dir = self.root.join(ENVIRONMENTS_DIR);
         let entries = match std::fs::read_dir(&dir) {
@@ -479,32 +500,50 @@ impl EnvironmentRepository for FsCollection {
 
     fn save_environment(&self, environment: &Environment) -> Result<(), RepositoryError> {
         let files = self.environment_files()?;
-        let existing = files.iter().find(|(_, e)| e.name == environment.name);
-        let relative = if let Some((relative, _)) = existing {
-            relative.clone()
-        } else {
-            let base = fs::file_name_for(&environment.name);
-            let taken = |candidate: &str| files.iter().any(|(r, _)| r == candidate);
-            let mut candidate = format!("{ENVIRONMENTS_DIR}/{base}.yml");
-            let mut n = 2;
-            while taken(&candidate) {
-                candidate = format!("{ENVIRONMENTS_DIR}/{base}-{n}.yml");
-                n += 1;
-            }
-            candidate
+        let relative = match files.iter().find(|(_, e)| e.name == environment.name) {
+            Some((relative, _)) => relative.clone(),
+            None => free_environment_file(&files, &environment.name),
         };
-        let stem = relative
-            .trim_start_matches("environments/")
-            .rsplit_once('.')
-            .map_or(relative.as_str(), |(s, _)| s)
-            .to_owned();
-        self.save_document(
-            &relative,
-            environment,
-            |doc| Ok(read::environment(doc, &stem)),
-            write::update_environment,
-            write::new_environment,
-        )
+        self.save_environment_at(&relative, environment)
+    }
+
+    fn rename_environment(&self, from: &str, to: &str) -> Result<(), RepositoryError> {
+        let files = self.environment_files()?;
+        if files.iter().any(|(_, e)| e.name == to) {
+            return Err(RepositoryError::Invalid {
+                path: to.to_owned(),
+                message: "an environment with that name already exists".into(),
+            });
+        }
+        let (relative, environment) = files
+            .iter()
+            .find(|(_, e)| e.name == from)
+            .ok_or_else(|| RepositoryError::NotFound(from.to_owned()))?;
+        // Bruno names the file after the environment: follow the new name.
+        let others: Vec<_> = files
+            .iter()
+            .filter(|(r, _)| r != relative)
+            .cloned()
+            .collect();
+        let target = free_environment_file(&others, to);
+        if target != *relative {
+            std::fs::rename(self.root.join(relative), self.root.join(&target))
+                .map_err(|e| io_error(relative, &e))?;
+        }
+        let renamed = Environment {
+            name: to.to_owned(),
+            ..environment.clone()
+        };
+        self.save_environment_at(&target, &renamed)
+    }
+
+    fn delete_environment(&self, name: &str) -> Result<(), RepositoryError> {
+        let files = self.environment_files()?;
+        let (relative, _) = files
+            .iter()
+            .find(|(_, e)| e.name == name)
+            .ok_or_else(|| RepositoryError::NotFound(name.to_owned()))?;
+        std::fs::remove_file(self.root.join(relative)).map_err(|e| io_error(relative, &e))
     }
 
     fn process_env(&self) -> Result<BTreeMap<String, String>, RepositoryError> {
@@ -516,6 +555,20 @@ impl EnvironmentRepository for FsCollection {
         }
         Ok(vars)
     }
+}
+
+/// A path in `environments/` for an environment named `name`, after the
+/// name and not taken by any of `files`.
+fn free_environment_file(files: &[(String, Environment)], name: &str) -> String {
+    let base = fs::file_name_for(name);
+    let taken = |candidate: &str| files.iter().any(|(r, _)| r == candidate);
+    let mut candidate = format!("{ENVIRONMENTS_DIR}/{base}.yml");
+    let mut n = 2;
+    while taken(&candidate) {
+        candidate = format!("{ENVIRONMENTS_DIR}/{base}-{n}.yml");
+        n += 1;
+    }
+    candidate
 }
 
 fn http_only(relative: &str, doc: &Value) -> Result<HttpRequest, RepositoryError> {
