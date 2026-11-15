@@ -336,4 +336,25 @@ El historial, las respuestas, las cookies y la bóveda local viven en el directo
 
 En macOS y Windows se usan los directorios equivalentes de cada plataforma.
 
+### Historial
+
+Cada envío terminado añade una línea JSON a `history/<collection-id>.jsonl`; un envío cancelado no la añade:
+
+```json
+{"v":1,"at":1763200000000,"request":"users/get.yml","method":"GET","url":"{{host}}/users/1",
+ "response":{"status":200,"version":"HTTP/1.1","url":"http://localhost:8080/users/1","redirects":0,
+   "headers":[["content-type","application/json"]],"elapsed_ms":12,"size":21,"body":"<id>",
+   "timeline":[{"type":"request","at_us":0,"method":"GET","url":"http://localhost:8080/users/1"},
+               {"type":"headers","at_us":11250,"status":200},{"type":"body","at_us":12000,"bytes":21}]}}
+```
+
+- Un envío fallido lleva `"error": "<mensaje>"` en lugar de `response`. Los mensajes de error nunca contienen secretos.
+- `url` es la URL tal como está escrita, con sus `{{variables}}` sin resolver.
+- El historial no se cifra, así que:
+  - si la request llevaba un secreto, los valores de la query de las URLs resueltas se sustituyen por `[hidden]`;
+  - los valores de `Set-Cookie` se sustituyen siempre.
+- `body` es el id del cuerpo en `responses/`. Puede haberse borrado por los límites, y entonces la entrada sigue en el historial sin cuerpo.
+- Las líneas que no se pueden leer (de un formato `v` más nuevo o cortadas por un cierre inesperado) se ignoran. Si una línea quedó cortada, la siguiente escritura empieza en una línea nueva.
+- Al abrir la colección se recortan el historial (1000 entradas, 30 días) y los cuerpos (1000, 512 MB, 30 días). Recortar reescribe el archivo aparte y lo renombra.
+
 Una colección sin identificador en `.apifast/` usa como clave un hash de su ruta. La sesión se escribe poco después de cada cambio y al cerrar la aplicación. Los borradores tienen el mismo formato que los archivos de la colección; si uno no se puede leer, solo se pierde ese borrador, no la sesión.

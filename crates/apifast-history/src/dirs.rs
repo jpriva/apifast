@@ -36,6 +36,14 @@ pub fn sessions_dir_in(data_dir: &Path, root: &Path, collection_id: Option<&str>
         .join(collection_key(root, collection_id))
 }
 
+/// File with the history of sends of the collection at `root`, under
+/// `data_dir`, keyed like [`responses_dir`].
+pub fn history_file_in(data_dir: &Path, root: &Path, collection_id: Option<&str>) -> PathBuf {
+    data_dir
+        .join("history")
+        .join(format!("{}.jsonl", collection_key(root, collection_id)))
+}
+
 fn collection_key(root: &Path, collection_id: Option<&str>) -> String {
     collection_id.map_or_else(
         || format!("path-{:016x}", fnv1a(root.to_string_lossy().as_bytes())),

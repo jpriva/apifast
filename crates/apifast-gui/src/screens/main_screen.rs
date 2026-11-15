@@ -12,8 +12,8 @@ use crate::core::{Command, ResponseState, Snapshot, Tab, TabContext};
 use crate::layout;
 use crate::molecules::EnvironmentSelector;
 use crate::organisms::{
-    RequestChange, RequestPanel, ResponseView, TabBar, TabEvent, TreeEvent, TreeView, UrlBar,
-    UrlBarEvent,
+    HistoryView, RequestChange, RequestPanel, ResponseView, TabBar, TabEvent, TreeEvent, TreeView,
+    UrlBar, UrlBarEvent,
 };
 use crate::strings::Strings;
 use crate::theme;
@@ -30,10 +30,23 @@ const REQUEST_PANEL_HEIGHT: f32 = 280.0;
 /// Lowest the request panel can be resized to, in points.
 const REQUEST_PANEL_MIN_HEIGHT: f32 = 120.0;
 
+/// What the sidebar shows.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Sidebar {
+    /// The collection's tree.
+    #[default]
+    Collection,
+    /// The history of sends.
+    History,
+}
+
 /// The state the main screen keeps between frames.
 #[derive(Debug, Default)]
 pub struct MainScreen {
+    /// What the sidebar shows.
+    pub sidebar: Sidebar,
     tree: TreeView,
+    history: HistoryView,
     tabs: TabBar,
     request: RequestPanel,
     response: ResponseView,
@@ -73,6 +86,7 @@ impl MainScreen {
         let hints = self.follow(active, strings);
         let sending = active.is_some_and(|tab| tab.response == ResponseState::Sending);
         let selected = snapshot.active.as_ref();
+        let (sidebar, history) = (&mut self.sidebar, &mut self.history);
         let (tree, tabs, panels, editor) = (
             &mut self.tree,
             &mut self.tabs,
@@ -80,49 +94,50 @@ impl MainScreen {
             &mut self.editor,
         );
 
-        let (environment, tree_event, (tab_event, (url_event, edited))) = layout::workbench(
-            ui,
-            |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(&collection.tree.collection.name).strong());
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        EnvironmentSelector::new(
-                            &snapshot.environments,
-                            snapshot.environment.as_deref(),
-                            strings.no_environment,
-                            strings.environment,
-                        )
-                        .show(ui)
+        let (environment, (tree_event, picked), (tab_event, (url_event, edited))) =
+            layout::workbench(
+                ui,
+                |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(&collection.tree.collection.name).strong());
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            EnvironmentSelector::new(
+                                &snapshot.environments,
+                                snapshot.environment.as_deref(),
+                                strings.no_environment,
+                                strings.environment,
+                            )
+                            .show(ui)
+                        })
+                        .inner
                     })
                     .inner
-                })
-                .inner
-            },
-            |ui| tree.show(ui, &collection.tree, snapshot.version, selected, strings),
-            |ui| {
-                let tab_event = tabs.show(ui, &snapshot.tabs, selected, strings);
-                ui.separator();
-                if let Some(error) = &snapshot.error {
-                    ui.label(RichText::new(error.as_str()).color(theme::palette(ui).danger));
-                    ui.add_space(theme::space::M);
-                }
-                let (Some(tab), Some(editor)) = (active, editor.as_mut()) else {
-                    let muted = theme::palette(ui).text_muted;
-                    ui.label(RichText::new(strings.no_request).color(muted));
-                    return (tab_event, (None, false));
-                };
-                let edits = editor_area(
-                    ui,
-                    tab,
-                    &mut editor.request,
-                    panels,
-                    &hints,
-                    sending,
-                    strings,
-                );
-                (tab_event, edits)
-            },
-        );
+                },
+                |ui| sidebar_area(ui, (sidebar, tree, history), snapshot, selected, strings),
+                |ui| {
+                    let tab_event = tabs.show(ui, &snapshot.tabs, selected, strings);
+                    ui.separator();
+                    if let Some(error) = &snapshot.error {
+                        ui.label(RichText::new(error.as_str()).color(theme::palette(ui).danger));
+                        ui.add_space(theme::space::M);
+                    }
+                    let (Some(tab), Some(editor)) = (active, editor.as_mut()) else {
+                        let muted = theme::palette(ui).text_muted;
+                        ui.label(RichText::new(strings.no_request).color(muted));
+                        return (tab_event, (None, false));
+                    };
+                    let edits = editor_area(
+                        ui,
+                        tab,
+                        &mut editor.request,
+                        panels,
+                        &hints,
+                        sending,
+                        strings,
+                    );
+                    (tab_event, edits)
+                },
+            );
 
         let mut commands = Vec::new();
         if let Some(choice) = environment {
@@ -130,6 +145,9 @@ impl MainScreen {
         }
         if let Some(event) = tree_event {
             commands.push(tree_command(event));
+        }
+        if let Some(index) = picked {
+            commands.push(Command::OpenHistory(index));
         }
         if let (true, Some(editor)) = (edited, &self.editor) {
             commands.push(Command::Edit {
@@ -286,6 +304,37 @@ fn shortcuts(ui: &egui::Ui, active: Option<&Tab>, sending: bool) -> Vec<Command>
         }
         commands
     })
+}
+
+/// The sidebar: a switch between the collection's tree and the history.
+/// Returns what the tree reported and the history entry picked.
+fn sidebar_area(
+    ui: &mut egui::Ui,
+    (sidebar, tree, history): (&mut Sidebar, &mut TreeView, &mut HistoryView),
+    snapshot: &Snapshot,
+    selected: Option<&RequestPath>,
+    strings: &Strings,
+) -> (Option<TreeEvent>, Option<usize>) {
+    ui.horizontal(|ui| {
+        ui.selectable_value(sidebar, Sidebar::Collection, strings.sidebar_collection);
+        ui.selectable_value(sidebar, Sidebar::History, strings.sidebar_history);
+    });
+    ui.separator();
+    match (*sidebar, &snapshot.collection) {
+        (Sidebar::Collection, Some(collection)) => (
+            tree.show(ui, &collection.tree, snapshot.version, selected, strings),
+            None,
+        ),
+        (Sidebar::History, _) => (None, history.show(ui, &snapshot.history, now_ms(), strings)),
+        (Sidebar::Collection, None) => (None, None),
+    }
+}
+
+/// The current time, in milliseconds since the Unix epoch.
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
 }
 
 #[cfg(test)]

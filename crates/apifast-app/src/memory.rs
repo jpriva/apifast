@@ -10,9 +10,9 @@ use apifast_domain::{Collection, Environment, Folder, HttpRequest};
 use crate::ports::is_within;
 use crate::{
     BodyWriter, CancelToken, Clock, CollectionRepository, CollectionTree, EnvironmentRepository,
-    HttpTransport, LoadedRequest, Prompter, Random, RenderedRequest, RepositoryError, RequestPath,
-    ResponseHead, ResponseId, ResponseStore, Session, SessionStore, StoreError, StoredBody,
-    TransportError, TreeItem,
+    HistoryEntry, HistoryLimits, HistoryStore, HttpTransport, LoadedRequest, Prompter, Random,
+    RenderedRequest, RepositoryError, RequestPath, ResponseHead, ResponseId, ResponseStore,
+    Session, SessionStore, StoreError, StoredBody, TransportError, TreeItem, within_limits,
 };
 
 /// Locks a mutex, recovering the data if a panicking test poisoned it.
@@ -448,5 +448,29 @@ impl SessionStore for MemorySessions {
     fn save(&self, session: &Session) -> Result<(), StoreError> {
         session.clone_into(&mut lock(&self.session));
         Ok(())
+    }
+}
+
+/// A history kept in memory.
+#[derive(Debug, Default)]
+pub struct MemoryHistory {
+    entries: Mutex<Vec<HistoryEntry>>,
+}
+
+impl HistoryStore for MemoryHistory {
+    fn append(&self, entry: &HistoryEntry) -> Result<(), StoreError> {
+        lock(&self.entries).push(entry.clone());
+        Ok(())
+    }
+
+    fn entries(&self) -> Result<Vec<HistoryEntry>, StoreError> {
+        Ok(lock(&self.entries).clone())
+    }
+
+    fn prune(&self, limits: HistoryLimits, now_ms: i64) -> Result<usize, StoreError> {
+        let mut entries = lock(&self.entries);
+        let before = entries.len();
+        *entries = within_limits(std::mem::take(&mut *entries), limits, now_ms);
+        Ok(before - entries.len())
     }
 }

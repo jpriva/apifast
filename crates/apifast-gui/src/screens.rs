@@ -4,5 +4,5 @@
 mod main_screen;
 mod welcome;
 
-pub use main_screen::MainScreen;
+pub use main_screen::{MainScreen, Sidebar};
 pub use welcome::Welcome;

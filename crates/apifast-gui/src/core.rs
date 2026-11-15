@@ -13,20 +13,21 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use apifast_app::{
-    AppError, CancelToken, CollectionRepository, CollectionTree, EnvironmentRepository, ItemPath,
-    NoPrompter, Placement, RequestPath, ResponseHead, ResponseId, ResponseStore, SendOptions,
-    SendPorts, Session, SessionStore, SessionTab, TransportError, create_folder, create_request,
-    delete_item, load_request, move_item, open_collection, rename_item, resolve_request_variables,
-    save_request, send_request,
+    AppError, CancelToken, Clock, CollectionRepository, CollectionTree, EnvironmentRepository,
+    HistoryEntry, HistoryLimits, HistoryOutcome, HistoryStore, ItemPath, NoPrompter, Placement,
+    RequestPath, ResponseHead, ResponseId, ResponseStore, SendOptions, SendPorts, Session,
+    SessionStore, SessionTab, TransportError, create_folder, create_request, delete_item,
+    load_request, move_item, open_collection, rename_item, resolve_request_variables, save_request,
+    send_request,
 };
 use apifast_domain::{
     AuthScheme, Chain, Collection, Header, HttpRequest, Origin, Resolved, ResolvedSettings,
     ResolvedVariables, Setting, Settings, resolve,
 };
-use apifast_history::FsResponseStore;
+use apifast_history::{FsHistoryStore, FsResponseStore, Limits};
 use apifast_http::ReqwestTransport;
 use apifast_storage_fs::{FsCollection, FsSessionStore};
 use tokio::sync::mpsc;
@@ -34,11 +35,67 @@ use tokio::sync::mpsc;
 use crate::body::{BodyHandle, BodySource};
 use crate::system::{SystemClock, SystemRandom};
 
+/// How much history is kept: entries beyond these are removed when a
+/// collection opens.
+pub const HISTORY_LIMITS: HistoryLimits = HistoryLimits {
+    max_entries: Some(1000),
+    max_age: Some(Duration::from_hours(30 * 24)),
+};
+
+/// How many response bodies are kept, removed when a collection opens.
+pub const RESPONSE_LIMITS: Limits = Limits {
+    max_count: Some(1000),
+    max_total_bytes: Some(512 * 1024 * 1024),
+    max_age: Some(Duration::from_hours(30 * 24)),
+};
+
 /// A body kept in the response store, read by windows from disk.
 struct StoredBody {
     store: Arc<FsResponseStore>,
     id: ResponseId,
     size: u64,
+}
+
+/// A response whose body is in `store`.
+fn received(
+    store: &Arc<FsResponseStore>,
+    head: ResponseHead,
+    size: u64,
+    id: ResponseId,
+) -> Received {
+    let stored = StoredBody {
+        store: store.clone(),
+        id: id.clone(),
+        size,
+    };
+    Received {
+        head,
+        size,
+        body: BodyHandle::new(id.0, Arc::new(stored)),
+    }
+}
+
+/// What a tab shows for a history entry. With `kept_only`, a response whose
+/// body was removed gives nothing.
+fn response_of(
+    store: &Arc<FsResponseStore>,
+    entry: &HistoryEntry,
+    kept_only: bool,
+) -> Option<ResponseState> {
+    match &entry.outcome {
+        HistoryOutcome::Received { head, size, body } => {
+            if kept_only && store.size(body).is_err() {
+                return None;
+            }
+            Some(ResponseState::Received(received(
+                store,
+                head.clone(),
+                *size,
+                body.clone(),
+            )))
+        }
+        HistoryOutcome::Failed(message) => Some(ResponseState::Failed(message.clone())),
+    }
 }
 
 impl BodySource for StoredBody {
@@ -118,6 +175,8 @@ pub enum Command {
         /// Where to.
         placement: Placement,
     },
+    /// Shows entry `index` of [`Snapshot::history`] in its request's tab.
+    OpenHistory(usize),
 }
 
 /// Everything the interface shows, as of one moment.
@@ -138,6 +197,9 @@ pub struct Snapshot {
     /// The last error that is not about a send, such as a collection that
     /// cannot be opened.
     pub error: Option<String>,
+    /// The sends of the collection, oldest first. Loaded shortly after the
+    /// collection opens.
+    pub history: Arc<Vec<HistoryEntry>>,
 }
 
 impl Snapshot {
@@ -258,9 +320,19 @@ pub struct Received {
 /// results of its own tasks.
 enum Message {
     Command(Command),
-    /// A send ended; the number identifies it in [`State::sending`].
-    SendFinished(u64, Result<Received, AppError>),
+    /// A send ended; the number identifies it in [`State::sending`]. The
+    /// entry, already in the history file, is there unless it was cancelled.
+    SendFinished(Box<Finished>),
+    /// The history of collection number `.0` was pruned and read.
+    HistoryLoaded(u64, Vec<HistoryEntry>),
     WriteSession,
+}
+
+/// How a send ended: its number, its result and its history entry.
+struct Finished {
+    id: u64,
+    result: Result<Received, AppError>,
+    entry: Option<HistoryEntry>,
 }
 
 /// Handle to the core thread. Dropping it stops the thread, after writing
@@ -352,7 +424,10 @@ struct Open {
     repo: Arc<FsCollection>,
     transport: Arc<ReqwestTransport>,
     responses: Arc<FsResponseStore>,
+    history: Arc<FsHistoryStore>,
     sessions: FsSessionStore,
+    /// Numbers this opening, so a late history load for another is ignored.
+    opened: u64,
 }
 
 struct State {
@@ -384,7 +459,11 @@ impl State {
                         self.schedule_session_write();
                     }
                 }
-                Message::SendFinished(id, result) => self.finish_send(id, result),
+                Message::SendFinished(finished) => {
+                    let Finished { id, result, entry } = *finished;
+                    self.finish_send(id, result, entry);
+                }
+                Message::HistoryLoaded(opened, entries) => self.history_loaded(opened, entries),
                 Message::WriteSession => {
                     self.session_pending = false;
                     self.write_session();
@@ -487,6 +566,7 @@ impl State {
                     self.follow_move(&item, &new);
                 }
             }
+            Command::OpenHistory(index) => self.open_history(index),
         }
     }
 
@@ -519,6 +599,11 @@ impl State {
             id,
         ));
         let sessions = FsSessionStore::new(apifast_history::dirs::sessions_dir_in(
+            &self.data_dir,
+            &root,
+            id,
+        ));
+        let history = FsHistoryStore::new(apifast_history::dirs::history_file_in(
             &self.data_dir,
             &root,
             id,
@@ -567,11 +652,16 @@ impl State {
             .or_else(|| tabs.first().map(|tab| tab.path.clone()));
         let environment = (session.environment).filter(|name| environments.contains(name));
 
+        let opened = self.next_revision();
+        let (responses, history) = (Arc::new(responses), Arc::new(history));
+        self.load_history(opened, responses.clone(), history.clone());
         self.open = Some(Open {
             repo: Arc::new(repo),
             transport: Arc::new(transport),
-            responses: Arc::new(responses),
+            responses,
+            history,
             sessions,
+            opened,
         });
         self.snapshot = Snapshot {
             version: self.snapshot.version,
@@ -581,6 +671,7 @@ impl State {
             tabs,
             active,
             error,
+            history: Arc::default(),
         };
         self.refresh_variables(None);
         Ok(())
@@ -799,11 +890,16 @@ impl State {
             return;
         }
         let Some(open) = &self.open else { return };
-        let (repo, transport, responses) = (
+        let (repo, transport, responses, history) = (
             open.repo.clone(),
             open.transport.clone(),
             open.responses.clone(),
+            open.history.clone(),
         );
+        let Some(request) = self.tab(&path).map(Tab::request) else {
+            return;
+        };
+        let written = (request.method.as_str().to_owned(), request.url.clone());
         let options = SendOptions {
             environment: self.snapshot.environment.clone(),
             draft: self.tab(&path).and_then(|tab| tab.draft.clone()),
@@ -830,23 +926,34 @@ impl State {
                 prompter: &NoPrompter,
                 report: &|_| {},
             };
-            let result = send_request(ports, &path, &options, &cancel)
-                .await
-                .map(|outcome| {
-                    let stored = StoredBody {
-                        store: responses,
-                        id: outcome.body.id.clone(),
-                        size: outcome.body.size,
-                    };
-                    Received {
-                        head: outcome.head,
-                        size: outcome.body.size,
-                        body: BodyHandle::new(outcome.body.id.0, Arc::new(stored)),
-                    }
-                });
+            let at_ms = clock.unix_millis();
+            let result = send_request(ports, &path, &options, &cancel).await;
+            let entry = match &result {
+                Ok(outcome) => Some(HistoryEntry::received(
+                    at_ms,
+                    path.clone(),
+                    written,
+                    outcome.head.clone(),
+                    (outcome.body.size, outcome.body.id.clone()),
+                    outcome.contains_secret,
+                )),
+                Err(AppError::Transport(TransportError::Cancelled)) => None,
+                Err(e) => Some(HistoryEntry::failed(
+                    at_ms,
+                    path.clone(),
+                    written,
+                    e.to_string(),
+                )),
+            };
+            // A history that cannot be written does not hide the response.
+            let entry = entry.filter(|entry| history.append(entry).is_ok());
+            let result = result.map(|outcome| {
+                received(&responses, outcome.head, outcome.body.size, outcome.body.id)
+            });
             // Gone only when the core is stopping, and then nobody waits.
             if let Some(messages) = messages.upgrade() {
-                let _ = messages.send(Message::SendFinished(id, result));
+                let finished = Finished { id, result, entry };
+                let _ = messages.send(Message::SendFinished(Box::new(finished)));
             }
         });
     }
@@ -854,7 +961,15 @@ impl State {
     /// Records the result of send number `id` in its tab, wherever the tab
     /// is now. A tab closed meanwhile has no entry, and the result is
     /// dropped.
-    fn finish_send(&mut self, id: u64, result: Result<Received, AppError>) {
+    fn finish_send(
+        &mut self,
+        id: u64,
+        result: Result<Received, AppError>,
+        entry: Option<HistoryEntry>,
+    ) {
+        if let Some(entry) = entry {
+            Arc::make_mut(&mut self.snapshot.history).push(entry);
+        }
         let Some(path) = (self.sending.iter())
             .find(|(_, (send, _))| *send == id)
             .map(|(path, _)| path.clone())
@@ -869,6 +984,70 @@ impl State {
         };
         if let Some(tab) = self.tab_mut(&path) {
             tab.response = response;
+        }
+    }
+
+    /// Prunes the history and the responses of the collection just opened,
+    /// then reads its history, away from the loop.
+    fn load_history(
+        &self,
+        opened: u64,
+        responses: Arc<FsResponseStore>,
+        history: Arc<FsHistoryStore>,
+    ) {
+        let messages = self.messages.clone();
+        tokio::spawn(async move {
+            let entries = tokio::task::spawn_blocking(move || {
+                let now = SystemTime::now();
+                let now_ms = SystemClock.unix_millis();
+                // Limits that cannot be applied now are applied next time.
+                let _ = history.prune(HISTORY_LIMITS, now_ms);
+                let _ = responses.prune(RESPONSE_LIMITS, now);
+                history.entries().unwrap_or_default()
+            })
+            .await
+            .unwrap_or_default();
+            if let Some(messages) = messages.upgrade() {
+                let _ = messages.send(Message::HistoryLoaded(opened, entries));
+            }
+        });
+    }
+
+    /// Takes the history read for collection number `opened`, and shows in
+    /// each tab still empty its last response that is still kept.
+    fn history_loaded(&mut self, opened: u64, entries: Vec<HistoryEntry>) {
+        let Some(open) = self.open.as_ref().filter(|open| open.opened == opened) else {
+            return;
+        };
+        let responses = open.responses.clone();
+        for tab in &mut self.snapshot.tabs {
+            if !matches!(tab.response, ResponseState::Idle) {
+                continue;
+            }
+            let last = entries.iter().rev().find(|entry| entry.request == tab.path);
+            if let Some(response) = last.and_then(|entry| response_of(&responses, entry, true)) {
+                tab.response = response;
+            }
+        }
+        self.snapshot.history = Arc::new(entries);
+    }
+
+    /// Shows history entry `index` in its request's tab.
+    fn open_history(&mut self, index: usize) {
+        let Some(entry) = self.snapshot.history.get(index).cloned() else {
+            return;
+        };
+        let Some(open) = &self.open else { return };
+        let responses = open.responses.clone();
+        self.open_request(entry.request.clone());
+        let sending = self.sending.contains_key(&entry.request);
+        match self.tab_mut(&entry.request) {
+            Some(tab) if !sending => {
+                if let Some(response) = response_of(&responses, &entry, false) {
+                    tab.response = response;
+                }
+            }
+            _ => {}
         }
     }
 

@@ -594,3 +594,150 @@ fn each_tab_knows_what_it_inherits_from_its_folders() {
         apifast_domain::Origin::Default
     );
 }
+
+fn received(snapshot: &Snapshot) -> apifast_gui::core::Received {
+    match response(snapshot) {
+        ResponseState::Received(received) => received,
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn each_send_goes_to_the_history_and_its_file() {
+    use apifast_app::HistoryOutcome;
+
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, data) = start();
+    open(&core, dir.path());
+    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    wait(&core, "the request", |s| s.active_tab().is_some());
+    // Fails: no environment, so `host` is missing.
+    core.send(Command::Send);
+    wait(&core, "one entry", |s| s.history.len() == 1);
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    core.send(Command::Send);
+    let snapshot = wait(&core, "two entries", |s| s.history.len() == 2);
+
+    let [failed, sent] = snapshot.history.as_slice() else {
+        unreachable!()
+    };
+    assert_eq!(failed.request, RequestPath::new("health.yml"));
+    assert_eq!(
+        failed.outcome,
+        HistoryOutcome::Failed("variable `host` is not defined".into())
+    );
+    // The URL as written, never resolved.
+    assert_eq!(sent.url, "{{host}}/health");
+    assert!(matches!(&sent.outcome, HistoryOutcome::Received { head, .. } if head.status == 200));
+
+    let files: Vec<_> = std::fs::read_dir(data.path().join("history"))
+        .unwrap()
+        .flatten()
+        .collect();
+    assert_eq!(files.len(), 1);
+    let text = std::fs::read_to_string(files[0].path()).unwrap();
+    assert_eq!(text.lines().count(), 2);
+}
+
+#[test]
+fn the_last_response_of_each_tab_comes_back_after_a_restart() {
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, data) = start();
+    open(&core, dir.path());
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    core.send(Command::OpenRequest(RequestPath::new("users/get.yml")));
+    wait(&core, "the request", |s| s.active_tab().is_some());
+    core.send(Command::Send);
+    wait(&core, "the response", |s| {
+        matches!(response(s), ResponseState::Received(_))
+    });
+    drop(core);
+
+    let core = Core::start(data.path().to_path_buf(), || {});
+    open(&core, dir.path());
+    let snapshot = wait(&core, "the restored response", |s| {
+        matches!(response(s), ResponseState::Received(_))
+    });
+    let received = received(&snapshot);
+    assert_eq!(received.head.status, 200);
+    assert_eq!(
+        received.body.read(0, 100).unwrap(),
+        b"GET /users/1 HTTP/1.1"
+    );
+    assert_eq!(snapshot.history.len(), 1);
+}
+
+#[test]
+fn a_history_entry_opens_its_request_with_that_response() {
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    for path in ["users/get.yml", "health.yml"] {
+        core.send(Command::OpenRequest(RequestPath::new(path)));
+        core.send(Command::Send);
+    }
+    wait(&core, "two entries", |s| s.history.len() == 2);
+    core.send(Command::CloseTab(RequestPath::new("users/get.yml")));
+    wait(&core, "one tab", |s| s.tabs.len() == 1);
+
+    let index = core
+        .snapshot()
+        .history
+        .iter()
+        .position(|e| e.request == RequestPath::new("users/get.yml"))
+        .unwrap();
+    core.send(Command::OpenHistory(index));
+    let snapshot = wait(&core, "the old response", |s| {
+        s.active == Some(RequestPath::new("users/get.yml"))
+            && matches!(response(s), ResponseState::Received(_))
+    });
+    assert_eq!(
+        received(&snapshot).body.read(0, 100).unwrap(),
+        b"GET /users/1 HTTP/1.1"
+    );
+}
+
+#[test]
+fn old_history_is_pruned_when_the_collection_opens() {
+    use apifast_app::{HistoryEntry, HistoryStore};
+
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, data) = start();
+    open(&core, dir.path());
+    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    core.send(Command::Send);
+    wait(&core, "one entry", |s| s.history.len() == 1);
+    drop(core);
+
+    // An entry from a year ago, before the one just sent.
+    let file = std::fs::read_dir(data.path().join("history"))
+        .unwrap()
+        .flatten()
+        .next()
+        .unwrap()
+        .path();
+    let store = apifast_history::FsHistoryStore::new(&file);
+    let mut entries = store.entries().unwrap();
+    let year_ago = entries[0].at_ms - 365 * 24 * 3600 * 1000;
+    entries.insert(
+        0,
+        HistoryEntry::failed(
+            year_ago,
+            RequestPath::new("health.yml"),
+            ("GET".into(), "old".into()),
+            "old".into(),
+        ),
+    );
+    std::fs::remove_file(&file).unwrap();
+    for entry in &entries {
+        store.append(entry).unwrap();
+    }
+
+    let core = Core::start(data.path().to_path_buf(), || {});
+    open(&core, dir.path());
+    let snapshot = wait(&core, "the history", |s| !s.history.is_empty());
+    assert_eq!(snapshot.history.len(), 1);
+    assert_ne!(snapshot.history[0].url, "old");
+    assert_eq!(store.entries().unwrap().len(), 1, "the file was rewritten");
+}

@@ -302,6 +302,7 @@ version = "0.0.0"
 dependencies = [
  "apifast-app",
  "apifast-domain",
+ "serde_json",
  "tempfile",
 ]
 

@@ -86,6 +86,9 @@ fn type_folder(harness: &mut Harness<'_, App>, folder: &std::path::Path) {
     harness.step();
 }
 
+/// The sidebar tab with the history.
+const EN_HISTORY: &str = apifast_gui::strings::EN.sidebar_history;
+
 #[test]
 fn open_select_send_and_see_the_status() {
     let dir = collection(server());
@@ -120,6 +123,10 @@ fn open_select_send_and_see_the_status() {
     harness.get_by_label("Raw").click();
     wait_for(&mut harness, r#"{"ok":true}"#);
     harness.get_by_label("Headers (3)");
+
+    // The send is in the history, in the sidebar.
+    harness.get_by_label(EN_HISTORY).click();
+    wait_for(&mut harness, "health.yml");
 }
 
 #[test]

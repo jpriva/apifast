@@ -9,6 +9,7 @@
 //! → [`RenderedRequest`] (templates and auth applied) → the [`HttpTransport`].
 
 mod error;
+mod history;
 mod host;
 pub mod memory;
 mod organize;
@@ -17,6 +18,9 @@ mod render;
 mod use_cases;
 
 pub use error::{AppError, RepositoryError, StoreError, TransportError};
+pub use history::{
+    HIDDEN, HistoryEntry, HistoryLimits, HistoryOutcome, HistoryStore, hide_query, within_limits,
+};
 pub use host::AppHost;
 pub use organize::{
     Placement, create_folder, create_request, delete_item, move_item, rename_item, slug,

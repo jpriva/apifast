@@ -4,14 +4,15 @@
 //! Every new component is added here.
 
 use apifast_app::{
-    CollectionTree, RequestPath, ResponseHead, TimelineEvent, TimelineKind, TreeItem,
+    CollectionTree, HistoryEntry, RequestPath, ResponseHead, ResponseId, TimelineEvent,
+    TimelineKind, TreeItem,
 };
 use apifast_domain::{Body, Collection, Folder, Header, HttpRequest, Method};
 use apifast_gui::atoms::{VariableHint, VariableHints};
 use apifast_gui::body::BodyHandle;
 use apifast_gui::core::{Received, ResponseState, Tab, TabContext};
 use apifast_gui::molecules::EnvironmentSelector;
-use apifast_gui::organisms::{RequestPanel, ResponseView, TabBar, TreeView, UrlBar};
+use apifast_gui::organisms::{HistoryView, RequestPanel, ResponseView, TabBar, TreeView, UrlBar};
 use apifast_gui::strings::EN;
 use apifast_gui::{atoms, theme};
 use eframe::egui::{self, Theme};
@@ -34,6 +35,7 @@ struct Column {
     request: HttpRequest,
     request_panel: RequestPanel,
     responses: Vec<ResponseView>,
+    history: HistoryView,
 }
 
 impl Default for Column {
@@ -52,6 +54,7 @@ impl Default for Column {
             request: sample_request(),
             request_panel: RequestPanel::default(),
             responses: Vec::new(),
+            history: HistoryView::default(),
         }
     }
 }
@@ -184,6 +187,11 @@ fn showcase(
                 .show(ui, tree, 0, Some(&RequestPath::new("login.yml")), &EN);
         });
     });
+    section(ui, "HistoryView", |ui| {
+        ui.allocate_ui(egui::vec2(ui.available_width(), 120.0), |ui| {
+            let _ = state.history.show(ui, &sample_history(), 10_000_000, &EN);
+        });
+    });
     section(ui, "ResponseView", |ui| {
         state
             .responses
@@ -197,6 +205,34 @@ fn showcase(
             });
         }
     });
+}
+
+fn sample_history() -> Vec<HistoryEntry> {
+    let head = ResponseHead {
+        status: 201,
+        version: "HTTP/1.1".into(),
+        url: "http://localhost:8080/users".into(),
+        redirects: 0,
+        headers: Vec::new(),
+        elapsed_ms: 182,
+        timeline: Vec::new(),
+    };
+    vec![
+        HistoryEntry::failed(
+            10_000_000 - 7_200_000,
+            RequestPath::new("health.yml"),
+            ("GET".into(), "{{host}}/health".into()),
+            "cannot connect to `localhost:8080`".into(),
+        ),
+        HistoryEntry::received(
+            10_000_000 - 65_000,
+            RequestPath::new("users/create.yml"),
+            ("POST".into(), "{{host}}/users".into()),
+            head,
+            (64, ResponseId("sample".into())),
+            false,
+        ),
+    ]
 }
 
 fn sample_tree() -> CollectionTree {

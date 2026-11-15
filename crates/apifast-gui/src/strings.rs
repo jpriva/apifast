@@ -34,6 +34,26 @@ pub struct Strings {
     pub body: &'static str,
     /// Response tab with the headers.
     pub headers: &'static str,
+    /// Sidebar tab with the collection's tree.
+    pub sidebar_collection: &'static str,
+    /// Sidebar tab with the history of sends.
+    pub sidebar_history: &'static str,
+    /// Hint of a filter field.
+    pub filter: &'static str,
+    /// Accessible name of the history filter.
+    pub filter_history: &'static str,
+    /// Shown when there is no history.
+    pub history_empty: &'static str,
+    /// A send that failed, in the history.
+    pub failed: &'static str,
+    /// After a number of seconds.
+    pub seconds_ago: &'static str,
+    /// After a number of minutes.
+    pub minutes_ago: &'static str,
+    /// After a number of hours.
+    pub hours_ago: &'static str,
+    /// After a number of days.
+    pub days_ago: &'static str,
     /// Response tab with the events of the send.
     pub timeline: &'static str,
     /// Shown when a response has no timeline.
@@ -244,6 +264,16 @@ pub const EN: Strings = Strings {
     no_request: "Select a request in the sidebar.",
     body: "Body",
     headers: "Headers",
+    sidebar_collection: "Collection",
+    sidebar_history: "History",
+    filter: "Filter",
+    filter_history: "Filter the history",
+    history_empty: "Nothing sent yet.",
+    failed: "Failed",
+    seconds_ago: "s ago",
+    minutes_ago: "min ago",
+    hours_ago: "h ago",
+    days_ago: "d ago",
     timeline: "Timeline",
     timeline_empty: "This response has no timeline.",
     event_redirect: "Redirect",

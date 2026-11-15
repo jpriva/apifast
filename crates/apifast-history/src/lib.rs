@@ -1,11 +1,17 @@
 //! Response history and bodies on disk.
 //!
+//! [`FsHistoryStore`] keeps the history of sends of a collection as JSON
+//! Lines, in `history/<collection-id>.jsonl`.
+//!
 //! [`FsResponseStore`] keeps one file per response body in a folder of the
 //! user's data directory (outside the collection, see ADR 0008), such as
 //! `responses/<collection-id>/`. Bodies are written in chunks through a fixed
 //! buffer and read back in windows, so memory never grows with their size.
 
 pub mod dirs;
+mod history;
+
+pub use history::FsHistoryStore;
 
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
