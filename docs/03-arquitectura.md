@@ -120,7 +120,7 @@ Definidos como traits en `apifast-app`:
 | `HistoryStore` | Registrar y consultar ejecuciones | `apifast-history` |
 | `CookieStore` | Persistir el tarro de cookies | `apifast-history` |
 | `SessionStore` | Guardar las pestañas abiertas y sus borradores sin guardar | `apifast-storage-fs` |
-| `FsWatcher` | Notificar cambios externos en la colección | `apifast-watch` |
+| `FsWatcher` | Notificar cambios externos en la colección, agrupados en lotes de rutas relativas. No implementa un puerto: el driver lo arranca al abrir la colección y reconcilia cada lote (`ApplyExternalChange`) | `apifast-watch` |
 | `ScriptEngine` | Ejecutar scripts de usuario | `apifast-script-js` |
 | `Clock` | Hora actual y medición de tiempos | Sistema, o falso en tests |
 | `Prompter` | Pedir un valor al usuario (`{{?Texto}}`) | GUI o terminal |

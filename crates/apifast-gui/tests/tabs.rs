@@ -24,6 +24,7 @@ fn tab(path: &str, name: &str, dirty: bool) -> Tab {
         response: ResponseState::Idle,
         revision: 0,
         context: std::sync::Arc::default(),
+        conflict: false,
     }
 }
 

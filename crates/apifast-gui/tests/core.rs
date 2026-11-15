@@ -802,3 +802,146 @@ fn environments_are_created_renamed_saved_and_deleted() {
     assert_eq!(snapshot.environment, None);
     assert_eq!(host(&snapshot), None);
 }
+
+fn request_file(name: &str, url: &str) -> String {
+    format!("info:\n  name: {name}\n  type: http\nhttp:\n  method: GET\n  url: \"{url}\"\n")
+}
+
+fn active_tab(snapshot: &Snapshot) -> &apifast_gui::core::Tab {
+    snapshot.active_tab().unwrap()
+}
+
+#[test]
+fn a_file_changed_outside_reaches_its_clean_tab_and_the_tree() {
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    let before = wait(&core, "the tab", |s| s.active_tab().is_some());
+    let revision = active_tab(&before).revision;
+
+    std::fs::write(
+        dir.path().join("health.yml"),
+        request_file("Health", "{{host}}/ping"),
+    )
+    .unwrap();
+    let snapshot = wait(&core, "the new URL", |s| {
+        s.active_tab()
+            .is_some_and(|t| t.saved.url == "{{host}}/ping")
+    });
+    let tab = active_tab(&snapshot);
+    assert!(tab.revision > revision, "the editor drops its copy");
+    assert!(!tab.conflict);
+
+    std::fs::write(dir.path().join("new.yml"), request_file("New", "x")).unwrap();
+    wait(&core, "the new request in the tree", |s| {
+        names(&s.collection.as_ref().unwrap().tree.items).contains(&"New".to_owned())
+    });
+}
+
+#[test]
+fn saving_is_not_taken_for_a_change_from_outside() {
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    let snapshot = wait(&core, "the tab", |s| s.active_tab().is_some());
+    core.send(Command::Edit {
+        path: RequestPath::new("health.yml"),
+        request: edited(&snapshot, "{{host}}/saved"),
+    });
+    core.send(Command::Save(RequestPath::new("health.yml")));
+    wait(&core, "saved", |s| !active_tab(s).is_dirty());
+    // Longer than the watcher's quiet time.
+    std::thread::sleep(Duration::from_millis(600));
+    let snapshot = core.snapshot();
+    let tab = active_tab(&snapshot);
+    assert!(!tab.conflict);
+    assert_eq!(tab.saved.url, "{{host}}/saved");
+}
+
+#[test]
+fn a_draft_and_a_change_from_outside_are_a_conflict_to_settle() {
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    let path = RequestPath::new("health.yml");
+    core.send(Command::OpenRequest(path.clone()));
+    let snapshot = wait(&core, "the tab", |s| s.active_tab().is_some());
+    core.send(Command::Edit {
+        path: path.clone(),
+        request: edited(&snapshot, "{{host}}/mine"),
+    });
+    wait(&core, "the draft", |s| active_tab(s).is_dirty());
+
+    let theirs = |url: &str| {
+        std::fs::write(dir.path().join("health.yml"), request_file("Health", url)).unwrap();
+    };
+    theirs("{{host}}/theirs");
+    let snapshot = wait(&core, "the conflict", |s| active_tab(s).conflict);
+    let tab = active_tab(&snapshot);
+    assert_eq!(
+        tab.request().url,
+        "{{host}}/mine",
+        "the draft stays on screen"
+    );
+    assert_eq!(tab.saved.url, "{{host}}/theirs");
+
+    core.send(Command::ResolveConflict {
+        path: path.clone(),
+        keep_draft: true,
+    });
+    let snapshot = wait(&core, "kept", |s| !active_tab(s).conflict);
+    assert_eq!(active_tab(&snapshot).request().url, "{{host}}/mine");
+
+    theirs("{{host}}/again");
+    wait(&core, "another conflict", |s| active_tab(s).conflict);
+    core.send(Command::ResolveConflict {
+        path,
+        keep_draft: false,
+    });
+    let snapshot = wait(&core, "taken from disk", |s| !active_tab(s).conflict);
+    let tab = active_tab(&snapshot);
+    assert!(!tab.is_dirty());
+    assert_eq!(tab.request().url, "{{host}}/again");
+}
+
+#[test]
+fn a_file_removed_outside_closes_its_tab_unless_it_has_a_draft() {
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::OpenRequest(RequestPath::new("users/get.yml")));
+    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    let snapshot = wait(&core, "two tabs", |s| s.tabs.len() == 2);
+    core.send(Command::Edit {
+        path: RequestPath::new("health.yml"),
+        request: edited(&snapshot, "{{host}}/kept"),
+    });
+    wait(&core, "the draft", |s| {
+        s.tabs.iter().any(apifast_gui::core::Tab::is_dirty)
+    });
+
+    std::fs::remove_file(dir.path().join("users/get.yml")).unwrap();
+    std::fs::remove_file(dir.path().join("health.yml")).unwrap();
+    let snapshot = wait(&core, "the clean tab closed", |s| s.tabs.len() == 1);
+    assert_eq!(tab_names(&snapshot), ["Health"]);
+}
+
+#[test]
+fn an_environment_changed_outside_reaches_the_variables() {
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::SelectEnvironment(Some("staging".into())));
+    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    wait(&core, "the tab", |s| s.active_tab().is_some());
+    std::fs::write(
+        dir.path().join("environments/staging.yml"),
+        "name: staging\nvariables:\n  - name: host\n    value: http://elsewhere\n",
+    )
+    .unwrap();
+    wait(&core, "the new host", |s| {
+        host(s).as_deref() == Some("http://elsewhere")
+    });
+}

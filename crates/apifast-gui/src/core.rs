@@ -18,10 +18,11 @@ use std::time::{Duration, SystemTime};
 use apifast_app::{
     AppError, CancelToken, Clock, CollectionRepository, CollectionTree, EnvironmentRepository,
     HistoryEntry, HistoryLimits, HistoryOutcome, HistoryStore, ItemPath, NoPrompter, Placement,
-    RequestPath, ResponseHead, ResponseId, ResponseStore, SendOptions, SendPorts, Session,
-    SessionStore, SessionTab, TransportError, create_environment, create_folder, create_request,
-    delete_environment, delete_item, load_request, move_item, open_collection, rename_environment,
-    rename_item, resolve_request_variables, save_environment, save_request, send_request,
+    RepositoryError, RequestPath, ResponseHead, ResponseId, ResponseStore, SendOptions, SendPorts,
+    Session, SessionStore, SessionTab, TransportError, create_environment, create_folder,
+    create_request, delete_environment, delete_item, load_request, move_item, open_collection,
+    rename_environment, rename_item, resolve_request_variables, save_environment, save_request,
+    send_request,
 };
 use apifast_domain::{
     AuthScheme, Chain, Collection, Environment, Header, HttpRequest, Origin, Resolved,
@@ -30,6 +31,7 @@ use apifast_domain::{
 use apifast_history::{FsHistoryStore, FsResponseStore, Limits};
 use apifast_http::ReqwestTransport;
 use apifast_storage_fs::{FsCollection, FsSessionStore};
+use apifast_watch::{Changes, FsWatcher};
 use tokio::sync::mpsc;
 
 use crate::body::{BodyHandle, BodySource};
@@ -190,6 +192,15 @@ pub enum Command {
     SaveEnvironment(Box<Environment>),
     /// Deletes an environment.
     DeleteEnvironment(String),
+    /// Settles a tab whose file changed outside apifast while it had a
+    /// draft: keep the draft (saving then replaces the file) or take the
+    /// file and drop the draft.
+    ResolveConflict {
+        /// The tab.
+        path: RequestPath,
+        /// Whether the draft is kept.
+        keep_draft: bool,
+    },
 }
 
 /// Everything the interface shows, as of one moment.
@@ -252,6 +263,9 @@ pub struct Tab {
     pub revision: u64,
     /// What its request sees from its folders, collection and environment.
     pub context: Arc<TabContext>,
+    /// Its file changed outside apifast while it had a draft: the interface
+    /// asks which to keep (see [`Command::ResolveConflict`]).
+    pub conflict: bool,
 }
 
 /// What a tab's request sees from outside itself: the variables of the
@@ -341,6 +355,8 @@ enum Message {
     SendFinished(Box<Finished>),
     /// The history of collection number `.0` was pruned and read.
     HistoryLoaded(u64, Vec<HistoryEntry>),
+    /// Files of collection number `.0` changed outside apifast.
+    External(u64, Changes),
     WriteSession,
 }
 
@@ -444,6 +460,9 @@ struct Open {
     sessions: FsSessionStore,
     /// Numbers this opening, so a late history load for another is ignored.
     opened: u64,
+    /// Watches the folder while the collection is open. `None` if the
+    /// system refused: changes made outside then show after reopening.
+    _watcher: Option<FsWatcher>,
 }
 
 struct State {
@@ -480,6 +499,11 @@ impl State {
                     self.finish_send(id, result, entry);
                 }
                 Message::HistoryLoaded(opened, entries) => self.history_loaded(opened, entries),
+                Message::External(opened, changes) => {
+                    if self.open.as_ref().is_some_and(|open| open.opened == opened) {
+                        self.apply_external(&changes);
+                    }
+                }
                 Message::WriteSession => {
                     self.session_pending = false;
                     self.write_session();
@@ -583,6 +607,17 @@ impl State {
                 }
             }
             Command::OpenHistory(index) => self.open_history(index),
+            Command::ResolveConflict { path, keep_draft } => {
+                let revision = self.next_revision();
+                if let Some(tab) = self.tab_mut(&path) {
+                    tab.conflict = false;
+                    if !keep_draft {
+                        tab.draft = None;
+                        tab.revision = revision;
+                    }
+                }
+                self.refresh_variables(Some(&path));
+            }
             Command::CreateEnvironment(_)
             | Command::RenameEnvironment { .. }
             | Command::SaveEnvironment(_)
@@ -628,7 +663,13 @@ impl State {
             Ok(()) => self.snapshot.error = None,
             Err(e) => self.snapshot.error = Some(e.to_string()),
         }
-        match repo.environments() {
+        self.reload_environments();
+    }
+
+    /// Reads the environments again.
+    fn reload_environments(&mut self) {
+        let Some(open) = &self.open else { return };
+        match open.repo.environments() {
             Ok(environments) => {
                 self.snapshot.environments = environments.iter().map(|e| e.name.clone()).collect();
                 self.snapshot.environment_files = Arc::new(environments);
@@ -714,6 +755,7 @@ impl State {
                 response: ResponseState::Idle,
                 revision: self.next_revision(),
                 context: Arc::default(),
+                conflict: false,
             });
         }
         let active = (session.active)
@@ -724,6 +766,16 @@ impl State {
         let opened = self.next_revision();
         let (responses, history) = (Arc::new(responses), Arc::new(history));
         self.load_history(opened, responses.clone(), history.clone());
+        let messages = self.messages.clone();
+        let watcher = FsWatcher::start(&root, move |changes| {
+            if let Some(messages) = messages.upgrade() {
+                let _ = messages.send(Message::External(opened, changes));
+            }
+        });
+        let (watcher, error) = match watcher {
+            Ok(watcher) => (Some(watcher), error),
+            Err(e) => (None, error.or_else(|| Some(e.to_string()))),
+        };
         self.open = Some(Open {
             repo: Arc::new(repo),
             transport: Arc::new(transport),
@@ -731,6 +783,7 @@ impl State {
             history,
             sessions,
             opened,
+            _watcher: watcher,
         });
         self.snapshot = Snapshot {
             version: self.snapshot.version,
@@ -762,6 +815,7 @@ impl State {
                     response: ResponseState::Idle,
                     revision: self.next_revision(),
                     context: Arc::default(),
+                    conflict: false,
                 };
                 // New tabs go right after the active one.
                 let at = (self.snapshot.active.as_ref())
@@ -809,6 +863,8 @@ impl State {
             tab.saved = draft;
             tab.draft = None;
             tab.revision = revision;
+            // Saving replaced the file: nothing is left to settle.
+            tab.conflict = false;
         }
         self.snapshot.error = None;
         self.refresh_variables(Some(path));
@@ -865,6 +921,77 @@ impl State {
             inherited_settings: inherited.settings().clone(),
             revision: 0,
         }
+    }
+
+    /// Reconciles files changed outside apifast with what is open. A file
+    /// that reads as what the tab already holds was written by apifast
+    /// itself, and changes nothing.
+    fn apply_external(&mut self, changes: &Changes) {
+        let Some(open) = &self.open else { return };
+        let repo = open.repo.clone();
+        // A changed path is a file, or a folder renamed or removed whole.
+        let touched = |path: &str| {
+            changes.rescan
+                || (changes.paths.iter())
+                    .any(|changed| path == changed || path.starts_with(&format!("{changed}/")))
+        };
+        let shared = changes.rescan
+            || changes.paths.iter().any(|path| {
+                path == "opencollection.yml"
+                    || path == ".env"
+                    || path == "environments"
+                    || path.starts_with("environments/")
+                    || path.ends_with("folder.yml")
+            });
+        self.reload_tree();
+        if shared {
+            self.reload_environments();
+        }
+        let tabs: Vec<RequestPath> = (self.snapshot.tabs.iter())
+            .map(|tab| tab.path.clone())
+            .filter(|path| touched(path.as_str()))
+            .collect();
+        for path in tabs {
+            match load_request(&*repo, &path) {
+                Ok(loaded) => self.take_external(&path, loaded.request),
+                Err(AppError::Repository(RepositoryError::NotFound(_))) => {
+                    // Gone. Changes not saved stay: saving writes the file
+                    // again. Without them, there is nothing left to show.
+                    if self.tab(&path).is_some_and(|tab| tab.draft.is_none()) {
+                        self.close_tab(&path);
+                    }
+                }
+                // Half written, or not valid yet: the next change will tell.
+                Err(_) => {}
+            }
+        }
+        if shared {
+            self.refresh_variables(None);
+        }
+    }
+
+    /// The file of tab `path` now holds `request`.
+    fn take_external(&mut self, path: &RequestPath, request: HttpRequest) {
+        let revision = self.next_revision();
+        let Some(tab) = self.tab_mut(path) else {
+            return;
+        };
+        if request == tab.saved {
+            return;
+        }
+        match &tab.draft {
+            None => tab.revision = revision,
+            // The file now says what the draft says: nothing to settle.
+            Some(draft) if *draft == request => {
+                tab.draft = None;
+                tab.conflict = false;
+                tab.revision = revision;
+            }
+            // Both changed: keep the draft on screen and ask.
+            Some(_) => tab.conflict = true,
+        }
+        tab.saved = request;
+        self.refresh_variables(Some(path));
     }
 
     fn reload_tree(&mut self) {

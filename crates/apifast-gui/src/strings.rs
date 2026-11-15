@@ -86,6 +86,12 @@ pub struct Strings {
     pub from: &'static str,
     /// Column of the scopes a variable overrides.
     pub overrides: &'static str,
+    /// Shown over a request changed on disk while it had a draft.
+    pub changed_on_disk: &'static str,
+    /// Keeps the draft over the file changed on disk.
+    pub keep_mine: &'static str,
+    /// Drops the draft for the file changed on disk.
+    pub load_from_disk: &'static str,
     /// Sidebar tab with the collection's tree.
     pub sidebar_collection: &'static str,
     /// Sidebar tab with the history of sends.
@@ -342,6 +348,9 @@ pub const EN: Strings = Strings {
     new_variable: "New variable",
     from: "From",
     overrides: "Overrides",
+    changed_on_disk: "This request changed on disk while you were editing it.",
+    keep_mine: "Keep my changes",
+    load_from_disk: "Load from disk",
     sidebar_collection: "Collection",
     sidebar_history: "History",
     filter: "Filter",

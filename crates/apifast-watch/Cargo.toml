@@ -1,0 +1,18 @@
+[package]
+name = "apifast-watch"
+description = "Watches a collection's folder for changes made outside apifast."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+notify.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

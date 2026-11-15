@@ -314,6 +314,7 @@ fn sample_tabs() -> Vec<Tab> {
             response: ResponseState::Idle,
             revision: 0,
             context: std::sync::Arc::default(),
+            conflict: false,
         }
     };
     vec![

@@ -119,7 +119,14 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
   - Renombrar sigue a los entornos que lo extienden, y su archivo pasa a llamarse como el entorno, como en Bruno. No se puede borrar un entorno que otro extiende, ni guardar un `extends` que no existe o forma un ciclo.
   - La vista All variables muestra cada variable que ve la request activa, con su valor, de dónde viene y qué ámbitos sustituye.
   - Marcar una variable como secreta espera a la bóveda (F3): sin ella, solo borraría el valor del archivo.
-- [ ] `apifast-watch`: recarga ante cambios externos y resolución de conflictos con borradores.
+- [x] `apifast-watch`: recarga ante cambios externos y resolución de conflictos con borradores.
+  - `FsWatcher` (con `notify`) agrupa las ráfagas: espera 200 ms de calma, con un máximo de 2 s, y entrega rutas relativas. Ignora `.git`, `.apifast`, `node_modules` y los temporales de editores y de las escrituras atómicas propias.
+  - El núcleo relee el árbol y, si cambió `opencollection.yml`, un `folder.yml`, `.env` o `environments/`, también los entornos y lo heredado.
+  - Para cada pestaña abierta cuyo archivo cambió:
+    - si el archivo dice lo mismo que ya tiene, era una escritura propia y no se hace nada;
+    - si no tiene borrador, toma lo nuevo;
+    - si tiene borrador, mantiene el borrador en pantalla y ofrece "Keep my changes" o "Load from disk";
+    - si el archivo se borró, se cierra si estaba limpia, y con borrador se queda (guardar lo vuelve a escribir).
 - [ ] Paleta de comandos y atajos reasignables.
 - [ ] Temas claro y oscuro.
 - [ ] Ajustes de la aplicación.

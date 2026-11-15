@@ -97,6 +97,7 @@ impl MainScreen {
             &mut self.editor,
         );
 
+        let mut resolve = None;
         let (
             (environment, edit_environments),
             (tree_event, picked),
@@ -117,6 +118,9 @@ impl MainScreen {
                     ui.label(RichText::new(strings.no_request).color(muted));
                     return (tab_event, (None, false));
                 };
+                if tab.conflict {
+                    resolve = conflict_banner(ui, strings);
+                }
                 let edits = editor_area(
                     ui,
                     tab,
@@ -131,6 +135,12 @@ impl MainScreen {
         );
 
         let mut commands = Vec::new();
+        if let (Some(keep_draft), Some(tab)) = (resolve, active) {
+            commands.push(Command::ResolveConflict {
+                path: tab.path.clone(),
+                keep_draft,
+            });
+        }
         if edit_environments || ui.input_mut(|i| i.consume_shortcut(&ENVIRONMENTS)) {
             self.environments.open = !self.environments.open;
         }
@@ -304,6 +314,31 @@ fn shortcuts(ui: &egui::Ui, active: Option<&Tab>, sending: bool) -> Vec<Command>
         }
         commands
     })
+}
+
+/// Shown over a request whose file changed outside apifast while it had
+/// changes not saved. Returns whether to keep them, once the user chooses.
+fn conflict_banner(ui: &mut egui::Ui, strings: &Strings) -> Option<bool> {
+    let warning = theme::palette(ui).warning;
+    let mut choice = None;
+    egui::Frame::new()
+        .fill(warning.gamma_multiply(theme::BADGE_TINT))
+        .stroke(egui::Stroke::new(1.0, warning))
+        .corner_radius(theme::radius::MEDIUM)
+        .inner_margin(theme::space::M)
+        .show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new(strings.changed_on_disk).color(warning));
+                if ui.button(strings.keep_mine).clicked() {
+                    choice = Some(true);
+                }
+                if ui.button(strings.load_from_disk).clicked() {
+                    choice = Some(false);
+                }
+            });
+        });
+    ui.add_space(theme::space::S);
+    choice
 }
 
 /// The top bar: the collection's name, then the environment, its color and
