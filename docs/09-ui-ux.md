@@ -80,8 +80,9 @@ Los paneles de request y respuesta se pueden disponer uno encima del otro o lado
 
 ### Editor de código
 
-- Resaltado para JSON, XML, GraphQL y texto con plantillas.
-- Formatear (`Alt+Shift+F`), buscar y reemplazar.
+- Resaltado para JSON, XML, SPARQL y texto con plantillas; GraphQL, cuando exista ese tipo de body.
+- Formatear (`Alt+Shift+F` o el botón Format) JSON y XML, con dos espacios de sangría. El formateador solo mueve espacios, así que acepta `{{variables}}` donde va un valor (`"id": {{id}}`). Si los corchetes o las etiquetas no cuadran, o algo queda sin cerrar, no cambia nada y dice en qué línea está el problema.
+- Buscar y reemplazar (pendiente).
 - Las variables se resaltan: las que se resuelven, sobre un tinte de su color; las que no existen, en otro color y subrayadas, para que el color no sea la única señal; las que se generan al enviar (`{{$...}}`, `{{?...}}`, `process.env`, funciones), en un tercer color.
 - Al pasar el cursor sobre una variable: valor, ámbito de origen y enlace para editarla.
 

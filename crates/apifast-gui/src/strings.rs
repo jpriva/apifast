@@ -148,6 +148,14 @@ pub struct Strings {
     pub body_file: &'static str,
     /// Shown for body types this version cannot edit.
     pub body_not_editable: &'static str,
+    /// Button that formats the body.
+    pub format: &'static str,
+    /// Hover of the format button, with its shortcut.
+    pub format_hint: &'static str,
+    /// Shown when the body cannot be formatted, before the line number.
+    pub format_failed: &'static str,
+    /// Shown over a body too large to highlight.
+    pub highlight_off: &'static str,
     /// Accessible name of the auth type selector.
     pub auth_type: &'static str,
     /// Auth type: inherit.
@@ -267,6 +275,10 @@ pub const EN: Strings = Strings {
     body_multipart: "Multipart form",
     body_file: "File",
     body_not_editable: "This body type cannot be edited here yet; it is sent and saved as it is.",
+    format: "Format",
+    format_hint: "Format (Alt+Shift+F)",
+    format_failed: "Could not format: brackets or tags do not match, or something is not closed. Check line",
+    highlight_off: "Highlighting is off: this body is over 200 KB.",
     auth_type: "Auth type",
     auth_inherit: "Inherit",
     auth_none: "No auth",

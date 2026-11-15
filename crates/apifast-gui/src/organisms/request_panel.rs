@@ -7,7 +7,8 @@ use apifast_domain::{
 };
 use eframe::egui::{self, RichText};
 
-use crate::atoms::{TemplateField, TemplateFieldTexts, VariableHints};
+use crate::atoms::{CodeEditor, TemplateField, TemplateFieldTexts, VariableHints};
+use crate::code::{self, HIGHLIGHT_LIMIT, Language};
 use crate::core::TabContext;
 use crate::organisms::KvTable;
 use crate::strings::Strings;
@@ -271,44 +272,60 @@ impl BodyKind {
 
 fn body(ui: &mut egui::Ui, body: &mut Body, hints: &VariableHints, strings: &Strings) -> bool {
     let current = BodyKind::of(body);
+    let editor = ui.make_persistent_id("body-text");
+    let formats = Language::of(body).is_some_and(Language::formats);
     let mut chosen = None;
-    egui::ComboBox::from_id_salt("body-type")
-        .selected_text(current.label(strings))
-        .show_ui(ui, |ui| {
-            let mut kinds = BodyKind::EDITABLE.to_vec();
-            if !kinds.contains(&current) {
-                kinds.push(current);
-            }
-            for kind in kinds {
-                if ui
-                    .selectable_label(kind == current, kind.label(strings))
-                    .clicked()
-                {
-                    chosen = Some(kind);
+    let mut format = false;
+    ui.horizontal(|ui| {
+        egui::ComboBox::from_id_salt("body-type")
+            .selected_text(current.label(strings))
+            .show_ui(ui, |ui| {
+                let mut kinds = BodyKind::EDITABLE.to_vec();
+                if !kinds.contains(&current) {
+                    kinds.push(current);
                 }
+                for kind in kinds {
+                    if ui
+                        .selectable_label(kind == current, kind.label(strings))
+                        .clicked()
+                    {
+                        chosen = Some(kind);
+                    }
+                }
+            })
+            .response
+            .on_hover_text(strings.body_type);
+        if formats {
+            format = ui
+                .button(strings.format)
+                .on_hover_text(strings.format_hint)
+                .clicked();
+        }
+    });
+    // Alt+Shift+F while the editor has the focus. Taken before the editor
+    // runs, so the key does not also type a letter.
+    if formats && ui.memory(|m| m.has_focus(editor)) {
+        format |= ui.input_mut(|i| {
+            let pressed =
+                i.consume_key(egui::Modifiers::ALT | egui::Modifiers::SHIFT, egui::Key::F);
+            if pressed {
+                i.events.retain(|e| !matches!(e, egui::Event::Text(_)));
             }
-        })
-        .response
-        .on_hover_text(strings.body_type);
+            pressed
+        });
+    }
     let mut changed = false;
     if let Some(kind) = chosen.filter(|kind| *kind != current) {
         kind.convert(body);
         changed = true;
     }
     ui.add_space(theme::space::S);
+    let language = Language::of(body);
     match body {
         Body::None => {}
         Body::Json(text) | Body::Text(text) | Body::Xml(text) | Body::Sparql(text) => {
-            changed |= ui
-                .add(
-                    egui::TextEdit::multiline(text)
-                        .id_salt("body-text")
-                        .code_editor()
-                        .desired_rows(BODY_ROWS)
-                        .desired_width(f32::INFINITY),
-                )
-                .accessible_name(strings.body)
-                .changed();
+            let language = language.unwrap_or(Language::Text);
+            changed |= code_body(ui, text, language, editor, format, hints, strings);
         }
         Body::FormUrlEncoded(fields) => {
             changed |= KvTable::new(
@@ -330,6 +347,54 @@ fn body(ui: &mut egui::Ui, body: &mut Body, hints: &VariableHints, strings: &Str
         }
     }
     changed
+}
+
+/// The editor of a text body. `format` asks to format it first. Returns
+/// whether the text changed.
+fn code_body(
+    ui: &mut egui::Ui,
+    text: &mut String,
+    language: Language,
+    editor: egui::Id,
+    format: bool,
+    hints: &VariableHints,
+    strings: &Strings,
+) -> bool {
+    // The line where formatting failed, shown until the text changes.
+    let failed = editor.with("format-failed");
+    let mut changed = false;
+    if format {
+        match code::format(text, language) {
+            Ok(formatted) => {
+                if formatted != *text {
+                    *text = formatted;
+                    changed = true;
+                }
+                ui.data_mut(|d| d.remove::<usize>(failed));
+            }
+            Err(error) => {
+                let line = code::line_of(text, error.offset);
+                ui.data_mut(|d| d.insert_temp(failed, line));
+            }
+        }
+    }
+    if let Some(line) = ui.data(|d| d.get_temp::<usize>(failed)) {
+        let message = format!("{} {line}.", strings.format_failed);
+        ui.label(RichText::new(message).color(theme::palette(ui).danger));
+    }
+    if text.len() > HIGHLIGHT_LIMIT {
+        ui.label(muted(ui, strings.highlight_off));
+    }
+    let edited = CodeEditor::new(text, language, hints, texts(strings))
+        .id(editor)
+        .desired_rows(BODY_ROWS)
+        .accessible_name(strings.body)
+        .show(ui)
+        .changed();
+    if edited {
+        ui.data_mut(|d| d.remove::<usize>(failed));
+    }
+    changed || edited
 }
 
 /// The kinds of auth the selector offers.

@@ -237,7 +237,10 @@ fn sample_request() -> HttpRequest {
         "{{host}}/users/:id?notify=true",
     );
     request.headers.push(Header::new("x-trace", "{{$uuid}}"));
-    request.body = Body::Json("{ \"name\": \"{{name}}\" }".into());
+    // On one line, so the Format button has something to do.
+    request.body = Body::Json(
+        r#"{"name": "{{name}}", "age": 30, "admin": false, "id": {{user_id}}, "tags": []}"#.into(),
+    );
     apifast_domain::sync_params_from_url(&mut request);
     request
 }

@@ -271,7 +271,7 @@ fn byte_at(text: &str, chars: usize) -> usize {
 }
 
 /// The variable or generated tag under character `index`, if any.
-fn span_at(text: &str, index: usize, hints: &VariableHints) -> Option<Span> {
+pub(crate) fn span_at(text: &str, index: usize, hints: &VariableHints) -> Option<Span> {
     let byte = text
         .char_indices()
         .nth(index)
@@ -281,7 +281,12 @@ fn span_at(text: &str, index: usize, hints: &VariableHints) -> Option<Span> {
     })
 }
 
-fn hover(ui: &mut egui::Ui, span: &Span, hints: &VariableHints, texts: TemplateFieldTexts<'_>) {
+pub(crate) fn hover(
+    ui: &mut egui::Ui,
+    span: &Span,
+    hints: &VariableHints,
+    texts: TemplateFieldTexts<'_>,
+) {
     let palette = theme::palette(ui);
     let Some(name) = &span.variable else {
         ui.label(texts.generated);
@@ -309,32 +314,43 @@ fn layout_job(
     let mut job = LayoutJob::default();
     for span in spans(text, hints) {
         let plain = TextFormat::simple(font.clone(), text_color);
-        let format = match span.kind {
-            SpanKind::Text => plain,
-            SpanKind::Defined => TextFormat {
-                color: palette.variable,
-                background: palette.variable.gamma_multiply(theme::BADGE_TINT),
-                ..plain
-            },
-            // Underlined too: color is never the only signal.
-            SpanKind::Missing => TextFormat {
-                color: palette.variable_missing,
-                underline: Stroke::new(1.0, palette.variable_missing),
-                ..plain
-            },
-            SpanKind::Generated => TextFormat {
-                color: palette.variable_generated,
-                ..plain
-            },
-            SpanKind::Invalid => TextFormat {
-                color: palette.variable_missing,
-                italics: true,
-                ..plain
-            },
-        };
-        job.append(&text[span.range], 0.0, format);
+        job.append(
+            &text[span.range],
+            0.0,
+            variable_format(span.kind, plain, palette),
+        );
     }
     job
+}
+/// `plain` as a span of `kind` is drawn.
+pub(crate) fn variable_format(
+    kind: SpanKind,
+    plain: TextFormat,
+    palette: &theme::Palette,
+) -> TextFormat {
+    match kind {
+        SpanKind::Text => plain,
+        SpanKind::Defined => TextFormat {
+            color: palette.variable,
+            background: palette.variable.gamma_multiply(theme::BADGE_TINT),
+            ..plain
+        },
+        // Underlined too: color is never the only signal.
+        SpanKind::Missing => TextFormat {
+            color: palette.variable_missing,
+            underline: Stroke::new(1.0, palette.variable_missing),
+            ..plain
+        },
+        SpanKind::Generated => TextFormat {
+            color: palette.variable_generated,
+            ..plain
+        },
+        SpanKind::Invalid => TextFormat {
+            color: palette.variable_missing,
+            italics: true,
+            ..plain
+        },
+    }
 }
 
 /// Keeps a built [`VariableHints`] until its source changes, so screens do

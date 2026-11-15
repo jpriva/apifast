@@ -85,6 +85,14 @@ pub struct Palette {
     /// A tag whose value is made when sending: `{{$random}}`, `{{?Ask}}`,
     /// `{{process.env.X}}` and functions.
     pub variable_generated: Color32,
+    /// Code: JSON keys, XML attribute names and SPARQL variables.
+    pub syntax_key: Color32,
+    /// Code: strings and attribute values.
+    pub syntax_string: Color32,
+    /// Code: numbers.
+    pub syntax_number: Color32,
+    /// Code: `true`, `false`, `null`, XML tag names and SPARQL keywords.
+    pub syntax_keyword: Color32,
 }
 
 /// The light theme.
@@ -108,6 +116,10 @@ pub const LIGHT: Palette = Palette {
     variable: Color32::from_rgb(0x0b, 0x6e, 0x74),
     variable_missing: Color32::from_rgb(0xa8, 0x24, 0x24),
     variable_generated: Color32::from_rgb(0x7a, 0x3e, 0xc0),
+    syntax_key: Color32::from_rgb(0x1b, 0x55, 0xb3),
+    syntax_string: Color32::from_rgb(0x15, 0x69, 0x2b),
+    syntax_number: Color32::from_rgb(0x8a, 0x51, 0x00),
+    syntax_keyword: Color32::from_rgb(0x9b, 0x2c, 0x6b),
 };
 
 /// The dark theme.
@@ -131,6 +143,10 @@ pub const DARK: Palette = Palette {
     variable: Color32::from_rgb(0x5c, 0xcf, 0xd4),
     variable_missing: Color32::from_rgb(0xff, 0x7b, 0x72),
     variable_generated: Color32::from_rgb(0xc3, 0x9b, 0xff),
+    syntax_key: Color32::from_rgb(0x6c, 0xa6, 0xff),
+    syntax_string: Color32::from_rgb(0x8f, 0xd1, 0x9e),
+    syntax_number: Color32::from_rgb(0xf2, 0xb5, 0x4a),
+    syntax_keyword: Color32::from_rgb(0xff, 0x8f, 0xc8),
 };
 
 /// The palette for the theme `ui` is drawn with.
@@ -245,6 +261,10 @@ mod tests {
                 ("variable", p.variable),
                 ("variable_missing", p.variable_missing),
                 ("variable_generated", p.variable_generated),
+                ("syntax_key", p.syntax_key),
+                ("syntax_string", p.syntax_string),
+                ("syntax_number", p.syntax_number),
+                ("syntax_keyword", p.syntax_keyword),
             ];
             for (text, color) in texts {
                 for (bg, background) in [("background", p.background), ("surface", p.surface)] {
