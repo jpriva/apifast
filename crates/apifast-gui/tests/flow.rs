@@ -146,6 +146,33 @@ fn a_folder_that_is_not_a_collection_shows_the_error() {
     harness.get_by_label("Open");
 }
 
+/// Types into the field that has the focus, as the keyboard would.
+fn type_into_focus(harness: &mut Harness<'_, App>, text: &str) {
+    harness
+        .input_mut()
+        .events
+        .push(egui::Event::Text(text.to_owned()));
+}
+
+/// Steps the interface until the tree shows a row labelled `label`.
+fn wait_for_row(harness: &mut Harness<'_, App>, label: &str) {
+    let start = Instant::now();
+    loop {
+        harness.step();
+        if harness
+            .query_by_role_and_label(Role::TreeItem, label)
+            .is_some()
+        {
+            return;
+        }
+        assert!(
+            start.elapsed() < Duration::from_secs(10),
+            "timed out waiting for the row `{label}`"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
 /// Steps the interface until `done` holds, failing after 10 seconds.
 fn wait_until(harness: &mut Harness<'_, App>, what: &str, done: impl Fn() -> bool) {
     let start = Instant::now();
@@ -165,7 +192,9 @@ fn wait_until(harness: &mut Harness<'_, App>, what: &str, done: impl Fn() -> boo
 /// Opens the context menu of `row` and picks `entry` (the last match: the
 /// toolbar has some of the same labels).
 fn menu(harness: &mut Harness<'_, App>, row: &str, entry: &str) {
-    harness.get_by_label(row).click_secondary();
+    harness
+        .get_by_role_and_label(Role::TreeItem, row)
+        .click_secondary();
     harness.run_steps(2);
     harness.get_all_by_label(entry).last().unwrap().click();
     harness.run_steps(2);
@@ -185,20 +214,20 @@ fn the_sidebar_creates_renames_and_deletes_files() {
 
     harness.get_by_label("New request").click();
     harness.run_steps(2);
-    harness.get_by_role(Role::TextInput).type_text("Ping");
+    type_into_focus(&mut harness, "Ping");
     harness.step();
     harness.get_by_label("Create").click();
-    wait_for(&mut harness, "Ping");
+    wait_for_row(&mut harness, "Ping");
     let file = dir.path().join("ping.yml");
     assert!(file.exists());
     // The new request is open.
     harness.get_by_label("Send");
 
     menu(&mut harness, "Ping", "Rename");
-    harness.get_by_role(Role::TextInput).type_text(" again");
+    type_into_focus(&mut harness, " again");
     harness.step();
     harness.key_press(egui::Key::Enter);
-    wait_for(&mut harness, "Ping again");
+    wait_for_row(&mut harness, "Ping again");
     assert!(!file.exists());
     assert!(dir.path().join("ping-again.yml").exists());
 
@@ -207,7 +236,78 @@ fn the_sidebar_creates_renames_and_deletes_files() {
     let gone = dir.path().join("ping-again.yml");
     wait_until(&mut harness, "the file to go", || !gone.exists());
     harness.run_steps(2);
-    assert!(harness.query_by_label("Ping again").is_none());
+    assert!(
+        harness
+            .query_by_role_and_label(Role::TreeItem, "Ping again")
+            .is_none()
+    );
     // The deleted request was open: now nothing is.
     harness.get_by_label(apifast_gui::strings::EN.no_request);
+}
+
+/// A harness over a fresh app on `data`, with the collection in `dir` open.
+fn open_app(dir: &std::path::Path, data: &std::path::Path) -> Harness<'static, App> {
+    let app = App::new(Core::start(data.to_path_buf(), || {}));
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(1280.0, 800.0))
+        .build_ui_state(|ui, app: &mut App| app.show(ui), app);
+    type_folder(&mut harness, dir);
+    harness.get_by_label("Open").click();
+    wait_for(&mut harness, "Shop API");
+    harness
+}
+
+/// Puts the cursor at the end of the URL field (the only text field on
+/// the main screen) and types `text`.
+fn type_in_url(harness: &mut Harness<'_, App>, text: &str) {
+    harness.get_by_role(Role::TextInput).focus();
+    harness.step();
+    harness.key_press(egui::Key::End);
+    type_into_focus(harness, text);
+    harness.step();
+}
+
+#[test]
+fn edits_are_saved_with_ctrl_s_and_drafts_survive_a_restart() {
+    let dir = collection(server());
+    let data = tempfile::tempdir().unwrap();
+    let file = dir.path().join("health.yml");
+    let mut harness = open_app(dir.path(), data.path());
+    harness
+        .get_by_role_and_label(Role::TreeItem, "Health")
+        .click();
+    wait_for(&mut harness, "Send");
+
+    type_in_url(&mut harness, "/v2");
+    wait_for(&mut harness, apifast_gui::strings::EN.unsaved);
+    assert!(!std::fs::read_to_string(&file).unwrap().contains("/v2"));
+
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::S);
+    wait_until(&mut harness, "the save", || {
+        std::fs::read_to_string(&file)
+            .unwrap()
+            .contains("{{host}}/health/v2")
+    });
+    harness.run_steps(2);
+    assert!(
+        harness
+            .query_by_label(apifast_gui::strings::EN.unsaved)
+            .is_none()
+    );
+
+    // An unsaved change, then the app closes.
+    harness.get_by_role(Role::TextInput).focus();
+    harness.step();
+    harness.key_press(egui::Key::End);
+    type_into_focus(&mut harness, "?draft=1");
+    wait_for(&mut harness, apifast_gui::strings::EN.unsaved);
+    drop(harness);
+
+    let mut harness = open_app(dir.path(), data.path());
+    wait_for(&mut harness, apifast_gui::strings::EN.unsaved);
+    assert_eq!(
+        harness.get_by_role(Role::TextInput).value().as_deref(),
+        Some("{{host}}/health/v2?draft=1")
+    );
+    assert!(!std::fs::read_to_string(&file).unwrap().contains("draft"));
 }

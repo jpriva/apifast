@@ -28,6 +28,14 @@ pub fn responses_dir_in(data_dir: &Path, root: &Path, collection_id: Option<&str
         .join(collection_key(root, collection_id))
 }
 
+/// Folder for the interface session (open tabs and unsaved drafts) of the
+/// collection at `root`, under `data_dir`, keyed like [`responses_dir`].
+pub fn sessions_dir_in(data_dir: &Path, root: &Path, collection_id: Option<&str>) -> PathBuf {
+    data_dir
+        .join("sessions")
+        .join(collection_key(root, collection_id))
+}
+
 fn collection_key(root: &Path, collection_id: Option<&str>) -> String {
     collection_id.map_or_else(
         || format!("path-{:016x}", fnv1a(root.to_string_lossy().as_bytes())),

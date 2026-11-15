@@ -7,6 +7,7 @@ use apifast_gui::core::{Received, ResponseState};
 use apifast_gui::molecules::EnvironmentSelector;
 use apifast_gui::organisms::{ResponseView, TreeEvent, TreeView, UrlBar, UrlBarEvent};
 use apifast_gui::strings::EN;
+use eframe::egui;
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 
@@ -82,19 +83,52 @@ fn the_url_bar_sends_or_cancels() {
         (true, "Cancel", UrlBarEvent::Cancel),
     ] {
         let mut events = Vec::new();
+        let (mut method, mut url) = (Method::Get, "{{host}}/users".to_owned());
         let mut harness = Harness::new_ui(|ui| {
-            if let Some(event) = UrlBar::new(&Method::Get, "{{host}}/users", sending, &EN).show(ui)
-            {
+            if let Some(event) = UrlBar::new(&mut method, &mut url, sending, &EN).show(ui) {
                 events.push(event);
             }
         });
-        harness.get_by_label("{{host}}/users");
-        harness.get_by_label("GET");
         harness.get_by_label(button).click();
         harness.run();
         drop(harness);
         assert_eq!(events, [expected]);
     }
+}
+
+#[test]
+fn the_url_bar_edits_the_method_and_the_url() {
+    let mut events = Vec::new();
+    let (mut method, mut url) = (Method::Get, "{{host}}/users".to_owned());
+    let mut harness = Harness::new_ui(|ui| {
+        if let Some(event) = UrlBar::new(&mut method, &mut url, false, &EN).show(ui) {
+            events.push(event);
+        }
+    });
+    let field = harness.get_by_role(egui::accesskit::Role::TextInput);
+    assert_eq!(field.value().as_deref(), Some("{{host}}/users"));
+    field.focus();
+    harness.run();
+    harness.key_press(egui::Key::End);
+    harness
+        .get_by_role(egui::accesskit::Role::TextInput)
+        .type_text("/1");
+    harness.run();
+
+    // The selector is named for screen readers; its value is the method.
+    let selector = harness.get_by_label("Method");
+    assert_eq!(selector.value().as_deref(), Some("GET"));
+    selector.click();
+    harness.run();
+    harness.get_by_label("DELETE").click();
+    harness.run();
+    drop(harness);
+    assert_eq!((method, url.as_str()), (Method::Delete, "{{host}}/users/1"));
+    assert!(
+        events.iter().all(|e| *e == UrlBarEvent::Edited),
+        "{events:?}"
+    );
+    assert!(events.len() >= 2, "{events:?}");
 }
 
 #[test]

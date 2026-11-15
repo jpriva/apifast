@@ -4,10 +4,10 @@
 //! Every new component is added here.
 
 use apifast_app::{CollectionTree, RequestPath, ResponseHead, TreeItem};
-use apifast_domain::{Collection, Folder, Method};
-use apifast_gui::core::{Received, ResponseState};
+use apifast_domain::{Collection, Folder, HttpRequest, Method};
+use apifast_gui::core::{Received, ResponseState, Tab};
 use apifast_gui::molecules::EnvironmentSelector;
-use apifast_gui::organisms::{ResponseView, TreeView, UrlBar};
+use apifast_gui::organisms::{ResponseView, TabBar, TreeView, UrlBar};
 use apifast_gui::strings::EN;
 use apifast_gui::{atoms, theme};
 use eframe::egui::{self, Theme};
@@ -17,14 +17,31 @@ struct Gallery {
     tree: CollectionTree,
     environments: Vec<String>,
     responses: Vec<ResponseState>,
+    tabs: Vec<Tab>,
     columns: [Column; 2],
 }
 
-#[derive(Default)]
 struct Column {
     tree: TreeView,
+    tab_bar: TabBar,
     environment: Option<String>,
+    urls: [(Method, String); 2],
     responses: Vec<ResponseView>,
+}
+
+impl Default for Column {
+    fn default() -> Self {
+        Self {
+            tree: TreeView::default(),
+            tab_bar: TabBar::default(),
+            environment: None,
+            urls: [
+                (Method::Get, "{{host}}/users?page=2".into()),
+                (Method::Post, "{{host}}/users".into()),
+            ],
+            responses: Vec::new(),
+        }
+    }
 }
 
 impl eframe::App for Gallery {
@@ -33,6 +50,7 @@ impl eframe::App for Gallery {
             tree,
             environments,
             responses,
+            tabs,
             columns: state,
         } = self;
         egui::CentralPanel::default().show(ui, |ui| {
@@ -44,7 +62,7 @@ impl eframe::App for Gallery {
                         .zip(state.iter_mut())
                     {
                         themed(column, theme, |ui| {
-                            showcase(ui, tree, environments, responses, state);
+                            showcase(ui, tree, environments, responses, tabs, state);
                         });
                     }
                 });
@@ -86,6 +104,7 @@ fn showcase(
     tree: &CollectionTree,
     environments: &[String],
     responses: &[ResponseState],
+    tabs: &[Tab],
     state: &mut Column,
 ) {
     section(ui, "MethodBadge", |ui| {
@@ -126,8 +145,12 @@ fn showcase(
         }
     });
     section(ui, "UrlBar", |ui| {
-        let _ = UrlBar::new(&Method::Get, "{{host}}/users?page=2", false, &EN).show(ui);
-        let _ = UrlBar::new(&Method::Post, "{{host}}/users", true, &EN).show(ui);
+        for ((method, url), sending) in state.urls.iter_mut().zip([false, true]) {
+            let _ = UrlBar::new(method, url, sending, &EN).show(ui);
+        }
+    });
+    section(ui, "TabBar", |ui| {
+        let _ = state.tab_bar.show(ui, tabs, Some(&tabs[1].path), &EN);
     });
     section(ui, "TreeView", |ui| {
         ui.allocate_ui(egui::vec2(ui.available_width(), 160.0), |ui| {
@@ -185,6 +208,25 @@ fn sample_tree() -> CollectionTree {
     }
 }
 
+fn sample_tabs() -> Vec<Tab> {
+    let tab = |path: &str, name: &str, method, dirty: bool| {
+        let saved = HttpRequest::new(name, method, "{{host}}");
+        let draft = dirty.then(|| HttpRequest::new(name, Method::Put, "{{host}}/x"));
+        Tab {
+            path: RequestPath::new(path),
+            saved,
+            draft,
+            response: ResponseState::Idle,
+            revision: 0,
+        }
+    };
+    vec![
+        tab("login.yml", "Login", Method::Post, false),
+        tab("users/create.yml", "Create user", Method::Post, true),
+        tab("users/list.yml", "List users", Method::Get, false),
+    ]
+}
+
 fn sample_responses() -> Vec<ResponseState> {
     let received = |status, preview: &str| {
         ResponseState::Received(Received {
@@ -230,6 +272,7 @@ fn main() -> eframe::Result {
                 tree: sample_tree(),
                 environments: vec!["local".into(), "staging".into(), "production".into()],
                 responses: sample_responses(),
+                tabs: sample_tabs(),
                 columns: Default::default(),
             }))
         }),

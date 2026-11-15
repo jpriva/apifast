@@ -325,10 +325,15 @@ El historial, las respuestas, las cookies y la bóveda local viven en el directo
 ├── cookies/<collection-id>.jar       # cookies, cifradas
 ├── history/<collection-id>.jsonl     # índice de ejecuciones
 ├── responses/<collection-id>/        # cuerpos de respuesta
-└── ui-state.yml                      # pestañas abiertas, tamaños de paneles
+├── sessions/<collection-id>/         # pestañas abiertas de la colección
+│   ├── session.yml                   # rutas de las pestañas, la activa y el entorno
+│   └── drafts/<n>.yml                # cambios sin guardar de la pestaña n, como archivo de request
+└── ui-state.yml                      # tamaños de paneles
 ~/.config/apifast/
 ├── settings.yml
 └── keymap.yml
 ```
 
 En macOS y Windows se usan los directorios equivalentes de cada plataforma.
+
+Una colección sin identificador en `.apifast/` usa como clave un hash de su ruta. La sesión se escribe poco después de cada cambio y al cerrar la aplicación. Los borradores tienen el mismo formato que los archivos de la colección; si uno no se puede leer, solo se pierde ese borrador, no la sesión.

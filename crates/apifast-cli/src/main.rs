@@ -120,6 +120,7 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
             .map(|(n, v)| Variable::text(n, v))
             .collect(),
         allow_unresolved: args.allow_unresolved,
+        draft: None,
     };
 
     let runtime = tokio::runtime::Builder::new_current_thread()

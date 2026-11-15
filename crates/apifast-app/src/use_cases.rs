@@ -107,6 +107,9 @@ pub struct SendOptions {
     pub runtime: Vec<Variable>,
     /// Send even if some variables are missing (they render empty).
     pub allow_unresolved: bool,
+    /// Send this instead of the request as saved: an unsaved draft. Its
+    /// folders and collection still come from the repository.
+    pub draft: Option<HttpRequest>,
 }
 
 /// Result of [`send_request`].
@@ -141,7 +144,10 @@ where
     T: HttpTransport,
     S: ResponseStore,
 {
-    let loaded = ports.collections.request(path)?;
+    let mut loaded = ports.collections.request(path)?;
+    if let Some(draft) = &options.draft {
+        loaded.request = draft.clone();
+    }
     let collection = ports.collections.collection()?;
     let variables = resolve_request_variables(
         ports.collections,

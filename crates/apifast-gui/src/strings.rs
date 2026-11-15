@@ -56,6 +56,22 @@ pub struct Strings {
     pub delete_title: &'static str,
     /// What deleting does, under the item's name.
     pub delete_warning: &'static str,
+    /// Placeholder of the URL field.
+    pub url_placeholder: &'static str,
+    /// Accessible name of the method selector.
+    pub method: &'static str,
+    /// Hover text of a tab's close button.
+    pub close_tab: &'static str,
+    /// Title of the dialog shown before closing a tab with unsaved changes.
+    pub unsaved_title: &'static str,
+    /// What closing without saving does, under the request's name.
+    pub unsaved_warning: &'static str,
+    /// Button that saves.
+    pub save: &'static str,
+    /// Button that closes without saving.
+    pub discard: &'static str,
+    /// Marks a tab with unsaved changes.
+    pub unsaved: &'static str,
 }
 
 /// English.
@@ -86,4 +102,12 @@ pub const EN: Strings = Strings {
     create: "Create",
     delete_title: "Delete this?",
     delete_warning: "Its files are deleted from disk, with everything inside.",
+    url_placeholder: "https://example.com or {{host}}/path",
+    method: "Method",
+    close_tab: "Close tab",
+    unsaved_title: "Save changes?",
+    unsaved_warning: "This request has unsaved changes. Closing without saving discards them.",
+    save: "Save",
+    discard: "Don't save",
+    unsaved: "Unsaved changes",
 };

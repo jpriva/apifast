@@ -100,7 +100,7 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
 - [x] Estructura de componentes con atomic design ([UI y UX](09-ui-ux.md#componentes-atomic-design)): tokens en `theme/`, átomos, moléculas, organismos que devuelven eventos, plantillas y pantallas.
 - [x] Galería de componentes (`--example gallery`) y pruebas por componente con `egui_kittest`.
 - [x] Barra lateral: árbol virtualizado, crear, renombrar, mover, borrar, reordenar. Menú contextual, arrastrar y soltar, y "subir" y "bajar" para hacerlo sin ratón. Crear y renombrar ponen al archivo el *slug* del nombre; mover y reordenar reescriben solo los `seq` que cambian.
-- [ ] Pestañas con borradores y restauración al abrir.
+- [x] Pestañas con borradores y restauración al abrir. Método y URL ya se editan; `Ctrl+S`, `Ctrl+Shift+S` y `Ctrl+W`; cerrar una pestaña con cambios pide confirmación. Enviar usa lo que hay en pantalla, guardado o no.
 - [ ] Barra de URL con resaltado de variables.
 - [ ] Panel de request: Params, Headers, Body (JSON, texto, formulario), Auth, Ajustes.
 - [ ] Tablas clave/valor con edición masiva.

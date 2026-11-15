@@ -13,6 +13,7 @@
 mod diff;
 mod fs;
 mod read;
+mod session;
 mod write;
 mod yaml;
 
@@ -26,6 +27,8 @@ use apifast_app::{
 };
 use apifast_domain::{Collection, CollectionId, Environment, Folder, HttpRequest};
 use oneyaml::Value;
+
+pub use session::FsSessionStore;
 
 const COLLECTION_FILE: &str = "opencollection.yml";
 const FOLDER_FILE: &str = "folder.yml";

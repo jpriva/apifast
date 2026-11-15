@@ -119,6 +119,7 @@ Definidos como traits en `apifast-app`:
 | `ResponseStore` | Escribir y leer cuerpos de respuesta por ventanas | `apifast-history` |
 | `HistoryStore` | Registrar y consultar ejecuciones | `apifast-history` |
 | `CookieStore` | Persistir el tarro de cookies | `apifast-history` |
+| `SessionStore` | Guardar las pestañas abiertas y sus borradores sin guardar | `apifast-storage-fs` |
 | `FsWatcher` | Notificar cambios externos en la colección | `apifast-watch` |
 | `ScriptEngine` | Ejecutar scripts de usuario | `apifast-script-js` |
 | `Clock` | Hora actual y medición de tiempos | Sistema, o falso en tests |

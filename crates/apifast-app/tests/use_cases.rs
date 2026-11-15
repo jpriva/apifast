@@ -467,3 +467,24 @@ fn send_request_can_run_on_any_thread() {
     let path = RequestPath::new("users/create.yml");
     assert_send(&send_request(ports, &path, &options, &cancel));
 }
+
+#[test]
+fn a_draft_is_sent_instead_of_the_saved_request_with_the_same_inheritance() {
+    let world = users_world();
+    let draft = HttpRequest::new("Create user", Method::Put, "{{host}}/{{resource}}/draft");
+    let options = SendOptions {
+        draft: Some(draft),
+        ..prod()
+    };
+    world.send("users/create.yml", &options).unwrap();
+    let sent = world.last_sent();
+    assert_eq!(sent.method(), &Method::Put);
+    // Folder variables and collection auth still apply.
+    assert_eq!(sent.url(), "https://api.test/users/draft");
+    assert_eq!(header(&sent, "authorization"), ["Bearer s3cr3t"]);
+    // The saved request did not change.
+    assert_eq!(
+        world.collections.get("users/create.yml").unwrap().method,
+        Method::Post
+    );
+}

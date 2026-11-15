@@ -11,7 +11,8 @@ use crate::ports::is_within;
 use crate::{
     BodyWriter, CancelToken, Clock, CollectionRepository, CollectionTree, EnvironmentRepository,
     HttpTransport, LoadedRequest, Prompter, Random, RenderedRequest, RepositoryError, RequestPath,
-    ResponseHead, ResponseId, ResponseStore, StoreError, StoredBody, TransportError, TreeItem,
+    ResponseHead, ResponseId, ResponseStore, Session, SessionStore, StoreError, StoredBody,
+    TransportError, TreeItem,
 };
 
 /// Locks a mutex, recovering the data if a panicking test poisoned it.
@@ -422,5 +423,29 @@ impl Prompter for ScriptedPrompter {
     fn prompt(&self, label: &str) -> Option<String> {
         lock(&self.asked).push(label.to_owned());
         self.answers.get(label).cloned()
+    }
+}
+
+/// A session kept in memory.
+#[derive(Debug, Default)]
+pub struct MemorySessions {
+    session: Mutex<Session>,
+}
+
+impl MemorySessions {
+    /// The session saved last.
+    pub fn saved(&self) -> Session {
+        lock(&self.session).clone()
+    }
+}
+
+impl SessionStore for MemorySessions {
+    fn load(&self) -> Result<Session, StoreError> {
+        Ok(self.saved())
+    }
+
+    fn save(&self, session: &Session) -> Result<(), StoreError> {
+        session.clone_into(&mut lock(&self.session));
+        Ok(())
     }
 }

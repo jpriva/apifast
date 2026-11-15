@@ -202,6 +202,45 @@ pub trait CollectionRepository {
     fn delete_path(&self, path: &str) -> Result<(), RepositoryError>;
 }
 
+/// What the interface had open in a collection, kept outside it in the
+/// user's data directory (ADR 0008), so that tabs and unsaved changes
+/// survive a restart.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Session {
+    /// Open tabs, in order.
+    pub tabs: Vec<SessionTab>,
+    /// The active tab.
+    pub active: Option<RequestPath>,
+    /// The active environment.
+    pub environment: Option<String>,
+}
+
+/// An open tab of a [`Session`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionTab {
+    /// The request it shows.
+    pub path: RequestPath,
+    /// Its unsaved changes, if any.
+    pub draft: Option<HttpRequest>,
+}
+
+/// Keeps the [`Session`] of one collection.
+pub trait SessionStore {
+    /// The saved session, or an empty one if there is none.
+    ///
+    /// # Errors
+    ///
+    /// If it exists but cannot be read.
+    fn load(&self) -> Result<Session, StoreError>;
+
+    /// Replaces the saved session.
+    ///
+    /// # Errors
+    ///
+    /// If it cannot be written.
+    fn save(&self, session: &Session) -> Result<(), StoreError>;
+}
+
 /// A request file or a folder of the collection: what the sidebar creates,
 /// renames, moves and deletes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

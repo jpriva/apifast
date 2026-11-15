@@ -77,6 +77,13 @@ fn start() -> (Core, Arc<AtomicUsize>, tempfile::TempDir) {
     (core, repaints, data)
 }
 
+/// The response of the active tab.
+fn response(snapshot: &Snapshot) -> ResponseState {
+    snapshot
+        .active_tab()
+        .map_or(ResponseState::Idle, |tab| tab.response.clone())
+}
+
 /// Waits until the snapshot satisfies `done`, failing after 10 seconds.
 fn wait(core: &Core, what: &str, done: impl Fn(&Snapshot) -> bool) -> Arc<Snapshot> {
     let start = Instant::now();
@@ -150,18 +157,18 @@ fn sends_the_open_request_with_the_active_environment() {
     open(&core, dir.path());
     core.send(Command::SelectEnvironment(Some("local".into())));
     core.send(Command::OpenRequest(RequestPath::new("users/get.yml")));
-    let snapshot = wait(&core, "the request", |s| s.request.is_some());
-    assert_eq!(snapshot.request.as_ref().unwrap().request.name, "Get");
+    let snapshot = wait(&core, "the request", |s| s.active_tab().is_some());
+    assert_eq!(snapshot.active_tab().unwrap().request().name, "Get");
 
     core.send(Command::Send);
     let snapshot = wait(&core, "the response", |s| {
         matches!(
-            s.response,
+            response(s),
             ResponseState::Received(_) | ResponseState::Failed(_)
         )
     });
-    let ResponseState::Received(received) = &snapshot.response else {
-        panic!("{:?}", snapshot.response);
+    let ResponseState::Received(received) = &response(&snapshot) else {
+        panic!("{:?}", response(&snapshot));
     };
     assert_eq!(received.head.status, 200);
     assert_eq!(received.preview, "GET /users/1 HTTP/1.1");
@@ -177,13 +184,13 @@ fn a_failed_send_is_reported_without_breaking_the_core() {
 
     // No environment: `host` is missing.
     core.send(Command::OpenRequest(RequestPath::new("health.yml")));
-    wait(&core, "the request", |s| s.request.is_some());
+    wait(&core, "the request", |s| s.active_tab().is_some());
     core.send(Command::Send);
     let snapshot = wait(&core, "the failure", |s| {
-        matches!(s.response, ResponseState::Failed(_))
+        matches!(response(s), ResponseState::Failed(_))
     });
     assert_eq!(
-        snapshot.response,
+        response(&snapshot),
         ResponseState::Failed("variable `host` is not defined".into())
     );
 
@@ -193,9 +200,9 @@ fn a_failed_send_is_reported_without_breaking_the_core() {
     let snapshot = wait(
         &core,
         "the connection error",
-        |s| matches!(&s.response, ResponseState::Failed(m) if m.contains("cannot connect")),
+        |s| matches!(&response(s), ResponseState::Failed(m) if m.contains("cannot connect")),
     );
-    assert!(matches!(snapshot.response, ResponseState::Failed(_)));
+    assert!(matches!(response(&snapshot), ResponseState::Failed(_)));
 }
 
 #[test]
@@ -205,20 +212,20 @@ fn a_send_in_progress_can_be_cancelled() {
     open(&core, dir.path());
     core.send(Command::SelectEnvironment(Some("local".into())));
     core.send(Command::OpenRequest(RequestPath::new("health.yml")));
-    wait(&core, "the request", |s| s.request.is_some());
+    wait(&core, "the request", |s| s.active_tab().is_some());
 
     core.send(Command::Send);
-    wait(&core, "sending", |s| s.response == ResponseState::Sending);
+    wait(&core, "sending", |s| response(s) == ResponseState::Sending);
     let started = Instant::now();
     core.send(Command::Cancel);
     wait(&core, "the cancellation", |s| {
-        s.response == ResponseState::Cancelled
+        response(s) == ResponseState::Cancelled
     });
     assert!(started.elapsed() < Duration::from_secs(2));
 }
 
 #[test]
-fn opening_another_request_clears_the_response() {
+fn a_new_tab_starts_without_a_response() {
     let dir = collection(server(Duration::ZERO));
     let (core, _, _data) = start();
     open(&core, dir.path());
@@ -226,14 +233,14 @@ fn opening_another_request_clears_the_response() {
     core.send(Command::OpenRequest(RequestPath::new("health.yml")));
     core.send(Command::Send);
     wait(&core, "the response", |s| {
-        matches!(s.response, ResponseState::Received(_))
+        matches!(response(s), ResponseState::Received(_))
     });
 
     core.send(Command::OpenRequest(RequestPath::new("users/get.yml")));
     let snapshot = wait(&core, "the new request", |s| {
-        s.request.as_ref().is_some_and(|r| r.request.name == "Get")
+        s.active_tab().is_some_and(|t| t.request().name == "Get")
     });
-    assert_eq!(snapshot.response, ResponseState::Idle);
+    assert_eq!(response(&snapshot), ResponseState::Idle);
 }
 
 #[test]
@@ -254,7 +261,7 @@ fn responses_are_stored_in_the_given_data_directory() {
     core.send(Command::OpenRequest(RequestPath::new("health.yml")));
     core.send(Command::Send);
     wait(&core, "the response", |s| {
-        matches!(s.response, ResponseState::Received(_))
+        matches!(response(s), ResponseState::Received(_))
     });
     let folders: Vec<_> = std::fs::read_dir(data.path().join("responses"))
         .unwrap()
@@ -293,7 +300,7 @@ fn a_created_request_appears_in_the_tree_and_opens() {
     assert_eq!(snapshot.error, None);
     let tree = &snapshot.collection.as_ref().unwrap().tree;
     assert_eq!(names(&tree.items), ["Users", "Health", "New one"]);
-    let open = snapshot.request.as_ref().unwrap();
+    let open = snapshot.active_tab().unwrap();
     assert_eq!(open.path.as_str(), "new-one.yml");
     assert!(dir.path().join("new-one.yml").exists());
 }
@@ -304,16 +311,16 @@ fn renaming_the_folder_of_the_open_request_keeps_it_open() {
     let (core, _, _data) = start();
     open(&core, dir.path());
     core.send(Command::OpenRequest(RequestPath::new("users/get.yml")));
-    let snapshot = wait(&core, "the request", |s| s.request.is_some());
+    let snapshot = wait(&core, "the request", |s| s.active_tab().is_some());
     core.send(Command::Rename {
         item: ItemPath::Folder("users".into()),
         name: "People".into(),
     });
     let snapshot = next(&core, snapshot.version);
     assert_eq!(snapshot.error, None);
-    let open = snapshot.request.as_ref().unwrap();
+    let open = snapshot.active_tab().unwrap();
     assert_eq!(open.path.as_str(), "people/get.yml");
-    assert_eq!(open.request.name, "Get");
+    assert_eq!(open.request().name, "Get");
 }
 
 #[test]
@@ -322,12 +329,12 @@ fn deleting_the_open_request_closes_it() {
     let (core, _, _data) = start();
     open(&core, dir.path());
     core.send(Command::OpenRequest(RequestPath::new("health.yml")));
-    let snapshot = wait(&core, "the request", |s| s.request.is_some());
+    let snapshot = wait(&core, "the request", |s| s.active_tab().is_some());
     core.send(Command::Delete(ItemPath::Request(RequestPath::new(
         "health.yml",
     ))));
     let snapshot = next(&core, snapshot.version);
-    assert!(snapshot.request.is_none());
+    assert!(snapshot.active_tab().is_none());
     let tree = &snapshot.collection.as_ref().unwrap().tree;
     assert_eq!(names(&tree.items), ["Users"]);
 }
@@ -354,5 +361,163 @@ fn moving_reorders_the_tree_and_errors_are_reported() {
         snapshot.error.as_ref().unwrap().contains("missing"),
         "{:?}",
         snapshot.error
+    );
+}
+
+fn tab_names(snapshot: &Snapshot) -> Vec<&str> {
+    snapshot
+        .tabs
+        .iter()
+        .map(|tab| tab.request().name.as_str())
+        .collect()
+}
+
+fn edited(snapshot: &Snapshot, url: &str) -> Box<apifast_domain::HttpRequest> {
+    let mut request = snapshot.active_tab().unwrap().request().clone();
+    url.clone_into(&mut request.url);
+    Box::new(request)
+}
+
+#[test]
+fn requests_open_in_tabs_and_closing_shows_a_neighbour() {
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    core.send(Command::OpenRequest(RequestPath::new("users/get.yml")));
+    let snapshot = wait(&core, "two tabs", |s| s.tabs.len() == 2);
+    assert_eq!(tab_names(&snapshot), ["Health", "Get"]);
+    assert_eq!(snapshot.active, Some(RequestPath::new("users/get.yml")));
+
+    // Opening an open request shows its tab instead of a second one.
+    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    let snapshot = next(&core, snapshot.version);
+    assert_eq!(snapshot.tabs.len(), 2);
+    assert_eq!(snapshot.active, Some(RequestPath::new("health.yml")));
+
+    core.send(Command::CloseTab(RequestPath::new("health.yml")));
+    let snapshot = next(&core, snapshot.version);
+    assert_eq!(tab_names(&snapshot), ["Get"]);
+    assert_eq!(snapshot.active, Some(RequestPath::new("users/get.yml")));
+}
+
+#[test]
+fn edits_are_a_draft_that_is_sent_and_saved() {
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    let snapshot = wait(&core, "the tab", |s| s.active_tab().is_some());
+    let path = RequestPath::new("health.yml");
+    let revision = snapshot.active_tab().unwrap().revision;
+
+    core.send(Command::Edit {
+        path: path.clone(),
+        request: edited(&snapshot, "{{host}}/draft"),
+    });
+    let snapshot = next(&core, snapshot.version);
+    let tab = snapshot.active_tab().unwrap();
+    assert!(tab.is_dirty());
+    // An edit is not a new revision: the interface keeps its own copy.
+    assert_eq!(tab.revision, revision);
+
+    // What is sent is what is on screen, not what is saved.
+    core.send(Command::Send);
+    let snapshot = wait(&core, "the response", |s| {
+        matches!(response(s), ResponseState::Received(_))
+    });
+    let ResponseState::Received(received) = response(&snapshot) else {
+        unreachable!()
+    };
+    assert_eq!(received.preview, "GET /draft HTTP/1.1");
+    let file = dir.path().join("health.yml");
+    assert!(!std::fs::read_to_string(&file).unwrap().contains("draft"));
+
+    core.send(Command::Save(path));
+    let snapshot = next(&core, snapshot.version);
+    let tab = snapshot.active_tab().unwrap();
+    assert!(!tab.is_dirty());
+    assert_ne!(tab.revision, revision);
+    assert!(
+        std::fs::read_to_string(&file)
+            .unwrap()
+            .contains("{{host}}/draft")
+    );
+}
+
+#[test]
+fn editing_back_to_the_saved_contents_is_not_a_draft() {
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    let snapshot = wait(&core, "the tab", |s| s.active_tab().is_some());
+    let path = RequestPath::new("health.yml");
+    core.send(Command::Edit {
+        path: path.clone(),
+        request: edited(&snapshot, "x"),
+    });
+    core.send(Command::Edit {
+        path,
+        request: edited(&snapshot, "{{host}}/health"),
+    });
+    let snapshot = wait(&core, "both edits", |s| s.version >= snapshot.version + 2);
+    assert!(!snapshot.active_tab().unwrap().is_dirty());
+}
+
+#[test]
+fn tabs_drafts_and_environment_come_back_after_a_restart() {
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, data) = start();
+    open(&core, dir.path());
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    core.send(Command::OpenRequest(RequestPath::new("users/get.yml")));
+    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    let snapshot = wait(&core, "two tabs", |s| s.tabs.len() == 2);
+    core.send(Command::Edit {
+        path: RequestPath::new("health.yml"),
+        request: edited(&snapshot, "{{host}}/unsaved"),
+    });
+    core.send(Command::ActivateTab(RequestPath::new("users/get.yml")));
+    wait(&core, "the draft", |s| s.tabs.iter().any(apifast_gui::core::Tab::is_dirty));
+    // Dropping writes the session at once, without waiting for the delay.
+    drop(core);
+
+    let core = Core::start(data.path().to_path_buf(), || {});
+    let snapshot = open(&core, dir.path());
+    assert_eq!(tab_names(&snapshot), ["Get", "Health"]);
+    assert_eq!(snapshot.active, Some(RequestPath::new("users/get.yml")));
+    assert_eq!(snapshot.environment.as_deref(), Some("local"));
+    let health = &snapshot.tabs[1];
+    assert_eq!(health.draft.as_ref().unwrap().url, "{{host}}/unsaved");
+    assert_eq!(health.saved.url, "{{host}}/health");
+}
+
+#[test]
+fn a_renamed_request_keeps_its_tab_and_draft() {
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::OpenRequest(RequestPath::new("users/get.yml")));
+    let snapshot = wait(&core, "the tab", |s| s.active_tab().is_some());
+    core.send(Command::Edit {
+        path: RequestPath::new("users/get.yml"),
+        request: edited(&snapshot, "{{host}}/edited"),
+    });
+    core.send(Command::Rename {
+        item: ItemPath::Request(RequestPath::new("users/get.yml")),
+        name: "Fetch".into(),
+    });
+    let snapshot = wait(&core, "the rename", |s| {
+        s.active == Some(RequestPath::new("users/fetch.yml"))
+    });
+    let tab = snapshot.active_tab().unwrap();
+    assert_eq!(tab.saved.name, "Fetch");
+    let draft = tab.draft.as_ref().unwrap();
+    // Saving the draft must not undo the rename.
+    assert_eq!(
+        (draft.name.as_str(), draft.url.as_str()),
+        ("Fetch", "{{host}}/edited")
     );
 }
