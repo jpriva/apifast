@@ -46,6 +46,8 @@ flowchart TD
 - Se genera la primera vez que se necesita.
 - Se guarda en el keyring del sistema (Secret Service en Linux, Keychain en macOS, Credential Manager en Windows).
 - **Respaldo sin keyring:** la clave maestra se guarda en un archivo con permisos `0600` en el directorio de datos, igual que hace Yaak. No se pide nada al usuario.
+- **Solo sin keyring.** El archivo se usa cuando el sistema no tiene keyring. Si el keyring existe pero está bloqueado o falla, es un error y se pide desbloquearlo: pasar al archivo crearía una clave nueva, y los secretos cifrados con la del keyring dejarían de abrirse. Una clave creada en el archivo sigue usándose aunque después aparezca un keyring.
+- El archivo es `master.key` en el directorio de datos. Se escribe aparte con permisos `0600` y se renombra; si al leerlo tiene permisos más abiertos, se vuelven a cerrar.
 - **Límite del respaldo:** protege frente a otros usuarios de la máquina, no frente a quien copie el directorio personal completo. La interfaz indica en la barra de estado cuándo la bóveda usa el archivo en lugar del keyring.
 - La clave es siempre aleatoria. No existe ningún modo con clave derivable de datos de la máquina.
 - Una passphrase como alternativa al archivo queda como mejora posterior a la 1.0.

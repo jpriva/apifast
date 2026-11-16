@@ -10,6 +10,13 @@
 //! the value to its collection, environment and variable: a value copied
 //! anywhere else does not open.
 
+mod keys;
+
+pub use keys::{
+    KEY_FILE, KEYRING_ENTRY, KEYRING_SERVICE, KeyBackend, KeyFile, KeyLocation, KeyStoreError,
+    SystemKeyring, master_key,
+};
+
 use std::fmt;
 
 use base64::Engine as _;
