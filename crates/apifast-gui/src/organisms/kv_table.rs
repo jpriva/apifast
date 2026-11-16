@@ -9,13 +9,17 @@ use apifast_domain::{FormField, Header, Param};
 use eframe::egui::{self, Id};
 
 use crate::atoms::{
-    TemplateField, TemplateFieldTexts, VariableHints, completions, refocus, suggestions,
+    CloseButton, TemplateField, TemplateFieldTexts, VariableHints, completions, refocus,
+    suggestions,
 };
 use crate::strings::Strings;
 use crate::theme;
 
 /// Width of the name column, as a share of the table's width.
 const NAME_SHARE: f32 = 0.35;
+/// The least the two fields of a row take together, in points, however
+/// narrow the panel.
+const MIN_FIELDS: f32 = 200.0;
 /// Rows the bulk editor shows before scrolling.
 const BULK_ROWS: usize = 8;
 /// Starts a disabled row in the bulk text.
@@ -231,71 +235,97 @@ impl<'a, T: KvRow> KvTable<'a, T> {
             missing: strings.variable_missing,
             generated: strings.variable_generated,
         };
-        let name_width = ui.available_width() * NAME_SHARE;
+        // Rows laid out by hand, not with a grid: a field in a grid cell only
+        // gets the width its column measured before, so it never grows.
+        let widths = Widths::new(ui, fixed_names);
         let mut changed = false;
         let mut remove = None;
-        egui::Grid::new(id)
-            .num_columns(4)
-            .spacing([theme::space::S, theme::space::XS])
-            .show(ui, |ui| {
-                for (index, row) in rows.iter_mut().enumerate() {
-                    if !shows(row) {
-                        continue;
-                    }
-                    changed |= ui
-                        .checkbox(row.enabled(), "")
-                        .accessible_name(strings.enabled)
-                        .on_hover_text(strings.enabled)
-                        .changed();
-                    if fixed_names {
-                        ui.label(egui::RichText::new(row.name().as_str()).monospace());
-                    } else {
-                        let cell = id.with((index, 0));
-                        changed |= name_field(ui, row.name(), cell, name_width, names, strings);
-                    }
-                    changed |= TemplateField::new(row.value(), hints, texts)
-                        .id(id.with((index, 1)))
-                        .accessible_name(strings.value)
-                        .show(ui)
-                        .changed();
-                    if !fixed_names
-                        && ui
-                            .small_button("×")
-                            .accessible_name(strings.remove_row)
-                            .on_hover_text(strings.remove_row)
-                            .clicked()
-                    {
-                        remove = Some(index);
-                    }
-                    ui.end_row();
-                }
+        for (index, row) in rows.iter_mut().enumerate() {
+            if !shows(row) {
+                continue;
+            }
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = theme::space::S;
+                changed |= ui
+                    .checkbox(row.enabled(), "")
+                    .accessible_name(strings.enabled)
+                    .on_hover_text(strings.enabled)
+                    .changed();
                 if fixed_names {
-                    return;
+                    let size = egui::vec2(widths.name, ui.spacing().interact_size.y);
+                    ui.allocate_ui_with_layout(
+                        size,
+                        egui::Layout::left_to_right(egui::Align::Center),
+                        |ui| ui.label(egui::RichText::new(row.name().as_str()).monospace()),
+                    );
+                } else {
+                    let cell = id.with((index, 0));
+                    changed |= name_field(ui, row.name(), cell, widths.name, names, strings);
                 }
-                // The empty row. Its fields have the ids the row will have
-                // once added, so typing keeps the focus.
-                let index = rows.len();
-                let (mut name, mut value) = (String::new(), String::new());
-                ui.add_enabled(false, egui::Checkbox::without_text(&mut true))
-                    .accessible_name(strings.enabled);
-                let cell = id.with((index, 0));
-                let typed_name = name_field(ui, &mut name, cell, name_width, names, strings);
-                let typed_value = TemplateField::new(&mut value, hints, texts)
+                changed |= TemplateField::new(row.value(), hints, texts)
                     .id(id.with((index, 1)))
+                    .desired_width(widths.value)
                     .accessible_name(strings.value)
                     .show(ui)
                     .changed();
-                ui.end_row();
-                if typed_name || typed_value {
-                    rows.push(new(name, value));
-                    changed = true;
+                if !fixed_names && ui.add(CloseButton::new(strings.remove_row)).clicked() {
+                    remove = Some(index);
                 }
             });
+        }
+        if !fixed_names {
+            // The empty row. Its fields have the ids the row will have once
+            // added, so typing keeps the focus.
+            let index = rows.len();
+            let (mut name, mut value) = (String::new(), String::new());
+            let (typed_name, typed_value) = ui
+                .horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = theme::space::S;
+                    ui.add_enabled(false, egui::Checkbox::without_text(&mut true))
+                        .accessible_name(strings.enabled);
+                    let cell = id.with((index, 0));
+                    let typed_name = name_field(ui, &mut name, cell, widths.name, names, strings);
+                    let typed_value = TemplateField::new(&mut value, hints, texts)
+                        .id(id.with((index, 1)))
+                        .desired_width(widths.value)
+                        .accessible_name(strings.value)
+                        .show(ui)
+                        .changed();
+                    (typed_name, typed_value)
+                })
+                .inner;
+            if typed_name || typed_value {
+                rows.push(new(name, value));
+                changed = true;
+            }
+        }
         if let Some(index) = remove {
             rows.remove(index);
             changed = true;
         }
         changed
+    }
+}
+
+/// Widths of the name and value fields of a row, from the space there is.
+struct Widths {
+    name: f32,
+    value: f32,
+}
+
+impl Widths {
+    fn new(ui: &egui::Ui, fixed_names: bool) -> Self {
+        let gap = theme::space::S;
+        let check = ui.spacing().icon_width;
+        let close = ui.spacing().interact_size.y.min(18.0);
+        // Without a remove button, the value takes its place.
+        let buttons = if fixed_names { 0.0 } else { close + gap };
+        let flexible = (ui.available_width() - check - 2.0 * gap - buttons).max(MIN_FIELDS);
+        let name = flexible * NAME_SHARE;
+        Self {
+            name,
+            value: flexible - name,
+        }
     }
 }
 

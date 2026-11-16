@@ -64,7 +64,11 @@ fn clicking_a_tab_activates_it_and_a_clean_tab_closes_at_once() {
     let mut harness = harness();
     harness.get_by_label("Users").click();
     harness.run();
-    harness.get_all_by_label("×").next().unwrap().click();
+    harness
+        .get_all_by_label(EN.close_tab)
+        .next()
+        .unwrap()
+        .click();
     harness.run();
     assert_eq!(
         harness.state().events,
@@ -89,7 +93,11 @@ fn closing_an_unsaved_tab_asks_first() {
         ("Cancel", None),
     ] {
         let mut harness = harness();
-        harness.get_all_by_label("×").last().unwrap().click();
+        harness
+            .get_all_by_label(EN.close_tab)
+            .last()
+            .unwrap()
+            .click();
         harness.run();
         harness.get_by_label(EN.unsaved_title);
         assert!(harness.state().events.is_empty(), "closed without asking");

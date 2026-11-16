@@ -291,3 +291,23 @@ fn the_sidebar_hides_and_the_history_shows() {
     press(&mut harness, Modifiers::COMMAND, Key::B);
     harness.get_by_label(EN.sidebar_history);
 }
+
+#[test]
+fn the_theme_is_chosen_from_the_palette() {
+    let mut harness = harness();
+    press(&mut harness, Modifiers::COMMAND, Key::K);
+    type_text(&mut harness, "theme dark");
+    press(&mut harness, Modifiers::NONE, Key::Enter);
+    assert_eq!(
+        harness.state().screen.theme,
+        apifast_gui::theme::ThemeChoice::Dark
+    );
+    harness.run();
+    assert_eq!(harness.ctx.theme(), egui::Theme::Dark);
+
+    press(&mut harness, Modifiers::COMMAND, Key::K);
+    type_text(&mut harness, "theme light");
+    press(&mut harness, Modifiers::NONE, Key::Enter);
+    harness.run();
+    assert_eq!(harness.ctx.theme(), egui::Theme::Light);
+}

@@ -19,7 +19,7 @@ use crate::organisms::{
     TreeView, UrlBar, UrlBarEvent,
 };
 use crate::strings::Strings;
-use crate::theme;
+use crate::theme::{self, ThemeChoice};
 
 /// Closed tabs remembered, to open again.
 const CLOSED_TABS: usize = 20;
@@ -70,6 +70,10 @@ pub struct MainScreen {
     closed: Vec<RequestPath>,
     /// Put the cursor in the URL on the next frame.
     focus_url: bool,
+    /// The theme chosen.
+    pub theme: ThemeChoice,
+    /// The theme last applied, to apply a new choice once.
+    applied_theme: Option<ThemeChoice>,
 }
 
 /// The interface's own copy of the active tab's contents. Edits change it
@@ -100,6 +104,10 @@ impl MainScreen {
         let Some(collection) = &snapshot.collection else {
             return Vec::new();
         };
+        if self.applied_theme != Some(self.theme) {
+            theme::apply(ui.ctx(), self.theme);
+            self.applied_theme = Some(self.theme);
+        }
         let active = snapshot.active_tab();
         let hints = self.follow(active, strings);
         let sending = active.is_some_and(|tab| tab.response == ResponseState::Sending);
@@ -184,24 +192,37 @@ impl MainScreen {
             Some(UrlBarEvent::Cancel) => commands.push(Command::Cancel),
             Some(UrlBarEvent::Edited) | None => {}
         }
-        // Keys go to the palette or the shortcut editor while they are up.
-        if self.palette.open.is_none() && !self.shortcuts.capturing() {
-            let available: Vec<Action> = (ALL.iter().copied())
-                .filter(|action| match action {
-                    // Escape is free for everything else when not sending.
-                    Action::Cancel => sending,
-                    Action::Send => !sending,
-                    // The body editor takes its own shortcut.
-                    Action::FormatBody => false,
-                    _ => true,
-                })
-                .collect();
-            let pressed = ui.input_mut(|i| self.keymap.pressed(i, &available));
-            for action in pressed {
-                commands.extend(self.run(action, snapshot, strings));
-            }
-        }
+        commands.extend(self.keys(ui, snapshot, sending, strings));
         commands
+    }
+
+    /// The commands of the shortcuts pressed this frame. Keys go to the
+    /// palette or the shortcut editor while they are up.
+    fn keys(
+        &mut self,
+        ui: &egui::Ui,
+        snapshot: &Snapshot,
+        sending: bool,
+        strings: &Strings,
+    ) -> Vec<Command> {
+        if self.palette.open.is_some() || self.shortcuts.capturing() {
+            return Vec::new();
+        }
+        let available: Vec<Action> = (ALL.iter().copied())
+            .filter(|action| match action {
+                // Escape is free for everything else when not sending.
+                Action::Cancel => sending,
+                Action::Send => !sending,
+                // The body editor takes its own shortcut.
+                Action::FormatBody => false,
+                _ => true,
+            })
+            .collect();
+        let pressed = ui.input_mut(|i| self.keymap.pressed(i, &available));
+        pressed
+            .into_iter()
+            .flat_map(|action| self.run(action, snapshot, strings))
+            .collect()
     }
 
     /// Whether the keymap changed since the last call, so it can be saved.
@@ -312,6 +333,14 @@ impl MainScreen {
             }
             Action::Shortcuts => {
                 self.shortcuts.open = true;
+                Vec::new()
+            }
+            Action::ThemeSystem | Action::ThemeLight | Action::ThemeDark => {
+                self.theme = match action {
+                    Action::ThemeLight => ThemeChoice::Light,
+                    Action::ThemeDark => ThemeChoice::Dark,
+                    _ => ThemeChoice::System,
+                };
                 Vec::new()
             }
         }

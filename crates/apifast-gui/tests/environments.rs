@@ -70,7 +70,10 @@ fn type_text(harness: &mut Harness<'_, State>, text: &str) {
 fn the_first_environment_is_shown_with_its_variables() {
     let harness = harness(None);
     assert_eq!(harness.state().editor.selected(), Some("local"));
-    harness.get_by_value("http://localhost");
+    // The field, not the text run inside it.
+    harness.get_by(|node| {
+        node.role() == Role::TextInput && node.value().as_deref() == Some("http://localhost")
+    });
     // A secret's value is never shown; marking secrets waits for the vault.
     harness.get_by_label(EN.secret_in_vault);
 }

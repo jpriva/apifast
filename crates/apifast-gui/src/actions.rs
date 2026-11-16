@@ -49,6 +49,12 @@ pub enum Action {
     FormatBody,
     /// Open the editor of these shortcuts.
     Shortcuts,
+    /// Follow the system's theme.
+    ThemeSystem,
+    /// Use the light theme.
+    ThemeLight,
+    /// Use the dark theme.
+    ThemeDark,
 }
 
 /// Every action, in the order the editor of shortcuts lists them.
@@ -79,6 +85,9 @@ pub const ALL: &[Action] = &[
     Action::ShowHistory,
     Action::FormatBody,
     Action::Shortcuts,
+    Action::ThemeSystem,
+    Action::ThemeLight,
+    Action::ThemeDark,
 ];
 
 const CTRL: Modifiers = Modifiers::COMMAND;
@@ -110,6 +119,9 @@ impl Action {
             Self::ShowHistory => "show_history".into(),
             Self::FormatBody => "format_body".into(),
             Self::Shortcuts => "shortcuts".into(),
+            Self::ThemeSystem => "theme_system".into(),
+            Self::ThemeLight => "theme_light".into(),
+            Self::ThemeDark => "theme_dark".into(),
         }
     }
 
@@ -139,6 +151,9 @@ impl Action {
             Self::ShowHistory => strings.action_show_history,
             Self::FormatBody => strings.action_format_body,
             Self::Shortcuts => strings.action_shortcuts,
+            Self::ThemeSystem => strings.action_theme_system,
+            Self::ThemeLight => strings.action_theme_light,
+            Self::ThemeDark => strings.action_theme_dark,
         };
         text.to_owned()
     }
@@ -176,7 +191,11 @@ impl Action {
             Self::Environments => one(key(CTRL, Key::E)),
             Self::ToggleSidebar => one(key(CTRL, Key::B)),
             Self::FormatBody => one(key(Modifiers::ALT.plus(Modifiers::SHIFT), Key::F)),
-            Self::ShowHistory | Self::Shortcuts => Vec::new(),
+            Self::ShowHistory
+            | Self::Shortcuts
+            | Self::ThemeSystem
+            | Self::ThemeLight
+            | Self::ThemeDark => Vec::new(),
         }
     }
 }

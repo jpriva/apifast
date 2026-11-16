@@ -197,13 +197,19 @@ pub fn visuals(theme: Theme) -> egui::Visuals {
         Theme::Light => (egui::Visuals::light(), &LIGHT),
     };
     visuals.panel_fill = p.background;
-    visuals.window_fill = p.surface;
+    // Windows take the background, so the fields in them (on `surface`)
+    // stand out; with both on `surface` they vanish in the light theme.
+    visuals.window_fill = p.background;
+    visuals.window_stroke = Stroke::new(1.0, p.border);
     visuals.extreme_bg_color = p.surface;
     visuals.override_text_color = Some(p.text);
     visuals.hyperlink_color = p.accent;
     visuals.selection.bg_fill = p.accent.gamma_multiply(0.35);
     visuals.selection.stroke = Stroke::new(1.0, p.accent);
     visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, p.border);
+    // Text fields draw their frame with this stroke: without it, an empty
+    // field cannot be seen.
+    visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, p.border);
     for widget in [
         &mut visuals.widgets.inactive,
         &mut visuals.widgets.hovered,
@@ -215,11 +221,39 @@ pub fn visuals(theme: Theme) -> egui::Visuals {
     visuals
 }
 
+/// Which theme the user wants.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ThemeChoice {
+    /// The one the system uses.
+    #[default]
+    System,
+    /// Always light.
+    Light,
+    /// Always dark.
+    Dark,
+}
+
+impl ThemeChoice {
+    /// As egui takes it.
+    pub fn preference(self) -> ThemePreference {
+        match self {
+            Self::System => ThemePreference::System,
+            Self::Light => ThemePreference::Light,
+            Self::Dark => ThemePreference::Dark,
+        }
+    }
+}
+
+/// Uses `choice` from the next frame on.
+pub fn apply(ctx: &egui::Context, choice: ThemeChoice) {
+    ctx.set_theme(choice.preference());
+}
+
 /// Installs both themes and follows the system's choice.
 pub fn install(ctx: &egui::Context) {
     ctx.set_visuals_of(Theme::Light, visuals(Theme::Light));
     ctx.set_visuals_of(Theme::Dark, visuals(Theme::Dark));
-    ctx.set_theme(ThemePreference::System);
+    apply(ctx, ThemeChoice::System);
     ctx.all_styles_mut(|style| {
         style.spacing.item_spacing = egui::vec2(space::M, space::S);
         style.spacing.button_padding = egui::vec2(space::M, space::S);

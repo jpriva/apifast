@@ -152,6 +152,16 @@ pub struct Strings {
     pub keymap_problems: &'static str,
     /// Name of a request created from the keyboard.
     pub new_request_name: &'static str,
+    /// Column header: names.
+    pub column_name: &'static str,
+    /// Column header: values.
+    pub column_value: &'static str,
+    /// Action: follow the system's theme.
+    pub action_theme_system: &'static str,
+    /// Action: light theme.
+    pub action_theme_light: &'static str,
+    /// Action: dark theme.
+    pub action_theme_dark: &'static str,
     /// Sidebar tab with the collection's tree.
     pub sidebar_collection: &'static str,
     /// Sidebar tab with the history of sends.
@@ -441,6 +451,11 @@ pub const EN: Strings = Strings {
     shortcut_moved: "Taken from",
     keymap_problems: "Some entries of keymap.yml were ignored:",
     new_request_name: "New request",
+    column_name: "Name",
+    column_value: "Value",
+    action_theme_system: "Theme: follow the system",
+    action_theme_light: "Theme: light",
+    action_theme_dark: "Theme: dark",
     sidebar_collection: "Collection",
     sidebar_history: "History",
     filter: "Filter",

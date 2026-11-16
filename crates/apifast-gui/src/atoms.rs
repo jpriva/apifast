@@ -130,3 +130,54 @@ impl Widget for ColorSwatch<'_> {
         response
     }
 }
+
+/// A small button with an ×, to close or remove something. Drawn, not
+/// written: the glyph looks different, or is missing, in some fonts. It has
+/// no background until hovered, so rows of them stay quiet.
+#[derive(Debug, Clone, Copy)]
+pub struct CloseButton<'a> {
+    name: &'a str,
+}
+
+impl<'a> CloseButton<'a> {
+    /// A button named `name` for screen readers and in its hover.
+    pub fn new(name: &'a str) -> Self {
+        Self { name }
+    }
+}
+
+impl Widget for CloseButton<'_> {
+    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+        let side = ui.spacing().interact_size.y.min(18.0);
+        let (rect, response) = ui.allocate_exact_size(egui::vec2(side, side), Sense::click());
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, self.name));
+        if ui.is_rect_visible(rect) {
+            let palette = theme::palette(ui);
+            let hovered = response.hovered() || response.has_focus();
+            if hovered {
+                ui.painter().rect_filled(
+                    rect,
+                    theme::radius::SMALL,
+                    ui.visuals().widgets.hovered.weak_bg_fill,
+                );
+            }
+            let color = if hovered {
+                palette.text
+            } else {
+                palette.text_muted
+            };
+            let arm = side * 0.2;
+            let c = rect.center();
+            let stroke = egui::Stroke::new(1.4, color);
+            ui.painter().line_segment(
+                [c + egui::vec2(-arm, -arm), c + egui::vec2(arm, arm)],
+                stroke,
+            );
+            ui.painter().line_segment(
+                [c + egui::vec2(-arm, arm), c + egui::vec2(arm, -arm)],
+                stroke,
+            );
+        }
+        response.on_hover_text(self.name)
+    }
+}

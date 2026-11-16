@@ -4,6 +4,7 @@
 use apifast_app::RequestPath;
 use eframe::egui::{self, Id, RichText};
 
+use crate::atoms::CloseButton;
 use crate::core::Tab;
 use crate::strings::Strings;
 use crate::theme;
@@ -85,7 +86,7 @@ impl TabBar {
             if response.clicked() {
                 event = Some(TabEvent::Activate(tab.path.clone()));
             }
-            let close = ui.small_button("×").on_hover_text(strings.close_tab);
+            let close = ui.add(CloseButton::new(strings.close_tab));
             if close.clicked() || response.middle_clicked() {
                 event = self.request_close(tab);
             }

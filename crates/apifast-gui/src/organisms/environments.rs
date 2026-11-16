@@ -9,7 +9,7 @@
 use apifast_domain::{Environment, ValueKind, Variable, VariableValue};
 use eframe::egui::{self, RichText};
 
-use crate::atoms::{ColorSwatch, TemplateField, TemplateFieldTexts, VariableHints};
+use crate::atoms::{CloseButton, ColorSwatch, TemplateField, TemplateFieldTexts, VariableHints};
 use crate::core::TabContext;
 use crate::strings::Strings;
 use crate::theme;
@@ -266,7 +266,7 @@ impl EnvironmentEditor {
             .num_columns(2)
             .spacing([theme::space::M, theme::space::S])
             .show(ui, |ui| {
-                ui.label(strings.name);
+                ui.label(strings.column_name);
                 let field = ui
                     .add(egui::TextEdit::singleline(&mut self.name).desired_width(240.0))
                     .accessible_name(strings.environment_name)
@@ -379,7 +379,50 @@ fn kind_label(kind: ValueKind, strings: &Strings) -> &str {
     }
 }
 
+/// Widths of the columns of the variables table.
+struct Columns {
+    check: f32,
+    name: f32,
+    value: f32,
+    kind: f32,
+    secret: f32,
+}
+
+impl Columns {
+    fn new(ui: &egui::Ui) -> Self {
+        let gap = theme::space::S;
+        let check = ui.spacing().icon_width;
+        let (kind, secret, close) = (90.0, 48.0, 18.0);
+        let flexible =
+            (ui.available_width() - check - kind - secret - close - 5.0 * gap).max(240.0);
+        let name = flexible * 0.35;
+        Self {
+            check,
+            name,
+            value: flexible - name,
+            kind,
+            secret,
+        }
+    }
+}
+
+/// A cell of `width`, its contents centered on the row's line.
+fn cell<R>(ui: &mut egui::Ui, width: f32, content: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    let size = egui::vec2(width, ui.spacing().interact_size.y);
+    ui.allocate_ui_with_layout(
+        size,
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            ui.set_min_width(width);
+            content(ui)
+        },
+    )
+    .inner
+}
+
 /// The table of an environment's variables, with an empty row to add one.
+/// Rows are laid out by hand, not with a grid: a field in a grid cell only
+/// gets the width its column measured before, so it never grows.
 fn variables(
     ui: &mut egui::Ui,
     variables: &mut Vec<Variable>,
@@ -392,59 +435,53 @@ fn variables(
         generated: strings.variable_generated,
     };
     let id = ui.make_persistent_id("environment-variables");
+    let columns = Columns::new(ui);
     let mut remove = None;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = theme::space::S;
+        for (header, width) in [
+            ("", columns.check),
+            (strings.column_name, columns.name),
+            (strings.column_value, columns.value),
+            (strings.kind, columns.kind),
+            (strings.secret, columns.secret),
+        ] {
+            cell(ui, width, |ui| ui.label(RichText::new(header).strong()));
+        }
+    });
     egui::ScrollArea::vertical()
         .id_salt("environment-variables-scroll")
         .max_height(ui.available_height() - 40.0)
         .show(ui, |ui| {
-            egui::Grid::new(id)
-                .num_columns(6)
-                .striped(true)
-                .spacing([theme::space::S, theme::space::XS])
-                .show(ui, |ui| {
-                    for header in [
-                        "",
-                        strings.name,
-                        strings.value,
-                        strings.kind,
-                        strings.secret,
-                        "",
-                    ] {
-                        ui.label(RichText::new(header).strong());
+            let rows = variables.len();
+            for (index, variable) in variables.iter_mut().enumerate() {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = theme::space::S;
+                    row(ui, variable, (id, index), &columns, (hints, texts), strings);
+                    if ui.add(CloseButton::new(strings.remove_row)).clicked() {
+                        remove = Some(index);
                     }
-                    ui.end_row();
-                    let rows = variables.len();
-                    for (index, variable) in variables.iter_mut().enumerate() {
-                        row(ui, variable, (id, index), hints, texts, strings);
-                        if ui
-                            .small_button("×")
-                            .accessible_name(strings.remove_row)
-                            .on_hover_text(strings.remove_row)
-                            .clicked()
-                        {
-                            remove = Some(index);
-                        }
-                        ui.end_row();
-                    }
-                    // The empty row: typing a name adds the variable. Its
-                    // field has the id the new row's will have, so the focus
-                    // stays.
-                    ui.label("");
-                    let mut name = String::new();
-                    if ui
-                        .add(
-                            egui::TextEdit::singleline(&mut name)
-                                .id(id.with((rows, 0)))
-                                .hint_text(strings.new_variable)
-                                .desired_width(160.0),
-                        )
-                        .accessible_name(strings.new_variable)
-                        .changed()
-                    {
-                        variables.push(Variable::text(name, ""));
-                    }
-                    ui.end_row();
                 });
+            }
+            // The empty row: typing a name adds the variable. Its field has
+            // the id the new row's will have, so the focus stays.
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = theme::space::S;
+                cell(ui, columns.check, |_| ());
+                let mut name = String::new();
+                if ui
+                    .add(
+                        egui::TextEdit::singleline(&mut name)
+                            .id(id.with((rows, 0)))
+                            .hint_text(strings.new_variable)
+                            .desired_width(columns.name),
+                    )
+                    .accessible_name(strings.new_variable)
+                    .changed()
+                {
+                    variables.push(Variable::text(name, ""));
+                }
+            });
         });
     if let Some(index) = remove {
         variables.remove(index);
@@ -455,28 +492,32 @@ fn row(
     ui: &mut egui::Ui,
     variable: &mut Variable,
     (id, index): (egui::Id, usize),
-    hints: &VariableHints,
-    texts: TemplateFieldTexts<'_>,
+    columns: &Columns,
+    (hints, texts): (&VariableHints, TemplateFieldTexts<'_>),
     strings: &Strings,
 ) {
-    ui.checkbox(&mut variable.enabled, "")
-        .accessible_name(strings.enabled)
-        .on_hover_text(strings.enabled);
+    cell(ui, columns.check, |ui| {
+        ui.checkbox(&mut variable.enabled, "")
+            .accessible_name(strings.enabled)
+            .on_hover_text(strings.enabled);
+    });
     ui.add(
         egui::TextEdit::singleline(&mut variable.name)
             .id(id.with((index, 0)))
-            .desired_width(160.0),
+            .desired_width(columns.name),
     )
     .accessible_name(strings.name);
     if variable.secret {
-        ui.label(RichText::new(strings.secret_in_vault).color(theme::palette(ui).text_muted));
+        cell(ui, columns.value, |ui| {
+            ui.label(RichText::new(strings.secret_in_vault).color(theme::palette(ui).text_muted));
+        });
     } else {
         let value = variable
             .value
             .get_or_insert_with(|| VariableValue::text(""));
         TemplateField::new(&mut value.data, hints, texts)
             .id(id.with((index, 1)))
-            .desired_width(260.0)
+            .desired_width(columns.value)
             .accessible_name(strings.value)
             .show(ui);
     }
@@ -487,7 +528,7 @@ fn row(
     ui.add_enabled_ui(!variable.secret, |ui| {
         egui::ComboBox::from_id_salt(id.with((index, 2)))
             .selected_text(kind_label(kind, strings))
-            .width(80.0)
+            .width(columns.kind)
             .show_ui(ui, |ui| {
                 for option in [
                     ValueKind::String,
@@ -509,10 +550,12 @@ fn row(
     });
     // Secrets live in the vault, which arrives later: marking one here
     // would only drop its value from the file.
-    let mut secret = variable.secret;
-    ui.add_enabled(false, egui::Checkbox::without_text(&mut secret))
-        .accessible_name(strings.secret)
-        .on_disabled_hover_text(strings.secret_later);
+    cell(ui, columns.secret, |ui| {
+        let mut secret = variable.secret;
+        ui.add_enabled(false, egui::Checkbox::without_text(&mut secret))
+            .accessible_name(strings.secret)
+            .on_disabled_hover_text(strings.secret_later);
+    });
 }
 
 /// Every variable the active request sees: its value, where it comes from
@@ -536,7 +579,12 @@ fn all_variables(ui: &mut egui::Ui, context: Option<&TabContext>, strings: &Stri
                 .num_columns(4)
                 .striped(true)
                 .show(ui, |ui| {
-                    for header in [strings.name, strings.value, strings.from, strings.overrides] {
+                    for header in [
+                        strings.column_name,
+                        strings.column_value,
+                        strings.from,
+                        strings.overrides,
+                    ] {
                         ui.label(RichText::new(header).strong());
                     }
                     ui.end_row();

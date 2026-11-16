@@ -132,7 +132,12 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
   - `Ctrl+K` abre la paleta: acciones con su atajo, requests y entornos, con búsqueda difusa y lo último elegido primero. `Ctrl+P` busca solo requests.
   - El editor de atajos (desde la paleta, "Keyboard shortcuts") cambia uno pulsando la combinación nueva, avisa si se la quita a otra acción y permite restablecer el predeterminado.
   - `~/.config/apifast/keymap.yml` guarda solo lo que difiere de lo predeterminado; las entradas que no se entienden se ignoran y se avisa en pantalla.
-- [ ] Temas claro y oscuro.
+- [x] Temas claro y oscuro.
+  - Por defecto se sigue el tema del sistema. Desde la paleta se elige "Theme: follow the system", "light" o "dark"; las tres acciones admiten atajo. La elección se guardará con los ajustes (punto siguiente).
+  - Repaso visual con capturas renderizadas en los dos temas:
+    - Las tablas clave/valor y la de variables ya no usan `egui::Grid`: un campo en una celda solo recibe el ancho que su columna midió antes, así que nunca crecía (nombres cortados y valores partidos en varias líneas). Ahora las filas se reparten el ancho disponible.
+    - Las ventanas usan el color de fondo y los campos el de superficie, con borde: en el tema claro los campos dentro de una ventana no se veían.
+    - Los botones de cerrar y quitar son el átomo `CloseButton`: una × dibujada, sin fondo hasta pasar el ratón.
 - [ ] Ajustes de la aplicación.
 
 ### Criterio de salida
