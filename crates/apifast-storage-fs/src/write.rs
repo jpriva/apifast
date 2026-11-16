@@ -9,9 +9,9 @@
 //! New files are built the same way, from a minimal document.
 
 use apifast_domain::{
-    ApiKeyPlacement, Auth, AuthScheme, Body, Collection, Environment, Folder, FormField, Header,
-    HttpRequest, MultipartPart, MultipartValue, Param, ParamKind, RequestDefaults, Setting,
-    ValueKind, Variable, VariableValue,
+    ApiKeyPlacement, Assertion, Auth, AuthScheme, Body, Capture, Collection, Environment, Folder,
+    FormField, Header, HttpRequest, MultipartPart, MultipartValue, Param, ParamKind,
+    RequestDefaults, Setting, ValueKind, Variable, VariableValue,
 };
 use oneyaml::Value;
 
@@ -175,6 +175,23 @@ pub(crate) fn update_request(doc: &mut Value, old: &HttpRequest, new: &HttpReque
         prune_empty(doc, "runtime");
     }
 
+    if old.assertions != new.assertions {
+        let runtime = child_mut(doc, "runtime");
+        update_list(
+            runtime,
+            "assertions",
+            &old.assertions,
+            &new.assertions,
+            assertion_item,
+            merge_assertion,
+        );
+        prune_empty(doc, "runtime");
+    }
+
+    if old.captures != new.captures {
+        update_captures(doc, &old.captures, &new.captures);
+    }
+
     if old.settings != new.settings {
         update_settings(doc, old, new);
     }
@@ -331,6 +348,114 @@ fn merge_variable(item: &mut Value, old: &Variable, new: &Variable) {
             (!new.enabled).then_some(Value::Bool(true)),
         );
     }
+}
+
+// --- Assertions and captures -------------------------------------------------
+
+fn assertion_item(assertion: &Assertion) -> Value {
+    mapping([
+        ("expression", Some(string(&assertion.expression))),
+        ("operator", Some(string(assertion.operator.as_str()))),
+        ("value", assertion.value.as_deref().map(string)),
+        (
+            "disabled",
+            (!assertion.enabled).then_some(Value::Bool(true)),
+        ),
+    ])
+}
+
+fn merge_assertion(item: &mut Value, old: &Assertion, new: &Assertion) {
+    if old.expression != new.expression {
+        set(item, "expression", string(&new.expression));
+    }
+    if old.operator != new.operator {
+        set(item, "operator", string(new.operator.as_str()));
+    }
+    if old.value != new.value {
+        set_or_remove(item, "value", new.value.as_deref().map(string));
+    }
+    if old.enabled != new.enabled {
+        set_or_remove(
+            item,
+            "disabled",
+            (!new.enabled).then_some(Value::Bool(true)),
+        );
+    }
+}
+
+fn capture_item(capture: &Capture) -> Value {
+    mapping([
+        ("type", Some(string("set-variable"))),
+        ("phase", Some(string(&capture.phase))),
+        (
+            "selector",
+            Some(mapping([
+                ("expression", Some(string(&capture.expression))),
+                ("method", Some(string(&capture.method))),
+            ])),
+        ),
+        (
+            "variable",
+            Some(mapping([
+                ("name", Some(string(&capture.variable))),
+                ("scope", Some(string(capture.scope.as_str()))),
+            ])),
+        ),
+        ("disabled", (!capture.enabled).then_some(Value::Bool(true))),
+    ])
+}
+
+fn merge_capture(item: &mut Value, old: &Capture, new: &Capture) {
+    if old.phase != new.phase {
+        set(item, "phase", string(&new.phase));
+    }
+    if (&old.expression, &old.method) != (&new.expression, &new.method) {
+        let selector = child_mut(item, "selector");
+        set(selector, "expression", string(&new.expression));
+        set(selector, "method", string(&new.method));
+    }
+    if (&old.variable, &old.scope) != (&new.variable, &new.scope) {
+        let variable = child_mut(item, "variable");
+        set(variable, "name", string(&new.variable));
+        set(variable, "scope", string(new.scope.as_str()));
+    }
+    if old.enabled != new.enabled {
+        set_or_remove(
+            item,
+            "disabled",
+            (!new.enabled).then_some(Value::Bool(true)),
+        );
+    }
+}
+
+/// Rewrites the captures in `runtime.actions`, keeping the actions of other
+/// kinds (which are not modeled) after them, as they were.
+fn update_captures(doc: &mut Value, old: &[Capture], new: &[Capture]) {
+    let runtime = child_mut(doc, "runtime");
+    let (captures, others): (Vec<Value>, Vec<Value>) = items(get(runtime, "actions"))
+        .iter()
+        .cloned()
+        .partition(read::is_capture);
+    let mut scratch = mapping([(
+        "actions",
+        (!captures.is_empty()).then(|| Value::from(captures)),
+    )]);
+    update_list(
+        &mut scratch,
+        "actions",
+        old,
+        new,
+        capture_item,
+        merge_capture,
+    );
+    let mut actions = items(get(&scratch, "actions")).to_vec();
+    actions.extend(others);
+    set_or_remove(
+        runtime,
+        "actions",
+        (!actions.is_empty()).then(|| actions.into()),
+    );
+    prune_empty(doc, "runtime");
 }
 
 /// Rewrites the list at `parent[key]` so it holds `new`, keeping the original

@@ -1,4 +1,4 @@
-use crate::{Auth, Body, Settings, Variable};
+use crate::{Assertion, Auth, Body, Capture, Settings, Variable};
 
 /// A request of a collection, by protocol.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,6 +31,10 @@ pub struct HttpRequest {
     pub auth: Auth,
     /// Request variables (`runtime.variables`).
     pub variables: Vec<Variable>,
+    /// Checks on the response (`runtime.assertions`).
+    pub assertions: Vec<Assertion>,
+    /// Values taken from the response into variables (`runtime.actions`).
+    pub captures: Vec<Capture>,
     /// Send settings.
     pub settings: Settings,
     /// Markdown documentation.
@@ -51,6 +55,8 @@ impl HttpRequest {
             body: Body::None,
             auth: Auth::Inherit,
             variables: Vec::new(),
+            assertions: Vec::new(),
+            captures: Vec::new(),
             settings: Settings::default(),
             docs: None,
         }

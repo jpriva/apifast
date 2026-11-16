@@ -12,6 +12,7 @@
 //! 3. [`resolve_variables`] merges the variables of every scope by precedence,
 //!    also recording where each one comes from.
 
+mod assertion;
 mod auth;
 mod body;
 mod collection;
@@ -26,6 +27,7 @@ mod status;
 mod url_params;
 mod variable;
 
+pub use assertion::{Assertion, Capture, CaptureScope, Operator};
 pub use auth::{ApiKeyAuth, ApiKeyPlacement, Auth, AuthScheme, BasicAuth, BearerAuth};
 pub use body::{Body, FormField, MultipartPart, MultipartValue};
 pub use collection::{Collection, CollectionId, Folder, RequestDefaults};

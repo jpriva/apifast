@@ -3,9 +3,10 @@
 //! instead of failing.
 
 use apifast_domain::{
-    ApiKeyAuth, ApiKeyPlacement, Auth, AuthScheme, BasicAuth, BearerAuth, Body, Collection,
-    Environment, Folder, FormField, Header, HttpRequest, Method, MultipartPart, MultipartValue,
-    Param, ParamKind, RequestDefaults, Setting, Settings, ValueKind, Variable, VariableValue,
+    ApiKeyAuth, ApiKeyPlacement, Assertion, Auth, AuthScheme, BasicAuth, BearerAuth, Body, Capture,
+    CaptureScope, Collection, Environment, Folder, FormField, Header, HttpRequest, Method,
+    MultipartPart, MultipartValue, Operator, Param, ParamKind, RequestDefaults, Setting, Settings,
+    ValueKind, Variable, VariableValue,
 };
 use oneyaml::Value;
 
@@ -60,8 +61,43 @@ fn http_request(doc: &Value, name: String, seq: Option<u32>) -> HttpRequest {
         body: body(field("body")),
         auth: self::auth(auth),
         variables: variables(get_in(doc, &["runtime", "variables"])),
+        assertions: items(get_in(doc, &["runtime", "assertions"]))
+            .iter()
+            .map(assertion)
+            .collect(),
+        captures: items(get_in(doc, &["runtime", "actions"]))
+            .iter()
+            .filter(|item| is_capture(item))
+            .map(capture)
+            .collect(),
         settings: settings(get(doc, "settings")),
         docs: text(get(doc, "docs")),
+    }
+}
+
+fn assertion(item: &Value) -> Assertion {
+    Assertion {
+        expression: text_or_empty(get(item, "expression")),
+        operator: Operator::parse(&text_or_empty(get(item, "operator"))),
+        value: text(get(item, "value")),
+        enabled: !is_disabled(item),
+    }
+}
+
+/// Whether an item of `runtime.actions` is a capture (`set-variable`):
+/// other kinds of action are kept in the file but not modeled.
+pub(crate) fn is_capture(item: &Value) -> bool {
+    text(get(item, "type")).as_deref() == Some("set-variable")
+}
+
+pub(crate) fn capture(item: &Value) -> Capture {
+    Capture {
+        expression: text_or_empty(get_in(item, &["selector", "expression"])),
+        method: text_or_empty(get_in(item, &["selector", "method"])),
+        phase: text_or_empty(get(item, "phase")),
+        variable: text_or_empty(get_in(item, &["variable", "name"])),
+        scope: CaptureScope::parse(&text_or_empty(get_in(item, &["variable", "scope"]))),
+        enabled: !is_disabled(item),
     }
 }
 

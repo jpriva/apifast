@@ -10,8 +10,9 @@ use std::fs;
 
 use apifast_app::{CollectionRepository, RequestPath};
 use apifast_domain::{
-    ApiKeyAuth, ApiKeyPlacement, AuthScheme, BasicAuth, BearerAuth, Body, FormField, Header,
-    HttpRequest, Method, Param, ParamKind, Setting, Settings, ValueKind, Variable, VariableValue,
+    ApiKeyAuth, ApiKeyPlacement, Assertion, AuthScheme, BasicAuth, BearerAuth, Body, Capture,
+    CaptureScope, FormField, Header, HttpRequest, Method, Operator, Param, ParamKind, Setting,
+    Settings, ValueKind, Variable, VariableValue,
 };
 use apifast_storage_fs::FsCollection;
 use proptest::prelude::*;
@@ -148,6 +149,43 @@ fn variable() -> impl Strategy<Value = Variable> {
     })
 }
 
+fn assertion() -> impl Strategy<Value = Assertion> {
+    let operators: Vec<Operator> = Operator::all()
+        .chain([Operator::Other("isFuture".into())])
+        .collect();
+    (
+        "res\\.(status|body\\.[a-z]{1,5}|headers\\.[a-z-]{1,8})",
+        prop::sample::select(operators),
+        prop::option::of(text()),
+        any::<bool>(),
+    )
+        .prop_map(|(expression, operator, value, enabled)| Assertion {
+            expression,
+            operator,
+            value,
+            enabled,
+        })
+}
+
+fn capture() -> impl Strategy<Value = Capture> {
+    (
+        "res\\.body\\.[a-z_]{1,8}",
+        "[a-z_]{1,8}",
+        prop_oneof![
+            Just(CaptureScope::Runtime),
+            Just(CaptureScope::Request),
+            Just(CaptureScope::Environment),
+            Just(CaptureScope::Other("global".into())),
+        ],
+        any::<bool>(),
+    )
+        .prop_map(|(expression, variable, scope, enabled)| Capture {
+            scope,
+            enabled,
+            ..Capture::new(expression, variable)
+        })
+}
+
 /// A random request. The parts are boxed in groups: one tuple of fifteen
 /// strategies builds a type too big for a test thread's stack in debug builds.
 fn request() -> BoxedStrategy<HttpRequest> {
@@ -171,6 +209,11 @@ fn request() -> BoxedStrategy<HttpRequest> {
         prop::collection::vec(variable(), 0..3),
     )
         .boxed();
+    let checks = (
+        prop::collection::vec(assertion(), 0..3),
+        prop::collection::vec(capture(), 0..3),
+    )
+        .boxed();
     let settings = (
         setting(0u64..100_000),
         setting(any::<bool>()),
@@ -179,11 +222,12 @@ fn request() -> BoxedStrategy<HttpRequest> {
         prop::option::of(text()),
     )
         .boxed();
-    (head, parts, settings)
+    (head, parts, checks, settings)
         .prop_map(
             |(
                 (name, seq, tags, method, url),
                 (params, headers, body, auth, variables),
+                (assertions, captures),
                 (timeout, follow, max, encode, docs),
             )| {
                 HttpRequest {
@@ -197,6 +241,8 @@ fn request() -> BoxedStrategy<HttpRequest> {
                     body,
                     auth,
                     variables,
+                    assertions,
+                    captures,
                     settings: Settings {
                         timeout_ms: timeout,
                         follow_redirects: follow,

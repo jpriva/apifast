@@ -715,3 +715,79 @@ fn opening_needs_an_opencollection_file() {
     ));
     let _ = Path::new("unused");
 }
+
+const CHECKED: &str = "info:
+  name: Login
+  type: http
+
+http:
+  method: POST
+  url: \"{{host}}/login\"
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: \"200\"
+    - expression: res.body.error
+      operator: isUndefined
+      disabled: true
+  actions:
+    - type: set-variable
+      phase: after-response
+      selector:
+        expression: res.body.token
+        method: jsonq
+      variable:
+        name: token
+        scope: runtime
+    - type: future-action
+      note: kept as is
+";
+
+#[test]
+fn assertions_and_captures_are_read_and_edited_in_place() {
+    use apifast_domain::{Assertion, Capture, CaptureScope, Operator};
+    let (dir, repo) = setup(&[("login.yml", CHECKED)]);
+    let mut request = load(&repo, "login.yml");
+    assert_eq!(
+        request.assertions,
+        [
+            Assertion::new("res.status", Operator::Eq, Some("200")),
+            Assertion {
+                enabled: false,
+                ..Assertion::new("res.body.error", Operator::IsUndefined, None)
+            },
+        ]
+    );
+    assert_eq!(request.captures, [Capture::new("res.body.token", "token")]);
+
+    request.assertions[0].value = Some("201".into());
+    request.captures[0].scope = CaptureScope::Environment;
+    request
+        .captures
+        .push(Capture::new("res.body.user.id", "user_id"));
+    repo.save_request(&path("login.yml"), &request).unwrap();
+    let after = read(&dir, "login.yml");
+    let expected = CHECKED
+        .replace("value: \"200\"", "value: \"201\"")
+        .replace(
+            "name: token\n        scope: runtime",
+            "name: token\n        scope: environment",
+        )
+        .replace(
+            "    - type: future-action",
+            "    - type: set-variable
+      phase: after-response
+      selector:
+        expression: res.body.user.id
+        method: jsonq
+      variable:
+        name: user_id
+        scope: runtime
+    - type: future-action",
+        );
+    assert_eq!(after, expected);
+    assert!(after.contains("type: future-action\n      note: kept as is"));
+    assert_eq!(load(&repo, "login.yml"), request);
+}
