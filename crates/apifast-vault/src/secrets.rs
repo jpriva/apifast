@@ -48,7 +48,7 @@ pub struct VaultSecrets<K = SystemKeyring, F = KeyFile> {
 
 impl VaultSecrets {
     /// The secrets of `collection`, whose shared ones are in `shared`, with
-    /// the master key in the system keyring or in its file under `data_dir`.
+    /// the master key in `keyring` or in its file under `data_dir`.
     ///
     /// # Errors
     ///
@@ -57,12 +57,13 @@ impl VaultSecrets {
         data_dir: &Path,
         collection: &str,
         shared: Arc<dyn SharedSecretFiles>,
+        keyring: SystemKeyring,
     ) -> Result<Self, KeyStoreError> {
         Self::with_backends(
             data_dir,
             collection,
             shared,
-            SystemKeyring,
+            keyring,
             KeyFile::in_dir(data_dir),
         )
     }
@@ -105,6 +106,57 @@ impl<K: KeyBackend, F: KeyBackend> VaultSecrets<K, F> {
     /// The local vault.
     pub fn local(&self) -> &LocalVault {
         &self.local
+    }
+
+    /// Whether this machine has the collection's key, without opening it
+    /// (nor asking the keyring).
+    pub fn has_collection_key(&self) -> bool {
+        self.collection_keys.exists(&self.collection)
+    }
+
+    /// Whether the collection shares secrets: it has a challenge.
+    ///
+    /// # Errors
+    ///
+    /// If the collection's files cannot be read.
+    pub fn shares_secrets(&self) -> Result<bool, KeyStoreError> {
+        Ok(self
+            .shared
+            .vault_challenge()
+            .map_err(|e| files(&e))?
+            .is_some())
+    }
+
+    /// The names of the stored secrets, as `(environment, name, kind)`,
+    /// without opening any.
+    ///
+    /// # Errors
+    ///
+    /// If the vault or the collection's files cannot be read.
+    pub fn stored(&self) -> Result<Vec<(String, String, SecretKind)>, KeyStoreError> {
+        let mut stored: Vec<(String, String, SecretKind)> = self
+            .local
+            .entries()?
+            .into_iter()
+            .map(|e| (e.environment, e.name, SecretKind::Local))
+            .collect();
+        stored.extend(
+            self.shared
+                .shared_secret_entries()
+                .map_err(|e| files(&e))?
+                .into_iter()
+                .map(|(environment, name)| (environment, name, SecretKind::Shared)),
+        );
+        Ok(stored)
+    }
+
+    /// The value of secret `name` of `environment`, to show it on request.
+    ///
+    /// # Errors
+    ///
+    /// If a key is missing or a file cannot be read.
+    pub fn reveal(&self, environment: &str, name: &str) -> Result<Option<Secret>, KeyStoreError> {
+        Ok(self.value(environment, name)?.map(Secret::new))
     }
 
     /// The master key if there is one. A failure is not kept, so a locked

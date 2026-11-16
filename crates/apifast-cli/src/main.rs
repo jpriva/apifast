@@ -21,7 +21,7 @@ use apifast_domain::Variable;
 use apifast_history::FsResponseStore;
 use apifast_http::ReqwestTransport;
 use apifast_storage_fs::FsCollection;
-use apifast_vault::VaultSecrets;
+use apifast_vault::{SystemKeyring, VaultSecrets};
 use clap::{Parser, Subcommand};
 
 /// Exit code when `--fail` is set and the status is 400 or more.
@@ -119,6 +119,7 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
             &apifast_history::dirs::data_dir(),
             id.as_str(),
             repo.clone(),
+            SystemKeyring::default(),
         )?),
         None => Box::new(NoSecrets),
     };

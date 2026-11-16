@@ -191,6 +191,12 @@ impl CollectionKeyStore {
             })
     }
 
+    /// Whether this user has a key of `collection`, without opening it.
+    pub fn exists(&self, collection: &str) -> bool {
+        self.file(collection, Slot::Current)
+            .is_ok_and(|path| path.exists())
+    }
+
     /// Forgets the key of `collection`. Forgetting one that is not there is
     /// fine.
     ///

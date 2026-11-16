@@ -94,10 +94,19 @@ pub trait KeyBackend {
 
 /// The master key's entry in the system keyring (Secret Service, Keychain or
 /// Credential Manager).
-#[derive(Debug, Default)]
-pub struct SystemKeyring;
+#[derive(Debug, Default, Clone, Copy)]
+pub struct SystemKeyring {
+    off: bool,
+}
 
 impl SystemKeyring {
+    /// A keyring taken as missing: the master key goes to its file. For
+    /// machines where the keyring must not be used, and for tests, which
+    /// must not touch the user's keyring.
+    pub fn off() -> Self {
+        Self { off: true }
+    }
+
     fn entry() -> Result<keyring::Entry, KeyStoreError> {
         keyring::Entry::new(KEYRING_SERVICE, KEYRING_ENTRY)
             .map_err(|e| KeyStoreError::Keyring(e.to_string()))
@@ -106,7 +115,7 @@ impl SystemKeyring {
 
 impl KeyBackend for SystemKeyring {
     fn available(&self) -> bool {
-        keyring::Entry::store_status().is_ok()
+        !self.off && keyring::Entry::store_status().is_ok()
     }
 
     fn get(&self) -> Result<Option<Vec<u8>>, KeyStoreError> {
@@ -141,6 +150,12 @@ impl KeyFile {
     /// The file's path.
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// Whether the master key is in this file: the keyring was not there
+    /// when it was made. The interface says so.
+    pub fn holds_key(&self) -> bool {
+        self.path.exists()
     }
 
     fn error(&self, e: &io::Error) -> KeyStoreError {

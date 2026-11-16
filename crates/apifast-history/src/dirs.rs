@@ -65,6 +65,39 @@ pub fn history_file_in(data_dir: &Path, root: &Path, collection_id: Option<&str>
         .join(format!("{}.jsonl", collection_key(root, collection_id)))
 }
 
+/// Moves what apifast keeps of the collection at `root` under `data_dir`
+/// (responses, session and history) from its path's hash to `id`, when the
+/// collection gets an id. What is already under `id` is left alone.
+///
+/// # Errors
+///
+/// If something cannot be moved; what moved before stays moved.
+pub fn move_to_id(data_dir: &Path, root: &Path, id: &str) -> std::io::Result<()> {
+    let moves = [
+        (
+            responses_dir_in(data_dir, root, None),
+            responses_dir_in(data_dir, root, Some(id)),
+        ),
+        (
+            sessions_dir_in(data_dir, root, None),
+            sessions_dir_in(data_dir, root, Some(id)),
+        ),
+        (
+            history_file_in(data_dir, root, None),
+            history_file_in(data_dir, root, Some(id)),
+        ),
+    ];
+    for (from, to) in moves {
+        if from.exists() && !to.exists() {
+            if let Some(parent) = to.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::rename(&from, &to)?;
+        }
+    }
+    Ok(())
+}
+
 fn collection_key(root: &Path, collection_id: Option<&str>) -> String {
     collection_id.map_or_else(
         || format!("path-{:016x}", fnv1a(root.to_string_lossy().as_bytes())),
@@ -120,6 +153,30 @@ mod tests {
     fn the_path_hash_is_stable() {
         assert_eq!(fnv1a(b""), 0xcbf2_9ce4_8422_2325);
         assert_eq!(fnv1a(b"a"), 0xaf63_dc4c_8601_ec8c);
+    }
+
+    #[test]
+    fn data_kept_by_path_moves_to_the_new_id() {
+        let data = std::env::temp_dir().join(format!("apifast-move-{}", std::process::id()));
+        let root = Path::new("/somewhere/collection");
+        let old = sessions_dir_in(&data, root, None);
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::write(old.join("session.yml"), "tabs: []").unwrap();
+        let history = history_file_in(&data, root, None);
+        std::fs::create_dir_all(history.parent().unwrap()).unwrap();
+        std::fs::write(&history, "{}\n").unwrap();
+
+        move_to_id(&data, root, "col_1").unwrap();
+        assert!(
+            sessions_dir_in(&data, root, Some("col_1"))
+                .join("session.yml")
+                .exists()
+        );
+        assert!(history_file_in(&data, root, Some("col_1")).exists());
+        assert!(!old.exists() && !history.exists());
+        // Nothing to move the second time.
+        move_to_id(&data, root, "col_1").unwrap();
+        std::fs::remove_dir_all(&data).unwrap();
     }
 
     #[test]

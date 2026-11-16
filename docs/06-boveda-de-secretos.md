@@ -160,6 +160,10 @@ Un secreto solo local se puede compartir y uno compartido se puede volver solo l
 - Copiar un secreto al portapapeles lo limpia después de un tiempo configurable.
 - La CLI nunca imprime secretos, ni siquiera en modo detallado.
 
+## Identificador al guardar el primer secreto
+
+Los secretos se indexan por el identificador estable de la colección. Una colección sin él (por ejemplo, una de Bruno recién abierta) lo recibe al guardar su primer secreto o al pegar una clave. En ese momento, lo que apifast guardaba de ella bajo el hash de su ruta (sesión, historial y cuerpos de respuesta) pasa a guardarse bajo el identificador, para no perderlo.
+
 ## Qué se cifra además de los secretos
 
 | Dato | Cifrado | Clave |

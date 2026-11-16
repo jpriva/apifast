@@ -9,6 +9,10 @@
 //! collection, written shortly after each change and when the core stops,
 //! and restored when the collection is opened again.
 
+mod vault;
+
+pub use vault::{Revealed, SHOWN_FOR, SecretState, SecretStatus, VaultCommand, VaultView};
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -31,7 +35,7 @@ use apifast_domain::{
 use apifast_history::{FsHistoryStore, FsResponseStore, Limits};
 use apifast_http::ReqwestTransport;
 use apifast_storage_fs::{FsCollection, FsSessionStore};
-use apifast_vault::VaultSecrets;
+use apifast_vault::{SystemKeyring, VaultSecrets};
 use apifast_watch::{Changes, FsWatcher};
 use tokio::sync::mpsc;
 
@@ -66,7 +70,7 @@ fn stores(
     data_dir: &Path,
     root: &Path,
     id: Option<&str>,
-    shared: Arc<dyn SharedSecretFiles>,
+    (shared, keyring): (Arc<dyn SharedSecretFiles>, SystemKeyring),
 ) -> Result<Stores, String> {
     let responses =
         FsResponseStore::new(apifast_history::dirs::responses_dir_in(data_dir, root, id));
@@ -74,7 +78,7 @@ fn stores(
     let history = FsHistoryStore::new(apifast_history::dirs::history_file_in(data_dir, root, id));
     // Secrets need the collection's id: without one, none was ever stored.
     let secrets = id
-        .map(|id| VaultSecrets::for_collection(data_dir, id, shared).map(Arc::new))
+        .map(|id| VaultSecrets::for_collection(data_dir, id, shared, keyring).map(Arc::new))
         .transpose()
         .map_err(|e| e.to_string())?;
     Ok(Stores {
@@ -244,6 +248,8 @@ pub enum Command {
         /// Whether the draft is kept.
         keep_draft: bool,
     },
+    /// Something of the vault: secrets and the collection's key.
+    Vault(VaultCommand),
 }
 
 /// Everything the interface shows, as of one moment.
@@ -270,6 +276,8 @@ pub struct Snapshot {
     /// The sends of the collection, oldest first. Loaded shortly after the
     /// collection opens.
     pub history: Arc<Vec<HistoryEntry>>,
+    /// What the interface sees of the vault.
+    pub vault: VaultView,
 }
 
 impl Snapshot {
@@ -400,6 +408,8 @@ enum Message {
     HistoryLoaded(u64, Vec<HistoryEntry>),
     /// Files of collection number `.0` changed outside apifast.
     External(u64, Changes),
+    /// Hide what was shown of the vault, if it is still show number `.0`.
+    HideShown(u64),
     WriteSession,
 }
 
@@ -428,6 +438,20 @@ impl Core {
     ///
     /// If the thread or its runtime cannot be created (out of resources).
     pub fn start(data_dir: PathBuf, notify: impl Fn() + Send + Sync + 'static) -> Self {
+        Self::start_with(data_dir, SystemKeyring::default(), notify)
+    }
+
+    /// As [`Core::start`], with the master key in `keyring`. Tests pass
+    /// [`SystemKeyring::off`], so the user's keyring is never touched.
+    ///
+    /// # Panics
+    ///
+    /// If the thread or its runtime cannot be created (out of resources).
+    pub fn start_with(
+        data_dir: PathBuf,
+        keyring: SystemKeyring,
+        notify: impl Fn() + Send + Sync + 'static,
+    ) -> Self {
         let (sender, receiver) = mpsc::unbounded_channel();
         let snapshot = Arc::new(Mutex::new(Arc::new(Snapshot::default())));
         let shared = snapshot.clone();
@@ -453,6 +477,8 @@ impl Core {
                     session_pending: false,
                     messages: own_sender,
                     limits: (HISTORY_LIMITS, RESPONSE_LIMITS),
+                    shown: 0,
+                    keyring,
                 };
                 runtime.block_on(state.run(receiver));
             });
@@ -528,6 +554,11 @@ struct State {
     /// How much history and how many response bodies are kept; applied
     /// when a collection opens.
     limits: (HistoryLimits, Limits),
+    /// Numbers what the vault shows, so hiding it later does not hide
+    /// something shown since.
+    shown: u64,
+    /// The keyring the vault keeps the master key in.
+    keyring: SystemKeyring,
     /// To post the results of spawned tasks back to the loop. Weak: a strong
     /// sender here would keep the loop alive after the handle is dropped.
     messages: mpsc::WeakUnboundedSender<Message>,
@@ -549,6 +580,7 @@ impl State {
                     self.finish_send(id, result, entry);
                 }
                 Message::HistoryLoaded(opened, entries) => self.history_loaded(opened, entries),
+                Message::HideShown(shown) => self.hide_shown(shown),
                 Message::External(opened, changes) => {
                     if self.open.as_ref().is_some_and(|open| open.opened == opened) {
                         self.apply_external(&changes);
@@ -658,6 +690,7 @@ impl State {
             }
             Command::OpenHistory(index) => self.open_history(index),
             Command::Configure { history, responses } => self.limits = (history, responses),
+            Command::Vault(command) => self.vault_command(command),
             Command::ResolveConflict { path, keep_draft } => {
                 let revision = self.next_revision();
                 if let Some(tab) = self.tab_mut(&path) {
@@ -741,6 +774,7 @@ impl State {
             }
             Err(e) => self.snapshot.error = Some(e.to_string()),
         }
+        self.refresh_vault();
     }
 
     fn tab(&self, path: &RequestPath) -> Option<&Tab> {
@@ -768,7 +802,7 @@ impl State {
             sessions,
             history,
             vault,
-        } = stores(&self.data_dir, &root, id, shared)?;
+        } = stores(&self.data_dir, &root, id, (shared, self.keyring))?;
 
         // Leave the previous collection as it was.
         if self.session_pending {
@@ -847,8 +881,10 @@ impl State {
             active,
             error,
             history: Arc::default(),
+            vault: VaultView::default(),
         };
         self.refresh_variables(None);
+        self.refresh_vault();
         Ok(())
     }
 
@@ -1019,6 +1055,10 @@ impl State {
         }
         if shared {
             self.refresh_variables(None);
+        }
+        // Secrets shared by a teammate, or a new challenge, came with git.
+        if changes.rescan || changes.paths.iter().any(|p| p.starts_with(".apifast")) {
+            self.refresh_vault();
         }
     }
 

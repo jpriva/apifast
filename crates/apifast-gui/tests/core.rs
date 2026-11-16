@@ -16,6 +16,7 @@ use std::time::{Duration, Instant};
 
 use apifast_app::{ItemPath, Placement, RequestPath, TreeItem};
 use apifast_gui::core::{Command, Core, ResponseState, Snapshot};
+use apifast_vault::SystemKeyring;
 
 /// Answers every request after `delay`, with the request line as the body.
 fn server(delay: Duration) -> u16 {
@@ -71,7 +72,7 @@ fn start() -> (Core, Arc<AtomicUsize>, tempfile::TempDir) {
     let data = tempfile::tempdir().unwrap();
     let repaints = Arc::new(AtomicUsize::new(0));
     let counter = repaints.clone();
-    let core = Core::start(data.path().to_path_buf(), move || {
+    let core = Core::start_with(data.path().to_path_buf(), SystemKeyring::off(), move || {
         counter.fetch_add(1, Ordering::Relaxed);
     });
     (core, repaints, data)
@@ -491,7 +492,7 @@ fn tabs_drafts_and_environment_come_back_after_a_restart() {
     // Dropping writes the session at once, without waiting for the delay.
     drop(core);
 
-    let core = Core::start(data.path().to_path_buf(), || {});
+    let core = Core::start_with(data.path().to_path_buf(), SystemKeyring::off(), || {});
     let snapshot = open(&core, dir.path());
     assert_eq!(tab_names(&snapshot), ["Get", "Health"]);
     assert_eq!(snapshot.active, Some(RequestPath::new("users/get.yml")));
@@ -653,7 +654,7 @@ fn the_last_response_of_each_tab_comes_back_after_a_restart() {
     });
     drop(core);
 
-    let core = Core::start(data.path().to_path_buf(), || {});
+    let core = Core::start_with(data.path().to_path_buf(), SystemKeyring::off(), || {});
     open(&core, dir.path());
     let snapshot = wait(&core, "the restored response", |s| {
         matches!(response(s), ResponseState::Received(_))
@@ -734,7 +735,7 @@ fn old_history_is_pruned_when_the_collection_opens() {
         store.append(entry).unwrap();
     }
 
-    let core = Core::start(data.path().to_path_buf(), || {});
+    let core = Core::start_with(data.path().to_path_buf(), SystemKeyring::off(), || {});
     open(&core, dir.path());
     let snapshot = wait(&core, "the history", |s| !s.history.is_empty());
     assert_eq!(snapshot.history.len(), 1);
@@ -961,7 +962,7 @@ fn the_history_limits_come_from_the_settings() {
     }
     drop(core);
 
-    let core = Core::start(data.path().to_path_buf(), || {});
+    let core = Core::start_with(data.path().to_path_buf(), SystemKeyring::off(), || {});
     core.send(Command::Configure {
         history: HistoryLimits {
             max_entries: Some(1),
@@ -972,4 +973,181 @@ fn the_history_limits_come_from_the_settings() {
     open(&core, dir.path());
     let snapshot = wait(&core, "the history", |s| !s.history.is_empty());
     assert_eq!(snapshot.history.len(), 1);
+}
+
+/// The `local` environment with `token` as a secret.
+fn with_secret_token(snapshot: &Snapshot) -> Box<apifast_domain::Environment> {
+    let mut local = snapshot
+        .environment_files
+        .iter()
+        .find(|e| e.name == "local")
+        .unwrap()
+        .clone();
+    local
+        .variables
+        .push(apifast_domain::Variable::secret("token"));
+    Box::new(local)
+}
+
+#[test]
+fn a_first_secret_gives_the_collection_an_id_and_its_value_reaches_the_send() {
+    use apifast_app::HistoryOutcome;
+    use apifast_gui::core::{SecretStatus, VaultCommand};
+
+    let dir = collection(server(Duration::ZERO));
+    std::fs::write(
+        dir.path().join("secret.yml"),
+        "info:\n  name: Secret\n  type: http\nhttp:\n  method: GET\n  url: \"{{host}}/s/{{token}}\"\n",
+    )
+    .unwrap();
+    let (core, _, data) = start();
+    let snapshot = open(&core, dir.path());
+    assert!(
+        snapshot
+            .collection
+            .as_ref()
+            .unwrap()
+            .tree
+            .collection
+            .id
+            .is_none()
+    );
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    core.send(Command::OpenRequest(RequestPath::new("secret.yml")));
+    core.send(Command::SaveEnvironment(with_secret_token(&snapshot)));
+    let snapshot = wait(&core, "the secret variable", |s| {
+        !s.vault.secrets.is_empty()
+    });
+    assert_eq!(
+        snapshot.vault.status("local", "token"),
+        SecretStatus::Missing
+    );
+
+    core.send(Command::Vault(VaultCommand::Set {
+        environment: "local".into(),
+        name: "token".into(),
+        value: apifast_domain::Secret::new("t0k3n"),
+        shared: false,
+    }));
+    let snapshot = wait(&core, "the stored value", |s| {
+        s.vault.status("local", "token") == SecretStatus::Local
+    });
+    assert!(snapshot.error.is_none(), "{:?}", snapshot.error);
+    assert!(
+        dir.path().join(".apifast/collection.yml").exists(),
+        "it got an id"
+    );
+    assert!(snapshot.vault.master_in_file, "no keyring in tests");
+    // The open tabs and the environment came along.
+    assert_eq!(snapshot.environment.as_deref(), Some("local"));
+    assert!(snapshot.active_tab().is_some());
+
+    core.send(Command::Send);
+    let snapshot = wait(&core, "the response", |s| {
+        matches!(
+            response(s),
+            ResponseState::Received(_) | ResponseState::Failed(_)
+        )
+    });
+    let ResponseState::Received(received) = response(&snapshot) else {
+        panic!("{:?}", response(&snapshot));
+    };
+    assert_eq!(
+        received.body.read(0, 100).unwrap(),
+        b"GET /s/t0k3n HTTP/1.1"
+    );
+    let snapshot = wait(&core, "the history", |s| !s.history.is_empty());
+    let HistoryOutcome::Received { head, .. } = &snapshot.history[0].outcome else {
+        unreachable!()
+    };
+    assert!(!head.url.contains("t0k3n"), "{}", head.url);
+    let file = std::fs::read_dir(data.path().join("history"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap();
+    let text = std::fs::read_to_string(file.path()).unwrap();
+    assert!(!text.contains("t0k3n"), "never stored in the clear");
+}
+
+#[test]
+fn values_are_revealed_on_request_and_keys_shown_and_rotated() {
+    use apifast_gui::core::{SecretStatus, VaultCommand};
+
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    let snapshot = open(&core, dir.path());
+    core.send(Command::SaveEnvironment(with_secret_token(&snapshot)));
+    wait(&core, "the secret variable", |s| {
+        !s.vault.secrets.is_empty()
+    });
+    core.send(Command::Vault(VaultCommand::Set {
+        environment: "local".into(),
+        name: "token".into(),
+        value: apifast_domain::Secret::new("t0k3n"),
+        shared: true,
+    }));
+    let snapshot = wait(&core, "shared", |s| {
+        s.vault.status("local", "token") == SecretStatus::Shared
+    });
+    assert!(snapshot.vault.shares && snapshot.vault.has_key);
+    assert!(dir.path().join(".apifast/secrets/local.yml").exists());
+
+    core.send(Command::Vault(VaultCommand::Reveal {
+        environment: "local".into(),
+        name: "token".into(),
+    }));
+    let snapshot = wait(&core, "the value", |s| s.vault.revealed.is_some());
+    assert_eq!(
+        snapshot.vault.revealed.as_ref().unwrap().value.expose(),
+        "t0k3n"
+    );
+    // Never printed, even in a debug dump of the snapshot.
+    assert!(!format!("{snapshot:?}").contains("t0k3n"));
+    core.send(Command::Vault(VaultCommand::Hide));
+    wait(&core, "hidden", |s| s.vault.revealed.is_none());
+
+    core.send(Command::Vault(VaultCommand::ShowKey));
+    let snapshot = wait(&core, "the key", |s| s.vault.shareable_key.is_some());
+    let key = snapshot.vault.shareable_key.clone().unwrap();
+    assert!(key.expose().starts_with("AFK-"));
+    core.send(Command::Vault(VaultCommand::RotateKey));
+    let snapshot = wait(&core, "a new key", |s| {
+        s.vault.shareable_key.as_ref().is_some_and(|k| k != &key)
+    });
+    assert!(snapshot.error.is_none(), "{:?}", snapshot.error);
+}
+
+#[test]
+fn a_value_no_secret_uses_is_an_orphan_and_can_be_forgotten() {
+    use apifast_gui::core::VaultCommand;
+
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    let snapshot = open(&core, dir.path());
+    core.send(Command::SaveEnvironment(with_secret_token(&snapshot)));
+    wait(&core, "the secret variable", |s| {
+        !s.vault.secrets.is_empty()
+    });
+    core.send(Command::Vault(VaultCommand::Set {
+        environment: "local".into(),
+        name: "token".into(),
+        value: apifast_domain::Secret::new("t0k3n"),
+        shared: false,
+    }));
+    let snapshot = wait(&core, "stored", |s| {
+        s.vault.orphans.is_empty() && !s.vault.secrets.is_empty()
+    });
+    // The variable stops being secret, as Bruno might leave it.
+    let mut local = with_secret_token(&snapshot);
+    local.variables.retain(|v| v.name != "token");
+    core.send(Command::SaveEnvironment(local));
+    let snapshot = wait(&core, "the orphan", |s| !s.vault.orphans.is_empty());
+    let orphan = snapshot.vault.orphans[0].clone();
+    assert_eq!(
+        (orphan.environment.as_str(), orphan.name.as_str()),
+        ("local", "token")
+    );
+    core.send(Command::Vault(VaultCommand::Forget(orphan)));
+    wait(&core, "forgotten", |s| s.vault.orphans.is_empty());
 }

@@ -14,6 +14,7 @@ use std::time::{Duration, Instant};
 
 use apifast_gui::app::App;
 use apifast_gui::core::Core;
+use apifast_vault::SystemKeyring;
 use eframe::egui::{self, accesskit::Role};
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
@@ -93,7 +94,11 @@ const EN_HISTORY: &str = apifast_gui::strings::EN.sidebar_history;
 fn open_select_send_and_see_the_status() {
     let dir = collection(server());
     let data = tempfile::tempdir().unwrap();
-    let app = App::new(Core::start(data.path().to_path_buf(), || {}));
+    let app = App::new(Core::start_with(
+        data.path().to_path_buf(),
+        SystemKeyring::off(),
+        || {},
+    ));
     let mut harness = Harness::builder()
         .with_size(egui::vec2(1280.0, 800.0))
         .build_ui_state(|ui, app: &mut App| app.show(ui), app);
@@ -133,7 +138,11 @@ fn open_select_send_and_see_the_status() {
 fn a_folder_that_is_not_a_collection_shows_the_error() {
     let dir = tempfile::tempdir().unwrap();
     let data = tempfile::tempdir().unwrap();
-    let app = App::new(Core::start(data.path().to_path_buf(), || {}));
+    let app = App::new(Core::start_with(
+        data.path().to_path_buf(),
+        SystemKeyring::off(),
+        || {},
+    ));
     let mut harness = Harness::builder()
         .with_size(egui::vec2(1280.0, 800.0))
         .build_ui_state(|ui, app: &mut App| app.show(ui), app);
@@ -214,7 +223,11 @@ fn menu(harness: &mut Harness<'_, App>, row: &str, entry: &str) {
 fn the_sidebar_creates_renames_and_deletes_files() {
     let dir = collection(server());
     let data = tempfile::tempdir().unwrap();
-    let app = App::new(Core::start(data.path().to_path_buf(), || {}));
+    let app = App::new(Core::start_with(
+        data.path().to_path_buf(),
+        SystemKeyring::off(),
+        || {},
+    ));
     let mut harness = Harness::builder()
         .with_size(egui::vec2(1280.0, 800.0))
         .build_ui_state(|ui, app: &mut App| app.show(ui), app);
@@ -257,7 +270,11 @@ fn the_sidebar_creates_renames_and_deletes_files() {
 
 /// A harness over a fresh app on `data`, with the collection in `dir` open.
 fn open_app(dir: &std::path::Path, data: &std::path::Path) -> Harness<'static, App> {
-    let app = App::new(Core::start(data.to_path_buf(), || {}));
+    let app = App::new(Core::start_with(
+        data.to_path_buf(),
+        SystemKeyring::off(),
+        || {},
+    ));
     let mut harness = Harness::builder()
         .with_size(egui::vec2(1280.0, 800.0))
         .build_ui_state(|ui, app: &mut App| app.show(ui), app);
