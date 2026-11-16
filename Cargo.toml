@@ -46,6 +46,6 @@ print_stdout = "deny"
 print_stderr = "deny"
 
 [profile.release]
-lto = "thin"
+lto = "fat"
 codegen-units = 1
 strip = true

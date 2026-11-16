@@ -1,7 +1,9 @@
 //! The application: reads the core's latest snapshot every frame, draws the
 //! screen that fits it and sends the user's commands back.
 
+use std::io::Write as _;
 use std::sync::mpsc;
+use std::time::Instant;
 
 use apifast_storage_fs::{FsKeymapStore, FsSettingsStore};
 use eframe::egui;
@@ -24,6 +26,17 @@ pub struct App {
     settings_store: Option<FsSettingsStore>,
     /// Results of saves, which run away from the interface.
     saved: (mpsc::Sender<SaveResult>, mpsc::Receiver<SaveResult>),
+    /// When the process started, to report how long it took to show the
+    /// first frame and the collection's tree; `None` when not asked for.
+    timings: Option<Timings>,
+}
+
+/// What is left to report of the startup times.
+#[derive(Debug)]
+struct Timings {
+    started: Instant,
+    first_frame: bool,
+    tree: bool,
 }
 
 /// How saving went: an error ready to show.
@@ -40,6 +53,7 @@ impl App {
             keymap_store: None,
             settings_store: None,
             saved: mpsc::channel(),
+            timings: None,
         }
     }
 
@@ -64,6 +78,36 @@ impl App {
         }
         self.keymap_store = Some(store);
         self
+    }
+
+    /// Writes to stderr how long after `started` (the start of the process)
+    /// the first frame and the collection's tree were shown: the internal
+    /// timestamps of `docs/10-rendimiento-y-memoria.md`.
+    #[must_use]
+    pub fn with_timings(mut self, started: Instant) -> Self {
+        self.timings = Some(Timings {
+            started,
+            first_frame: false,
+            tree: false,
+        });
+        self
+    }
+
+    /// Reports the startup times not reported yet.
+    fn report_timings(&mut self, tree_shown: bool) {
+        let Some(timings) = &mut self.timings else {
+            return;
+        };
+        let ms = timings.started.elapsed().as_millis();
+        let mut stderr = std::io::stderr();
+        if !timings.first_frame {
+            timings.first_frame = true;
+            let _ = writeln!(stderr, "apifast: first frame after {ms} ms");
+        }
+        if tree_shown && !timings.tree {
+            timings.tree = true;
+            let _ = writeln!(stderr, "apifast: collection tree shown after {ms} ms");
+        }
     }
 
     /// Reads the settings from `store`, tells the core its limits, and
@@ -148,6 +192,7 @@ impl App {
         }
         let ctx = ui.ctx().clone();
         self.save(&ctx);
+        self.report_timings(snapshot.collection.is_some());
     }
 }
 

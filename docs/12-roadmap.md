@@ -94,6 +94,8 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
 
 **Objetivo:** una aplicación de escritorio con la que trabajar a diario.
 
+**Estado:** completada el 2026-11-16.
+
 ### Tareas
 
 - [x] `apifast-gui`: ventana, bucle reactivo, canal de comandos y de instantáneas con el núcleo. La ventana abre una carpeta desde la pantalla de bienvenida o con `apifast-gui <carpeta>`; el botón "Browse..." abre el selector de carpetas del sistema (`rfd`, por el portal de escritorio en Linux).
@@ -153,6 +155,26 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
 - El flujo crear → editar → guardar → enviar → inspeccionar funciona sin tocar archivos a mano.
 - Se cumplen los presupuestos de RAM en reposo y de arranque.
 - Un cambio hecho con otro editor o con git se refleja sin reiniciar.
+
+**Resultado:** los tres se cumplen.
+
+- El flujo completo lo recorren las pruebas de `apifast-gui` (`tests/flow.rs` contra un servidor real, y `tests/core.rs`): crear, editar, guardar, enviar e inspeccionar, sin tocar archivos.
+- Presupuestos medidos con `tools/bench/`: 50 MB PSS en reposo con 100 requests, primera ventana en 43–64 ms. Detalle en [rendimiento](10-rendimiento-y-memoria.md#mediciones-de-f2).
+- `apifast-watch` refleja los cambios externos; con un borrador, la interfaz pregunta qué conservar.
+
+**Queda fuera de F2**, a retomar en la fase que lo necesite o en un repaso de la interfaz:
+
+| Pendiente | Motivo |
+|---|---|
+| Buscar y reemplazar en el editor | No bloquea el uso diario |
+| Duplicar, renombrar con `F2`, filtro `Ctrl+F` y disposición lado a lado (`Ctrl+J`) | Funciones de la barra lateral y del diseño aún sin hacer; sus atajos se añaden con ellas |
+| Bodies multipart y de archivo editables | Se muestran y se envían tal cual |
+| Autocompletado de variables en el editor de varias líneas | Enter y las flechas chocan con la edición |
+| Entorno "de cuidado" que tiñe la barra | OpenCollection no tiene esa marca; falta decidir dónde guardarla |
+| Marcar variables como secretas | Llega con la bóveda (F3) |
+| Selector de respuestas anteriores en el panel de respuesta | El historial ya permite abrirlas |
+| Bloqueo de archivo del historial entre dos instancias | Cada línea se escribe de una vez; basta en la práctica |
+| Contraste 3:1 de los bordes de los campos | Los campos se distinguen por el fondo; se revisará en el repaso de accesibilidad |
 
 ---
 

@@ -1,19 +1,49 @@
 //! The `apifast-gui` binary. `apifast-gui <folder>` opens that collection.
 
 use std::path::PathBuf;
+use std::time::Instant;
 
 use apifast_gui::app::App;
 use apifast_gui::core::{Command, Core};
 use apifast_storage_fs::{FsKeymapStore, FsSettingsStore};
 use eframe::egui;
+use eframe::egui_wgpu::{WgpuConfiguration, WgpuSetup, WgpuSetupCreateNew};
+use eframe::wgpu::Backends;
 
 fn main() -> eframe::Result {
+    let started = Instant::now();
+    let timings = std::env::var_os("APIFAST_TIMINGS").is_some();
     let folder = std::env::args_os().nth(1).map(PathBuf::from);
+    // The native backends first (Vulkan, Metal, DirectX 12). With OpenGL
+    // as well, wgpu also starts the OpenGL driver, which on Linux loads
+    // Mesa and LLVM: about 14 MB more at rest (docs/10). OpenGL is the
+    // fallback for systems without the others; `WGPU_BACKEND` overrides
+    // both.
+    match Backends::from_env() {
+        Some(backends) => run(backends, folder, started, timings),
+        None => run(Backends::PRIMARY, folder.clone(), started, timings)
+            .or_else(|_| run(Backends::PRIMARY | Backends::GL, folder, started, timings)),
+    }
+}
+
+/// Runs the window with wgpu on `backends`, until it closes.
+fn run(
+    backends: Backends,
+    folder: Option<PathBuf>,
+    started: Instant,
+    timings: bool,
+) -> eframe::Result {
+    let mut setup = WgpuSetupCreateNew::without_display_handle();
+    setup.instance_descriptor.backends = backends;
     let options = eframe::NativeOptions {
         renderer: eframe::Renderer::Wgpu,
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1280.0, 800.0])
             .with_title("apifast"),
+        wgpu_options: WgpuConfiguration {
+            wgpu_setup: WgpuSetup::CreateNew(setup),
+            ..WgpuConfiguration::default()
+        },
         ..Default::default()
     };
     eframe::run_native(
@@ -30,7 +60,10 @@ fn main() -> eframe::Result {
             let settings = FsSettingsStore::new(apifast_history::dirs::settings_file_in(&dirs));
             // Settings first: they tell the core its limits before a
             // collection opens.
-            let app = App::new(core).with_settings(settings).with_keymap(keymap);
+            let mut app = App::new(core).with_settings(settings).with_keymap(keymap);
+            if timings {
+                app = app.with_timings(started);
+            }
             if let Some(folder) = folder {
                 app.core().send(Command::OpenCollection(folder));
             }

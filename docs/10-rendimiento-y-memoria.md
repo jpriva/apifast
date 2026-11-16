@@ -75,6 +75,27 @@ Como referencia, las aplicaciones sobre Electron o webview suelen consumir vario
 - **Watcher con agrupación** de eventos para no reprocesar ráfagas (por ejemplo, un `git checkout`).
 - **Parseo en paralelo** al abrir, con un número acotado de tareas.
 
+## Mediciones de F2
+
+Medido el 2026-11-16 con `tools/bench/` (ver su README), binario release, en un AMD Ryzen 7 8700G (Radeon 780M, Mesa, Vulkan), Fedora 44 con Wayland. La memoria es PSS tras 10 s inactivo; los tiempos van desde el inicio del proceso, con la caché de disco caliente.
+
+| Métrica | Objetivo | Medido |
+|---|---|---|
+| RAM en reposo, 100 requests | < 60 MB PSS | 50 MB |
+| RAM en reposo, 5000 requests | < 120 MB PSS | 55 MB |
+| Arranque hasta primera ventana | < 300 ms | 43–64 ms |
+| Abrir 1000 requests (árbol visible, contando el arranque) | < 200 ms | 67 ms |
+| CPU en reposo | ~0 % | 0,0 % |
+| Tamaño del binario | < 25 MB | 22,7 MB |
+| Desplazar un body de 100 MB (CPU por frame) | — | 0,23 ms |
+
+Dos decisiones salieron de estas medidas:
+
+- **wgpu usa primero los backends nativos** (Vulkan, Metal, DirectX 12) y OpenGL solo si fallan. Con OpenGL activo también, wgpu arranca el driver OpenGL de Mesa, que carga `libgallium` y LLVM: 66 MB en reposo con 100 requests, por encima del presupuesto. Con `WGPU_BACKEND=gl` se fuerza OpenGL (77 MB). Aun así, el cargador de Vulkan abre todos los drivers instalados, incluido lavapipe, que trae 15 MB de LLVM: es memoria del sistema que la aplicación no controla.
+- **`lto = "fat"`** baja el binario de 25,6 MB a 22,7 MB, a cambio de una compilación release de unos 4 minutos en vez de 1.
+
+Sin medir aún: la RAM extra al recibir 100 MB y la CPU por tecla en un body de 200 KB en la ventana real (el spike 2 las midió en un prototipo), y la sobrecarga de envío.
+
 ## Perfil de compilación
 
 Configuración prevista para release:
@@ -88,6 +109,7 @@ panic = "abort"
 strip = true
 ```
 
+- En uso desde F2: `lto = "fat"`, `codegen-units = 1` y `strip = true`. `panic = "abort"` todavía no: con él, un pánico en el hilo del núcleo cerraría la aplicación sin guardar la sesión.
 - En F0 se compara `opt-level = 3` con `"s"` (tamaño frente a velocidad).
 - Se evalúa un asignador alternativo (por ejemplo mimalloc) midiendo RSS y fragmentación; solo se adopta si mejora las cifras.
 - Las dependencias se revisan con `cargo bloat` y `cargo tree` para evitar duplicados y funciones no usadas.
