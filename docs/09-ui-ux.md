@@ -116,10 +116,11 @@ La edición con resaltado se limita a unos 200 KB: con más texto, egui tarda de
 
 ## Bóveda
 
-- Al abrir una colección con secretos compartidos y sin clave local, un aviso no bloqueante ofrece introducir la clave.
+- Al abrir una colección con secretos compartidos y sin clave local, un aviso no bloqueante sobre la request ofrece pegar la clave.
+- La ventana "Collection key" (paleta) muestra la clave para pasarla al equipo, con botón de copiar, y la rota tras una confirmación que explica que el equipo necesitará la nueva y que los valores antiguos siguen en el historial de git.
 - Diálogo "Compartir clave": muestra la clave legible, con botón de copiar y advertencia sobre cómo compartirla.
 - Los campos secretos tienen un botón de revelar que se vuelve a ocultar solo.
-- Indicador del estado de la bóveda en la barra de estado, incluyendo si la clave maestra está en el keyring o en el archivo de respaldo.
+- Indicador del estado de la bóveda en la barra superior (todavía no hay barra de estado): aparece cuando la clave maestra está en el archivo de respaldo en lugar del keyring, con la explicación al pasar el ratón.
 
 ## Paleta de comandos
 

@@ -13,6 +13,7 @@ mod shortcuts;
 mod tabs;
 mod tree;
 mod url_bar;
+mod vault_window;
 
 pub use body_viewer::BodyViewer;
 pub use environments::{EnvironmentEditor, EnvironmentEvent, EnvironmentsView};
@@ -28,3 +29,4 @@ pub use shortcuts::{ShortcutEditor, shortcut_of};
 pub use tabs::{TabBar, TabEvent};
 pub use tree::{TreeEvent, TreeView};
 pub use url_bar::{UrlBar, UrlBarEvent};
+pub use vault_window::{VaultWindow, paste_key};

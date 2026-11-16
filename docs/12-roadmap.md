@@ -207,7 +207,7 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
   - El historial y su Timeline enmascaran las URLs alcanzadas (la final, cada request y cada redirección) y, además, ocultan los valores de su query. La request renderizada se imprime enmascarada, así que no llega a un log.
   - La CLI no imprime nada de la request, solo la respuesta y un resumen sin URL.
   - Queda fuera: el valor existe en memoria como texto normal mientras se renderiza y se envía, y un cuerpo de respuesta que repita un secreto se guarda tal cual (ver `docs/06`).
-- [ ] Interfaz: columna de clase de secreto, revelar, diálogos de clave, estado de la bóveda.
+- [x] Interfaz: columna de clase de secreto, revelar, diálogos de clave, estado de la bóveda.
   - [x] Núcleo: la instantánea lleva la vista de la bóveda (dónde está el valor de cada variable secreta, entradas huérfanas, si la colección comparte secretos y tiene clave, si la maestra está en archivo), calculada solo con nombres: no abre ningún valor ni pregunta al keyring. Comandos para guardar un valor (local o compartido), revelarlo, olvidar una entrada, y mostrar, pegar y rotar la clave; lo revelado y la clave mostrada se ocultan solos a los 15 s. Una colección sin identificador lo recibe al guardar su primer secreto, y su sesión, historial y respuestas pasan del hash de la ruta al identificador. `Core::start_with(.., SystemKeyring::off(), ..)` usa solo el archivo de la clave maestra: así las pruebas nunca tocan el keyring del usuario.
   - [x] Editor de entornos: marcar secreta (local o compartida), escribir el valor oculto, revelar, estado y huérfanas.
     - La casilla Secret ya funciona. Si la variable tenía valor, ese valor se guarda en la bóveda al pulsar Save y el archivo queda solo con el nombre.
@@ -215,7 +215,10 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
     - El estado (guardado aquí, compartido, bloqueado sin la clave o sin valor) aparece en el campo vacío, al pasar el ratón y en su nombre accesible.
     - Save guarda el entorno y los valores escritos, cada uno en su sitio; Revert descarta ambos.
     - Debajo, las entradas huérfanas con un botón Forget.
-  - [ ] Diálogos de la clave de la colección e indicador de la bóveda.
+  - [x] Diálogos de la clave de la colección e indicador de la bóveda.
+    - Una colección que comparte secretos sin la clave en esta máquina muestra un aviso con un campo oculto para pegarla.
+    - La ventana "Collection key" (desde la paleta) muestra la clave con un botón para copiarla, y la rota tras confirmar lo que implica. Sin secretos compartidos, explica que la clave se crea al compartir el primero.
+    - La barra superior avisa cuando la clave maestra está en el archivo de respaldo y no en el keyring.
 - [ ] CLI: `apifast vault` y `APIFAST_COLLECTION_KEY`.
 - [ ] Cifrado del tarro de cookies.
 

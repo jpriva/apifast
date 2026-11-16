@@ -57,6 +57,8 @@ pub enum Action {
     ThemeDark,
     /// Open the settings.
     Settings,
+    /// Open the collection key window.
+    CollectionKey,
 }
 
 /// Every action, in the order the editor of shortcuts lists them.
@@ -91,6 +93,7 @@ pub const ALL: &[Action] = &[
     Action::ThemeLight,
     Action::ThemeDark,
     Action::Settings,
+    Action::CollectionKey,
 ];
 
 const CTRL: Modifiers = Modifiers::COMMAND;
@@ -126,6 +129,7 @@ impl Action {
             Self::ThemeLight => "theme_light".into(),
             Self::ThemeDark => "theme_dark".into(),
             Self::Settings => "settings".into(),
+            Self::CollectionKey => "collection_key".into(),
         }
     }
 
@@ -159,6 +163,7 @@ impl Action {
             Self::ThemeLight => strings.action_theme_light,
             Self::ThemeDark => strings.action_theme_dark,
             Self::Settings => strings.action_settings,
+            Self::CollectionKey => strings.action_collection_key,
         };
         text.to_owned()
     }
@@ -201,7 +206,8 @@ impl Action {
             | Self::Shortcuts
             | Self::ThemeSystem
             | Self::ThemeLight
-            | Self::ThemeDark => Vec::new(),
+            | Self::ThemeDark
+            | Self::CollectionKey => Vec::new(),
         }
     }
 }

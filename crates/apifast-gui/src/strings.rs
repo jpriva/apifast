@@ -226,6 +226,32 @@ pub struct Strings {
     pub orphans_hint: &'static str,
     /// Button that removes an orphan value.
     pub forget: &'static str,
+    /// Title of the collection key window, and its field.
+    pub collection_key: &'static str,
+    /// Action: open the collection key window.
+    pub action_collection_key: &'static str,
+    /// Button that takes a pasted key.
+    pub use_key: &'static str,
+    /// Shown when the collection shares no secret.
+    pub no_collection_key: &'static str,
+    /// Asks for the collection's key.
+    pub key_needed: &'static str,
+    /// How to pass the key.
+    pub share_key_hint: &'static str,
+    /// Button that shows the collection's key.
+    pub show_key: &'static str,
+    /// Button that rotates the collection's key.
+    pub rotate_key: &'static str,
+    /// What rotating does.
+    pub rotate_hint: &'static str,
+    /// Confirmation of a rotation.
+    pub rotate_confirm: &'static str,
+    /// Banner when the key of a collection is missing.
+    pub vault_banner: &'static str,
+    /// Top-bar note when the master key is in a file.
+    pub master_in_file: &'static str,
+    /// Explains the master key file.
+    pub master_in_file_hint: &'static str,
     /// Sidebar tab with the collection's tree.
     pub sidebar_collection: &'static str,
     /// Sidebar tab with the history of sends.
@@ -552,6 +578,19 @@ pub const EN: Strings = Strings {
     orphans_title: "Values no secret uses",
     orphans_hint: "Their variable is gone or no longer secret, as after editing with Bruno.",
     forget: "Forget",
+    collection_key: "Collection key",
+    action_collection_key: "Collection key",
+    use_key: "Use key",
+    no_collection_key: "This collection shares no secrets yet. Sharing the first one makes its key.",
+    key_needed: "This collection shares secrets, and this machine does not have its key. Paste the key your team gave you:",
+    share_key_hint: "Give this key to your team through a password manager or another private channel. apifast never sends it.",
+    show_key: "Show key",
+    rotate_key: "Rotate key",
+    rotate_hint: "Rotating makes a new key and seals every shared secret again. Your team needs the new key.",
+    rotate_confirm: "Make a new key and seal every shared secret again? Commit the changed files afterwards, and give the new key to your team. Old values stay in git's history: if the old key leaked, change the real credentials too.",
+    vault_banner: "This collection shares secrets that this machine cannot open: paste the collection's key.",
+    master_in_file: "Master key in a file",
+    master_in_file_hint: "No system keyring was found, so the vault's master key is in a file only you can read. Anyone who copies your home folder gets it too.",
     sidebar_collection: "Collection",
     sidebar_history: "History",
     filter: "Filter",

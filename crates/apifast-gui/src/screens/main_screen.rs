@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use apifast_app::{RequestPath, TreeItem};
-use apifast_domain::{HttpRequest, sync_params_from_url, sync_url_from_params};
+use apifast_domain::{HttpRequest, Secret, sync_params_from_url, sync_url_from_params};
 use eframe::egui::{self, RichText};
 
 use crate::actions::{ALL, Action, Keymap};
@@ -16,7 +16,7 @@ use crate::molecules::EnvironmentSelector;
 use crate::organisms::{
     CommandPalette, EnvironmentEditor, EnvironmentEvent, HistoryView, PaletteItem, PaletteMode,
     RequestChange, RequestPanel, ResponseView, SettingsWindow, ShortcutEditor, TabBar, TabEvent,
-    TreeEvent, TreeView, UrlBar, UrlBarEvent,
+    TreeEvent, TreeView, UrlBar, UrlBarEvent, VaultWindow, paste_key,
 };
 use crate::settings::Settings;
 use crate::strings::Strings;
@@ -77,6 +77,10 @@ pub struct MainScreen {
     pub settings_window: SettingsWindow,
     /// The theme and scale last applied, to apply a new choice once.
     applied: Option<(ThemeChoice, f32)>,
+    /// The collection key window.
+    pub vault_window: VaultWindow,
+    /// The collection key being pasted in the banner.
+    key_paste: String,
 }
 
 /// What changed and is not saved yet.
@@ -129,8 +133,10 @@ impl MainScreen {
             (&mut self.request, &mut self.response),
             &mut self.editor,
         );
+        let key_paste = &mut self.key_paste;
 
         let mut resolve = None;
+        let mut pasted_key = None;
         let (
             (environment, edit_environments),
             (tree_event, picked),
@@ -154,6 +160,9 @@ impl MainScreen {
                         ui.add_space(theme::space::M);
                     }
                 }
+                if snapshot.vault.shares && !snapshot.vault.has_key {
+                    pasted_key = key_banner(ui, key_paste, strings);
+                }
                 let (Some(tab), Some(editor)) = (active, editor.as_mut()) else {
                     ui.label(RichText::new(strings.no_request).color(palette.text_muted));
                     return (tab_event, (None, false));
@@ -167,7 +176,10 @@ impl MainScreen {
             },
         );
 
-        let mut commands = Vec::new();
+        let mut commands: Vec<Command> = pasted_key
+            .map(|key| Command::Vault(VaultCommand::ImportKey(key)))
+            .into_iter()
+            .collect();
         if let (Some(keep_draft), Some(tab)) = (resolve, active) {
             commands.push(Command::ResolveConflict {
                 path: tab.path.clone(),
@@ -281,6 +293,8 @@ impl MainScreen {
         let files = (snapshot.environment_files.as_slice(), &snapshot.vault);
         let events = self.environments.show(&ctx, files, context, hints, strings);
         commands.extend(events.into_iter().map(environment_command));
+        let vault = self.vault_window.show(&ctx, &snapshot.vault, strings);
+        commands.extend(vault.into_iter().map(Command::Vault));
         if self.shortcuts.show(&ctx, &mut self.keymap, strings) {
             self.unsaved.keymap = true;
         }
@@ -371,6 +385,10 @@ impl MainScreen {
             }
             Action::Shortcuts => {
                 self.shortcuts.open = true;
+                Vec::new()
+            }
+            Action::CollectionKey => {
+                self.vault_window.open = true;
                 Vec::new()
             }
             Action::Settings => {
@@ -557,6 +575,24 @@ fn requests(tree: &[TreeItem], out: &mut Vec<PaletteItem>) {
     }
 }
 
+/// Shown while the collection shares secrets this machine cannot open:
+/// asks for the collection's key. Returns it once given.
+fn key_banner(ui: &mut egui::Ui, text: &mut String, strings: &Strings) -> Option<Secret> {
+    let warning = theme::palette(ui).warning;
+    let mut key = None;
+    egui::Frame::new()
+        .fill(warning.gamma_multiply(theme::BADGE_TINT))
+        .stroke(egui::Stroke::new(1.0, warning))
+        .corner_radius(theme::radius::MEDIUM)
+        .inner_margin(theme::space::M)
+        .show(ui, |ui| {
+            ui.label(RichText::new(strings.vault_banner).color(warning));
+            key = paste_key(ui, text, strings);
+        });
+    ui.add_space(theme::space::S);
+    key
+}
+
 /// Shown over a request whose file changed outside apifast while it had
 /// changes not saved. Returns whether to keep them, once the user chooses.
 fn conflict_banner(ui: &mut egui::Ui, strings: &Strings) -> Option<bool> {
@@ -593,6 +629,10 @@ fn top_bar(
 ) -> (Option<Command>, bool) {
     ui.horizontal(|ui| {
         ui.label(RichText::new(name).strong());
+        if snapshot.vault.master_in_file {
+            ui.label(RichText::new(strings.master_in_file).color(theme::palette(ui).warning))
+                .on_hover_text(strings.master_in_file_hint);
+        }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let edit = ui
                 .button(strings.environments)
