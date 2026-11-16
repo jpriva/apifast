@@ -460,7 +460,7 @@ fn update_captures(doc: &mut Value, old: &[Capture], new: &[Capture]) {
 
 /// Rewrites the list at `parent[key]` so it holds `new`, keeping the original
 /// item (and its unknown keys) for every item that is kept or changed.
-fn update_list<T: PartialEq>(
+pub(crate) fn update_list<T: PartialEq>(
     parent: &mut Value,
     key: &str,
     old: &[T],

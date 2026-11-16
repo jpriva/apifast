@@ -16,6 +16,7 @@ mod keymap;
 mod read;
 mod session;
 mod settings;
+mod workspace;
 mod write;
 mod yaml;
 
@@ -33,6 +34,10 @@ use oneyaml::Value;
 pub use keymap::FsKeymapStore;
 pub use session::FsSessionStore;
 pub use settings::FsSettingsStore;
+pub use workspace::{
+    FsKnownWorkspaces, FsWorkspace, FsWorkspaceState, KnownWorkspaces, WORKSPACE_FILE,
+    WorkspaceStateData,
+};
 
 const COLLECTION_FILE: &str = "opencollection.yml";
 const FOLDER_FILE: &str = "folder.yml";
@@ -130,11 +135,7 @@ impl FsCollection {
     /// The file's text, or `None` if it does not exist. `relative` is trusted
     /// (built by this crate), so it is not validated again.
     fn read_text(&self, relative: &str) -> Result<Option<String>, RepositoryError> {
-        match std::fs::read_to_string(self.root.join(relative)) {
-            Ok(text) => Ok(Some(text)),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(e) => Err(io_error(relative, &e)),
-        }
+        read_text_in(&self.root, relative)
     }
 
     fn read_value(&self, relative: &str) -> Result<Option<Value>, RepositoryError> {
@@ -154,43 +155,7 @@ impl FsCollection {
         update: impl Fn(&mut Value, &T, &T),
         create: impl Fn(&T) -> Value,
     ) -> Result<(), RepositoryError> {
-        let path = self.root.join(relative);
-        let (text, expected) = if let Some(original_text) = self.read_text(relative)? {
-            let original = parse(relative, &original_text)?;
-            let old = read(&original)?;
-            let mut updated = original.clone();
-            update(&mut updated, &old, new);
-            let ops = diff::diff(&original, &updated);
-            if ops.is_empty() {
-                return if old == *new {
-                    Ok(())
-                } else {
-                    Err(unrepresentable(relative))
-                };
-            }
-            let mut doc = oneyaml::Document::parse_with(original_text.as_str(), &write::settings())
-                .map_err(|e| invalid(relative, &e))?;
-            doc.apply_patch(&oneyaml::Patch::new(ops))
-                .map_err(|e| RepositoryError::Invalid {
-                    path: relative.to_owned(),
-                    message: format!("cannot apply the change: {e}"),
-                })?;
-            (doc.to_string(), updated)
-        } else {
-            let value = create(new);
-            let text = write::to_text(&value).map_err(|e| invalid(relative, &e))?;
-            (text, value)
-        };
-
-        // Never write something that does not read back as what was saved.
-        let written = parse(relative, &text)?;
-        if written != expected || read(&written)? != *new {
-            return Err(unrepresentable(relative));
-        }
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| io_error(relative, &e))?;
-        }
-        fs::write_atomic(&path, text.as_bytes()).map_err(|e| io_error(relative, &e))
+        save_document_in(&self.root, relative, new, (read, update, create))
     }
 
     fn read_folder(&self, dir: &str) -> Result<Folder, RepositoryError> {
@@ -788,6 +753,67 @@ fn is_yaml(name: &str) -> bool {
     Path::new(name)
         .extension()
         .is_some_and(|e| e.eq_ignore_ascii_case("yml") || e.eq_ignore_ascii_case("yaml"))
+}
+
+/// The text of the file at `relative` inside `root`; `None` if missing.
+pub(crate) fn read_text_in(root: &Path, relative: &str) -> Result<Option<String>, RepositoryError> {
+    match std::fs::read_to_string(root.join(relative)) {
+        Ok(text) => Ok(Some(text)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(io_error(relative, &e)),
+    }
+}
+
+/// Saves `new` into the file at `relative` inside `root` (trusted), as
+/// described in the crate docs. `read` turns a document into the domain value and `update`
+/// writes the differences into a document.
+pub(crate) fn save_document_in<T: PartialEq + Debug>(
+    root: &Path,
+    relative: &str,
+    new: &T,
+    (read, update, create): (
+        impl Fn(&Value) -> Result<T, RepositoryError>,
+        impl Fn(&mut Value, &T, &T),
+        impl Fn(&T) -> Value,
+    ),
+) -> Result<(), RepositoryError> {
+    let path = root.join(relative);
+    let (text, expected) = if let Some(original_text) = read_text_in(root, relative)? {
+        let original = parse(relative, &original_text)?;
+        let old = read(&original)?;
+        let mut updated = original.clone();
+        update(&mut updated, &old, new);
+        let ops = diff::diff(&original, &updated);
+        if ops.is_empty() {
+            return if old == *new {
+                Ok(())
+            } else {
+                Err(unrepresentable(relative))
+            };
+        }
+        let mut doc = oneyaml::Document::parse_with(original_text.as_str(), &write::settings())
+            .map_err(|e| invalid(relative, &e))?;
+        doc.apply_patch(&oneyaml::Patch::new(ops))
+            .map_err(|e| RepositoryError::Invalid {
+                path: relative.to_owned(),
+                message: format!("cannot apply the change: {e}"),
+            })?;
+        (doc.to_string(), updated)
+    } else {
+        let value = create(new);
+        let text = write::to_text(&value).map_err(|e| invalid(relative, &e))?;
+        (text, value)
+    };
+
+    // Never write something that does not read back as what was saved.
+    let written = parse(relative, &text)?;
+    if written != expected || read(&written)? != *new {
+        return Err(unrepresentable(relative));
+    }
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| io_error(relative, &e))?;
+    }
+    fs::write_atomic(&path, text.as_bytes()).map_err(|e| io_error(relative, &e))
 }
 
 fn parse(relative: &str, text: &str) -> Result<Value, RepositoryError> {

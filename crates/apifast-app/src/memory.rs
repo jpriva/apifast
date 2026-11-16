@@ -13,7 +13,7 @@ use crate::{
     HistoryEntry, HistoryLimits, HistoryStore, HttpTransport, LoadedRequest, Prompter, Random,
     RenderedRequest, RepositoryError, RequestPath, ResponseHead, ResponseId, ResponseStore,
     SecretStore, Session, SessionStore, SharedSecretFiles, StoreError, StoredBody, TransportError,
-    TreeItem, within_limits,
+    TreeItem, Workspace, WorkspaceRepository, within_limits,
 };
 
 /// Locks a mutex, recovering the data if a panicking test poisoned it.
@@ -451,6 +451,32 @@ impl Prompter for ScriptedPrompter {
     fn prompt(&self, label: &str) -> Option<String> {
         lock(&self.asked).push(label.to_owned());
         self.answers.get(label).cloned()
+    }
+}
+
+/// A workspace kept in memory.
+#[derive(Debug, Default)]
+pub struct MemoryWorkspace {
+    workspace: Mutex<Workspace>,
+}
+
+impl MemoryWorkspace {
+    /// Holding `workspace`.
+    pub fn new(workspace: Workspace) -> Self {
+        Self {
+            workspace: Mutex::new(workspace),
+        }
+    }
+}
+
+impl WorkspaceRepository for MemoryWorkspace {
+    fn workspace(&self) -> Result<Workspace, RepositoryError> {
+        Ok(lock(&self.workspace).clone())
+    }
+
+    fn save_workspace(&self, workspace: &Workspace) -> Result<(), RepositoryError> {
+        workspace.clone_into(&mut lock(&self.workspace));
+        Ok(())
     }
 }
 

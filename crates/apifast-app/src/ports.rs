@@ -202,6 +202,43 @@ pub trait CollectionRepository {
     fn delete_path(&self, path: &str) -> Result<(), RepositoryError>;
 }
 
+/// A workspace: a named group of collections, written in `workspace.yml`
+/// as Bruno does (ADR 0009).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Workspace {
+    /// Its name (`info.name`).
+    pub name: String,
+    /// Its collections, in order.
+    pub collections: Vec<WorkspaceEntry>,
+}
+
+/// A collection of a [`Workspace`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkspaceEntry {
+    /// The name Bruno shows for it.
+    pub name: String,
+    /// Its folder as written: relative to the workspace's folder, or
+    /// absolute.
+    pub path: String,
+}
+
+/// Reads and saves a [`Workspace`], keeping what it does not model.
+pub trait WorkspaceRepository {
+    /// The workspace.
+    ///
+    /// # Errors
+    ///
+    /// If it cannot be read or is not valid.
+    fn workspace(&self) -> Result<Workspace, RepositoryError>;
+
+    /// Saves it, changing only what differs.
+    ///
+    /// # Errors
+    ///
+    /// If it cannot be written.
+    fn save_workspace(&self, workspace: &Workspace) -> Result<(), RepositoryError>;
+}
+
 /// What the interface had open in a collection, kept outside it in the
 /// user's data directory (ADR 0008), so that tabs and unsaved changes
 /// survive a restart.

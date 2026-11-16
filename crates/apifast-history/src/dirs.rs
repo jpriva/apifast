@@ -34,6 +34,28 @@ pub fn keymap_file_in(config_dir: &Path) -> PathBuf {
     config_dir.join("keymap.yml")
 }
 
+/// The list of known workspaces under `config_dir` (ADR 0009).
+pub fn known_workspaces_file_in(config_dir: &Path) -> PathBuf {
+    config_dir.join("workspaces.yml")
+}
+
+/// The folder of the default workspace, "My workspace", under `data_dir`.
+pub fn default_workspace_in(data_dir: &Path) -> PathBuf {
+    data_dir.join("default-workspace")
+}
+
+/// What this machine keeps of the workspace in `folder` (expanded
+/// collections, open tabs), under `data_dir`, keyed by a hash of its path.
+pub fn workspace_state_file_in(data_dir: &Path, folder: &Path) -> PathBuf {
+    data_dir
+        .join("workspaces")
+        .join(format!(
+            "{:016x}",
+            fnv1a(folder.to_string_lossy().as_bytes())
+        ))
+        .join("state.yml")
+}
+
 /// Folder for the responses of the collection at `root`, under
 /// [`data_dir`]. The key is the collection id when it has one, or a hash of
 /// its path, so opening or sending never writes into the collection.
@@ -148,6 +170,23 @@ fn fnv1a(bytes: &[u8]) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_workspace_has_its_own_state_file() {
+        let data = Path::new("/data");
+        let a = workspace_state_file_in(data, Path::new("/w/a"));
+        assert_eq!(a, workspace_state_file_in(data, Path::new("/w/a")));
+        assert_ne!(a, workspace_state_file_in(data, Path::new("/w/b")));
+        assert!(a.starts_with("/data/workspaces") && a.ends_with("state.yml"));
+        assert_eq!(
+            default_workspace_in(data),
+            Path::new("/data/default-workspace")
+        );
+        assert_eq!(
+            known_workspaces_file_in(Path::new("/c")),
+            Path::new("/c/workspaces.yml")
+        );
+    }
 
     #[test]
     fn the_path_hash_is_stable() {
