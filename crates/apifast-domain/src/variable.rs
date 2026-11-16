@@ -133,6 +133,29 @@ impl ResolvedVariables {
             var.value = Some(value);
         }
     }
+
+    /// Sets `name` to a value captured from a response, above every scope.
+    /// A secret stays a secret, so its new value is masked as well.
+    pub fn capture(&mut self, name: &str, value: VariableValue) {
+        let previous = self.by_name.remove(name);
+        let secret = previous.as_ref().is_some_and(|p| p.secret);
+        let overridden = previous
+            .map(|p| {
+                let mut chain = p.overridden;
+                chain.push(p.origin);
+                chain
+            })
+            .unwrap_or_default();
+        self.by_name.insert(
+            name.to_owned(),
+            ResolvedVariable {
+                value: Some(value),
+                secret,
+                origin: Origin::Runtime,
+                overridden,
+            },
+        );
+    }
 }
 
 /// Merges the variables of several scopes.

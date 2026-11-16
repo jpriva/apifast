@@ -27,6 +27,8 @@ use clap::{Parser, Subcommand};
 
 /// Exit code when `--fail` is set and the status is 400 or more.
 const EXIT_HTTP_ERROR: u8 = 4;
+/// Exit code when an assertion of the request failed.
+const EXIT_ASSERTION_FAILED: u8 = 1;
 /// Window used to copy the stored body to stdout.
 const COPY_WINDOW: usize = 64 * 1024;
 
@@ -180,9 +182,12 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
     if !args.quiet {
         eprintln!("{}", summary(&outcome));
     }
+    report_checks(&outcome, args.quiet);
     print_response(&outcome, &responses, args.include)?;
 
-    Ok(if args.fail && outcome.head.status >= 400 {
+    Ok(if outcome.assertions.iter().any(|a| !a.verdict.passed) {
+        ExitCode::from(EXIT_ASSERTION_FAILED)
+    } else if args.fail && outcome.head.status >= 400 {
         ExitCode::from(EXIT_HTTP_ERROR)
     } else {
         ExitCode::SUCCESS
@@ -237,6 +242,34 @@ fn print_response(outcome: &SendOutcome, responses: &FsResponseStore, include: b
 /// Whether to end the output with a newline the body does not have.
 fn needs_final_newline(on_terminal: bool, last_byte: Option<u8>) -> bool {
     on_terminal && last_byte.is_some_and(|b| b != b'\n')
+}
+
+/// Captures that found nothing and assertions, on stderr; with `quiet`,
+/// only the failures. Their values come already masked.
+fn report_checks(outcome: &SendOutcome, quiet: bool) {
+    for capture in &outcome.captures {
+        if let Err(reason) = &capture.value {
+            eprintln!("warning: capture of `{}`: {reason}", capture.variable);
+        }
+    }
+    for result in &outcome.assertions {
+        let assertion = &result.assertion;
+        let text = format!(
+            "{} {}{}",
+            assertion.expression.trim(),
+            assertion.operator.as_str(),
+            result
+                .expected
+                .as_deref()
+                .map(|e| format!(" {e}"))
+                .unwrap_or_default()
+        );
+        match &result.verdict.message {
+            None if !quiet => eprintln!("pass  {text}"),
+            None => {}
+            Some(message) => eprintln!("FAIL  {text}: {message}"),
+        }
+    }
 }
 
 fn summary(outcome: &SendOutcome) -> String {

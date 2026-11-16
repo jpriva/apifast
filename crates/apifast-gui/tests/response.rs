@@ -54,6 +54,7 @@ fn received(content_type: &str, body: impl Into<Vec<u8>>) -> ResponseState {
         },
         size: body.len() as u64,
         body: BodyHandle::memory(format!("r{}", body.len()), body),
+        checks: apifast_gui::core::Checks::default(),
     })
 }
 

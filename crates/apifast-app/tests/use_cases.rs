@@ -533,3 +533,116 @@ fn a_secret_takes_its_value_from_the_vault_for_the_send() {
     assert!(!printed.contains("k3y"), "{printed}");
     assert!(printed.contains(apifast_domain::MASK), "{printed}");
 }
+
+#[test]
+fn captures_run_before_assertions_and_feed_the_next_send() {
+    use apifast_app::apply_captures;
+    use apifast_domain::{Assertion, Capture, CaptureScope, Operator, ValueKind};
+
+    let mut login = HttpRequest::new("login", Method::Post, "{{host}}/login");
+    login.captures = vec![
+        Capture::new("res.body.token", "token"),
+        Capture::new("res.body.user", "user"),
+        Capture {
+            scope: CaptureScope::Request,
+            ..Capture::new("res.body.user.id", "user_id")
+        },
+        Capture::new("res.body.missing", "nothing"),
+    ];
+    login.assertions = vec![
+        Assertion::new("res.status", Operator::Eq, Some("200")),
+        // A value captured just now is there for the assertions.
+        Assertion::new("res.body.user.id", Operator::Eq, Some("{{user_id}}")),
+        Assertion::new("res.body.token", Operator::Eq, Some("wrong")),
+        Assertion {
+            enabled: false,
+            ..Assertion::new("res.status", Operator::Eq, Some("500"))
+        },
+    ];
+    let me = get("{{host}}/users/{{user.id}}?t={{token}}");
+    let mut world = World::new(
+        MemoryCollections::new(Collection::new("api"))
+            .with_request("login.yml", login)
+            .with_request("me.yml", me),
+    );
+    world.transport = MemoryTransport::new(200, r#"{"token":"t0k","user":{"id":5}}"#);
+    let mut options = SendOptions {
+        runtime: vec![Variable::text("host", "http://h")],
+        ..SendOptions::default()
+    };
+
+    let outcome = world.send("login.yml", &options).unwrap();
+    let passed: Vec<bool> = outcome
+        .assertions
+        .iter()
+        .map(|a| a.verdict.passed)
+        .collect();
+    assert_eq!(passed, [true, true, false], "the disabled one is skipped");
+    assert_eq!(outcome.assertions[1].expected.as_deref(), Some("5"));
+    assert_eq!(
+        outcome.assertions[2].verdict.message.as_deref(),
+        Some("expected eq wrong, got \"t0k\"")
+    );
+    let values: Vec<_> = outcome.captures.iter().map(|c| c.value.clone()).collect();
+    assert_eq!(values[0], Ok(VariableValue::text("t0k")));
+    assert_eq!(values[1].as_ref().unwrap().kind, ValueKind::Object);
+    assert_eq!(values[3], Err("res.body.missing is undefined".into()));
+
+    apply_captures(&mut options.runtime, &outcome.captures);
+    let names: Vec<&str> = options.runtime.iter().map(|v| v.name.as_str()).collect();
+    assert_eq!(
+        names,
+        ["host", "token", "user"],
+        "request scope ends with its send"
+    );
+    world.send("me.yml", &options).unwrap();
+    assert!(
+        world.last_sent().url().ends_with("t=t0k"),
+        "{}",
+        world.last_sent().url()
+    );
+}
+
+#[test]
+fn a_captured_secret_and_secrets_in_results_are_masked() {
+    use apifast_domain::{Assertion, Capture, MASK, Operator};
+
+    let mut request = get("{{host}}/echo?key={{api_key}}");
+    request.captures = vec![Capture::new("res.body.new_key", "api_key")];
+    request.assertions = vec![Assertion::new("res.body.sent", Operator::Eq, Some("x"))];
+    let mut world = World::new(
+        MemoryCollections::new(Collection::new("api")).with_request("echo.yml", request),
+    );
+    world.environments = MemoryEnvironments::new(vec![env(
+        "prod",
+        None,
+        vec![
+            Variable::text("host", "https://api.test"),
+            Variable::secret("api_key"),
+        ],
+    )]);
+    world.secrets = MemorySecrets::default().with("prod", "api_key", "k3y");
+    // A server that echoes the secret and hands out a new one.
+    world.transport = MemoryTransport::new(200, r#"{"sent":"k3y","new_key":"n3w"}"#);
+    let options = SendOptions {
+        environment: Some("prod".into()),
+        ..SendOptions::default()
+    };
+    let outcome = world.send("echo.yml", &options).unwrap();
+    let verdict = &outcome.assertions[0].verdict;
+    assert_eq!(verdict.actual, format!("\"{MASK}\""));
+    assert!(!verdict.message.as_deref().unwrap().contains("k3y"));
+    assert!(outcome.captures[0].secret);
+    let mut runtime = Vec::new();
+    apifast_app::apply_captures(&mut runtime, &outcome.captures);
+    assert!(runtime[0].secret, "it stays a secret for the next requests");
+}
+
+#[test]
+fn a_request_without_checks_does_not_read_its_body_back() {
+    let world = World::new(
+        MemoryCollections::new(Collection::new("api")).with_request("a.yml", get("http://h/")),
+    );
+    let outcome = world.send("a.yml", &SendOptions::default()).unwrap();
+    assert!(outcome.assertions.is_empty() && outcome.captures.is_empty());
+}

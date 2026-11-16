@@ -82,6 +82,10 @@ impl Json {
         let mut current = self;
         for step in steps(path)? {
             let next = match (&step, current) {
+                // `items.0`, as in a template, indexes an array too.
+                (Step::Key(key), Self::Array(items)) => {
+                    key.parse::<usize>().ok().and_then(|i| items.get(i))
+                }
                 (Step::Key(key), _) => current.get(key),
                 (Step::Index(i), Self::Array(items)) => items.get(*i),
                 (Step::Index(_), _) => None,

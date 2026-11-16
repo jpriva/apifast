@@ -324,3 +324,64 @@ fn a_secret_made_of_other_variables_is_kept_as_rendered() {
     assert_eq!(rendered.text, "x=ana:pa55&u=ana");
     assert_eq!(rendered.secrets, [apifast_domain::Secret::new("ana:pa55")]);
 }
+
+#[test]
+fn paths_reach_inside_object_variables() {
+    let user = r#"{"id":5,"address":{"city":"Lima"},"tags":["a","b"],"ref":"{{other}}"}"#;
+    let variables = vars(&[
+        ("user", user),
+        ("other", "x"),
+        ("api", r#"{"v":{"x":"short"}}"#),
+        ("api.v", r#"{"x":"long"}"#),
+        ("host.name", "h"),
+        ("text", "not json"),
+    ]);
+    assert_eq!(strict("{{user.id}}", &variables).unwrap(), "5");
+    assert_eq!(
+        strict("{{ user.address.city }}", &variables).unwrap(),
+        "Lima"
+    );
+    assert_eq!(
+        strict("{{user.address}}", &variables).unwrap(),
+        r#"{"city":"Lima"}"#
+    );
+    assert_eq!(strict("{{user.tags.1}}", &variables).unwrap(), "b");
+    // The value is rendered before it is read.
+    assert_eq!(strict("{{user.ref}}", &variables).unwrap(), "x");
+    // A variable with dots in its name comes first, the longest one next.
+    assert_eq!(strict("{{host.name}}", &variables).unwrap(), "h");
+    assert_eq!(strict("{{api.v.x}}", &variables).unwrap(), "long");
+    for missing in ["user.nope", "user.address.city.x", "text.a", "nobody.id"] {
+        assert_eq!(
+            strict(&format!("{{{{{missing}}}}}"), &variables),
+            Err(RenderError(Problem::MissingVariable(missing.into())))
+        );
+    }
+}
+
+#[test]
+fn a_path_inside_a_secret_is_a_secret() {
+    let env = [Variable {
+        value: Some(apifast_domain::VariableValue::text(r#"{"key":"k3y"}"#)),
+        ..Variable::secret("creds")
+    }];
+    let variables = resolve_variables([(Origin::Environment("prod".into()), &env[..])]);
+    let rendered = render(
+        "{{creds.key}}",
+        &variables,
+        &mut FakeHost::default(),
+        Mode::Strict,
+    )
+    .unwrap();
+    assert_eq!(rendered.text, "k3y");
+    assert!(rendered.contains_secret);
+    assert_eq!(rendered.secrets, [apifast_domain::Secret::new("k3y")]);
+    let locked = resolve_variables([(
+        Origin::Environment("prod".into()),
+        &[Variable::secret("creds")][..],
+    )]);
+    assert_eq!(
+        strict("{{creds.key}}", &locked),
+        Err(RenderError(Problem::SecretUnavailable("creds".into())))
+    );
+}

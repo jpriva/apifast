@@ -65,7 +65,7 @@ apifast send users/get.yml -e production | jq .      # the body goes to stdout
 
 The collection is the nearest folder above the file with an `opencollection.yml` (or `--collection`). A summary and any warnings go to stderr. Responses are kept under the user's data directory (`APIFAST_DATA_DIR` overrides it); `send` never writes into the collection.
 
-Exit codes: 0 when a response arrived, 1 on errors, 2 on usage errors, 4 with `--fail` when the status is 400 or more.
+Exit codes: 0 when a response arrived (and its assertions passed), 1 on errors or a failed assertion, 2 on usage errors, 4 with `--fail` when the status is 400 or more.
 
 ### Secrets
 

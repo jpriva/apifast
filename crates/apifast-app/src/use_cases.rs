@@ -4,11 +4,13 @@ use apifast_domain::{
 };
 use apifast_template::{Mode, Problem};
 
+use crate::checks::{CHECK_LIMIT, has_checks, run_checks};
 use crate::{
     AppError, AppHost, BodyWriter, CancelToken, Clock, CollectionRepository, CollectionTree,
     EnvironmentRepository, HttpTransport, LoadedRequest, Prompter, Random, RequestPath,
     ResponseHead, ResponseStore, SecretStore, StoredBody, render_request, sort_tree,
 };
+use crate::{AssertionOutcome, CaptureOutcome, ResponseFacts};
 
 /// Loads the collection tree, sorted by `seq` and name.
 ///
@@ -128,6 +130,11 @@ pub struct SendOutcome {
     /// The values of the secrets it carried, to mask them in what is shown
     /// or stored (history, timeline).
     pub secrets: Vec<Secret>,
+    /// The captures that ran, in order. Pass them to
+    /// [`apply_captures`](crate::apply_captures) to keep their values.
+    pub captures: Vec<CaptureOutcome>,
+    /// The assertions checked, in order.
+    pub assertions: Vec<AssertionOutcome>,
 }
 
 /// Loads a request, resolves inheritance and variables, renders it, sends it
@@ -190,11 +197,32 @@ where
         .await?;
     let body = writer.finish()?;
 
+    let (captures, assertions) = if has_checks(&loaded.request) {
+        let bytes = if body.size <= CHECK_LIMIT {
+            let len = usize::try_from(body.size).unwrap_or(usize::MAX);
+            Some(ports.responses.read(&body.id, 0, len)?)
+        } else {
+            None
+        };
+        let facts = ResponseFacts::new(&head, body.size, bytes.as_deref());
+        run_checks(
+            &loaded.request,
+            &facts,
+            &mut variables,
+            &mut host,
+            rendered.request.secrets(),
+        )
+    } else {
+        (Vec::new(), Vec::new())
+    };
+
     Ok(SendOutcome {
         head,
         body,
         problems: rendered.problems,
         contains_secret: rendered.request.contains_secret(),
         secrets: rendered.request.secrets().to_vec(),
+        captures,
+        assertions,
     })
 }

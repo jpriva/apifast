@@ -1157,3 +1157,42 @@ fn a_value_no_secret_uses_is_an_orphan_and_can_be_forgotten() {
     core.send(Command::Vault(VaultCommand::Forget(orphan)));
     wait(&core, "forgotten", |s| s.vault.orphans.is_empty());
 }
+
+#[test]
+fn a_capture_feeds_the_next_send_and_checks_reach_the_tab() {
+    let dir = collection(server(Duration::ZERO));
+    std::fs::write(
+        dir.path().join("first.yml"),
+        "info:\n  name: First\n  type: http\nhttp:\n  method: GET\n  url: \"{{host}}/first\"\nruntime:\n  actions:\n    - type: set-variable\n      phase: after-response\n      selector:\n        expression: res.status\n        method: jsonq\n      variable:\n        name: code\n        scope: runtime\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("second.yml"),
+        "info:\n  name: Second\n  type: http\nhttp:\n  method: GET\n  url: \"{{host}}/code/{{code}}\"\nruntime:\n  assertions:\n    - expression: res.body\n      operator: contains\n      value: /code/200\n    - expression: res.status\n      operator: eq\n      value: \"201\"\n",
+    )
+    .unwrap();
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    core.send(Command::OpenRequest(RequestPath::new("first.yml")));
+    wait(&core, "the first tab", |s| s.active_tab().is_some());
+    core.send(Command::Send);
+    let snapshot = wait(&core, "the first response", |s| {
+        matches!(response(s), ResponseState::Received(_))
+    });
+    let checks = received(&snapshot).checks;
+    assert_eq!(checks.captures[0].variable, "code");
+
+    core.send(Command::OpenRequest(RequestPath::new("second.yml")));
+    wait(&core, "the second tab", |s| {
+        s.active_tab()
+            .is_some_and(|t| t.path == RequestPath::new("second.yml"))
+    });
+    core.send(Command::Send);
+    let snapshot = wait(&core, "the second response", |s| {
+        matches!(response(s), ResponseState::Received(_))
+    });
+    let checks = received(&snapshot).checks;
+    let passed: Vec<bool> = checks.assertions.iter().map(|a| a.verdict.passed).collect();
+    assert_eq!(passed, [true, false], "{checks:?}");
+}

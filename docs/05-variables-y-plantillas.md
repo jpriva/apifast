@@ -70,6 +70,16 @@ variables:
 - Al interpolar en texto, el valor se convierte a cadena; los objetos se insertan como JSON.
 - Las aserciones y, más adelante, los scripts reciben el valor con su tipo real.
 
+### Rutas dentro de un objeto
+
+`{{feature_flags.beta}}` lee un campo del valor JSON de una variable; un segmento numérico indexa un array (`{{user.tags.0}}`). Reglas:
+
+- Una variable cuyo nombre contiene puntos tiene prioridad: si existe `api.v`, `{{api.v}}` es ella. Si no, gana el prefijo más largo que sea una variable (`api.v` antes que `api` para `{{api.v.x}}`).
+- El valor de la variable se renderiza antes de leerlo, así que puede contener plantillas.
+- Un campo que no existe, o un valor que no es JSON, es una variable sin definir, con el nombre completo en el mensaje.
+- Un campo de un secreto es secreto: se enmascara igual.
+- Las capturas de un objeto o un array crean variables de tipo objeto, así que `{{user.id}}` funciona tras capturar `res.body.user`.
+
 ## Variables dinámicas
 
 Se generan en cada envío. Conjunto inicial:

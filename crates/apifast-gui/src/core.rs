@@ -20,17 +20,18 @@ use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime};
 
 use apifast_app::{
-    AppError, CancelToken, Clock, CollectionRepository, CollectionTree, EnvironmentRepository,
-    HistoryEntry, HistoryLimits, HistoryOutcome, HistoryStore, ItemPath, NoPrompter, NoSecrets,
-    Placement, RepositoryError, RequestPath, ResponseHead, ResponseId, ResponseStore, SecretStore,
-    SendOptions, SendPorts, Session, SessionStore, SessionTab, SharedSecretFiles, TransportError,
+    AppError, AssertionOutcome, CancelToken, CaptureOutcome, Clock, CollectionRepository,
+    CollectionTree, EnvironmentRepository, HistoryEntry, HistoryLimits, HistoryOutcome,
+    HistoryStore, ItemPath, NoPrompter, NoSecrets, Placement, RepositoryError, RequestPath,
+    ResponseHead, ResponseId, ResponseStore, SecretStore, SendOptions, SendPorts, Session,
+    SessionStore, SessionTab, SharedSecretFiles, TransportError, apply_captures,
     create_environment, create_folder, create_request, delete_environment, delete_item,
     load_request, move_item, open_collection, rename_environment, rename_item,
     resolve_request_variables, save_environment, save_request, send_request,
 };
 use apifast_domain::{
     AuthScheme, Chain, Collection, Environment, Header, HttpRequest, Origin, Resolved,
-    ResolvedSettings, ResolvedVariables, Setting, Settings, resolve,
+    ResolvedSettings, ResolvedVariables, Setting, Settings, Variable, resolve,
 };
 use apifast_history::{FsHistoryStore, FsResponseStore, Limits};
 use apifast_http::ReqwestTransport;
@@ -113,6 +114,7 @@ fn received(
         head,
         size,
         body: BodyHandle::new(id.0, Arc::new(stored)),
+        checks: Checks::default(),
     }
 }
 
@@ -395,6 +397,18 @@ pub struct Received {
     pub size: u64,
     /// The body, read by windows where it is kept.
     pub body: BodyHandle,
+    /// What ran after it: captures and assertions. Empty for a response
+    /// from the history, which does not keep them.
+    pub checks: Checks,
+}
+
+/// The captures and assertions that ran after a response, masked.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Checks {
+    /// Captures, in order.
+    pub captures: Vec<CaptureOutcome>,
+    /// Assertions, in order.
+    pub assertions: Vec<AssertionOutcome>,
 }
 
 /// Messages the core thread handles: commands from the interface and
@@ -533,6 +547,9 @@ struct Open {
     /// The collection's secrets. `None` without a collection id: no secret
     /// was ever stored.
     vault: Option<Arc<VaultSecrets>>,
+    /// Values captured from responses, for the next sends. They last while
+    /// the collection is open.
+    runtime: Vec<Variable>,
     /// Watches the folder while the collection is open. `None` if the
     /// system refused: changes made outside then show after reopening.
     _watcher: Option<FsWatcher>,
@@ -869,6 +886,7 @@ impl State {
             sessions,
             opened,
             vault,
+            runtime: Vec::new(),
             _watcher: watcher,
         });
         self.snapshot = Snapshot {
@@ -1196,6 +1214,7 @@ impl State {
         let options = SendOptions {
             environment: self.snapshot.environment.clone(),
             draft: self.tab(&path).and_then(|tab| tab.draft.clone()),
+            runtime: open.runtime.clone(),
             ..SendOptions::default()
         };
         let Some(tab) = self.tab_mut(&path) else {
@@ -1241,8 +1260,12 @@ impl State {
             };
             // A history that cannot be written does not hide the response.
             let entry = entry.filter(|entry| history.append(entry).is_ok());
-            let result = result.map(|outcome| {
-                received(&responses, outcome.head, outcome.body.size, outcome.body.id)
+            let result = result.map(|outcome| Received {
+                checks: Checks {
+                    captures: outcome.captures,
+                    assertions: outcome.assertions,
+                },
+                ..received(&responses, outcome.head, outcome.body.size, outcome.body.id)
             });
             // Gone only when the core is stopping, and then nobody waits.
             if let Some(messages) = messages.upgrade() {
@@ -1272,7 +1295,12 @@ impl State {
         };
         self.sending.remove(&path);
         let response = match result {
-            Ok(received) => ResponseState::Received(received),
+            Ok(received) => {
+                if let Some(open) = &mut self.open {
+                    apply_captures(&mut open.runtime, &received.checks.captures);
+                }
+                ResponseState::Received(received)
+            }
             Err(AppError::Transport(TransportError::Cancelled)) => ResponseState::Cancelled,
             Err(e) => ResponseState::Failed(e.to_string()),
         };

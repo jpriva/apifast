@@ -244,10 +244,10 @@ El cifrado del tarro de cookies pasa a F5, donde llega el tarro.
 
 ### Tareas
 
-- [ ] Rutas en variables de tipo objeto (`{{user.address.city}}`), que necesitan las capturas: requiere leer JSON fuera del dominio o un lector propio en `apifast-template`. Pasado desde F1.
+- [x] Rutas en variables de tipo objeto (`{{user.address.city}}`), que necesitan las capturas: requiere leer JSON fuera del dominio o un lector propio en `apifast-template`. Pasado desde F1. Hecho con el lector `Json` del dominio: gana una variable con puntos en su nombre, luego el prefijo más largo; un segmento numérico indexa arrays y el campo de un secreto es secreto.
 - [ ] Variables dinámicas de datos de prueba (`$randomEmail`, `$randomFullName`, `$randomWord`). Pasado desde F1.
-- [x] Evaluador de aserciones con todos los operadores. Las aserciones y capturas de Bruno (`runtime.assertions` y las acciones `set-variable`) se leen y se guardan en su sitio; las acciones de otro tipo se conservan. Un lector JSON propio en el dominio (`Json`) sirve al evaluador y servirá a las rutas en variables objeto. `check` evalúa los 28 operadores contra `ResponseFacts` con conversión al tipo del valor real y mensajes con ambos valores. Falta conectarlo al envío, con las capturas.
-- [ ] Capturas con selector JSON; variables de runtime.
+- [x] Evaluador de aserciones con todos los operadores. Las aserciones y capturas de Bruno (`runtime.assertions` y las acciones `set-variable`) se leen y se guardan en su sitio; las acciones de otro tipo se conservan. Un lector JSON propio en el dominio (`Json`) sirve al evaluador y servirá a las rutas en variables objeto. `check` evalúa los 28 operadores contra `ResponseFacts` con conversión al tipo del valor real y mensajes con ambos valores.
+- [x] Capturas con selector JSON; variables de runtime. `send_request` ejecuta las capturas y luego las aserciones (con el valor esperado renderizado, ya con lo capturado) y las devuelve enmascaradas en `SendOutcome`. `apply_captures` guarda los valores para los envíos siguientes: la interfaz los mantiene mientras la colección está abierta, y `apifast send` muestra los resultados y termina con 1 si una aserción falla. Pendiente para la pestaña Tests: escribir las capturas de ámbito `environment` en el entorno y las de secretos en la bóveda.
 - [ ] Funciones de plantilla `response` y `header`, con política de refresco y detección de ciclos.
 - [ ] JSONPath y XPath.
 - [ ] Caso de uso `RunCollection`: orden, tags, pausa, `--bail`, iteraciones.

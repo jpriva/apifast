@@ -109,6 +109,17 @@ runtime:
 
 Una captura cuyo destino es una variable secreta guarda el valor en la bóveda, nunca en claro.
 
+Comportamiento actual:
+
+- Las capturas corren tras guardar el cuerpo, y lo capturado ya está disponible para las aserciones del mismo envío (`value: "{{user_id}}"`).
+- El valor toma el tipo de lo capturado: texto, número o booleano; un objeto, un array o `null` se guardan como variable de tipo objeto (JSON).
+- Una captura sin valor (`res.body.token` ausente) no cambia la variable y se informa como aviso; no hace fallar la request.
+- Una captura sobre una variable secreta conserva la marca de secreto: su valor se enmascara en resultados, historial y requests siguientes. Por ahora queda en memoria; escribirla en la bóveda llega con la interfaz de tests.
+- Ámbito `environment`: por ahora vive como `runtime`. Escribirlo en el entorno, con confirmación en la interfaz, llega con la pestaña Tests.
+- En la interfaz, las variables de runtime duran mientras la colección está abierta; en la CLI, lo que dura `send` (y en `run`, toda la ejecución).
+- El cuerpo se lee para las comprobaciones solo si la request tiene alguna activa, y como mucho 16 MiB (`CHECK_LIMIT`).
+- Los valores real y esperado de los resultados llegan ya enmascarados con los secretos de la request y los capturados.
+
 ## Orden de evaluación en un envío
 
 1. Variables previas de la request.
@@ -116,6 +127,10 @@ Una captura cuyo destino es una variable secreta guarda el valor en la bóveda, 
 3. Capturas.
 4. Aserciones.
 5. (F9) Scripts posteriores y tests en JavaScript.
+
+### `apifast send`
+
+Muestra cada aserción en stderr (`pass` o `FAIL` con su motivo) y cada captura sin valor como aviso; con `--quiet`, solo los fallos. Si una aserción falla, termina con código 1.
 
 ## Runner de colección
 

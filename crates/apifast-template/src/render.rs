@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use apifast_domain::{ResolvedVariables, Secret};
+use apifast_domain::{Json, ResolvedVariables, Secret};
 
 use crate::dynamic;
 use crate::parse::{Expr, Template, Token};
@@ -242,13 +242,58 @@ impl Renderer<'_, '_> {
     /// Renders variable `name`; the value of a secret is kept, so whatever
     /// shows the text later can mask it.
     fn variable_into(&mut self, name: &str, out: &mut String) -> Result<(), RenderError> {
-        let secret = self.variables.get(name).is_some_and(|var| var.secret);
         let start = out.len();
-        let result = self.value_into(name, out);
+        let (secret, result) = if let Some((base, path)) = self.object_path(name) {
+            let secret = self.variables.get(base).is_some_and(|var| var.secret);
+            (secret, self.path_into(name, base, path, out))
+        } else {
+            let secret = self.variables.get(name).is_some_and(|var| var.secret);
+            (secret, self.value_into(name, out))
+        };
         if secret && out.len() > start {
             self.secrets.push(Secret::new(&out[start..]));
         }
         result
+    }
+
+    /// For a name that is not a variable but starts with one followed by a
+    /// dot (`user.address.city`), that variable and the path after it. The
+    /// longest such variable wins, so `api.v` beats `api` for `api.v.x`.
+    fn object_path<'n>(&self, name: &'n str) -> Option<(&'n str, &'n str)> {
+        if self.variables.get(name).is_some() {
+            return None;
+        }
+        name.char_indices()
+            .rev()
+            .filter(|(_, c)| *c == '.')
+            .map(|(i, _)| (&name[..i], &name[i + 1..]))
+            .find(|(base, _)| self.variables.get(base).is_some())
+    }
+
+    /// Renders the value at `path` inside the JSON value of variable `base`.
+    fn path_into(
+        &mut self,
+        name: &str,
+        base: &str,
+        path: &str,
+        out: &mut String,
+    ) -> Result<(), RenderError> {
+        let mut whole = String::new();
+        let problems = self.problems.len();
+        self.value_into(base, &mut whole)?;
+        if self.problems.len() > problems {
+            return Ok(()); // the base already reported why it has no value
+        }
+        let found = Json::parse(&whole)
+            .ok()
+            .and_then(|json| json.at(path).ok().flatten().map(Json::to_text));
+        match found {
+            Some(text) => {
+                out.push_str(&text);
+                Ok(())
+            }
+            None => self.problem(Problem::MissingVariable(name.to_owned())),
+        }
     }
 
     fn value_into(&mut self, name: &str, out: &mut String) -> Result<(), RenderError> {
