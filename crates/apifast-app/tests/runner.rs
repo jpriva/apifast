@@ -10,8 +10,8 @@ use apifast_app::memory::{
     MemorySecrets, MemoryTransport, RecordedPauses, ScriptedPrompter,
 };
 use apifast_app::{
-    AppError, CancelToken, RequestPath, RunEvent, RunOptions, RunReport, SendPorts, TreeItem,
-    run_collection, run_selection,
+    AppError, CancelToken, CollectionRepository, RequestPath, RunEvent, RunOptions, RunReport,
+    SendPorts, TreeItem, run_collection, run_selection,
 };
 use apifast_domain::{Assertion, Capture, Collection, Folder, HttpRequest, Method, Operator};
 
@@ -326,4 +326,36 @@ fn requests_that_cannot_run_are_skipped() {
             ("broken.yml", "bad YAML")
         ]
     );
+}
+
+#[test]
+fn data_rows_drive_the_iterations() {
+    let world = World::new();
+    let rows = apifast_app::parse_data("id\n1\n2\n3\n", apifast_app::DataFormat::Csv)
+        .unwrap_or_else(|e| panic!("{e}"));
+    world
+        .collections
+        .save_request(
+            &RequestPath::new("users/list.yml"),
+            &request("List", 1, "http://api/users/{{id}}"),
+        )
+        .unwrap_or_else(|e| panic!("{e}"));
+    let report = world.run(&RunOptions {
+        folder: Some("users".into()),
+        recursive: false,
+        iterations: 10,
+        data: rows,
+        ..RunOptions::default()
+    });
+    assert_eq!(
+        world.urls(),
+        [
+            "http://api/users/1",
+            "http://api/users/2",
+            "http://api/users/3"
+        ]
+    );
+    let iterations: Vec<u32> = report.steps.iter().map(|s| s.iteration).collect();
+    assert_eq!(iterations, [1, 2, 3]);
+    assert!(report.runtime.iter().any(|v| v.name == "id"));
 }

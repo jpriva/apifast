@@ -32,7 +32,7 @@ Cuando el mismo nombre existe en varios ámbitos, gana el más específico. De m
 | 3 | Entorno activo | `environments/<nombre>.yml`, incluyendo lo heredado por `extends` |
 | 4 | Carpetas | `request.variables` en cada `folder.yml`, de la más externa a la más interna |
 | 5 | Request | `runtime.variables` en el archivo de la request |
-| 6 | Runtime | Capturas de respuestas anteriores (en memoria) |
+| 6 | Runtime | Capturas de respuestas anteriores (en memoria) y, en el runner, las columnas de la fila de datos |
 | 7 | Pregunta | Valores introducidos por el usuario para este envío |
 
 `process.env.*` es un espacio de nombres aparte y no participa en esta cadena.

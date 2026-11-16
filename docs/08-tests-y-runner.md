@@ -195,6 +195,21 @@ El caso de uso `run_collection` (`apifast-app`) es el mismo para la CLI y la int
 - **`bail`:** detiene la ejecución tras la primera request con un error o una aserción fallida.
 - **Pausa:** `delay_ms` se espera entre dos requests, no antes de la primera. La espera es un puerto (`Pause`), así que las pruebas no esperan.
 - **Iteraciones:** la selección entera se repite `iterations` veces; cada paso del informe dice a qué iteración pertenece.
+- **Datos:** con `data`, la selección corre una vez por fila y se ignora `iterations`. Al empezar cada fila, sus columnas pasan a variables runtime y reemplazan las de la fila anterior; una captura con el mismo nombre la sobrescribe hasta la fila siguiente.
+
+### Archivos de datos
+
+`parse_data` (`apifast-app`, sin E/S) lee el texto. El formato sale de la extensión (`.csv` o `.json`, sin distinguir mayúsculas):
+
+- **CSV** (RFC 4180): la primera fila son los nombres de las columnas. Campos entre comillas dobles cuando llevan comas, saltos de línea o comillas (`""`). Admite `\r\n`, un BOM inicial y líneas en blanco, que se saltan. Todos los valores son texto.
+- **JSON:** un array de objetos; cada clave es una variable. Números y booleanos conservan su tipo, y un objeto o un array se vuelve una variable de tipo objeto (`{{user.name}}`).
+- **Errores**, con dónde: `line 3 has 1 fields; the header has 2`, `line 2: a quote is not closed`, `column 2 has no name`, `` the column `a` appears twice ``, `item 2 is number, not an object`, `the data file has no rows`.
+
+```csv
+email,password
+ana@example.com,"s3cr3t, really"
+bo@example.com,hunter2
+```
 - **Cancelación:** se comprueba antes de cada request y corta la que está en vuelo; el informe queda marcado como cancelado.
 - **Progreso:** un callback recibe `Started` y `Finished` de cada request, para mostrar el avance en vivo.
 - **Resultado:** el informe tiene los pasos (respuesta, capturas, aserciones y duración), las omitidas, la duración total y si se detuvo por `bail` o por cancelación. `summary()` da los totales y `succeeded()` dice si todo se envió y todas las aserciones pasaron.

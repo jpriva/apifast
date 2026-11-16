@@ -28,8 +28,13 @@ pub struct RunOptions {
     /// Stop at the first request that fails: an assertion that does not
     /// hold, or an error.
     pub bail: bool,
-    /// How many times the whole selection runs; at least 1.
+    /// How many times the whole selection runs; at least 1. Ignored when
+    /// there is `data`.
     pub iterations: u32,
+    /// Rows of a data file ([`parse_data`](crate::parse_data)): the
+    /// selection runs once per row, with the row's columns as runtime
+    /// variables.
+    pub data: Vec<Vec<Variable>>,
     /// The environment, the starting runtime values and whether unresolved
     /// variables are allowed. Its `draft` is ignored.
     pub send: SendOptions,
@@ -45,6 +50,7 @@ impl Default for RunOptions {
             delay_ms: 0,
             bail: false,
             iterations: 1,
+            data: Vec::new(),
             send: SendOptions::default(),
         }
     }
@@ -322,7 +328,15 @@ where
         runtime: Vec::new(),
     };
     let total = selection.len();
-    'run: for iteration in 1..=options.iterations.max(1) {
+    let iterations = if options.data.is_empty() {
+        options.iterations.max(1)
+    } else {
+        u32::try_from(options.data.len()).unwrap_or(u32::MAX)
+    };
+    'run: for iteration in 1..=iterations {
+        if let Some(row) = options.data.get(iteration as usize - 1) {
+            set_row(&mut send.runtime, row);
+        }
         for (index, (path, name)) in selection.iter().enumerate() {
             if !report.steps.is_empty() && options.delay_ms > 0 {
                 pause.pause(options.delay_ms).await;
@@ -366,6 +380,15 @@ where
     report.runtime = send.runtime;
     report.duration_ms = elapsed(started, ports.clock.unix_millis());
     Ok(report)
+}
+
+/// Puts the columns of a data row in the runtime values, replacing what
+/// earlier rows or captures left under the same names.
+fn set_row(runtime: &mut Vec<Variable>, row: &[Variable]) {
+    for column in row {
+        runtime.retain(|v| v.name != column.name);
+        runtime.push(column.clone());
+    }
 }
 
 fn elapsed(from: i64, to: i64) -> u64 {
