@@ -15,9 +15,10 @@ use crate::layout;
 use crate::molecules::EnvironmentSelector;
 use crate::organisms::{
     CommandPalette, EnvironmentEditor, EnvironmentEvent, HistoryView, PaletteItem, PaletteMode,
-    RequestChange, RequestPanel, ResponseView, ShortcutEditor, TabBar, TabEvent, TreeEvent,
-    TreeView, UrlBar, UrlBarEvent,
+    RequestChange, RequestPanel, ResponseView, SettingsWindow, ShortcutEditor, TabBar, TabEvent,
+    TreeEvent, TreeView, UrlBar, UrlBarEvent,
 };
+use crate::settings::Settings;
 use crate::strings::Strings;
 use crate::theme::{self, ThemeChoice};
 
@@ -56,10 +57,10 @@ pub struct MainScreen {
     /// The shortcuts of every action.
     pub keymap: Keymap,
     /// Whether the keymap changed since [`Self::take_keymap_change`].
-    keymap_changed: bool,
+    unsaved: Unsaved,
     /// Something to tell about the keymap, such as entries of
     /// `keymap.yml` that were ignored.
-    pub keymap_notice: Option<String>,
+    pub notice: Option<String>,
     /// The command palette.
     pub palette: CommandPalette,
     /// The editor of shortcuts.
@@ -70,10 +71,19 @@ pub struct MainScreen {
     closed: Vec<RequestPath>,
     /// Put the cursor in the URL on the next frame.
     focus_url: bool,
-    /// The theme chosen.
-    pub theme: ThemeChoice,
-    /// The theme last applied, to apply a new choice once.
-    applied_theme: Option<ThemeChoice>,
+    /// The application's settings.
+    pub settings: Settings,
+    /// The settings window.
+    pub settings_window: SettingsWindow,
+    /// The theme and scale last applied, to apply a new choice once.
+    applied: Option<(ThemeChoice, f32)>,
+}
+
+/// What changed and is not saved yet.
+#[derive(Debug, Default)]
+struct Unsaved {
+    keymap: bool,
+    settings: bool,
 }
 
 /// The interface's own copy of the active tab's contents. Edits change it
@@ -104,17 +114,14 @@ impl MainScreen {
         let Some(collection) = &snapshot.collection else {
             return Vec::new();
         };
-        if self.applied_theme != Some(self.theme) {
-            theme::apply(ui.ctx(), self.theme);
-            self.applied_theme = Some(self.theme);
-        }
         let active = snapshot.active_tab();
         let hints = self.follow(active, strings);
         let sending = active.is_some_and(|tab| tab.response == ResponseState::Sending);
         let selected = snapshot.active.as_ref();
         self.request.format_shortcuts = Some(self.keymap.shortcuts(Action::FormatBody));
+        self.response.pretty_limit = Some(self.settings.pretty_limit());
         let focus_url = std::mem::take(&mut self.focus_url);
-        let notice = self.keymap_notice.as_deref();
+        let notice = self.notice.as_deref();
         let (sidebar, history) = (&mut self.sidebar, &mut self.history);
         let (tree, tabs, panels, editor) = (
             &mut self.tree,
@@ -225,9 +232,38 @@ impl MainScreen {
             .collect()
     }
 
+    /// Whether the settings changed since the last call, so they can be
+    /// saved and the core told.
+    pub fn take_settings_change(&mut self) -> bool {
+        std::mem::take(&mut self.unsaved.settings)
+    }
+
+    /// Applies the theme and scale of the settings, on every screen. The
+    /// scale waits until the mouse is released, so a slider being dragged
+    /// does not move under the pointer; a scale changed with `Ctrl+=` or
+    /// `Ctrl+-` goes back into the settings.
+    pub fn apply_appearance(&mut self, ctx: &egui::Context) {
+        let settings = &mut self.settings;
+        if let Some((_, scale)) = self.applied
+            && (ctx.zoom_factor() - scale).abs() > f32::EPSILON
+        {
+            settings.ui_scale = ctx.zoom_factor();
+            self.applied = Some((settings.theme, settings.ui_scale));
+            self.unsaved.settings = true;
+        }
+        if self.applied == Some((settings.theme, settings.ui_scale)) {
+            return;
+        }
+        theme::apply(ctx, settings.theme);
+        if !ctx.input(|i| i.pointer.any_down()) {
+            ctx.set_zoom_factor(settings.ui_scale);
+            self.applied = Some((settings.theme, settings.ui_scale));
+        }
+    }
+
     /// Whether the keymap changed since the last call, so it can be saved.
     pub fn take_keymap_change(&mut self) -> bool {
-        std::mem::take(&mut self.keymap_changed)
+        std::mem::take(&mut self.unsaved.keymap)
     }
 
     /// The windows over the screen: environments, shortcuts and the
@@ -247,7 +283,10 @@ impl MainScreen {
             commands.push(environment_command(event));
         }
         if self.shortcuts.show(&ctx, &mut self.keymap, strings) {
-            self.keymap_changed = true;
+            self.unsaved.keymap = true;
+        }
+        if self.settings_window.show(&ctx, &mut self.settings, strings) {
+            self.unsaved.settings = true;
         }
         if self.palette.open.is_some() {
             let items = palette_items(&ctx, snapshot, &self.keymap, strings);
@@ -335,12 +374,17 @@ impl MainScreen {
                 self.shortcuts.open = true;
                 Vec::new()
             }
+            Action::Settings => {
+                self.settings_window.open = true;
+                Vec::new()
+            }
             Action::ThemeSystem | Action::ThemeLight | Action::ThemeDark => {
-                self.theme = match action {
+                self.settings.theme = match action {
                     Action::ThemeLight => ThemeChoice::Light,
                     Action::ThemeDark => ThemeChoice::Dark,
                     _ => ThemeChoice::System,
                 };
+                self.unsaved.settings = true;
                 Vec::new()
             }
         }

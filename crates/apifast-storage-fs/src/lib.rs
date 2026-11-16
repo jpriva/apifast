@@ -15,6 +15,7 @@ mod fs;
 mod keymap;
 mod read;
 mod session;
+mod settings;
 mod write;
 mod yaml;
 
@@ -31,6 +32,7 @@ use oneyaml::Value;
 
 pub use keymap::FsKeymapStore;
 pub use session::FsSessionStore;
+pub use settings::FsSettingsStore;
 
 const COLLECTION_FILE: &str = "opencollection.yml";
 const FOLDER_FILE: &str = "folder.yml";

@@ -15,6 +15,7 @@ pub mod layout;
 pub mod molecules;
 pub mod organisms;
 pub mod screens;
+pub mod settings;
 pub mod strings;
 mod system;
 pub mod theme;

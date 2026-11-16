@@ -24,6 +24,11 @@ pub fn config_dir() -> PathBuf {
         .unwrap_or_else(|| std::env::temp_dir().join("apifast"))
 }
 
+/// The settings file under `config_dir`.
+pub fn settings_file_in(config_dir: &Path) -> PathBuf {
+    config_dir.join("settings.yml")
+}
+
 /// The keymap file under `config_dir`.
 pub fn keymap_file_in(config_dir: &Path) -> PathBuf {
     config_dir.join("keymap.yml")

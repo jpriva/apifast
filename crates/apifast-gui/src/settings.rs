@@ -1,0 +1,201 @@
+//! The application's settings, as `settings.yml` keeps them: appearance,
+//! how large a response is shown pretty, and how much history and how many
+//! response bodies are kept.
+
+use std::time::Duration;
+
+use apifast_app::HistoryLimits;
+use apifast_history::Limits;
+
+use crate::theme::ThemeChoice;
+
+/// Smallest and largest interface scale.
+pub const SCALE_RANGE: (f32, f32) = (0.75, 2.0);
+/// Bounds of the numeric settings, as `(min, max)`.
+pub const PRETTY_MB_RANGE: (u32, u32) = (1, 64);
+/// Bounds of the history entries kept.
+pub const HISTORY_ENTRIES_RANGE: (u32, u32) = (10, 100_000);
+/// Bounds of the days anything is kept.
+pub const DAYS_RANGE: (u32, u32) = (1, 3650);
+/// Bounds of the megabytes of response bodies kept.
+pub const RESPONSES_MB_RANGE: (u32, u32) = (16, 100_000);
+
+const MB: u64 = 1024 * 1024;
+
+/// The settings.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Settings {
+    /// The theme.
+    pub theme: ThemeChoice,
+    /// How large everything is drawn, 1 being normal.
+    pub ui_scale: f32,
+    /// Bodies up to this many megabytes are shown pretty.
+    pub pretty_limit_mb: u32,
+    /// History entries kept.
+    pub history_entries: u32,
+    /// Days history entries and response bodies are kept.
+    pub keep_days: u32,
+    /// Megabytes of response bodies kept.
+    pub responses_mb: u32,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            theme: ThemeChoice::System,
+            ui_scale: 1.0,
+            pretty_limit_mb: 2,
+            history_entries: 1000,
+            keep_days: 30,
+            responses_mb: 512,
+        }
+    }
+}
+
+impl Settings {
+    /// The settings in `entries`, as `settings.yml` holds them. Also returns
+    /// what could not be understood; defaults stand in for it, and values
+    /// out of range are brought into it.
+    pub fn from_entries(entries: &[(String, String)]) -> (Self, Vec<String>) {
+        let mut settings = Self::default();
+        let mut problems = Vec::new();
+        for (key, value) in entries {
+            let ok = match key.as_str() {
+                "theme" => match value.as_str() {
+                    "system" => Some(ThemeChoice::System),
+                    "light" => Some(ThemeChoice::Light),
+                    "dark" => Some(ThemeChoice::Dark),
+                    _ => None,
+                }
+                .map(|theme| settings.theme = theme),
+                "ui_scale" => value
+                    .parse::<f32>()
+                    .ok()
+                    .filter(|n| n.is_finite())
+                    .map(|n| settings.ui_scale = n.clamp(SCALE_RANGE.0, SCALE_RANGE.1)),
+                "pretty_limit_mb" => {
+                    number(value, PRETTY_MB_RANGE).map(|n| settings.pretty_limit_mb = n)
+                }
+                "history_entries" => {
+                    number(value, HISTORY_ENTRIES_RANGE).map(|n| settings.history_entries = n)
+                }
+                "keep_days" => number(value, DAYS_RANGE).map(|n| settings.keep_days = n),
+                "responses_mb" => {
+                    number(value, RESPONSES_MB_RANGE).map(|n| settings.responses_mb = n)
+                }
+                _ => None,
+            };
+            if ok.is_none() {
+                problems.push(format!("`{key}: {value}`"));
+            }
+        }
+        (settings, problems)
+    }
+
+    /// The entries for `settings.yml`: every setting, so the file shows
+    /// what can be set.
+    pub fn entries(&self) -> Vec<(String, String)> {
+        let theme = match self.theme {
+            ThemeChoice::System => "system",
+            ThemeChoice::Light => "light",
+            ThemeChoice::Dark => "dark",
+        };
+        vec![
+            ("theme".into(), theme.into()),
+            ("ui_scale".into(), format!("{}", self.ui_scale)),
+            ("pretty_limit_mb".into(), self.pretty_limit_mb.to_string()),
+            ("history_entries".into(), self.history_entries.to_string()),
+            ("keep_days".into(), self.keep_days.to_string()),
+            ("responses_mb".into(), self.responses_mb.to_string()),
+        ]
+    }
+
+    /// The largest body shown pretty, in bytes.
+    pub fn pretty_limit(&self) -> u64 {
+        u64::from(self.pretty_limit_mb) * MB
+    }
+
+    fn keep(&self) -> Duration {
+        Duration::from_hours(24 * u64::from(self.keep_days))
+    }
+
+    /// How much history is kept.
+    pub fn history_limits(&self) -> HistoryLimits {
+        HistoryLimits {
+            max_entries: usize::try_from(self.history_entries).ok(),
+            max_age: Some(self.keep()),
+        }
+    }
+
+    /// How many response bodies are kept: one per history entry at most.
+    pub fn response_limits(&self) -> Limits {
+        Limits {
+            max_count: usize::try_from(self.history_entries).ok(),
+            max_total_bytes: Some(u64::from(self.responses_mb) * MB),
+            max_age: Some(self.keep()),
+        }
+    }
+}
+
+/// `value` as a whole number, brought into `range`.
+fn number(value: &str, (min, max): (u32, u32)) -> Option<u32> {
+    let n: u64 = value.trim().parse().ok()?;
+    Some(u32::try_from(n).unwrap_or(u32::MAX).clamp(min, max))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn settings_round_trip_through_their_entries() {
+        let settings = Settings {
+            theme: ThemeChoice::Dark,
+            ui_scale: 1.25,
+            pretty_limit_mb: 8,
+            history_entries: 500,
+            keep_days: 7,
+            responses_mb: 256,
+        };
+        let (read, problems) = Settings::from_entries(&settings.entries());
+        assert_eq!(read, settings);
+        assert!(problems.is_empty(), "{problems:?}");
+    }
+
+    #[test]
+    fn unknown_or_bad_values_keep_the_default_and_are_reported() {
+        let entries = [
+            ("theme".to_owned(), "purple".to_owned()),
+            ("ui_scale".to_owned(), "9".to_owned()),
+            ("keep_days".to_owned(), "-3".to_owned()),
+            ("nope".to_owned(), "1".to_owned()),
+        ];
+        let (settings, problems) = Settings::from_entries(&entries);
+        assert_eq!(settings.theme, ThemeChoice::System);
+        assert!(
+            (settings.ui_scale - SCALE_RANGE.1).abs() < f32::EPSILON,
+            "clamped"
+        );
+        assert_eq!(settings.keep_days, 30);
+        assert_eq!(
+            problems,
+            ["`theme: purple`", "`keep_days: -3`", "`nope: 1`"]
+        );
+    }
+
+    #[test]
+    fn limits_follow_the_settings() {
+        let settings = Settings {
+            history_entries: 50,
+            keep_days: 2,
+            responses_mb: 16,
+            ..Settings::default()
+        };
+        let history = settings.history_limits();
+        assert_eq!(history.max_entries, Some(50));
+        assert_eq!(history.max_age, Some(Duration::from_hours(48)));
+        let responses = settings.response_limits();
+        assert_eq!(responses.max_total_bytes, Some(16 * MB));
+        assert_eq!(Settings::default().pretty_limit(), 2 * MB);
+    }
+}

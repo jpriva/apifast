@@ -162,6 +162,48 @@ pub struct Strings {
     pub action_theme_light: &'static str,
     /// Action: dark theme.
     pub action_theme_dark: &'static str,
+    /// Action: open the settings.
+    pub action_settings: &'static str,
+    /// Title of the settings window.
+    pub settings_title: &'static str,
+    /// Settings section: appearance.
+    pub settings_appearance: &'static str,
+    /// Setting: theme.
+    pub settings_theme: &'static str,
+    /// Theme option: follow the system.
+    pub theme_system: &'static str,
+    /// Theme option: light.
+    pub theme_light: &'static str,
+    /// Theme option: dark.
+    pub theme_dark: &'static str,
+    /// Setting: interface scale.
+    pub settings_scale: &'static str,
+    /// Hover of the interface scale.
+    pub settings_scale_hint: &'static str,
+    /// Settings section: responses.
+    pub settings_responses: &'static str,
+    /// Setting: largest body shown pretty.
+    pub settings_pretty_limit: &'static str,
+    /// Settings section: history and storage.
+    pub settings_storage: &'static str,
+    /// Setting: history entries kept.
+    pub settings_history_entries: &'static str,
+    /// Setting: days kept.
+    pub settings_keep_days: &'static str,
+    /// Setting: megabytes of responses kept.
+    pub settings_responses_mb: &'static str,
+    /// Explains when storage limits apply.
+    pub settings_storage_hint: &'static str,
+    /// Button that puts back every default.
+    pub settings_reset: &'static str,
+    /// Before the entries of settings.yml that were not understood.
+    pub settings_problems: &'static str,
+    /// Unit after a number of days.
+    pub days: &'static str,
+    /// Button that opens the system's folder picker.
+    pub browse: &'static str,
+    /// Title of the folder picker.
+    pub pick_collection: &'static str,
     /// Sidebar tab with the collection's tree.
     pub sidebar_collection: &'static str,
     /// Sidebar tab with the history of sends.
@@ -456,6 +498,27 @@ pub const EN: Strings = Strings {
     action_theme_system: "Theme: follow the system",
     action_theme_light: "Theme: light",
     action_theme_dark: "Theme: dark",
+    action_settings: "Settings",
+    settings_title: "Settings",
+    settings_appearance: "Appearance",
+    settings_theme: "Theme",
+    theme_system: "Follow the system",
+    theme_light: "Light",
+    theme_dark: "Dark",
+    settings_scale: "Interface scale",
+    settings_scale_hint: "Also Ctrl+= and Ctrl+-; Ctrl+0 resets it",
+    settings_responses: "Responses",
+    settings_pretty_limit: "Format and color bodies up to",
+    settings_storage: "History and storage",
+    settings_history_entries: "Sends kept in the history",
+    settings_keep_days: "Keep history and responses for",
+    settings_responses_mb: "Space for response bodies",
+    settings_storage_hint: "Limits apply the next time a collection opens.",
+    settings_reset: "Restore defaults",
+    settings_problems: "Some entries of settings.yml were ignored:",
+    days: "days",
+    browse: "Browse...",
+    pick_collection: "Open a collection folder",
     sidebar_collection: "Collection",
     sidebar_history: "History",
     filter: "Filter",

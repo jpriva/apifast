@@ -8,6 +8,7 @@ mod kv_table;
 mod palette;
 mod request_panel;
 mod response;
+mod settings_window;
 mod shortcuts;
 mod tabs;
 mod tree;
@@ -22,6 +23,7 @@ pub use request_panel::{RequestChange, RequestPanel, RequestTab};
 pub use response::{
     BodyMode, COPY_LIMIT, PRETTY_LIMIT, ResponseTab, ResponseView, describe, millis,
 };
+pub use settings_window::SettingsWindow;
 pub use shortcuts::{ShortcutEditor, shortcut_of};
 pub use tabs::{TabBar, TabEvent};
 pub use tree::{TreeEvent, TreeView};

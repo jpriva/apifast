@@ -165,3 +165,14 @@ fn times_and_events_read_well() {
     };
     assert_eq!(describe(&event, &EN), "Body received: 0 B");
 }
+
+#[test]
+fn the_pretty_limit_comes_from_the_settings() {
+    let mut harness = harness(received("application/json", r#"{"a":1}"#));
+    harness.state_mut().view.pretty_limit = Some(3);
+    harness.run();
+    assert!(has(&harness, EN.pretty_off));
+    harness.state_mut().view.pretty_limit = None;
+    harness.run();
+    assert!(has(&harness, EN.pretty));
+}

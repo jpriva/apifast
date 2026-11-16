@@ -70,6 +70,8 @@ pub struct ResponseView {
     pub tab: ResponseTab,
     /// How the body is shown.
     pub mode: BodyMode,
+    /// The largest body shown pretty, in bytes; [`PRETTY_LIMIT`] if `None`.
+    pub pretty_limit: Option<u64>,
     viewer: BodyViewer,
     prepared: Option<Prepared>,
 }
@@ -128,7 +130,8 @@ impl ResponseView {
             ui.label(RichText::new(text).color(muted));
             return;
         }
-        let can_pretty = language.is_some() && body.len() <= PRETTY_LIMIT;
+        let limit = self.pretty_limit.unwrap_or(PRETTY_LIMIT);
+        let can_pretty = language.is_some() && body.len() <= limit;
         ui.horizontal(|ui| {
             if can_pretty {
                 ui.selectable_value(&mut self.mode, BodyMode::Pretty, strings.pretty);

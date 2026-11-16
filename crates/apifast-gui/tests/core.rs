@@ -945,3 +945,31 @@ fn an_environment_changed_outside_reaches_the_variables() {
         host(s).as_deref() == Some("http://elsewhere")
     });
 }
+
+#[test]
+fn the_history_limits_come_from_the_settings() {
+    use apifast_app::HistoryLimits;
+    use apifast_history::Limits;
+
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, data) = start();
+    open(&core, dir.path());
+    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    for count in 1..=3 {
+        core.send(Command::Send);
+        wait(&core, "the entry", |s| s.history.len() == count);
+    }
+    drop(core);
+
+    let core = Core::start(data.path().to_path_buf(), || {});
+    core.send(Command::Configure {
+        history: HistoryLimits {
+            max_entries: Some(1),
+            max_age: None,
+        },
+        responses: Limits::default(),
+    });
+    open(&core, dir.path());
+    let snapshot = wait(&core, "the history", |s| !s.history.is_empty());
+    assert_eq!(snapshot.history.len(), 1);
+}

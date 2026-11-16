@@ -55,6 +55,8 @@ pub enum Action {
     ThemeLight,
     /// Use the dark theme.
     ThemeDark,
+    /// Open the settings.
+    Settings,
 }
 
 /// Every action, in the order the editor of shortcuts lists them.
@@ -88,6 +90,7 @@ pub const ALL: &[Action] = &[
     Action::ThemeSystem,
     Action::ThemeLight,
     Action::ThemeDark,
+    Action::Settings,
 ];
 
 const CTRL: Modifiers = Modifiers::COMMAND;
@@ -122,6 +125,7 @@ impl Action {
             Self::ThemeSystem => "theme_system".into(),
             Self::ThemeLight => "theme_light".into(),
             Self::ThemeDark => "theme_dark".into(),
+            Self::Settings => "settings".into(),
         }
     }
 
@@ -154,6 +158,7 @@ impl Action {
             Self::ThemeSystem => strings.action_theme_system,
             Self::ThemeLight => strings.action_theme_light,
             Self::ThemeDark => strings.action_theme_dark,
+            Self::Settings => strings.action_settings,
         };
         text.to_owned()
     }
@@ -188,6 +193,7 @@ impl Action {
             .map(|&k| vec![key(CTRL, k)])
             .unwrap_or_default(),
             Self::FocusUrl => one(key(CTRL, Key::L)),
+            Self::Settings => one(key(CTRL, Key::Comma)),
             Self::Environments => one(key(CTRL, Key::E)),
             Self::ToggleSidebar => one(key(CTRL, Key::B)),
             Self::FormatBody => one(key(Modifiers::ALT.plus(Modifiers::SHIFT), Key::F)),

@@ -179,7 +179,7 @@ Mientras la paleta está abierta o el editor espera una combinación, los demás
 - Tema claro y oscuro, siguiendo el del sistema por defecto; se puede fijar uno desde la paleta.
 - Las ventanas usan el color de fondo y los campos el de superficie, con borde, para que un campo se distinga siempre de lo que lo rodea.
 - Las tablas con campos editables se componen fila a fila con anchos repartidos, no con `egui::Grid`: en una celda de grid un campo solo recibe el ancho que su columna midió el frame anterior y no crece.
-- Escala de interfaz y tamaño de fuente configurables.
+- Escala de interfaz configurable en los ajustes (`Ctrl+,`), que también siguen `Ctrl+=`, `Ctrl+-` y `Ctrl+0`; la escala aumenta el texto con todo lo demás.
 - Los colores de método y de estado nunca son el único indicador: siempre van con texto.
 - Contraste WCAG AA (4,5:1) en ambos temas, comprobado por un test sobre los tokens de `theme/`: cada color de texto sobre cada fondo, y el texto de los badges sobre su propio tinte.
 

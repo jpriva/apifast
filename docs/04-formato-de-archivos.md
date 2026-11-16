@@ -336,6 +336,19 @@ El historial, las respuestas, las cookies y la bóveda local viven en el directo
 
 En macOS y Windows se usan los directorios equivalentes de cada plataforma.
 
+`settings.yml` guarda todos los ajustes, con sus valores por defecto si no se cambiaron:
+
+```yaml
+theme: system           # system, light o dark
+ui_scale: 1             # de 0.75 a 2
+pretty_limit_mb: 2      # bodies formateados y coloreados hasta este tamaño
+history_entries: 1000   # envíos que se conservan en el historial
+keep_days: 30           # días que se conservan el historial y los cuerpos
+responses_mb: 512       # espacio máximo para cuerpos de respuesta
+```
+
+`APIFAST_CONFIG_DIR` sustituye a `~/.config/apifast/`, como `APIFAST_DATA_DIR` al directorio de datos.
+
 ### Historial
 
 Cada envío terminado añade una línea JSON a `history/<collection-id>.jsonl`; un envío cancelado no la añade:

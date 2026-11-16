@@ -37,8 +37,8 @@ use tokio::sync::mpsc;
 use crate::body::{BodyHandle, BodySource};
 use crate::system::{SystemClock, SystemRandom};
 
-/// How much history is kept: entries beyond these are removed when a
-/// collection opens.
+/// How much history is kept by default: entries beyond these are removed
+/// when a collection opens (see [`Command::Configure`]).
 pub const HISTORY_LIMITS: HistoryLimits = HistoryLimits {
     max_entries: Some(1000),
     max_age: Some(Duration::from_hours(30 * 24)),
@@ -179,6 +179,14 @@ pub enum Command {
     },
     /// Shows entry `index` of [`Snapshot::history`] in its request's tab.
     OpenHistory(usize),
+    /// How much history and how many response bodies to keep, from the
+    /// settings. Applied when a collection opens.
+    Configure {
+        /// Of the history.
+        history: HistoryLimits,
+        /// Of the response bodies.
+        responses: Limits,
+    },
     /// Creates an empty environment.
     CreateEnvironment(String),
     /// Renames an environment, and the `extends` that name it.
@@ -409,6 +417,7 @@ impl Core {
                     revision: 0,
                     session_pending: false,
                     messages: own_sender,
+                    limits: (HISTORY_LIMITS, RESPONSE_LIMITS),
                 };
                 runtime.block_on(state.run(receiver));
             });
@@ -478,6 +487,9 @@ struct State {
     revision: u64,
     /// Whether the session changed and a write is scheduled.
     session_pending: bool,
+    /// How much history and how many response bodies are kept; applied
+    /// when a collection opens.
+    limits: (HistoryLimits, Limits),
     /// To post the results of spawned tasks back to the loop. Weak: a strong
     /// sender here would keep the loop alive after the handle is dropped.
     messages: mpsc::WeakUnboundedSender<Message>,
@@ -607,6 +619,7 @@ impl State {
                 }
             }
             Command::OpenHistory(index) => self.open_history(index),
+            Command::Configure { history, responses } => self.limits = (history, responses),
             Command::ResolveConflict { path, keep_draft } => {
                 let revision = self.next_revision();
                 if let Some(tab) = self.tab_mut(&path) {
@@ -1193,13 +1206,14 @@ impl State {
         history: Arc<FsHistoryStore>,
     ) {
         let messages = self.messages.clone();
+        let (history_limits, response_limits) = self.limits;
         tokio::spawn(async move {
             let entries = tokio::task::spawn_blocking(move || {
                 let now = SystemTime::now();
                 let now_ms = SystemClock.unix_millis();
                 // Limits that cannot be applied now are applied next time.
-                let _ = history.prune(HISTORY_LIMITS, now_ms);
-                let _ = responses.prune(RESPONSE_LIMITS, now);
+                let _ = history.prune(history_limits, now_ms);
+                let _ = responses.prune(response_limits, now);
                 history.entries().unwrap_or_default()
             })
             .await

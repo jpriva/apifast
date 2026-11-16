@@ -71,6 +71,8 @@ fn harness() -> Harness<'static, State> {
         .with_size(egui::vec2(1100.0, 700.0))
         .build_ui_state(
             |ui, state: &mut State| {
+                // As the app does, every frame.
+                state.screen.apply_appearance(ui.ctx());
                 let commands = state.screen.show(ui, &state.snapshot, &EN);
                 state.commands.extend(commands);
             },
@@ -299,7 +301,7 @@ fn the_theme_is_chosen_from_the_palette() {
     type_text(&mut harness, "theme dark");
     press(&mut harness, Modifiers::NONE, Key::Enter);
     assert_eq!(
-        harness.state().screen.theme,
+        harness.state().screen.settings.theme,
         apifast_gui::theme::ThemeChoice::Dark
     );
     harness.run();
@@ -310,4 +312,34 @@ fn the_theme_is_chosen_from_the_palette() {
     press(&mut harness, Modifiers::NONE, Key::Enter);
     harness.run();
     assert_eq!(harness.ctx.theme(), egui::Theme::Light);
+}
+
+#[test]
+fn ctrl_comma_opens_the_settings_and_changes_are_marked_for_saving() {
+    let mut harness = harness();
+    press(&mut harness, Modifiers::COMMAND, Key::Comma);
+    assert!(harness.state().screen.settings_window.open);
+    harness.get_by_label(EN.settings_appearance);
+    harness.state_mut().screen.settings.theme = apifast_gui::theme::ThemeChoice::Dark;
+    harness.get_by_label(EN.settings_reset).click();
+    harness.run();
+    let screen = &mut harness.state_mut().screen;
+    assert_eq!(
+        screen.settings.theme,
+        apifast_gui::theme::ThemeChoice::System
+    );
+    assert!(screen.take_settings_change());
+    assert!(!screen.take_settings_change());
+}
+
+#[test]
+fn the_scale_follows_ctrl_plus_into_the_settings() {
+    let mut harness = harness();
+    // As `Ctrl+=` does; egui applies it at the end of the frame.
+    harness.ctx.set_zoom_factor(1.5);
+    harness.run();
+    harness.run();
+    let screen = &mut harness.state_mut().screen;
+    assert!((screen.settings.ui_scale - 1.5).abs() < f32::EPSILON);
+    assert!(screen.take_settings_change());
 }

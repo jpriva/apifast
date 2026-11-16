@@ -96,7 +96,7 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
 
 ### Tareas
 
-- [x] `apifast-gui`: ventana, bucle reactivo, canal de comandos y de instantáneas con el núcleo. La ventana abre una carpeta desde la pantalla de bienvenida o con `apifast-gui <carpeta>`; el selector de carpetas nativo llega con los ajustes.
+- [x] `apifast-gui`: ventana, bucle reactivo, canal de comandos y de instantáneas con el núcleo. La ventana abre una carpeta desde la pantalla de bienvenida o con `apifast-gui <carpeta>`; el botón "Browse..." abre el selector de carpetas del sistema (`rfd`, por el portal de escritorio en Linux).
 - [x] Estructura de componentes con atomic design ([UI y UX](09-ui-ux.md#componentes-atomic-design)): tokens en `theme/`, átomos, moléculas, organismos que devuelven eventos, plantillas y pantallas.
 - [x] Galería de componentes (`--example gallery`) y pruebas por componente con `egui_kittest`.
 - [x] Barra lateral: árbol virtualizado, crear, renombrar, mover, borrar, reordenar. Menú contextual, arrastrar y soltar, y "subir" y "bajar" para hacerlo sin ratón. Crear y renombrar ponen al archivo el *slug* del nombre; mover y reordenar reescriben solo los `seq` que cambian.
@@ -133,12 +133,20 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
   - El editor de atajos (desde la paleta, "Keyboard shortcuts") cambia uno pulsando la combinación nueva, avisa si se la quita a otra acción y permite restablecer el predeterminado.
   - `~/.config/apifast/keymap.yml` guarda solo lo que difiere de lo predeterminado; las entradas que no se entienden se ignoran y se avisa en pantalla.
 - [x] Temas claro y oscuro.
-  - Por defecto se sigue el tema del sistema. Desde la paleta se elige "Theme: follow the system", "light" o "dark"; las tres acciones admiten atajo. La elección se guardará con los ajustes (punto siguiente).
+  - Por defecto se sigue el tema del sistema. Desde la paleta se elige "Theme: follow the system", "light" o "dark"; las tres acciones admiten atajo. La elección se guarda con los ajustes.
   - Repaso visual con capturas renderizadas en los dos temas:
     - Las tablas clave/valor y la de variables ya no usan `egui::Grid`: un campo en una celda solo recibe el ancho que su columna midió antes, así que nunca crecía (nombres cortados y valores partidos en varias líneas). Ahora las filas se reparten el ancho disponible.
     - Las ventanas usan el color de fondo y los campos el de superficie, con borde: en el tema claro los campos dentro de una ventana no se veían.
     - Los botones de cerrar y quitar son el átomo `CloseButton`: una × dibujada, sin fondo hasta pasar el ratón.
-- [ ] Ajustes de la aplicación.
+- [x] Ajustes de la aplicación.
+  - Ventana Settings (`Ctrl+,` o desde la paleta):
+    - tema y escala de la interfaz (también `Ctrl+=`, `Ctrl+-` y `Ctrl+0`, que se guardan igual);
+    - tamaño máximo de un body en la vista Pretty;
+    - entradas del historial, días que se conservan y espacio para cuerpos de respuesta;
+    - un botón para restablecer los valores por defecto.
+  - Se guardan en `~/.config/apifast/settings.yml` al cambiar, en un hilo aparte, y al soltar el ratón si se arrastra un control.
+  - Los límites de almacenamiento llegan al núcleo con `Command::Configure` antes de abrir la colección y se aplican al abrirla.
+  - Los valores fuera de rango se ajustan al rango; los que no se entienden se ignoran y se avisa en pantalla.
 
 ### Criterio de salida
 

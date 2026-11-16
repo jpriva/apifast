@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use apifast_gui::app::App;
 use apifast_gui::core::{Command, Core};
-use apifast_storage_fs::FsKeymapStore;
+use apifast_storage_fs::{FsKeymapStore, FsSettingsStore};
 use eframe::egui;
 
 fn main() -> eframe::Result {
@@ -25,12 +25,16 @@ fn main() -> eframe::Result {
             let core = Core::start(apifast_history::dirs::data_dir(), move || {
                 ctx.request_repaint();
             });
-            if let Some(folder) = folder {
-                core.send(Command::OpenCollection(folder));
-            }
             let dirs = apifast_history::dirs::config_dir();
             let keymap = FsKeymapStore::new(apifast_history::dirs::keymap_file_in(&dirs));
-            Ok(Box::new(App::new(core).with_keymap(keymap)))
+            let settings = FsSettingsStore::new(apifast_history::dirs::settings_file_in(&dirs));
+            // Settings first: they tell the core its limits before a
+            // collection opens.
+            let app = App::new(core).with_settings(settings).with_keymap(keymap);
+            if let Some(folder) = folder {
+                app.core().send(Command::OpenCollection(folder));
+            }
+            Ok(Box::new(app))
         }),
     )
 }
