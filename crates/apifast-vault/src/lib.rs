@@ -12,13 +12,15 @@
 
 mod collection;
 mod keys;
+mod local;
 
 pub use collection::{CollectionKeyStore, check_challenge, new_challenge};
 
 pub use keys::{
     KEY_FILE, KEYRING_ENTRY, KEYRING_SERVICE, KeyBackend, KeyFile, KeyLocation, KeyStoreError,
-    SystemKeyring, master_key,
+    SystemKeyring, existing_master_key, master_key,
 };
+pub use local::{LocalVault, SecretEntry, VaultSecrets};
 
 use std::fmt;
 

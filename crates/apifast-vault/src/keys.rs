@@ -202,6 +202,29 @@ fn key_from(bytes: &[u8]) -> Result<Key, KeyStoreError> {
     Ok(Key::from_bytes(bytes))
 }
 
+/// The master key if there is one already, without making one: reading
+/// secrets must not create keys (nor prompt the keyring) for a user who has
+/// none.
+///
+/// # Errors
+///
+/// If the keyring is there but refuses, the file cannot be read, or what is
+/// stored is not a key.
+pub fn existing_master_key(
+    keyring: &impl KeyBackend,
+    file: &impl KeyBackend,
+) -> Result<Option<(Key, KeyLocation)>, KeyStoreError> {
+    if keyring.available()
+        && let Some(bytes) = keyring.get()?
+    {
+        return Ok(Some((key_from(&bytes)?, KeyLocation::Keyring)));
+    }
+    match file.get()? {
+        Some(bytes) => Ok(Some((key_from(&bytes)?, KeyLocation::File))),
+        None => Ok(None),
+    }
+}
+
 /// The master key: from the keyring, else from the file, else a new one put
 /// in the keyring, or in the file when there is no keyring.
 ///
@@ -213,15 +236,12 @@ pub fn master_key(
     keyring: &impl KeyBackend,
     file: &impl KeyBackend,
 ) -> Result<(Key, KeyLocation), KeyStoreError> {
-    let has_keyring = keyring.available();
-    if has_keyring && let Some(bytes) = keyring.get()? {
-        return Ok((key_from(&bytes)?, KeyLocation::Keyring));
-    }
     // A key made while there was no keyring stays in its file: secrets were
     // sealed with it.
-    if let Some(bytes) = file.get()? {
-        return Ok((key_from(&bytes)?, KeyLocation::File));
+    if let Some(found) = existing_master_key(keyring, file)? {
+        return Ok(found);
     }
+    let has_keyring = keyring.available();
     let key = Key::generate()?;
     if has_keyring {
         keyring.set(key.as_bytes())?;

@@ -322,7 +322,7 @@ El historial, las respuestas, las cookies y la bóveda local viven en el directo
 ~/.local/share/apifast/
 ├── master.key                        # clave maestra, solo si no hay keyring (0600)
 ├── keys/<collection-id>.key          # clave de la colección, envuelta
-├── vault/<collection-id>.vault       # secretos solo locales, cifrados
+├── vault/<collection-id>.vault       # secretos solo locales, cifrados (JSON, 0600)
 ├── cookies/<collection-id>.jar       # cookies, cifradas
 ├── history/<collection-id>.jsonl     # índice de ejecuciones
 ├── responses/<collection-id>/        # cuerpos de respuesta

@@ -67,6 +67,7 @@ fn sends_a_bruno_collection_from_disk() {
         clock: &FixedClock(0),
         random: &CountingRandom::new(0),
         prompter: &NoPrompter,
+        secrets: &apifast_app::NoSecrets,
         report: &|_| {},
     };
     let options = SendOptions {

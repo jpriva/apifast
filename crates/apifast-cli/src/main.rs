@@ -13,13 +13,14 @@ use std::process::ExitCode;
 
 use anyhow::{Context, Result};
 use apifast_app::{
-    CancelToken, CollectionRepository, ResponseStore, SendOptions, SendOutcome, SendPorts,
-    send_request,
+    CancelToken, CollectionRepository, NoSecrets, ResponseStore, SecretStore, SendOptions,
+    SendOutcome, SendPorts, send_request,
 };
 use apifast_domain::Variable;
 use apifast_history::FsResponseStore;
 use apifast_http::ReqwestTransport;
 use apifast_storage_fs::FsCollection;
+use apifast_vault::VaultSecrets;
 use clap::{Parser, Subcommand};
 
 /// Exit code when `--fail` is set and the status is 400 or more.
@@ -111,6 +112,14 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
             .map(apifast_domain::CollectionId::as_str),
     ));
     let transport = ReqwestTransport::new(&located.root)?;
+    // Secrets need the collection's id: without one, none was ever stored.
+    let secrets: Box<dyn SecretStore> = match &collection.id {
+        Some(id) => Box::new(VaultSecrets::for_collection(
+            &apifast_history::dirs::data_dir(),
+            id.as_str(),
+        )?),
+        None => Box::new(NoSecrets),
+    };
     let (clock, random) = (system::SystemClock, system::SystemRandom::new());
     let options = SendOptions {
         environment: args.env.clone(),
@@ -143,6 +152,7 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
             clock: &clock,
             random: &random,
             prompter: &system::TerminalPrompter,
+            secrets: secrets.as_ref(),
             // Shown before sending, so they are seen even if the send fails.
             report: &|problem| eprintln!("warning: {problem}"),
         };

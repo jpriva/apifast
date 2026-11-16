@@ -12,7 +12,8 @@ use crate::{
     BodyWriter, CancelToken, Clock, CollectionRepository, CollectionTree, EnvironmentRepository,
     HistoryEntry, HistoryLimits, HistoryStore, HttpTransport, LoadedRequest, Prompter, Random,
     RenderedRequest, RepositoryError, RequestPath, ResponseHead, ResponseId, ResponseStore,
-    Session, SessionStore, StoreError, StoredBody, TransportError, TreeItem, within_limits,
+    SecretStore, Session, SessionStore, StoreError, StoredBody, TransportError, TreeItem,
+    within_limits,
 };
 
 /// Locks a mutex, recovering the data if a panicking test poisoned it.
@@ -498,5 +499,28 @@ impl HistoryStore for MemoryHistory {
         let before = entries.len();
         *entries = within_limits(std::mem::take(&mut *entries), limits, now_ms);
         Ok(before - entries.len())
+    }
+}
+
+/// Secret values in memory, by environment and name.
+#[derive(Debug, Default)]
+pub struct MemorySecrets {
+    values: Mutex<BTreeMap<(String, String), String>>,
+}
+
+impl MemorySecrets {
+    /// Adds the value of secret `name` of `environment`.
+    #[must_use]
+    pub fn with(self, environment: &str, name: &str, value: &str) -> Self {
+        lock(&self.values).insert((environment.to_owned(), name.to_owned()), value.to_owned());
+        self
+    }
+}
+
+impl SecretStore for MemorySecrets {
+    fn secret(&self, environment: &str, name: &str) -> Result<Option<String>, StoreError> {
+        Ok(lock(&self.values)
+            .get(&(environment.to_owned(), name.to_owned()))
+            .cloned())
     }
 }

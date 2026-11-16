@@ -1,13 +1,13 @@
 use apifast_domain::{
-    Chain, HttpRequest, Origin, ResolvedVariables, Variable, environment_chain, resolve,
-    resolve_variables,
+    Chain, HttpRequest, Origin, ResolvedVariables, Variable, VariableValue, environment_chain,
+    resolve, resolve_variables,
 };
 use apifast_template::{Mode, Problem};
 
 use crate::{
     AppError, AppHost, BodyWriter, CancelToken, Clock, CollectionRepository, CollectionTree,
     EnvironmentRepository, HttpTransport, LoadedRequest, Prompter, Random, RequestPath,
-    ResponseHead, ResponseStore, StoredBody, render_request, sort_tree,
+    ResponseHead, ResponseStore, SecretStore, StoredBody, render_request, sort_tree,
 };
 
 /// Loads the collection tree, sorted by `seq` and name.
@@ -92,6 +92,8 @@ pub struct SendPorts<'a, C, E, T, S> {
     pub random: &'a dyn Random,
     /// Answers for `{{?Label}}`.
     pub prompter: &'a dyn Prompter,
+    /// Values of the secret variables.
+    pub secrets: &'a dyn SecretStore,
     /// Called with each template problem right after rendering, before
     /// sending, when `allow_unresolved` lets the send go ahead. So a driver
     /// can show the warnings even if the send then fails.
@@ -149,13 +151,19 @@ where
         loaded.request = draft.clone();
     }
     let collection = ports.collections.collection()?;
-    let variables = resolve_request_variables(
+    let mut variables = resolve_request_variables(
         ports.collections,
         ports.environments,
         &loaded,
         options.environment.as_deref(),
         &options.runtime,
     )?;
+    // Secrets come from the vault only now, for this send.
+    for (name, environment) in variables.secrets_without_value() {
+        if let Some(value) = ports.secrets.secret(&environment, &name)? {
+            variables.fill_secret(&name, VariableValue::text(value));
+        }
+    }
     let resolved = resolve(Chain::new(&collection, &loaded.folders, &loaded.request));
 
     let mut host = AppHost::new(

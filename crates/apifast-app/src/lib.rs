@@ -31,9 +31,9 @@ pub use organize::{
 };
 pub use ports::{
     BodyWriter, CancelToken, Clock, CollectionRepository, CollectionTree, EnvironmentRepository,
-    HttpTransport, ItemPath, LoadedRequest, NoPrompter, Prompter, Random, RequestPath,
-    ResponseHead, ResponseId, ResponseStore, Session, SessionStore, SessionTab, StoredBody,
-    TimelineEvent, TimelineKind, TreeItem, sort_tree,
+    HttpTransport, ItemPath, LoadedRequest, NoPrompter, NoSecrets, Prompter, Random, RequestPath,
+    ResponseHead, ResponseId, ResponseStore, SecretStore, Session, SessionStore, SessionTab,
+    StoredBody, TimelineEvent, TimelineKind, TreeItem, sort_tree,
 };
 pub use render::{RenderOutcome, RenderedBody, RenderedPart, RenderedRequest, render_request};
 pub use use_cases::{

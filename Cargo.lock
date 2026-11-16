@@ -298,6 +298,7 @@ dependencies = [
  "apifast-http",
  "apifast-storage-fs",
  "apifast-template",
+ "apifast-vault",
  "clap",
  "tempfile",
  "tokio",
@@ -320,6 +321,7 @@ dependencies = [
  "apifast-http",
  "apifast-storage-fs",
  "apifast-template",
+ "apifast-vault",
  "apifast-watch",
  "eframe",
  "egui_kittest",
@@ -378,10 +380,12 @@ dependencies = [
 name = "apifast-vault"
 version = "0.0.0"
 dependencies = [
+ "apifast-app",
  "base64",
  "chacha20poly1305",
  "getrandom 0.4.3",
  "keyring",
+ "serde_json",
  "tempfile",
  "thiserror 2.0.21",
  "zeroize",

@@ -547,3 +547,24 @@ mod tests {
         assert!(token.is_cancelled());
     }
 }
+
+/// The values of the secret variables of one collection, kept in the vault.
+/// Values are only read here; storing them is up to the vault itself.
+pub trait SecretStore: Sync {
+    /// The value of secret `name` of `environment`, if this user has it.
+    ///
+    /// # Errors
+    ///
+    /// If the vault cannot be read, such as a locked keyring.
+    fn secret(&self, environment: &str, name: &str) -> Result<Option<String>, StoreError>;
+}
+
+/// No vault: every secret is without value.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NoSecrets;
+
+impl SecretStore for NoSecrets {
+    fn secret(&self, _: &str, _: &str) -> Result<Option<String>, StoreError> {
+        Ok(None)
+    }
+}

@@ -43,6 +43,23 @@ pub fn check_challenge(key: &Key, collection: &str, challenge: &str) -> Result<(
     open(key, challenge, &challenge_aad(collection)).map(drop)
 }
 
+/// Checks that `collection` is an id that names a file inside `dir`, so a
+/// damaged one cannot point outside it.
+pub(crate) fn check_id(dir: &Path, collection: &str) -> Result<(), KeyStoreError> {
+    let safe = !collection.is_empty()
+        && collection
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-'));
+    if safe {
+        Ok(())
+    } else {
+        Err(KeyStoreError::File {
+            path: dir.to_owned(),
+            message: format!("`{collection}` is not a collection id"),
+        })
+    }
+}
+
 /// The collection keys of this user, each wrapped with the master key.
 #[derive(Debug, Clone)]
 pub struct CollectionKeyStore {
@@ -57,19 +74,9 @@ impl CollectionKeyStore {
         }
     }
 
-    /// The file of `collection`'s key. Ids are checked so a damaged one
-    /// cannot point outside the folder.
+    /// The file of `collection`'s key.
     fn file(&self, collection: &str) -> Result<PathBuf, KeyStoreError> {
-        let safe = !collection.is_empty()
-            && collection
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-'));
-        if !safe {
-            return Err(KeyStoreError::File {
-                path: self.dir.clone(),
-                message: format!("`{collection}` is not a collection id"),
-            });
-        }
+        check_id(&self.dir, collection)?;
         Ok(self.dir.join(format!("{collection}.key")))
     }
 

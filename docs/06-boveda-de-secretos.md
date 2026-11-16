@@ -100,6 +100,16 @@ AFK-CRRP2C-K46HH3-6RSRCM-VKJEB1-CRRK8D-9PC9JK-6D1Q71-GK8RSK
 2. En el archivo del entorno se escribe el nombre con `secret: true`, sin valor.
 3. El valor se guarda en `vault/<collection-id>.vault`, cifrado con la clave maestra.
 
+El archivo es JSON, con permisos `0600`, y cada valor va en su propio sobre:
+
+```json
+{"format": 1, "secrets": [
+  {"environment": "prod", "name": "token", "value": "enc:v1:..."}
+]}
+```
+
+Los datos asociados de cada sobre son los de la variable (`apifast/v1|<collection-id>|<entorno>|<variable>`): un valor movido a otra entrada no se abre.
+
 ### Compartir un secreto
 
 1. El usuario elige "compartir con el equipo" en una variable secreta.
@@ -115,7 +125,7 @@ AFK-CRRP2C-K46HH3-6RSRCM-VKJEB1-CRRK8D-9PC9JK-6D1Q71-GK8RSK
 
 ### Enviar una request
 
-1. El resolvedor de variables pide a la bóveda los secretos referenciados.
+1. El resolvedor de variables pide a la bóveda (puerto `SecretStore`) los secretos sin valor del entorno activo. La clave maestra se lee la primera vez que hace falta un secreto y no se crea al leer: quien no usa secretos nunca ve un aviso del keyring. Si el keyring está bloqueado, el envío falla con ese motivo y se vuelve a intentar en el siguiente.
 2. Los valores se descifran a memoria protegida y se usan en el render.
 3. Al terminar el envío, se borran.
 

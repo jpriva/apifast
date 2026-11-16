@@ -6,7 +6,7 @@ use std::task::{Context, Poll, Waker};
 
 use apifast_app::memory::{
     CountingRandom, FixedClock, MemoryCollections, MemoryEnvironments, MemoryResponses,
-    MemoryTransport, ScriptedPrompter,
+    MemorySecrets, MemoryTransport, ScriptedPrompter,
 };
 use apifast_app::{
     AppError, CancelToken, RenderedBody, RequestPath, ResponseStore, SendOptions, SendOutcome,
@@ -39,6 +39,7 @@ struct World {
     clock: FixedClock,
     random: CountingRandom,
     prompter: ScriptedPrompter,
+    secrets: MemorySecrets,
 }
 
 impl World {
@@ -51,6 +52,7 @@ impl World {
             clock: FixedClock(1_700_000_000_000),
             random: CountingRandom::new(7),
             prompter: ScriptedPrompter::default(),
+            secrets: MemorySecrets::default(),
         }
     }
 
@@ -72,6 +74,7 @@ impl World {
             clock: &self.clock,
             random: &self.random,
             prompter: &self.prompter,
+            secrets: &self.secrets,
             report: &|_| {},
         };
         block_on(send_request(
@@ -423,6 +426,7 @@ fn problems_are_reported_before_sending_even_if_the_send_fails() {
         clock: &world.clock,
         random: &world.random,
         prompter: &world.prompter,
+        secrets: &world.secrets,
         report: &|problem: &Problem| reported.lock().unwrap().push(problem.clone()),
     };
     let options = SendOptions {
@@ -460,6 +464,7 @@ fn send_request_can_run_on_any_thread() {
         clock: &world.clock,
         random: &world.random,
         prompter: &world.prompter,
+        secrets: &world.secrets,
         report: &|_| {},
     };
     let options = SendOptions::default();
@@ -486,5 +491,39 @@ fn a_draft_is_sent_instead_of_the_saved_request_with_the_same_inheritance() {
     assert_eq!(
         world.collections.get("users/create.yml").unwrap().method,
         Method::Post
+    );
+}
+
+/// A secret declared without a value takes it from the vault for the send.
+#[test]
+fn a_secret_takes_its_value_from_the_vault_for_the_send() {
+    let mut world = World::new(
+        MemoryCollections::new(Collection::new("api"))
+            .with_request("me.yml", get("{{host}}/me?key={{api_key}}")),
+    );
+    world.environments = MemoryEnvironments::new(vec![env(
+        "prod",
+        None,
+        vec![
+            Variable::text("host", "https://api.test"),
+            Variable::secret("api_key"),
+        ],
+    )]);
+    let options = SendOptions {
+        environment: Some("prod".into()),
+        ..SendOptions::default()
+    };
+
+    // Not in the vault: the secret has no value, and nothing is sent.
+    let error = world.send("me.yml", &options).unwrap_err();
+    assert_eq!(error.to_string(), "secret `api_key` has no value available");
+    assert_eq!(world.transport.sent().len(), 0);
+
+    world.secrets = MemorySecrets::default().with("prod", "api_key", "k3y");
+    let outcome = world.send("me.yml", &options).unwrap();
+    assert!(outcome.contains_secret);
+    assert_eq!(
+        world.transport.sent()[0].url(),
+        "https://api.test/me?key=k3y"
     );
 }

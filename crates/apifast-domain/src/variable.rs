@@ -112,6 +112,27 @@ impl ResolvedVariables {
     pub fn is_empty(&self) -> bool {
         self.by_name.is_empty()
     }
+
+    /// Secrets of environments that have no value yet: their name and the
+    /// environment that declares them. Their values live in the vault.
+    pub fn secrets_without_value(&self) -> Vec<(String, String)> {
+        self.by_name
+            .iter()
+            .filter(|(_, var)| var.secret && var.value.is_none())
+            .filter_map(|(name, var)| match &var.origin {
+                Origin::Environment(environment) => Some((name.clone(), environment.clone())),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Gives secret `name` the value read from the vault. Does nothing for a
+    /// variable that is not a secret.
+    pub fn fill_secret(&mut self, name: &str, value: VariableValue) {
+        if let Some(var) = self.by_name.get_mut(name).filter(|var| var.secret) {
+            var.value = Some(value);
+        }
+    }
 }
 
 /// Merges the variables of several scopes.
@@ -150,6 +171,31 @@ pub fn resolve_variables<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_secrets_of_environments_are_filled_from_the_vault() {
+        let env = [Variable::secret("token"), Variable::text("host", "h")];
+        let request = [Variable::secret("local_only")];
+        let mut vars = resolve_variables([
+            (Origin::Environment("prod".into()), &env[..]),
+            (Origin::Request, &request[..]),
+        ]);
+        assert_eq!(
+            vars.secrets_without_value(),
+            [("token".to_owned(), "prod".to_owned())]
+        );
+        vars.fill_secret("token", VariableValue::text("t0k"));
+        vars.fill_secret("host", VariableValue::text("ignored"));
+        assert_eq!(
+            vars.get("token").unwrap().value,
+            Some(VariableValue::text("t0k"))
+        );
+        assert_eq!(
+            vars.get("host").unwrap().value,
+            Some(VariableValue::text("h"))
+        );
+        assert_eq!(vars.secrets_without_value(), Vec::new());
+    }
 
     #[test]
     fn highest_precedence_scope_wins_and_records_overridden_ones() {

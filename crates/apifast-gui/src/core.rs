@@ -10,19 +10,19 @@
 //! and restored when the collection is opened again.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime};
 
 use apifast_app::{
     AppError, CancelToken, Clock, CollectionRepository, CollectionTree, EnvironmentRepository,
-    HistoryEntry, HistoryLimits, HistoryOutcome, HistoryStore, ItemPath, NoPrompter, Placement,
-    RepositoryError, RequestPath, ResponseHead, ResponseId, ResponseStore, SendOptions, SendPorts,
-    Session, SessionStore, SessionTab, TransportError, create_environment, create_folder,
-    create_request, delete_environment, delete_item, load_request, move_item, open_collection,
-    rename_environment, rename_item, resolve_request_variables, save_environment, save_request,
-    send_request,
+    HistoryEntry, HistoryLimits, HistoryOutcome, HistoryStore, ItemPath, NoPrompter, NoSecrets,
+    Placement, RepositoryError, RequestPath, ResponseHead, ResponseId, ResponseStore, SecretStore,
+    SendOptions, SendPorts, Session, SessionStore, SessionTab, TransportError, create_environment,
+    create_folder, create_request, delete_environment, delete_item, load_request, move_item,
+    open_collection, rename_environment, rename_item, resolve_request_variables, save_environment,
+    save_request, send_request,
 };
 use apifast_domain::{
     AuthScheme, Chain, Collection, Environment, Header, HttpRequest, Origin, Resolved,
@@ -31,6 +31,7 @@ use apifast_domain::{
 use apifast_history::{FsHistoryStore, FsResponseStore, Limits};
 use apifast_http::ReqwestTransport;
 use apifast_storage_fs::{FsCollection, FsSessionStore};
+use apifast_vault::VaultSecrets;
 use apifast_watch::{Changes, FsWatcher};
 use tokio::sync::mpsc;
 
@@ -56,6 +57,36 @@ struct StoredBody {
     store: Arc<FsResponseStore>,
     id: ResponseId,
     size: u64,
+}
+
+/// The stores of the collection at `root`, all under `data_dir` and keyed
+/// by its id (or a hash of its path): responses, session, history and
+/// secrets.
+fn stores(
+    data_dir: &Path,
+    root: &Path,
+    id: Option<&str>,
+) -> Result<
+    (
+        FsResponseStore,
+        FsSessionStore,
+        FsHistoryStore,
+        Arc<dyn SecretStore + Send>,
+    ),
+    String,
+> {
+    let responses =
+        FsResponseStore::new(apifast_history::dirs::responses_dir_in(data_dir, root, id));
+    let sessions = FsSessionStore::new(apifast_history::dirs::sessions_dir_in(data_dir, root, id));
+    let history = FsHistoryStore::new(apifast_history::dirs::history_file_in(data_dir, root, id));
+    // Secrets need the collection's id: without one, none was ever stored.
+    let secrets: Arc<dyn SecretStore + Send> = match id {
+        Some(id) => {
+            Arc::new(VaultSecrets::for_collection(data_dir, id).map_err(|e| e.to_string())?)
+        }
+        None => Arc::new(NoSecrets),
+    };
+    Ok((responses, sessions, history, secrets))
 }
 
 /// A response whose body is in `store`.
@@ -469,6 +500,8 @@ struct Open {
     sessions: FsSessionStore,
     /// Numbers this opening, so a late history load for another is ignored.
     opened: u64,
+    /// The values of the collection's secrets, from the vault.
+    secrets: Arc<dyn SecretStore + Send>,
     /// Watches the folder while the collection is open. `None` if the
     /// system refused: changes made outside then show after reopening.
     _watcher: Option<FsWatcher>,
@@ -716,21 +749,7 @@ impl State {
             .id
             .as_ref()
             .map(apifast_domain::CollectionId::as_str);
-        let responses = FsResponseStore::new(apifast_history::dirs::responses_dir_in(
-            &self.data_dir,
-            &root,
-            id,
-        ));
-        let sessions = FsSessionStore::new(apifast_history::dirs::sessions_dir_in(
-            &self.data_dir,
-            &root,
-            id,
-        ));
-        let history = FsHistoryStore::new(apifast_history::dirs::history_file_in(
-            &self.data_dir,
-            &root,
-            id,
-        ));
+        let (responses, sessions, history, secrets) = stores(&self.data_dir, &root, id)?;
 
         // Leave the previous collection as it was.
         if self.session_pending {
@@ -796,6 +815,7 @@ impl State {
             history,
             sessions,
             opened,
+            secrets,
             _watcher: watcher,
         });
         self.snapshot = Snapshot {
@@ -1106,6 +1126,7 @@ impl State {
             open.responses.clone(),
             open.history.clone(),
         );
+        let secrets = open.secrets.clone();
         let Some(request) = self.tab(&path).map(Tab::request) else {
             return;
         };
@@ -1134,6 +1155,7 @@ impl State {
                 clock: &clock,
                 random: &random,
                 prompter: &NoPrompter,
+                secrets: &*secrets,
                 report: &|_| {},
             };
             let at_ms = clock.unix_millis();
