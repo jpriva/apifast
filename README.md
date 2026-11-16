@@ -49,9 +49,10 @@ Architecture decisions live in [docs/adr/](docs/adr/).
 
 ## Usage
 
-The desktop app opens a collection folder (or asks for one):
+The desktop app starts in its main view; collections are created and opened from inside it (sidebar, command palette or `Ctrl+O`). A collection folder can also be given:
 
 ```
+apifast-gui
 apifast-gui path/to/collection
 ```
 

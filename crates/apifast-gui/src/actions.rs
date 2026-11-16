@@ -59,6 +59,10 @@ pub enum Action {
     Settings,
     /// Open the collection key window.
     CollectionKey,
+    /// Open a collection folder.
+    OpenCollection,
+    /// Create a collection.
+    NewCollection,
 }
 
 /// Every action, in the order the editor of shortcuts lists them.
@@ -94,6 +98,8 @@ pub const ALL: &[Action] = &[
     Action::ThemeDark,
     Action::Settings,
     Action::CollectionKey,
+    Action::OpenCollection,
+    Action::NewCollection,
 ];
 
 const CTRL: Modifiers = Modifiers::COMMAND;
@@ -130,6 +136,8 @@ impl Action {
             Self::ThemeDark => "theme_dark".into(),
             Self::Settings => "settings".into(),
             Self::CollectionKey => "collection_key".into(),
+            Self::OpenCollection => "open_collection".into(),
+            Self::NewCollection => "new_collection".into(),
         }
     }
 
@@ -164,6 +172,8 @@ impl Action {
             Self::ThemeDark => strings.action_theme_dark,
             Self::Settings => strings.action_settings,
             Self::CollectionKey => strings.action_collection_key,
+            Self::OpenCollection => strings.open_collection,
+            Self::NewCollection => strings.new_collection,
         };
         text.to_owned()
     }
@@ -200,6 +210,7 @@ impl Action {
             Self::FocusUrl => one(key(CTRL, Key::L)),
             Self::Settings => one(key(CTRL, Key::Comma)),
             Self::Environments => one(key(CTRL, Key::E)),
+            Self::OpenCollection => one(key(CTRL, Key::O)),
             Self::ToggleSidebar => one(key(CTRL, Key::B)),
             Self::FormatBody => one(key(Modifiers::ALT.plus(Modifiers::SHIFT), Key::F)),
             Self::ShowHistory
@@ -207,7 +218,8 @@ impl Action {
             | Self::ThemeSystem
             | Self::ThemeLight
             | Self::ThemeDark
-            | Self::CollectionKey => Vec::new(),
+            | Self::CollectionKey
+            | Self::NewCollection => Vec::new(),
         }
     }
 }

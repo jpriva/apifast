@@ -13,7 +13,8 @@ use std::net::TcpListener;
 use std::time::{Duration, Instant};
 
 use apifast_gui::app::App;
-use apifast_gui::core::Core;
+use apifast_gui::core::{Command, Core};
+use apifast_gui::strings::EN;
 use apifast_vault::SystemKeyring;
 use eframe::egui::{self, accesskit::Role};
 use egui_kittest::Harness;
@@ -77,13 +78,13 @@ fn wait_for(harness: &mut Harness<'_, App>, label: &str) {
     }
 }
 
-/// Focuses the folder field of the welcome screen and types `folder`.
-fn type_folder(harness: &mut Harness<'_, App>, folder: &std::path::Path) {
-    harness.get_by_role(Role::TextInput).focus();
-    harness.step();
+/// Opens the collection in `folder`, as the system's folder picker would
+/// (which a test cannot drive).
+fn open_folder(harness: &mut Harness<'_, App>, folder: &std::path::Path) {
     harness
-        .get_by_role(Role::TextInput)
-        .type_text(folder.to_str().unwrap());
+        .state()
+        .core()
+        .send(Command::OpenCollection(folder.to_path_buf()));
     harness.step();
 }
 
@@ -103,9 +104,9 @@ fn open_select_send_and_see_the_status() {
         .with_size(egui::vec2(1280.0, 800.0))
         .build_ui_state(|ui, app: &mut App| app.show(ui), app);
 
-    // Welcome screen: type the folder and open it.
-    type_folder(&mut harness, dir.path());
-    harness.get_by_label("Open").click();
+    // The app starts in its main view; then a collection is opened.
+    harness.get_by_label(EN.new_collection);
+    open_folder(&mut harness, dir.path());
     wait_for(&mut harness, "Shop API");
 
     // Folders start closed; their requests appear when opened.
@@ -135,8 +136,10 @@ fn open_select_send_and_see_the_status() {
 }
 
 #[test]
-fn a_folder_that_is_not_a_collection_shows_the_error() {
+fn a_folder_that_is_not_a_collection_offers_to_create_one() {
     let dir = tempfile::tempdir().unwrap();
+    let folder = dir.path().join("my-api");
+    std::fs::create_dir(&folder).unwrap();
     let data = tempfile::tempdir().unwrap();
     let app = App::new(Core::start_with(
         data.path().to_path_buf(),
@@ -147,22 +150,44 @@ fn a_folder_that_is_not_a_collection_shows_the_error() {
         .with_size(egui::vec2(1280.0, 800.0))
         .build_ui_state(|ui, app: &mut App| app.show(ui), app);
 
-    type_folder(&mut harness, dir.path());
-    harness.key_press(egui::Key::Enter);
-    let start = Instant::now();
-    loop {
-        harness.step();
-        if harness
+    open_folder(&mut harness, &folder);
+    wait_for(&mut harness, EN.create_here);
+    assert!(
+        harness
             .query_by_label_contains("opencollection.yml")
             .is_some()
-        {
-            break;
-        }
-        assert!(start.elapsed() < Duration::from_secs(10), "no error shown");
-        std::thread::sleep(Duration::from_millis(5));
-    }
-    // Still on the welcome screen, ready to try another folder.
-    harness.get_by_label("Open");
+    );
+    harness.get_by_label(EN.create_here).click();
+    wait_for(&mut harness, "my-api");
+    assert!(folder.join("opencollection.yml").is_file());
+}
+
+#[test]
+fn a_new_collection_is_created_from_the_empty_view() {
+    let data = tempfile::tempdir().unwrap();
+    let app = App::new(Core::start_with(
+        data.path().to_path_buf(),
+        SystemKeyring::off(),
+        || {},
+    ));
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(1280.0, 800.0))
+        .build_ui_state(|ui, app: &mut App| app.show(ui), app);
+
+    harness.get_by_label(EN.new_collection).click();
+    wait_for(&mut harness, EN.new_collection_title);
+    // The name takes the focus.
+    type_into_focus(&mut harness, "Billing API");
+    harness.step();
+    // The default folder is the default workspace's, in the data directory.
+    harness.get_by_label_contains("default-workspace");
+    harness.get_by_label(EN.create).click();
+    wait_for(&mut harness, "Billing API");
+    let created = data
+        .path()
+        .join("default-workspace/billing-api/opencollection.yml");
+    let text = std::fs::read_to_string(created).unwrap();
+    assert!(text.contains("Billing API"), "{text}");
 }
 
 /// Types into the field that has the focus, as the keyboard would.
@@ -231,8 +256,7 @@ fn the_sidebar_creates_renames_and_deletes_files() {
     let mut harness = Harness::builder()
         .with_size(egui::vec2(1280.0, 800.0))
         .build_ui_state(|ui, app: &mut App| app.show(ui), app);
-    type_folder(&mut harness, dir.path());
-    harness.get_by_label("Open").click();
+    open_folder(&mut harness, dir.path());
     wait_for(&mut harness, "Shop API");
 
     harness.get_by_label("New request").click();
@@ -278,8 +302,7 @@ fn open_app(dir: &std::path::Path, data: &std::path::Path) -> Harness<'static, A
     let mut harness = Harness::builder()
         .with_size(egui::vec2(1280.0, 800.0))
         .build_ui_state(|ui, app: &mut App| app.show(ui), app);
-    type_folder(&mut harness, dir);
-    harness.get_by_label("Open").click();
+    open_folder(&mut harness, dir);
     wait_for(&mut harness, "Shop API");
     harness
 }

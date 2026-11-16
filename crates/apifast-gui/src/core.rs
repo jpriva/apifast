@@ -157,11 +157,25 @@ impl BodySource for StoredBody {
 /// that typing does not write a file per key.
 const SESSION_DELAY: Duration = Duration::from_millis(300);
 
+/// The folder of the default workspace, in the data directory.
+const DEFAULT_WORKSPACE: &str = "default-workspace";
+
+/// The file that makes a folder a collection.
+const COLLECTION_FILE: &str = "opencollection.yml";
+
 /// What the interface asks the core to do.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     /// Opens the collection in this folder, with the tabs it had open.
     OpenCollection(PathBuf),
+    /// Creates a collection named `name` in `folder` (created if needed),
+    /// then opens it. Refused if the folder already holds one.
+    CreateCollection {
+        /// Its folder.
+        folder: PathBuf,
+        /// Its name.
+        name: String,
+    },
     /// Picks the active environment, or none.
     SelectEnvironment(Option<String>),
     /// Opens a request in a tab, or shows its tab if it is open.
@@ -275,6 +289,12 @@ pub struct Snapshot {
     /// The last error that is not about a send, such as a collection that
     /// cannot be opened.
     pub error: Option<String>,
+    /// A folder the user tried to open as a collection, which has none: the
+    /// interface offers to create one there.
+    pub missing_collection: Option<PathBuf>,
+    /// Where a new collection goes unless the user picks another folder:
+    /// the folder of the default workspace, in the data directory.
+    pub default_parent: PathBuf,
     /// The sends of the collection, oldest first. Loaded shortly after the
     /// collection opens.
     pub history: Arc<Vec<HistoryEntry>>,
@@ -469,7 +489,11 @@ impl Core {
         notify: impl Fn() + Send + Sync + 'static,
     ) -> Self {
         let (sender, receiver) = mpsc::unbounded_channel();
-        let snapshot = Arc::new(Mutex::new(Arc::new(Snapshot::default())));
+        let first = Snapshot {
+            default_parent: data_dir.join(DEFAULT_WORKSPACE),
+            ..Snapshot::default()
+        };
+        let snapshot = Arc::new(Mutex::new(Arc::new(first.clone())));
         let shared = snapshot.clone();
         // Weak, so that only the handle keeps the channel open: dropping the
         // handle must end the loop.
@@ -484,7 +508,7 @@ impl Core {
                     .expect("cannot start the async runtime");
                 let state = State {
                     data_dir,
-                    snapshot: Snapshot::default(),
+                    snapshot: first,
                     shared,
                     notify: Box::new(notify),
                     open: None,
@@ -640,11 +664,8 @@ impl State {
 
     fn handle(&mut self, command: Command) {
         match command {
-            Command::OpenCollection(root) => {
-                if let Err(message) = self.open_collection(root) {
-                    self.snapshot.error = Some(message);
-                }
-            }
+            Command::OpenCollection(root) => self.open_or_report(root),
+            Command::CreateCollection { folder, name } => self.create_collection(folder, name),
             Command::SelectEnvironment(name) => {
                 self.snapshot.environment = name;
                 self.refresh_variables(None);
@@ -812,6 +833,26 @@ impl State {
         self.snapshot.tabs.iter_mut().find(|tab| tab.path == *path)
     }
 
+    /// Opens the collection in `root`, or tells why not; a folder without
+    /// a collection is remembered, so the interface can offer to create one.
+    fn open_or_report(&mut self, root: PathBuf) {
+        let missing = root.is_dir() && !root.join(COLLECTION_FILE).exists();
+        if let Err(message) = self.open_collection(root.clone()) {
+            self.snapshot.error = Some(message);
+            self.snapshot.missing_collection = missing.then_some(root);
+        }
+    }
+
+    /// Creates a collection named `name` in `folder` and opens it.
+    fn create_collection(&mut self, folder: PathBuf, name: String) {
+        let result = FsCollection::create(&folder, &Collection::new(name))
+            .map_err(|e| e.to_string())
+            .and_then(|_| self.open_collection(folder));
+        if let Err(message) = result {
+            self.snapshot.error = Some(message);
+        }
+    }
+
     fn open_collection(&mut self, root: PathBuf) -> Result<(), String> {
         let repo = Arc::new(FsCollection::open(&root).map_err(|e| e.to_string())?);
         let tree = open_collection(&*repo).map_err(|e| e.to_string())?;
@@ -908,6 +949,8 @@ impl State {
             tabs,
             active,
             error,
+            missing_collection: None,
+            default_parent: self.snapshot.default_parent.clone(),
             history: Arc::default(),
             vault: VaultView::default(),
         };

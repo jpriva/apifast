@@ -2,6 +2,7 @@
 //! changing the model. Screens turn the events into core commands.
 
 mod body_viewer;
+mod collection_dialogs;
 mod environments;
 mod history;
 mod kv_table;
@@ -16,6 +17,7 @@ mod url_bar;
 mod vault_window;
 
 pub use body_viewer::BodyViewer;
+pub use collection_dialogs::{CollectionDialogs, CollectionRequest, folder_name};
 pub use environments::{EnvironmentEditor, EnvironmentEvent, EnvironmentsView};
 pub use history::{HistoryView, ago, matches};
 pub use kv_table::{BulkRow, KvRow, KvTable, from_bulk, to_bulk};

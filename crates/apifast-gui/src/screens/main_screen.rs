@@ -1,6 +1,7 @@
 //! The main screen: collection tree, environment, tabs, URL bar, request
 //! panel and response.
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use apifast_app::{RequestPath, TreeItem};
@@ -14,9 +15,10 @@ use crate::core::{Command, ResponseState, Snapshot, Tab, TabContext, VaultComman
 use crate::layout;
 use crate::molecules::EnvironmentSelector;
 use crate::organisms::{
-    CommandPalette, EnvironmentEditor, EnvironmentEvent, HistoryView, PaletteItem, PaletteMode,
-    RequestChange, RequestPanel, ResponseView, SettingsWindow, ShortcutEditor, TabBar, TabEvent,
-    TreeEvent, TreeView, UrlBar, UrlBarEvent, VaultWindow, paste_key,
+    CollectionDialogs, CollectionRequest, CommandPalette, EnvironmentEditor, EnvironmentEvent,
+    HistoryView, PaletteItem, PaletteMode, RequestChange, RequestPanel, ResponseView,
+    SettingsWindow, ShortcutEditor, TabBar, TabEvent, TreeEvent, TreeView, UrlBar, UrlBarEvent,
+    VaultWindow, paste_key,
 };
 use crate::settings::Settings;
 use crate::strings::Strings;
@@ -81,6 +83,8 @@ pub struct MainScreen {
     pub vault_window: VaultWindow,
     /// The collection key being pasted in the banner.
     key_paste: String,
+    /// Creating and opening collections.
+    collections: CollectionDialogs,
 }
 
 /// What changed and is not saved yet.
@@ -115,9 +119,7 @@ impl MainScreen {
         snapshot: &Snapshot,
         strings: &Strings,
     ) -> Vec<Command> {
-        let Some(collection) = &snapshot.collection else {
-            return Vec::new();
-        };
+        let collection = snapshot.collection.as_ref();
         let active = snapshot.active_tab();
         let hints = self.follow(active, strings);
         let sending = active.is_some_and(|tab| tab.response == ResponseState::Sending);
@@ -137,13 +139,21 @@ impl MainScreen {
 
         let mut resolve = None;
         let mut pasted_key = None;
+        let mut create_here = None;
         let (
             (environment, edit_environments),
-            (tree_event, picked),
+            (tree_event, picked, asked),
             (tab_event, (url_event, edited)),
         ) = layout::workbench(
             ui,
-            |ui| top_bar(ui, &collection.tree.collection.name, snapshot, strings),
+            |ui| {
+                top_bar(
+                    ui,
+                    collection.map(|c| c.tree.collection.name.as_str()),
+                    snapshot,
+                    strings,
+                )
+            },
             (!self.sidebar_hidden).then_some(|ui: &mut egui::Ui| {
                 sidebar_area(ui, (sidebar, tree, history), snapshot, selected, strings)
             }),
@@ -151,20 +161,17 @@ impl MainScreen {
                 let tab_event = tabs.show(ui, &snapshot.tabs, selected, strings);
                 ui.separator();
                 let palette = theme::palette(ui);
-                for (message, color) in [
-                    (snapshot.error.as_deref(), palette.danger),
-                    (notice, palette.warning),
-                ] {
-                    if let Some(message) = message {
-                        ui.label(RichText::new(message).color(color));
-                        ui.add_space(theme::space::M);
-                    }
-                }
+                create_here = messages(ui, snapshot, notice, strings);
                 if snapshot.vault.shares && !snapshot.vault.has_key {
                     pasted_key = key_banner(ui, key_paste, strings);
                 }
                 let (Some(tab), Some(editor)) = (active, editor.as_mut()) else {
-                    ui.label(RichText::new(strings.no_request).color(palette.text_muted));
+                    let hint = if collection.is_some() {
+                        strings.no_request
+                    } else {
+                        strings.no_collection
+                    };
+                    ui.label(RichText::new(hint).color(palette.text_muted));
                     return (tab_event, (None, false));
                 };
                 if tab.conflict {
@@ -189,6 +196,7 @@ impl MainScreen {
         if edit_environments {
             self.environments.open = !self.environments.open;
         }
+        commands.extend(self.collection_commands(ui, (create_here, asked), snapshot, strings));
         commands.extend(self.windows(ui, snapshot, &hints, strings));
         commands.extend(environment);
         if let Some(event) = tree_event {
@@ -212,6 +220,34 @@ impl MainScreen {
             Some(UrlBarEvent::Edited) | None => {}
         }
         commands.extend(self.keys(ui, snapshot, sending, strings));
+        commands
+    }
+
+    /// The commands for collections: a folder to create one in, an action
+    /// from the sidebar, and what the dialogs ask for.
+    fn collection_commands(
+        &mut self,
+        ui: &egui::Ui,
+        (create_here, asked): (Option<PathBuf>, Option<Action>),
+        snapshot: &Snapshot,
+        strings: &Strings,
+    ) -> Vec<Command> {
+        let mut commands = Vec::new();
+        if let Some(folder) = create_here {
+            commands.push(collection_command(CollectionRequest::Create {
+                name: folder.file_name().map_or_else(
+                    || strings.new_collection_title.to_owned(),
+                    |n| n.to_string_lossy().into_owned(),
+                ),
+                folder,
+            }));
+        }
+        if let Some(action) = asked {
+            commands.extend(self.run(action, snapshot, strings));
+        }
+        if let Some(request) = self.collections.show(ui.ctx(), strings) {
+            commands.push(collection_command(request));
+        }
         commands
     }
 
@@ -393,6 +429,19 @@ impl MainScreen {
             }
             Action::Settings => {
                 self.settings_window.open = true;
+                Vec::new()
+            }
+            Action::OpenCollection => {
+                self.collections.open_collection();
+                Vec::new()
+            }
+            Action::NewCollection => {
+                let parent = snapshot
+                    .collection
+                    .as_ref()
+                    .and_then(|c| c.root.parent().map(Path::to_path_buf))
+                    .unwrap_or_else(|| snapshot.default_parent.clone());
+                self.collections.new_collection(&parent);
                 Vec::new()
             }
             Action::ThemeSystem | Action::ThemeLight | Action::ThemeDark => {
@@ -623,11 +672,15 @@ fn conflict_banner(ui: &mut egui::Ui, strings: &Strings) -> Option<bool> {
 /// editor was asked for.
 fn top_bar(
     ui: &mut egui::Ui,
-    name: &str,
+    name: Option<&str>,
     snapshot: &Snapshot,
     strings: &Strings,
 ) -> (Option<Command>, bool) {
     ui.horizontal(|ui| {
+        let Some(name) = name else {
+            ui.label(RichText::new("apifast").strong());
+            return (None, false);
+        };
         ui.label(RichText::new(name).strong());
         if snapshot.vault.master_in_file {
             ui.label(RichText::new(strings.master_in_file).color(theme::palette(ui).warning))
@@ -682,14 +735,15 @@ fn environment_command(event: EnvironmentEvent) -> Command {
 }
 
 /// The sidebar: a switch between the collection's tree and the history.
-/// Returns what the tree reported and the history entry picked.
+/// Returns what the tree reported, the history entry picked and an action
+/// asked for (creating or opening a collection).
 fn sidebar_area(
     ui: &mut egui::Ui,
     (sidebar, tree, history): (&mut Sidebar, &mut TreeView, &mut HistoryView),
     snapshot: &Snapshot,
     selected: Option<&RequestPath>,
     strings: &Strings,
-) -> (Option<TreeEvent>, Option<usize>) {
+) -> (Option<TreeEvent>, Option<usize>, Option<Action>) {
     ui.horizontal(|ui| {
         ui.selectable_value(sidebar, Sidebar::Collection, strings.sidebar_collection);
         ui.selectable_value(sidebar, Sidebar::History, strings.sidebar_history);
@@ -699,9 +753,58 @@ fn sidebar_area(
         (Sidebar::Collection, Some(collection)) => (
             tree.show(ui, &collection.tree, snapshot.version, selected, strings),
             None,
+            None,
         ),
-        (Sidebar::History, _) => (None, history.show(ui, &snapshot.history, now_ms(), strings)),
-        (Sidebar::Collection, None) => (None, None),
+        (Sidebar::History, _) => (
+            None,
+            history.show(ui, &snapshot.history, now_ms(), strings),
+            None,
+        ),
+        (Sidebar::Collection, None) => (None, None, empty_sidebar(ui, strings)),
+    }
+}
+
+/// The sidebar without a collection: how to start. Returns the action of
+/// the button pressed.
+fn empty_sidebar(ui: &mut egui::Ui, strings: &Strings) -> Option<Action> {
+    ui.label(RichText::new(strings.no_collection).color(theme::palette(ui).text_muted));
+    ui.add_space(theme::space::M);
+    let new = ui.button(strings.new_collection).clicked();
+    let open = ui.button(strings.open_collection).clicked();
+    if new {
+        Some(Action::NewCollection)
+    } else {
+        open.then_some(Action::OpenCollection)
+    }
+}
+
+/// The error and the notice, if any. A folder without a collection gets a
+/// button to create one there: returns that folder when pressed.
+fn messages(
+    ui: &mut egui::Ui,
+    snapshot: &Snapshot,
+    notice: Option<&str>,
+    strings: &Strings,
+) -> Option<PathBuf> {
+    let palette = theme::palette(ui);
+    for (message, color) in [
+        (snapshot.error.as_deref(), palette.danger),
+        (notice, palette.warning),
+    ] {
+        if let Some(message) = message {
+            ui.label(RichText::new(message).color(color));
+            ui.add_space(theme::space::M);
+        }
+    }
+    let folder = snapshot.missing_collection.as_ref()?;
+    (snapshot.error.is_some() && ui.button(strings.create_here).clicked()).then(|| folder.clone())
+}
+
+/// The command of what the collection dialogs asked for.
+fn collection_command(request: CollectionRequest) -> Command {
+    match request {
+        CollectionRequest::Open(folder) => Command::OpenCollection(folder),
+        CollectionRequest::Create { folder, name } => Command::CreateCollection { folder, name },
     }
 }
 

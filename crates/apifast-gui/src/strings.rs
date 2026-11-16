@@ -6,13 +6,27 @@ use apifast_domain::Origin;
 /// Every text the interface shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Strings {
-    /// Welcome screen heading.
-    pub welcome_title: &'static str,
-    /// Welcome screen explanation.
-    pub welcome_hint: &'static str,
-    /// Placeholder of the folder field.
-    pub folder_placeholder: &'static str,
-    /// Button that opens a collection.
+    /// Shown in the sidebar while no collection is open.
+    pub no_collection: &'static str,
+    /// Button and action that create a collection.
+    pub new_collection: &'static str,
+    /// Button and action that open a collection.
+    pub open_collection: &'static str,
+    /// Heading of the "New collection" dialog.
+    pub new_collection_title: &'static str,
+    /// Label of the collection's name.
+    pub collection_name: &'static str,
+    /// Placeholder of the collection's name.
+    pub new_collection_hint: &'static str,
+    /// Label of the folder a new collection goes in.
+    pub collection_parent: &'static str,
+    /// Before the folder a new collection will have.
+    pub collection_goes_in: &'static str,
+    /// Title of the picker for that folder.
+    pub pick_parent: &'static str,
+    /// Offers to create a collection in a folder that has none.
+    pub create_here: &'static str,
+    /// Button that opens something.
     pub open: &'static str,
     /// Environment selector entry for "no environment".
     pub no_environment: &'static str,
@@ -468,9 +482,16 @@ pub struct Strings {
 
 /// English.
 pub const EN: Strings = Strings {
-    welcome_title: "apifast",
-    welcome_hint: "Open a collection folder to start.",
-    folder_placeholder: "/path/to/collection",
+    no_collection: "Create a collection or open one to start.",
+    new_collection: "New collection…",
+    open_collection: "Open collection…",
+    new_collection_title: "New collection",
+    collection_name: "Name",
+    new_collection_hint: "Shop API",
+    collection_parent: "Folder",
+    collection_goes_in: "It goes in",
+    pick_parent: "Choose where to create the collection",
+    create_here: "Create one here",
     open: "Open",
     no_environment: "No environment",
     environment: "Environment",

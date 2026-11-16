@@ -55,7 +55,7 @@ Los paneles de request y respuesta se pueden disponer uno encima del otro o lado
 La aplicación entra siempre directamente al visor, sin pantalla de bienvenida ([ADR 0009](adr/0009-workspaces-y-varias-colecciones.md)):
 
 - Abre el último workspace usado, con sus colecciones desplegadas y sus pestañas como se dejaron.
-- La primera vez crea "My workspace" en el directorio de datos.
+- La primera vez crea "My workspace" en el directorio de datos (`default-workspace/`), que es también la carpeta donde "New collection…" propone crear las colecciones.
 - Sin colecciones, el visor muestra un estado vacío con "New collection…" y "Open collection…".
 - `apifast-gui <carpeta>`: si la carpeta tiene `workspace.yml`, abre ese workspace; si es una colección, la añade al workspace activo.
 

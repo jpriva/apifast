@@ -10,7 +10,7 @@ use eframe::egui;
 
 use crate::actions::Keymap;
 use crate::core::{Command, Core};
-use crate::screens::{MainScreen, Welcome};
+use crate::screens::MainScreen;
 use crate::settings::Settings;
 use crate::strings::{self, Strings};
 
@@ -18,7 +18,6 @@ use crate::strings::{self, Strings};
 pub struct App {
     core: Core,
     strings: &'static Strings,
-    welcome: Welcome,
     main: MainScreen,
     /// Where the keymap is kept, if anywhere.
     keymap_store: Option<FsKeymapStore>,
@@ -48,7 +47,6 @@ impl App {
         Self {
             core,
             strings: &strings::EN,
-            welcome: Welcome::default(),
             main: MainScreen::default(),
             keymap_store: None,
             settings_store: None,
@@ -180,14 +178,7 @@ impl App {
         }
         self.main.apply_appearance(ui.ctx());
         let snapshot = self.core.snapshot();
-        if snapshot.collection.is_some() {
-            for command in self.main.show(ui, &snapshot, self.strings) {
-                self.core.send(command);
-            }
-        } else if let Some(command) = self
-            .welcome
-            .show(ui, snapshot.error.as_deref(), self.strings)
-        {
+        for command in self.main.show(ui, &snapshot, self.strings) {
             self.core.send(command);
         }
         let ctx = ui.ctx().clone();

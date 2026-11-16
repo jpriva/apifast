@@ -1225,3 +1225,55 @@ fn a_request_uses_another_ones_response_which_shows_in_the_history() {
     let body = received(&snapshot).body.read(0, 100).unwrap();
     assert_eq!(String::from_utf8(body).unwrap(), "GET /len/20 HTTP/1.1");
 }
+
+#[test]
+fn a_collection_is_created_and_opened_but_never_over_another() {
+    let dir = tempfile::tempdir().unwrap();
+    let folder = dir.path().join("new/billing");
+    let (core, _, _data) = start();
+    core.send(Command::CreateCollection {
+        folder: folder.clone(),
+        name: "Billing".into(),
+    });
+    let snapshot = wait(&core, "the new collection", |s| s.collection.is_some());
+    let collection = snapshot.collection.as_ref().unwrap();
+    assert_eq!(collection.tree.collection.name, "Billing");
+    assert!(folder.join("opencollection.yml").is_file());
+
+    // A folder that already holds one is left alone.
+    let before = std::fs::read_to_string(folder.join("opencollection.yml")).unwrap();
+    core.send(Command::CreateCollection {
+        folder: folder.clone(),
+        name: "Other".into(),
+    });
+    let snapshot = wait(&core, "the refusal", |s| s.error.is_some());
+    assert!(
+        snapshot
+            .error
+            .as_deref()
+            .unwrap()
+            .contains("opencollection.yml"),
+        "{:?}",
+        snapshot.error
+    );
+    assert_eq!(
+        std::fs::read_to_string(folder.join("opencollection.yml")).unwrap(),
+        before
+    );
+}
+
+#[test]
+fn a_folder_without_a_collection_is_remembered_to_offer_one() {
+    let dir = tempfile::tempdir().unwrap();
+    let (core, _, data) = start();
+    assert!(core.snapshot().default_parent.starts_with(data.path()));
+    core.send(Command::OpenCollection(dir.path().to_path_buf()));
+    let snapshot = wait(&core, "the error", |s| s.error.is_some());
+    assert_eq!(snapshot.missing_collection.as_deref(), Some(dir.path()));
+    // A folder that does not exist is not offered.
+    core.send(Command::OpenCollection(dir.path().join("nope")));
+    let snapshot = wait(&core, "the second error", |s| {
+        s.missing_collection.is_none()
+    });
+    assert!(snapshot.error.is_some());
+}
