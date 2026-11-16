@@ -12,8 +12,8 @@ use crate::{
     BodyWriter, CancelToken, Clock, CollectionRepository, CollectionTree, EnvironmentRepository,
     HistoryEntry, HistoryLimits, HistoryStore, HttpTransport, LoadedRequest, Prompter, Random,
     RenderedRequest, RepositoryError, RequestPath, ResponseHead, ResponseId, ResponseStore,
-    SecretStore, Session, SessionStore, StoreError, StoredBody, TransportError, TreeItem,
-    within_limits,
+    SecretStore, Session, SessionStore, SharedSecretFiles, StoreError, StoredBody, TransportError,
+    TreeItem, within_limits,
 };
 
 /// Locks a mutex, recovering the data if a panicking test poisoned it.
@@ -522,5 +522,56 @@ impl SecretStore for MemorySecrets {
         Ok(lock(&self.values)
             .get(&(environment.to_owned(), name.to_owned()))
             .cloned())
+    }
+}
+
+/// Shared secret files and the challenge, in memory.
+#[derive(Debug, Default)]
+pub struct MemorySharedSecrets {
+    secrets: Mutex<BTreeMap<(String, String), String>>,
+    challenge: Mutex<Option<String>>,
+}
+
+impl SharedSecretFiles for MemorySharedSecrets {
+    fn shared_secret(
+        &self,
+        environment: &str,
+        name: &str,
+    ) -> Result<Option<String>, RepositoryError> {
+        Ok(lock(&self.secrets)
+            .get(&(environment.to_owned(), name.to_owned()))
+            .cloned())
+    }
+
+    fn set_shared_secret(
+        &self,
+        environment: &str,
+        name: &str,
+        envelope: &str,
+    ) -> Result<(), RepositoryError> {
+        lock(&self.secrets).insert(
+            (environment.to_owned(), name.to_owned()),
+            envelope.to_owned(),
+        );
+        Ok(())
+    }
+
+    fn remove_shared_secret(&self, environment: &str, name: &str) -> Result<bool, RepositoryError> {
+        Ok(lock(&self.secrets)
+            .remove(&(environment.to_owned(), name.to_owned()))
+            .is_some())
+    }
+
+    fn shared_secret_entries(&self) -> Result<Vec<(String, String)>, RepositoryError> {
+        Ok(lock(&self.secrets).keys().cloned().collect())
+    }
+
+    fn vault_challenge(&self) -> Result<Option<String>, RepositoryError> {
+        Ok(lock(&self.challenge).clone())
+    }
+
+    fn set_vault_challenge(&self, challenge: &str) -> Result<(), RepositoryError> {
+        *lock(&self.challenge) = Some(challenge.to_owned());
+        Ok(())
     }
 }

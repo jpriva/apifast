@@ -191,7 +191,12 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
 - [x] Clave de colección: generación, envoltura, *challenge*. `CollectionKeyStore` guarda cada clave en `keys/<collection-id>.key`, cifrada con la maestra y atada a su colección por los datos asociados, con permisos `0600`. El *challenge* son 32 bytes aleatorios cifrados con la clave de la colección, en `vault.challenge` de `.apifast/collection.yml`; abrirlo dice si una clave es la correcta. Generar la clave al guardar el primer secreto compartido llega con la tarea de secretos.
 - [ ] Secretos solo locales (por defecto) y secretos compartidos en `.apifast/secrets/`; detección de entradas huérfanas.
   - [x] Solo locales: `vault/<collection-id>.vault` (JSON, `0600`), cada valor en su sobre con la clave maestra y atado a colección, entorno y variable. El envío pide los valores por el puerto `SecretStore`, solo para las variables secretas sin valor; la GUI y la CLI usan `VaultSecrets`, que lee la clave maestra la primera vez que hace falta y nunca la crea al leer.
-  - [ ] Compartidos en `.apifast/secrets/<entorno>.yml`, con la clave de la colección generada al compartir el primero.
+  - [x] Compartidos en `.apifast/secrets/<entorno>.yml`, con la clave de la colección generada al compartir el primero.
+    - El envío busca primero el secreto local y luego el compartido. `apifast-vault` lee los archivos de la colección por el puerto `SharedSecretFiles`, que implementa `FsCollection`.
+    - Compartir crea la clave de la colección y el *challenge* la primera vez. Si la colección ya tiene *challenge* y esta máquina no tiene su clave, compartir falla: la clave se pide al equipo, nunca se crea otra.
+    - `use_collection_key` acepta la clave del equipo solo si abre el *challenge*.
+    - Pasar un secreto de local a compartido o al revés lo quita del otro sitio.
+    - Un secreto compartido sin la clave en esta máquina hace fallar el envío con ese motivo, en vez de enviarse sin él.
   - [ ] Entradas huérfanas: secretos guardados cuya variable ya no existe o ya no es secreta.
 - [ ] Clave compartible: exportar, importar y validar.
 - [ ] Rotación de clave y conversión entre modelos.

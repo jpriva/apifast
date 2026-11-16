@@ -114,13 +114,15 @@ Los datos asociados de cada sobre son los de la variable (`apifast/v1|<collectio
 
 1. El usuario elige "compartir con el equipo" en una variable secreta.
 2. Si la colección no tiene clave, se genera y se escribe el *challenge*.
-3. El valor se cifra con la clave de la colección y se guarda en `.apifast/secrets/<entorno>.yml`.
+3. El valor se cifra con la clave de la colección y se guarda en `.apifast/secrets/<entorno>.yml`, con los mismos datos asociados que un secreto local. Su entrada local, si la había, se borra.
+
+Si la colección ya tiene *challenge* pero esta máquina no tiene su clave, compartir falla y se pide la clave al equipo: crear otra dejaría a los demás sin poder abrir lo nuevo. El archivo se nombra como el entorno (con los caracteres no válidos sustituidos) y guarda el nombre real en `environment`; si se queda sin secretos, se borra.
 
 ### Abrir una colección clonada
 
 1. apifast lee `vault.challenge` de `.apifast/collection.yml`.
 2. Si no hay clave local para ese identificador, pide la clave compartible.
-3. Si el usuario no la tiene, la colección se abre igual: los secretos compartidos aparecen como "bloqueados" y las requests que los usen avisan antes de enviarse.
+3. Si el usuario no la tiene, la colección se abre igual: los secretos compartidos aparecen como "bloqueados" y las requests que los usen fallan al enviarse con un mensaje que lo explica.
 4. Los secretos solo locales aparecen como "sin valor" hasta que el usuario los completa.
 
 ### Enviar una request

@@ -25,7 +25,7 @@ use std::path::{Path, PathBuf};
 
 use apifast_app::{
     CollectionRepository, CollectionTree, EnvironmentRepository, LoadedRequest, Random,
-    RepositoryError, RequestPath, TreeItem,
+    RepositoryError, RequestPath, SharedSecretFiles, TreeItem,
 };
 use apifast_domain::{Collection, CollectionId, Environment, Folder, HttpRequest};
 use oneyaml::Value;
@@ -104,49 +104,6 @@ impl FsCollection {
         collection.id = Some(id.clone());
         self.save_collection(&collection)?;
         Ok(id)
-    }
-
-    /// The vault's challenge in `.apifast/collection.yml`, if the
-    /// collection has shared secrets.
-    ///
-    /// # Errors
-    ///
-    /// If the file exists but cannot be read.
-    pub fn vault_challenge(&self) -> Result<Option<String>, RepositoryError> {
-        Ok(self
-            .read_value(APIFAST_COLLECTION_FILE)?
-            .and_then(|doc| yaml::text(yaml::get_in(&doc, &["vault", "challenge"])))
-            .filter(|challenge| !challenge.is_empty()))
-    }
-
-    /// Writes the vault's challenge, keeping the rest of
-    /// `.apifast/collection.yml`.
-    ///
-    /// # Errors
-    ///
-    /// `NotFound` if the collection has no id yet (see [`Self::ensure_id`]),
-    /// or if the file cannot be written.
-    pub fn set_vault_challenge(&self, challenge: &str) -> Result<(), RepositoryError> {
-        if self.collection()?.id.is_none() {
-            return Err(RepositoryError::NotFound(APIFAST_COLLECTION_FILE.into()));
-        }
-        let read = |doc: &Value| {
-            Ok(yaml::text(yaml::get_in(doc, &["vault", "challenge"])).unwrap_or_default())
-        };
-        self.save_document(
-            APIFAST_COLLECTION_FILE,
-            &challenge.to_owned(),
-            read,
-            |doc, _, new| {
-                yaml::set(
-                    yaml::child_mut(doc, "vault"),
-                    "challenge",
-                    yaml::string(new),
-                );
-            },
-            // The file exists: the id is in it.
-            |_| Value::Null,
-        )
     }
 
     fn path(&self, relative: &str) -> Result<PathBuf, RepositoryError> {
@@ -613,6 +570,205 @@ fn free_environment_file(files: &[(String, Environment)], name: &str) -> String 
     let mut n = 2;
     while taken(&candidate) {
         candidate = format!("{ENVIRONMENTS_DIR}/{base}-{n}.yml");
+        n += 1;
+    }
+    candidate
+}
+
+/// Folder of the shared secrets, one file per environment.
+const SECRETS_DIR: &str = ".apifast/secrets";
+
+/// A file of shared secrets: its path, environment and `(name, envelope)`s.
+type SecretsFile = (String, String, Vec<(String, String)>);
+
+impl FsCollection {
+    /// Every file of shared secrets.
+    fn secrets_files(&self) -> Result<Vec<SecretsFile>, RepositoryError> {
+        let entries = match std::fs::read_dir(self.root.join(SECRETS_DIR)) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) => return Err(io_error(SECRETS_DIR, &e)),
+        };
+        let mut names: Vec<String> = entries
+            .filter_map(Result::ok)
+            .filter_map(|e| e.file_name().to_str().map(str::to_owned))
+            .filter(|n| is_yaml(n))
+            .collect();
+        names.sort();
+        let mut out = Vec::new();
+        for name in names {
+            let relative = format!("{SECRETS_DIR}/{name}");
+            let Some(doc) = self.read_value(&relative)? else {
+                continue;
+            };
+            let Some(environment) = yaml::text(yaml::get(&doc, "environment")) else {
+                continue;
+            };
+            let secrets = yaml::items(yaml::get(&doc, "secrets"))
+                .iter()
+                .filter_map(|item| {
+                    Some((
+                        yaml::text(yaml::get(item, "name"))?,
+                        yaml::text(yaml::get(item, "value"))?,
+                    ))
+                })
+                .collect();
+            out.push((relative, environment, secrets));
+        }
+        Ok(out)
+    }
+
+    fn write_secrets_file(
+        &self,
+        relative: &str,
+        environment: &str,
+        secrets: &[(String, String)],
+    ) -> Result<(), RepositoryError> {
+        let path = self.root.join(relative);
+        if secrets.is_empty() {
+            return match std::fs::remove_file(&path) {
+                Ok(()) => Ok(()),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(e) => Err(io_error(relative, &e)),
+            };
+        }
+        let items: Vec<Value> = secrets
+            .iter()
+            .map(|(name, value)| {
+                yaml::mapping([
+                    ("name", Some(yaml::string(name))),
+                    ("value", Some(yaml::string(value))),
+                ])
+            })
+            .collect();
+        let doc = yaml::mapping([
+            ("environment", Some(yaml::string(environment))),
+            ("secrets", Some(Value::from(items))),
+        ]);
+        let text = write::to_text(&doc).map_err(|e| invalid(relative, &e))?;
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| io_error(relative, &e))?;
+        }
+        fs::write_atomic(&path, text.as_bytes()).map_err(|e| io_error(relative, &e))
+    }
+}
+
+impl SharedSecretFiles for FsCollection {
+    fn shared_secret(
+        &self,
+        environment: &str,
+        name: &str,
+    ) -> Result<Option<String>, RepositoryError> {
+        Ok(self
+            .secrets_files()?
+            .into_iter()
+            .filter(|(_, env, _)| env == environment)
+            .flat_map(|(_, _, secrets)| secrets)
+            .find(|(n, _)| n == name)
+            .map(|(_, value)| value))
+    }
+
+    fn set_shared_secret(
+        &self,
+        environment: &str,
+        name: &str,
+        envelope: &str,
+    ) -> Result<(), RepositoryError> {
+        let files = self.secrets_files()?;
+        let (relative, mut secrets) = if let Some((relative, _, secrets)) =
+            files.iter().find(|(_, env, _)| env == environment)
+        {
+            (relative.clone(), secrets.clone())
+        } else {
+            (free_secrets_file(&files, environment), Vec::new())
+        };
+        match secrets.iter_mut().find(|(n, _)| n == name) {
+            Some(entry) => envelope.clone_into(&mut entry.1),
+            None => secrets.push((name.to_owned(), envelope.to_owned())),
+        }
+        self.write_secrets_file(&relative, environment, &secrets)
+    }
+
+    fn remove_shared_secret(&self, environment: &str, name: &str) -> Result<bool, RepositoryError> {
+        for (relative, env, mut secrets) in self.secrets_files()? {
+            if env != environment {
+                continue;
+            }
+            let before = secrets.len();
+            secrets.retain(|(n, _)| n != name);
+            if secrets.len() != before {
+                self.write_secrets_file(&relative, &env, &secrets)?;
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    fn shared_secret_entries(&self) -> Result<Vec<(String, String)>, RepositoryError> {
+        Ok(self
+            .secrets_files()?
+            .into_iter()
+            .flat_map(|(_, env, secrets)| {
+                secrets
+                    .into_iter()
+                    .map(move |(name, _)| (env.clone(), name))
+            })
+            .collect())
+    }
+
+    /// The vault's challenge in `.apifast/collection.yml`, if the
+    /// collection has shared secrets.
+    ///
+    /// # Errors
+    ///
+    /// If the file exists but cannot be read.
+    fn vault_challenge(&self) -> Result<Option<String>, RepositoryError> {
+        Ok(self
+            .read_value(APIFAST_COLLECTION_FILE)?
+            .and_then(|doc| yaml::text(yaml::get_in(&doc, &["vault", "challenge"])))
+            .filter(|challenge| !challenge.is_empty()))
+    }
+
+    /// Writes the vault's challenge, keeping the rest of
+    /// `.apifast/collection.yml`.
+    ///
+    /// # Errors
+    ///
+    /// `NotFound` if the collection has no id yet (see [`Self::ensure_id`]),
+    /// or if the file cannot be written.
+    fn set_vault_challenge(&self, challenge: &str) -> Result<(), RepositoryError> {
+        if self.collection()?.id.is_none() {
+            return Err(RepositoryError::NotFound(APIFAST_COLLECTION_FILE.into()));
+        }
+        let read = |doc: &Value| {
+            Ok(yaml::text(yaml::get_in(doc, &["vault", "challenge"])).unwrap_or_default())
+        };
+        self.save_document(
+            APIFAST_COLLECTION_FILE,
+            &challenge.to_owned(),
+            read,
+            |doc, _, new| {
+                yaml::set(
+                    yaml::child_mut(doc, "vault"),
+                    "challenge",
+                    yaml::string(new),
+                );
+            },
+            // The file exists: the id is in it.
+            |_| Value::Null,
+        )
+    }
+}
+
+/// A path in `.apifast/secrets/` for `environment`, after its name and not
+/// taken by any of `files`.
+fn free_secrets_file(files: &[SecretsFile], environment: &str) -> String {
+    let base = fs::file_name_for(environment);
+    let taken = |candidate: &str| files.iter().any(|(r, _, _)| r == candidate);
+    let mut candidate = format!("{SECRETS_DIR}/{base}.yml");
+    let mut n = 2;
+    while taken(&candidate) {
+        candidate = format!("{SECRETS_DIR}/{base}-{n}.yml");
         n += 1;
     }
     candidate

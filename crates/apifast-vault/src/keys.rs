@@ -37,6 +37,23 @@ pub enum KeyStoreError {
     /// What is stored is not a key.
     #[error("the stored master key is damaged")]
     Damaged,
+    /// The collection's files cannot be read or written.
+    #[error("{0}")]
+    Collection(String),
+    /// The collection has shared secrets, but this machine does not have
+    /// its key: it must come from the team.
+    #[error("this collection already shares secrets: ask your team for its key")]
+    NoCollectionKey,
+    /// A shared secret is needed, but this machine does not have the
+    /// collection's key.
+    #[error(
+        "secret `{0}` is shared with the team, and this machine does not have the collection's key"
+    )]
+    SharedWithoutKey(String),
+    /// The key given is not the collection's: it does not open the
+    /// challenge.
+    #[error("that is not this collection's key")]
+    WrongCollectionKey,
     /// A new key could not be made.
     #[error(transparent)]
     Vault(#[from] VaultError),

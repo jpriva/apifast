@@ -559,6 +559,63 @@ pub trait SecretStore: Sync {
     fn secret(&self, environment: &str, name: &str) -> Result<Option<String>, StoreError>;
 }
 
+/// The collection's side of shared secrets: the sealed values in
+/// `.apifast/secrets/` and the vault's challenge, both versioned with the
+/// collection. Values are envelopes; only the vault opens them.
+pub trait SharedSecretFiles: Send + Sync {
+    /// The envelope of shared secret `name` of `environment`, if any.
+    ///
+    /// # Errors
+    ///
+    /// If the files cannot be read.
+    fn shared_secret(
+        &self,
+        environment: &str,
+        name: &str,
+    ) -> Result<Option<String>, RepositoryError>;
+
+    /// Stores `envelope` as shared secret `name` of `environment`.
+    ///
+    /// # Errors
+    ///
+    /// If the files cannot be written.
+    fn set_shared_secret(
+        &self,
+        environment: &str,
+        name: &str,
+        envelope: &str,
+    ) -> Result<(), RepositoryError>;
+
+    /// Removes shared secret `name` of `environment`. Returns whether it was
+    /// there.
+    ///
+    /// # Errors
+    ///
+    /// If the files cannot be written.
+    fn remove_shared_secret(&self, environment: &str, name: &str) -> Result<bool, RepositoryError>;
+
+    /// Every shared secret, as `(environment, name)`.
+    ///
+    /// # Errors
+    ///
+    /// If the files cannot be read.
+    fn shared_secret_entries(&self) -> Result<Vec<(String, String)>, RepositoryError>;
+
+    /// The vault's challenge, if the collection has shared secrets.
+    ///
+    /// # Errors
+    ///
+    /// If the file cannot be read.
+    fn vault_challenge(&self) -> Result<Option<String>, RepositoryError>;
+
+    /// Writes the vault's challenge.
+    ///
+    /// # Errors
+    ///
+    /// If the collection has no id yet, or the file cannot be written.
+    fn set_vault_challenge(&self, challenge: &str) -> Result<(), RepositoryError>;
+}
+
 /// No vault: every secret is without value.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NoSecrets;

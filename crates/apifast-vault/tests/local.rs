@@ -3,10 +3,11 @@
 
 #![allow(clippy::unwrap_used, reason = "test: a failure fails the test")]
 
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use apifast_app::SecretStore;
+use apifast_app::memory::MemorySharedSecrets;
 use apifast_vault::{
     Key, KeyBackend, KeyFile, KeyStoreError, LocalVault, SecretEntry, VaultSecrets,
 };
@@ -105,9 +106,14 @@ fn a_value_moved_to_another_entry_does_not_open() {
 fn reading_secrets_never_makes_a_master_key() {
     let dir = tempfile::tempdir().unwrap();
     let keyring = FakeKeyring::default();
-    let secrets =
-        VaultSecrets::with_backends(dir.path(), "col_1", &keyring, KeyFile::in_dir(dir.path()))
-            .unwrap();
+    let secrets = VaultSecrets::with_backends(
+        dir.path(),
+        "col_1",
+        Arc::new(MemorySharedSecrets::default()),
+        &keyring,
+        KeyFile::in_dir(dir.path()),
+    )
+    .unwrap();
     assert_eq!(secrets.secret("prod", "token").unwrap(), None);
     assert!(keyring.stored.lock().unwrap().is_none());
     assert!(!dir.path().join("master.key").exists());
@@ -127,13 +133,23 @@ fn reading_secrets_never_makes_a_master_key() {
 fn a_locked_keyring_is_an_error_and_is_asked_again_once_unlocked() {
     let dir = tempfile::tempdir().unwrap();
     let keyring = FakeKeyring::default();
-    let secrets =
-        VaultSecrets::with_backends(dir.path(), "col_1", &keyring, KeyFile::in_dir(dir.path()))
-            .unwrap();
+    let secrets = VaultSecrets::with_backends(
+        dir.path(),
+        "col_1",
+        Arc::new(MemorySharedSecrets::default()),
+        &keyring,
+        KeyFile::in_dir(dir.path()),
+    )
+    .unwrap();
     secrets.set_local("prod", "token", "t0k").unwrap();
-    let later =
-        VaultSecrets::with_backends(dir.path(), "col_1", &keyring, KeyFile::in_dir(dir.path()))
-            .unwrap();
+    let later = VaultSecrets::with_backends(
+        dir.path(),
+        "col_1",
+        Arc::new(MemorySharedSecrets::default()),
+        &keyring,
+        KeyFile::in_dir(dir.path()),
+    )
+    .unwrap();
     keyring.locked.store(true, Ordering::Relaxed);
     assert!(later.secret("prod", "token").is_err());
     keyring.locked.store(false, Ordering::Relaxed);

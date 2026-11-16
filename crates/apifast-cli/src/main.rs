@@ -10,6 +10,7 @@ use std::fmt::Write as _;
 use std::io::{IsTerminal, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use apifast_app::{
@@ -102,7 +103,7 @@ fn main() -> ExitCode {
 
 fn run_send(args: &SendArgs) -> Result<ExitCode> {
     let located = locate::locate(&args.file, args.collection.as_deref())?;
-    let repo = FsCollection::open(&located.root)?;
+    let repo = Arc::new(FsCollection::open(&located.root)?);
     let collection = repo.collection()?;
     let responses = FsResponseStore::new(apifast_history::dirs::responses_dir(
         &located.root,
@@ -117,6 +118,7 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
         Some(id) => Box::new(VaultSecrets::for_collection(
             &apifast_history::dirs::data_dir(),
             id.as_str(),
+            repo.clone(),
         )?),
         None => Box::new(NoSecrets),
     };
@@ -145,8 +147,8 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
             }
         });
         let ports = SendPorts {
-            collections: &repo,
-            environments: &repo,
+            collections: &*repo,
+            environments: &*repo,
             transport: &transport,
             responses: &responses,
             clock: &clock,

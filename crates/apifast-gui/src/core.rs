@@ -19,10 +19,10 @@ use apifast_app::{
     AppError, CancelToken, Clock, CollectionRepository, CollectionTree, EnvironmentRepository,
     HistoryEntry, HistoryLimits, HistoryOutcome, HistoryStore, ItemPath, NoPrompter, NoSecrets,
     Placement, RepositoryError, RequestPath, ResponseHead, ResponseId, ResponseStore, SecretStore,
-    SendOptions, SendPorts, Session, SessionStore, SessionTab, TransportError, create_environment,
-    create_folder, create_request, delete_environment, delete_item, load_request, move_item,
-    open_collection, rename_environment, rename_item, resolve_request_variables, save_environment,
-    save_request, send_request,
+    SendOptions, SendPorts, Session, SessionStore, SessionTab, SharedSecretFiles, TransportError,
+    create_environment, create_folder, create_request, delete_environment, delete_item,
+    load_request, move_item, open_collection, rename_environment, rename_item,
+    resolve_request_variables, save_environment, save_request, send_request,
 };
 use apifast_domain::{
     AuthScheme, Chain, Collection, Environment, Header, HttpRequest, Origin, Resolved,
@@ -66,6 +66,7 @@ fn stores(
     data_dir: &Path,
     root: &Path,
     id: Option<&str>,
+    shared: Arc<dyn SharedSecretFiles>,
 ) -> Result<
     (
         FsResponseStore,
@@ -82,7 +83,7 @@ fn stores(
     // Secrets need the collection's id: without one, none was ever stored.
     let secrets: Arc<dyn SecretStore + Send> = match id {
         Some(id) => {
-            Arc::new(VaultSecrets::for_collection(data_dir, id).map_err(|e| e.to_string())?)
+            Arc::new(VaultSecrets::for_collection(data_dir, id, shared).map_err(|e| e.to_string())?)
         }
         None => Arc::new(NoSecrets),
     };
@@ -739,8 +740,8 @@ impl State {
     }
 
     fn open_collection(&mut self, root: PathBuf) -> Result<(), String> {
-        let repo = FsCollection::open(&root).map_err(|e| e.to_string())?;
-        let tree = open_collection(&repo).map_err(|e| e.to_string())?;
+        let repo = Arc::new(FsCollection::open(&root).map_err(|e| e.to_string())?);
+        let tree = open_collection(&*repo).map_err(|e| e.to_string())?;
         let environment_files = repo.environments().map_err(|e| e.to_string())?;
         let environments: Vec<String> = environment_files.iter().map(|e| e.name.clone()).collect();
         let transport = ReqwestTransport::new(&root).map_err(|e| e.to_string())?;
@@ -749,7 +750,8 @@ impl State {
             .id
             .as_ref()
             .map(apifast_domain::CollectionId::as_str);
-        let (responses, sessions, history, secrets) = stores(&self.data_dir, &root, id)?;
+        let shared: Arc<dyn SharedSecretFiles> = repo.clone();
+        let (responses, sessions, history, secrets) = stores(&self.data_dir, &root, id, shared)?;
 
         // Leave the previous collection as it was.
         if self.session_pending {
@@ -767,7 +769,7 @@ impl State {
         };
         let mut tabs = Vec::with_capacity(session.tabs.len());
         for SessionTab { path, draft } in session.tabs {
-            let (saved, draft) = match load_request(&repo, &path) {
+            let (saved, draft) = match load_request(&*repo, &path) {
                 Ok(loaded) => {
                     let saved = loaded.request;
                     let draft = draft.filter(|draft| *draft != saved);
@@ -809,7 +811,7 @@ impl State {
             Err(e) => (None, error.or_else(|| Some(e.to_string()))),
         };
         self.open = Some(Open {
-            repo: Arc::new(repo),
+            repo,
             transport: Arc::new(transport),
             responses,
             history,

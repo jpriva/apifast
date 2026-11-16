@@ -33,7 +33,7 @@ pub use ports::{
     BodyWriter, CancelToken, Clock, CollectionRepository, CollectionTree, EnvironmentRepository,
     HttpTransport, ItemPath, LoadedRequest, NoPrompter, NoSecrets, Prompter, Random, RequestPath,
     ResponseHead, ResponseId, ResponseStore, SecretStore, Session, SessionStore, SessionTab,
-    StoredBody, TimelineEvent, TimelineKind, TreeItem, sort_tree,
+    SharedSecretFiles, StoredBody, TimelineEvent, TimelineKind, TreeItem, sort_tree,
 };
 pub use render::{RenderOutcome, RenderedBody, RenderedPart, RenderedRequest, render_request};
 pub use use_cases::{

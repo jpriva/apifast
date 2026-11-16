@@ -12,20 +12,14 @@
 //! Each value is its own envelope, bound to its collection, environment and
 //! name: a value moved to another entry does not open.
 
+use serde_json::{Value, json};
 use std::fs;
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
-
-use apifast_app::{SecretStore, StoreError};
-use serde_json::{Value, json};
 use zeroize::Zeroizing;
 
 use crate::keys::owner_only;
-use crate::{
-    Aad, Key, KeyBackend, KeyFile, KeyStoreError, SystemKeyring, existing_master_key, master_key,
-    open, seal,
-};
+use crate::{Aad, Key, KeyStoreError, open, seal};
 
 const FORMAT: u64 = 1;
 
@@ -192,111 +186,5 @@ impl LocalVault {
             .into_iter()
             .map(|(environment, name, _)| SecretEntry { environment, name })
             .collect())
-    }
-}
-
-/// The secrets of one collection, as the send needs them: the master key is
-/// read the first time a secret is, and never made by reading.
-pub struct VaultSecrets<K = SystemKeyring, F = KeyFile> {
-    local: LocalVault,
-    keyring: K,
-    file: F,
-    master: Mutex<Option<Key>>,
-}
-
-impl VaultSecrets {
-    /// The secrets of `collection`, with the master key in the system
-    /// keyring or in its file under `data_dir`.
-    ///
-    /// # Errors
-    ///
-    /// If `collection` is not a valid collection id.
-    pub fn for_collection(data_dir: &Path, collection: &str) -> Result<Self, KeyStoreError> {
-        Self::with_backends(
-            data_dir,
-            collection,
-            SystemKeyring,
-            KeyFile::in_dir(data_dir),
-        )
-    }
-}
-
-impl<K: KeyBackend, F: KeyBackend> VaultSecrets<K, F> {
-    /// The secrets of `collection` with the master key in `keyring`, or in
-    /// `file`. For tests, a fake keyring.
-    ///
-    /// # Errors
-    ///
-    /// If `collection` is not a valid collection id.
-    pub fn with_backends(
-        data_dir: &Path,
-        collection: &str,
-        keyring: K,
-        file: F,
-    ) -> Result<Self, KeyStoreError> {
-        Ok(Self {
-            local: LocalVault::in_dir(data_dir, collection)?,
-            keyring,
-            file,
-            master: Mutex::new(None),
-        })
-    }
-
-    /// The local vault.
-    pub fn local(&self) -> &LocalVault {
-        &self.local
-    }
-
-    /// The master key if there is one. A failure is not kept, so a locked
-    /// keyring is asked again next time.
-    fn existing_master(&self) -> Result<Option<Key>, KeyStoreError> {
-        let mut master = self
-            .master
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if master.is_none() {
-            *master = existing_master_key(&self.keyring, &self.file)?.map(|(key, _)| key);
-        }
-        Ok(master.clone())
-    }
-
-    /// Stores `value` as the local secret `name` of `environment`, making
-    /// the master key if there is none yet.
-    ///
-    /// # Errors
-    ///
-    /// If the master key cannot be read or made, or the vault written.
-    pub fn set_local(
-        &self,
-        environment: &str,
-        name: &str,
-        value: &str,
-    ) -> Result<(), KeyStoreError> {
-        let master = if let Some(master) = self.existing_master()? {
-            master
-        } else {
-            let (master, _) = master_key(&self.keyring, &self.file)?;
-            *self
-                .master
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(master.clone());
-            master
-        };
-        self.local.set(&master, environment, name, value)
-    }
-}
-
-impl<K: KeyBackend + Sync + Send, F: KeyBackend + Sync + Send> SecretStore for VaultSecrets<K, F> {
-    fn secret(&self, environment: &str, name: &str) -> Result<Option<String>, StoreError> {
-        let store = |e: KeyStoreError| StoreError(e.to_string());
-        // No master key: no secret was ever stored on this machine.
-        let Some(master) = self.existing_master().map_err(store)? else {
-            return Ok(None);
-        };
-        Ok(self
-            .local
-            .get(&master, environment, name)
-            .map_err(store)?
-            .map(|value| value.as_str().to_owned()))
     }
 }
