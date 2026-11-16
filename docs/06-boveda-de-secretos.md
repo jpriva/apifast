@@ -152,7 +152,10 @@ Un secreto solo local se puede compartir y uno compartido se puede volver solo l
 ## Protección en memoria y en la interfaz
 
 - El tipo `Secret` envuelve el valor, lo pone a cero al liberarse y no implementa `Debug` ni `Display` con el contenido.
-- El resultado de un render que usó secretos lleva la lista de fragmentos sensibles. Timeline, historial, reporters y logs los sustituyen por `••••••`.
+- El resultado de un render que usó secretos lleva la lista de fragmentos sensibles: el valor de cada secreto tal como quedó en el texto, ya renderizado si se compone de otras variables. Timeline, historial, reporters y logs los sustituyen por `••••••`, también en su forma codificada para URL (`%XX`).
+- En el historial, una request con secretos guarda sus URLs enmascaradas y, además, con los valores de la query ocultos (`[hidden]`).
+- La request renderizada se imprime con los secretos enmascarados, así que no llega en claro a un log aunque se imprima entera.
+- Límite: mientras se renderiza y se envía, el valor existe en memoria como texto normal (en la URL, los headers y el body que se envían). `Secret` se borra al liberarse, pero esas copias no.
 - En los campos de la interfaz el valor está oculto; "revelar" lo muestra unos segundos.
 - Copiar un secreto al portapapeles lo limpia después de un tiempo configurable.
 - La CLI nunca imprime secretos, ni siquiera en modo detallado.

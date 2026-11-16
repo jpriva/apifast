@@ -1,6 +1,6 @@
 use apifast_domain::{
-    Chain, HttpRequest, Origin, ResolvedVariables, Variable, VariableValue, environment_chain,
-    resolve, resolve_variables,
+    Chain, HttpRequest, Origin, ResolvedVariables, Secret, Variable, VariableValue,
+    environment_chain, resolve, resolve_variables,
 };
 use apifast_template::{Mode, Problem};
 
@@ -125,6 +125,9 @@ pub struct SendOutcome {
     pub problems: Vec<Problem>,
     /// Whether the request carried a secret.
     pub contains_secret: bool,
+    /// The values of the secrets it carried, to mask them in what is shown
+    /// or stored (history, timeline).
+    pub secrets: Vec<Secret>,
 }
 
 /// Loads a request, resolves inheritance and variables, renders it, sends it
@@ -161,7 +164,7 @@ where
     // Secrets come from the vault only now, for this send.
     for (name, environment) in variables.secrets_without_value() {
         if let Some(value) = ports.secrets.secret(&environment, &name)? {
-            variables.fill_secret(&name, VariableValue::text(value));
+            variables.fill_secret(&name, VariableValue::text(value.expose()));
         }
     }
     let resolved = resolve(Chain::new(&collection, &loaded.folders, &loaded.request));
@@ -192,5 +195,6 @@ where
         body,
         problems: rendered.problems,
         contains_secret: rendered.request.contains_secret(),
+        secrets: rendered.request.secrets().to_vec(),
     })
 }

@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use apifast_domain::ResolvedVariables;
+use apifast_domain::{ResolvedVariables, Secret};
 
 use crate::dynamic;
 use crate::parse::{Expr, Template, Token};
@@ -109,6 +109,8 @@ pub struct Rendered<'a> {
     /// Whether a secret went into the text. If so, the timeline, history and
     /// logs must mask it.
     pub contains_secret: bool,
+    /// The values of the secrets that went into the text, to mask them.
+    pub secrets: Vec<Secret>,
     /// Problems found; empty in [`Mode::Strict`], since the first one fails.
     pub problems: Vec<Problem>,
 }
@@ -131,6 +133,7 @@ pub fn render<'a>(
         return Ok(Rendered {
             text: Cow::Borrowed(input),
             contains_secret: false,
+            secrets: Vec::new(),
             problems: Vec::new(),
         });
     }
@@ -139,6 +142,7 @@ pub fn render<'a>(
         host,
         mode,
         contains_secret: false,
+        secrets: Vec::new(),
         problems: Vec::new(),
         stack: Vec::new(),
     };
@@ -147,6 +151,7 @@ pub fn render<'a>(
     Ok(Rendered {
         text: Cow::Owned(out),
         contains_secret: renderer.contains_secret,
+        secrets: renderer.secrets,
         problems: renderer.problems,
     })
 }
@@ -156,6 +161,7 @@ struct Renderer<'v, 'h> {
     host: &'h mut dyn Host,
     mode: Mode,
     contains_secret: bool,
+    secrets: Vec<Secret>,
     problems: Vec<Problem>,
     /// Variables being rendered, to detect cycles.
     stack: Vec<String>,
@@ -233,7 +239,19 @@ impl Renderer<'_, '_> {
         })
     }
 
+    /// Renders variable `name`; the value of a secret is kept, so whatever
+    /// shows the text later can mask it.
     fn variable_into(&mut self, name: &str, out: &mut String) -> Result<(), RenderError> {
+        let secret = self.variables.get(name).is_some_and(|var| var.secret);
+        let start = out.len();
+        let result = self.value_into(name, out);
+        if secret && out.len() > start {
+            self.secrets.push(Secret::new(&out[start..]));
+        }
+        result
+    }
+
+    fn value_into(&mut self, name: &str, out: &mut String) -> Result<(), RenderError> {
         let Some(var) = self.variables.get(name) else {
             return self.problem(Problem::MissingVariable(name.to_owned()));
         };

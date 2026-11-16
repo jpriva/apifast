@@ -8,6 +8,8 @@
 
 use std::time::Duration;
 
+use apifast_domain::{Secret, mask};
+
 use crate::{RequestPath, ResponseHead, ResponseId, StoreError, TimelineKind};
 
 /// What replaces a hidden value.
@@ -46,27 +48,31 @@ pub enum HistoryOutcome {
 }
 
 impl HistoryEntry {
-    /// An entry for a response. `contains_secret` tells whether the request
-    /// carried a secret, so the queries it reached are hidden.
+    /// An entry for a response. `secrets` are the values of the secrets
+    /// the request carried: they are masked wherever they appear in the
+    /// URLs it reached, and the queries of those URLs are hidden too.
     pub fn received(
         at_ms: i64,
         request: RequestPath,
         (method, url): (String, String),
         mut head: ResponseHead,
         (size, body): (u64, ResponseId),
-        contains_secret: bool,
+        secrets: &[Secret],
     ) -> Self {
         for (name, value) in &mut head.headers {
             if name.eq_ignore_ascii_case("set-cookie") {
                 HIDDEN.clone_into(value);
             }
         }
-        if contains_secret {
-            head.url = hide_query(&head.url);
+        if !secrets.is_empty() {
+            // Masked anywhere (a secret in the path too), and every query
+            // value hidden besides, as some may be secrets in other forms.
+            let clean = |url: &str| hide_query(&mask(url, secrets));
+            head.url = clean(&head.url);
             for event in &mut head.timeline {
                 match &mut event.kind {
-                    TimelineKind::Request { url, .. } => *url = hide_query(url),
-                    TimelineKind::Redirect { location, .. } => *location = hide_query(location),
+                    TimelineKind::Request { url, .. } => *url = clean(url),
+                    TimelineKind::Redirect { location, .. } => *location = clean(location),
                     TimelineKind::Headers { .. } | TimelineKind::Body { .. } => {}
                 }
             }
@@ -178,6 +184,7 @@ pub fn within_limits(
 mod tests {
     use super::*;
     use crate::TimelineEvent;
+    use apifast_domain::MASK;
 
     fn head(url: &str) -> ResponseHead {
         ResponseHead {
@@ -200,20 +207,20 @@ mod tests {
         }
     }
 
-    fn entry(contains_secret: bool) -> HistoryEntry {
+    fn entry(secrets: &[Secret]) -> HistoryEntry {
         HistoryEntry::received(
             1,
             RequestPath::new("a.yml"),
             ("GET".into(), "{{host}}/a?key={{key}}".into()),
             head("http://h/a?key=s3cret&page=2#top"),
             (5, ResponseId("r".into())),
-            contains_secret,
+            secrets,
         )
     }
 
     #[test]
     fn a_send_with_a_secret_hides_the_values_of_its_queries() {
-        let HistoryOutcome::Received { head, .. } = entry(true).outcome else {
+        let HistoryOutcome::Received { head, .. } = entry(&[Secret::new("s3cret")]).outcome else {
             unreachable!()
         };
         assert_eq!(head.url, "http://h/a?key=[hidden]&page=[hidden]#top");
@@ -225,7 +232,7 @@ mod tests {
 
     #[test]
     fn without_a_secret_urls_are_kept_but_cookies_never() {
-        let entry = entry(false);
+        let entry = entry(&[]);
         assert_eq!(entry.url, "{{host}}/a?key={{key}}");
         let HistoryOutcome::Received { head, .. } = entry.outcome else {
             unreachable!()
@@ -233,6 +240,22 @@ mod tests {
         assert_eq!(head.url, "http://h/a?key=s3cret&page=2#top");
         assert_eq!(head.headers[0].1, HIDDEN);
         assert_eq!(head.headers[1].1, "text/plain");
+    }
+
+    #[test]
+    fn a_secret_in_the_path_is_masked_too() {
+        let entry = HistoryEntry::received(
+            1,
+            RequestPath::new("a.yml"),
+            ("GET".into(), "{{host}}/users/{{token}}".into()),
+            head("http://h/users/t0k3n"),
+            (5, ResponseId("r".into())),
+            &[Secret::new("t0k3n")],
+        );
+        let HistoryOutcome::Received { head, .. } = entry.outcome else {
+            unreachable!()
+        };
+        assert_eq!(head.url, format!("http://h/users/{MASK}"));
     }
 
     #[test]

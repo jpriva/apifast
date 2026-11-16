@@ -7,7 +7,7 @@ use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use apifast_domain::{Collection, Environment, Folder, HttpRequest, Method};
+use apifast_domain::{Collection, Environment, Folder, HttpRequest, Method, Secret};
 
 use crate::{RenderedRequest, RepositoryError, StoreError, TransportError};
 
@@ -556,7 +556,7 @@ pub trait SecretStore: Sync {
     /// # Errors
     ///
     /// If the vault cannot be read, such as a locked keyring.
-    fn secret(&self, environment: &str, name: &str) -> Result<Option<String>, StoreError>;
+    fn secret(&self, environment: &str, name: &str) -> Result<Option<Secret>, StoreError>;
 }
 
 /// The collection's side of shared secrets: the sealed values in
@@ -621,7 +621,7 @@ pub trait SharedSecretFiles: Send + Sync {
 pub struct NoSecrets;
 
 impl SecretStore for NoSecrets {
-    fn secret(&self, _: &str, _: &str) -> Result<Option<String>, StoreError> {
+    fn secret(&self, _: &str, _: &str) -> Result<Option<Secret>, StoreError> {
         Ok(None)
     }
 }

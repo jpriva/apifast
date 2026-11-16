@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use apifast_app::SecretStore;
 use apifast_app::memory::MemorySharedSecrets;
+use apifast_domain::Secret;
 use apifast_vault::{
     Key, KeyBackend, KeyFile, KeyStoreError, LocalVault, SecretEntry, VaultSecrets,
 };
@@ -124,7 +125,11 @@ fn reading_secrets_never_makes_a_master_key() {
         "made when storing"
     );
     assert_eq!(
-        secrets.secret("prod", "token").unwrap().as_deref(),
+        secrets
+            .secret("prod", "token")
+            .unwrap()
+            .as_ref()
+            .map(Secret::expose),
         Some("t0k")
     );
 }
@@ -154,7 +159,11 @@ fn a_locked_keyring_is_an_error_and_is_asked_again_once_unlocked() {
     assert!(later.secret("prod", "token").is_err());
     keyring.locked.store(false, Ordering::Relaxed);
     assert_eq!(
-        later.secret("prod", "token").unwrap().as_deref(),
+        later
+            .secret("prod", "token")
+            .unwrap()
+            .as_ref()
+            .map(Secret::expose),
         Some("t0k")
     );
     // Once read, the key is kept: no more trips to the keyring.

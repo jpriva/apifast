@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 
 use apifast_app::memory::MemorySharedSecrets;
 use apifast_app::{SecretStore, SharedSecretFiles};
+use apifast_domain::Secret;
 use apifast_vault::{CollectionKeyStore, Key, KeyBackend, KeyFile, KeyStoreError, VaultSecrets};
 
 /// A keyring in memory; clones share it.
@@ -89,7 +90,12 @@ fn sharing_makes_the_collection_key_and_its_challenge_once() {
         "moved, not copied"
     );
     assert_eq!(
-        alice.secrets.secret("prod", "token").unwrap().as_deref(),
+        alice
+            .secrets
+            .secret("prod", "token")
+            .unwrap()
+            .as_ref()
+            .map(Secret::expose),
         Some("t0k")
     );
     // Sharing again keeps the same key and challenge.
@@ -125,12 +131,21 @@ fn a_teammate_needs_the_collection_key_and_only_the_right_one_is_taken() {
         .use_collection_key(alice.collection_key())
         .unwrap();
     assert_eq!(
-        bob.secrets.secret("prod", "token").unwrap().as_deref(),
+        bob.secrets
+            .secret("prod", "token")
+            .unwrap()
+            .as_ref()
+            .map(Secret::expose),
         Some("t0k")
     );
     bob.secrets.share("prod", "other", "x").unwrap();
     assert_eq!(
-        alice.secrets.secret("prod", "other").unwrap().as_deref(),
+        alice
+            .secrets
+            .secret("prod", "other")
+            .unwrap()
+            .as_ref()
+            .map(Secret::expose),
         Some("x")
     );
 }
@@ -143,7 +158,12 @@ fn making_a_shared_secret_local_removes_it_from_the_collection() {
     alice.secrets.set_local("prod", "token", "mine").unwrap();
     assert_eq!(collection.shared_secret("prod", "token").unwrap(), None);
     assert_eq!(
-        alice.secrets.secret("prod", "token").unwrap().as_deref(),
+        alice
+            .secrets
+            .secret("prod", "token")
+            .unwrap()
+            .as_ref()
+            .map(Secret::expose),
         Some("mine")
     );
 }
@@ -206,7 +226,12 @@ fn stored_secrets_no_secret_variable_uses_are_orphans_and_can_be_forgotten() {
     }
     assert_eq!(alice.secrets.orphans(&environments).unwrap(), []);
     assert_eq!(
-        alice.secrets.secret("prod", "token").unwrap().as_deref(),
+        alice
+            .secrets
+            .secret("prod", "token")
+            .unwrap()
+            .as_ref()
+            .map(Secret::expose),
         Some("t")
     );
 }
@@ -223,7 +248,13 @@ fn renaming_an_environment_seals_its_secrets_again_under_the_new_name() {
         .secrets
         .rename_environment("prod", "production")
         .unwrap();
-    let secret = |env: &str, name: &str| alice.secrets.secret(env, name).unwrap();
+    let secret = |env: &str, name: &str| {
+        alice
+            .secrets
+            .secret(env, name)
+            .unwrap()
+            .map(|s| s.expose().to_owned())
+    };
     assert_eq!(secret("production", "token").as_deref(), Some("t0k"));
     assert_eq!(secret("production", "key").as_deref(), Some("k3y"));
     assert_eq!(secret("prod", "token"), None);
@@ -267,7 +298,11 @@ fn the_key_is_passed_as_text_and_a_typo_or_another_key_is_refused() {
 
     bob.secrets.import_collection_key(&text).unwrap();
     assert_eq!(
-        bob.secrets.secret("prod", "token").unwrap().as_deref(),
+        bob.secrets
+            .secret("prod", "token")
+            .unwrap()
+            .as_ref()
+            .map(Secret::expose),
         Some("t0k")
     );
 }
@@ -299,11 +334,21 @@ fn rotating_seals_everything_again_and_the_team_needs_the_new_key() {
         old_token
     );
     assert_eq!(
-        alice.secrets.secret("prod", "token").unwrap().as_deref(),
+        alice
+            .secrets
+            .secret("prod", "token")
+            .unwrap()
+            .as_ref()
+            .map(Secret::expose),
         Some("t0k")
     );
     assert_eq!(
-        alice.secrets.secret("dev", "key").unwrap().as_deref(),
+        alice
+            .secrets
+            .secret("dev", "key")
+            .unwrap()
+            .as_ref()
+            .map(Secret::expose),
         Some("k3y")
     );
     assert!(!alice.dir.path().join("keys/col_1.previous.key").exists());
@@ -312,7 +357,11 @@ fn rotating_seals_everything_again_and_the_team_needs_the_new_key() {
     assert!(bob.secrets.secret("prod", "token").is_err());
     bob.secrets.import_collection_key(&new_key).unwrap();
     assert_eq!(
-        bob.secrets.secret("prod", "token").unwrap().as_deref(),
+        bob.secrets
+            .secret("prod", "token")
+            .unwrap()
+            .as_ref()
+            .map(Secret::expose),
         Some("t0k")
     );
 }
@@ -350,17 +399,29 @@ fn a_rotation_cut_short_loses_nothing_and_can_run_again() {
 
     let after_crash = machine_with(&collection, &alice);
     assert_eq!(
-        after_crash.secret("prod", "token").unwrap().as_deref(),
+        after_crash
+            .secret("prod", "token")
+            .unwrap()
+            .as_ref()
+            .map(Secret::expose),
         Some("t0k")
     );
     assert_eq!(
-        after_crash.secret("prod", "key").unwrap().as_deref(),
+        after_crash
+            .secret("prod", "key")
+            .unwrap()
+            .as_ref()
+            .map(Secret::expose),
         Some("k3y")
     );
 
     after_crash.rotate_collection_key().unwrap();
     assert_eq!(
-        after_crash.secret("prod", "key").unwrap().as_deref(),
+        after_crash
+            .secret("prod", "key")
+            .unwrap()
+            .as_ref()
+            .map(Secret::expose),
         Some("k3y")
     );
     assert!(!alice.dir.path().join("keys/col_1.previous.key").exists());

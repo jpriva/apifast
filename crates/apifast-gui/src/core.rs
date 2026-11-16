@@ -1189,7 +1189,7 @@ impl State {
                     written,
                     outcome.head.clone(),
                     (outcome.body.size, outcome.body.id.clone()),
-                    outcome.contains_secret,
+                    &outcome.secrets,
                 )),
                 Err(AppError::Transport(TransportError::Cancelled)) => None,
                 Err(e) => Some(HistoryEntry::failed(

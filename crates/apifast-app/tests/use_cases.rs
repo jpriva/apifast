@@ -526,4 +526,10 @@ fn a_secret_takes_its_value_from_the_vault_for_the_send() {
         world.transport.sent()[0].url(),
         "https://api.test/me?key=k3y"
     );
+    // What is shown or stored can mask it; printing the request never
+    // shows it.
+    assert_eq!(outcome.secrets, [apifast_domain::Secret::new("k3y")]);
+    let printed = format!("{:?}", world.transport.sent()[0]);
+    assert!(!printed.contains("k3y"), "{printed}");
+    assert!(printed.contains(apifast_domain::MASK), "{printed}");
 }

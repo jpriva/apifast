@@ -185,6 +185,7 @@ fn secrets_mark_the_result_and_are_never_in_problems() {
     .unwrap();
     assert_eq!(rendered.text, "Bearer s3cr3t");
     assert!(rendered.contains_secret);
+    assert_eq!(rendered.secrets, [apifast_domain::Secret::new("s3cr3t")]);
 
     let plain = render(
         "{{x}}",
@@ -194,6 +195,7 @@ fn secrets_mark_the_result_and_are_never_in_problems() {
     )
     .unwrap();
     assert!(!plain.contains_secret);
+    assert_eq!(plain.secrets, []);
 
     assert_eq!(
         strict("{{locked}}", &variables),
@@ -298,4 +300,27 @@ fn object_variables_are_inserted_as_json() {
         strict("{{flags}}", &variables).unwrap(),
         r#"{"beta": true}"#
     );
+}
+
+/// A secret whose value is a template keeps its rendered value, so that is
+/// what gets masked.
+#[test]
+fn a_secret_made_of_other_variables_is_kept_as_rendered() {
+    let env = [
+        Variable::text("user", "ana"),
+        Variable {
+            value: Some(apifast_domain::VariableValue::text("{{user}}:pa55")),
+            ..Variable::secret("credentials")
+        },
+    ];
+    let variables = resolve_variables([(Origin::Environment("prod".into()), &env[..])]);
+    let rendered = render(
+        "x={{credentials}}&u={{user}}",
+        &variables,
+        &mut FakeHost::default(),
+        Mode::Strict,
+    )
+    .unwrap();
+    assert_eq!(rendered.text, "x=ana:pa55&u=ana");
+    assert_eq!(rendered.secrets, [apifast_domain::Secret::new("ana:pa55")]);
 }

@@ -33,7 +33,7 @@ fn entries() -> Vec<HistoryEntry> {
             ("POST".into(), "{{host}}/users".into()),
             head,
             (2, ResponseId("r".into())),
-            false,
+            &[],
         ),
     ]
 }

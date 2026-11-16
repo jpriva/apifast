@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use apifast_app::{SecretStore, SharedSecretFiles, StoreError};
-use apifast_domain::Environment;
+use apifast_domain::{Environment, Secret};
 
 use crate::{
     Aad, CollectionKeyStore, Key, KeyBackend, KeyFile, KeyStoreError, LocalVault, SystemKeyring,
@@ -450,8 +450,9 @@ where
     K: KeyBackend + Send + Sync,
     F: KeyBackend + Send + Sync,
 {
-    fn secret(&self, environment: &str, name: &str) -> Result<Option<String>, StoreError> {
+    fn secret(&self, environment: &str, name: &str) -> Result<Option<Secret>, StoreError> {
         self.value(environment, name)
+            .map(|value| value.map(Secret::new))
             .map_err(|e| StoreError(e.to_string()))
     }
 }

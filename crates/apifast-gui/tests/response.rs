@@ -176,3 +176,20 @@ fn the_pretty_limit_comes_from_the_settings() {
     harness.run();
     assert!(has(&harness, EN.pretty));
 }
+
+/// Masked secrets show as dots, which the interface's fonts must have.
+#[test]
+fn a_masked_secret_in_the_timeline_is_drawn() {
+    let ResponseState::Received(mut received) = received("text/plain", "x") else {
+        unreachable!()
+    };
+    let url = format!("http://localhost/users/{}", apifast_domain::MASK);
+    received.head.timeline[0].kind = TimelineKind::Request {
+        method: "GET".into(),
+        url: url.clone(),
+    };
+    let mut harness = harness(ResponseState::Received(received));
+    harness.get_by_label(EN.timeline).click();
+    harness.run();
+    assert!(has(&harness, &format!("GET {url}")));
+}

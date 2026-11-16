@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use apifast_domain::{Collection, Environment, Folder, HttpRequest};
+use apifast_domain::{Collection, Environment, Folder, HttpRequest, Secret};
 
 use crate::ports::is_within;
 use crate::{
@@ -518,10 +518,10 @@ impl MemorySecrets {
 }
 
 impl SecretStore for MemorySecrets {
-    fn secret(&self, environment: &str, name: &str) -> Result<Option<String>, StoreError> {
+    fn secret(&self, environment: &str, name: &str) -> Result<Option<Secret>, StoreError> {
         Ok(lock(&self.values)
             .get(&(environment.to_owned(), name.to_owned()))
-            .cloned())
+            .map(Secret::new))
     }
 }
 

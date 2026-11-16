@@ -50,7 +50,7 @@ fn received(at_ms: i64) -> HistoryEntry {
         ("POST".into(), "{{host}}/u".into()),
         head,
         (7, ResponseId("0001-abc".into())),
-        false,
+        &[],
     )
 }
 

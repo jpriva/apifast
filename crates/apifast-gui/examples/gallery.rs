@@ -238,7 +238,7 @@ fn sample_history() -> Vec<HistoryEntry> {
             ("POST".into(), "{{host}}/users".into()),
             head,
             (64, ResponseId("sample".into())),
-            false,
+            &[],
         ),
     ]
 }

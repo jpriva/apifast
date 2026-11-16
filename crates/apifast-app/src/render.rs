@@ -1,9 +1,11 @@
 //! From a [`ResolvedRequest`] (inheritance applied, templates unrendered) to a
 //! [`RenderedRequest`] (ready to send).
 
+use std::fmt;
+
 use apifast_domain::{
     ApiKeyPlacement, AuthScheme, Body, Method, MultipartValue, ParamKind, ResolvedRequest,
-    ResolvedVariables,
+    ResolvedVariables, Secret, mask,
 };
 use apifast_template::{Host, Mode, Problem, render};
 
@@ -34,7 +36,7 @@ use crate::AppError;
 ///     contains_secret: false,
 /// };
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct RenderedRequest {
     method: Method,
     url: String,
@@ -45,6 +47,41 @@ pub struct RenderedRequest {
     max_redirects: u32,
     encode_url: bool,
     contains_secret: bool,
+    secrets: Vec<Secret>,
+}
+
+/// Printed with every secret value masked, so it never reaches a log.
+impl fmt::Debug for RenderedRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        #[derive(Debug)]
+        #[allow(dead_code, reason = "only printed")]
+        struct RenderedRequest<'a> {
+            method: &'a Method,
+            url: &'a str,
+            headers: &'a [(String, String)],
+            body: &'a RenderedBody,
+            timeout_ms: u64,
+            follow_redirects: bool,
+            max_redirects: u32,
+            encode_url: bool,
+            contains_secret: bool,
+        }
+        let shown = format!(
+            "{:?}",
+            RenderedRequest {
+                method: &self.method,
+                url: &self.url,
+                headers: &self.headers,
+                body: &self.body,
+                timeout_ms: self.timeout_ms,
+                follow_redirects: self.follow_redirects,
+                max_redirects: self.max_redirects,
+                encode_url: self.encode_url,
+                contains_secret: self.contains_secret,
+            }
+        );
+        f.write_str(&mask(&shown, &self.secrets))
+    }
 }
 
 impl RenderedRequest {
@@ -92,6 +129,12 @@ impl RenderedRequest {
     /// and logs must mask it.
     pub fn contains_secret(&self) -> bool {
         self.contains_secret
+    }
+
+    /// The values of the secrets that went into the request, to mask them
+    /// wherever it is shown or stored.
+    pub fn secrets(&self) -> &[Secret] {
+        &self.secrets
     }
 }
 
@@ -155,6 +198,7 @@ pub fn render_request(
         host,
         mode,
         contains_secret: false,
+        secrets: Vec::new(),
         problems: Vec::new(),
     };
 
@@ -229,6 +273,7 @@ pub fn render_request(
             max_redirects: settings.max_redirects.value,
             encode_url: settings.encode_url.value,
             contains_secret: r.contains_secret,
+            secrets: r.secrets,
         },
         problems: r.problems,
     })
@@ -239,6 +284,7 @@ struct Renderer<'v, 'h> {
     host: &'h mut dyn Host,
     mode: Mode,
     contains_secret: bool,
+    secrets: Vec<Secret>,
     problems: Vec<Problem>,
 }
 
@@ -246,6 +292,7 @@ impl Renderer<'_, '_> {
     fn text(&mut self, template: &str) -> Result<String, AppError> {
         let rendered = render(template, self.variables, self.host, self.mode)?;
         self.contains_secret |= rendered.contains_secret;
+        self.secrets.extend(rendered.secrets);
         self.problems.extend(rendered.problems);
         Ok(rendered.text.into_owned())
     }

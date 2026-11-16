@@ -200,7 +200,13 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
   - [x] Entradas huérfanas: secretos guardados cuya variable ya no existe o ya no es secreta. `VaultSecrets::orphans` las lista, locales y compartidas, y `forget` las borra; mostrarlas y limpiarlas desde el editor de entornos llega con la interfaz de la bóveda. Al renombrar un entorno, sus secretos se cifran de nuevo con el nombre nuevo (los datos asociados lo incluyen), cada uno en su sitio. Renombrar una variable secreta deja su valor huérfano hasta volver a escribirlo: desde un archivo no se distingue un renombrado de un borrado más un alta.
 - [x] Clave compartible: exportar, importar y validar. `AFK-` y 54 caracteres Crockford en 9 grupos de 6: 52 de la clave y 2 de control (10 bits de un CRC-16) que detectan una errata antes de probar la clave. La lectura ignora mayúsculas, guiones y espacios, y toma `I`/`L` por `1` y `O` por `0`. `export_collection_key` la muestra; `import_collection_key` la lee, la valida contra el *challenge* y la guarda.
 - [x] Rotación de clave y conversión entre modelos. `rotate_collection_key` abre todos los secretos compartidos antes de escribir nada, guarda la clave nueva y conserva la anterior como `keys/<id>.previous.key` hasta terminar de cifrar de nuevo los secretos y el *challenge*. Si se corta a mitad, los valores se leen con la nueva o con la anterior y basta con repetirla. Devuelve la clave nueva en formato compartible para el equipo. La conversión entre modelos ya la hacen `set_local` y `share`.
-- [ ] Tipo `Secret` y enmascarado en timeline, historial, logs y CLI.
+- [x] Tipo `Secret` y enmascarado en timeline, historial, logs y CLI.
+  - `Secret` (en el dominio) borra su valor de memoria al liberarse y al imprimirse solo muestra `••••••`; la bóveda devuelve los valores así.
+  - El render recoge el valor de cada secreto que usa (el valor ya renderizado, si se compone de otras variables). La request renderizada y el resultado del envío lo llevan consigo.
+  - `mask` sustituye cada valor, y su forma codificada en URL, por `••••••`.
+  - El historial y su Timeline enmascaran las URLs alcanzadas (la final, cada request y cada redirección) y, además, ocultan los valores de su query. La request renderizada se imprime enmascarada, así que no llega a un log.
+  - La CLI no imprime nada de la request, solo la respuesta y un resumen sin URL.
+  - Queda fuera: el valor existe en memoria como texto normal mientras se renderiza y se envía, y un cuerpo de respuesta que repita un secreto se guarda tal cual (ver `docs/06`).
 - [ ] Interfaz: columna de clase de secreto, revelar, diálogos de clave, estado de la bóveda.
 - [ ] CLI: `apifast vault` y `APIFAST_COLLECTION_KEY`.
 - [ ] Cifrado del tarro de cookies.
