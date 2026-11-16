@@ -175,6 +175,7 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
             secrets: secrets.as_ref(),
             // Shown before sending, so they are seen even if the send fails.
             report: &|problem| eprintln!("warning: {problem}"),
+            history: None,
         };
         send_request(ports, &located.request, &options, &cancel).await
     })?;

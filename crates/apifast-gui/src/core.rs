@@ -432,6 +432,8 @@ struct Finished {
     id: u64,
     result: Result<Received, AppError>,
     entry: Option<HistoryEntry>,
+    /// Entries for the requests its `response(...)` sent first.
+    dependencies: Vec<HistoryEntry>,
 }
 
 /// Handle to the core thread. Dropping it stops the thread, after writing
@@ -593,7 +595,15 @@ impl State {
                     }
                 }
                 Message::SendFinished(finished) => {
-                    let Finished { id, result, entry } = *finished;
+                    let Finished {
+                        id,
+                        result,
+                        entry,
+                        dependencies,
+                    } = *finished;
+                    if !dependencies.is_empty() {
+                        Arc::make_mut(&mut self.snapshot.history).extend(dependencies);
+                    }
                     self.finish_send(id, result, entry);
                 }
                 Message::HistoryLoaded(opened, entries) => self.history_loaded(opened, entries),
@@ -1238,6 +1248,7 @@ impl State {
                 prompter: &NoPrompter,
                 secrets: &*secrets,
                 report: &|_| {},
+                history: Some(&*history),
             };
             let at_ms = clock.unix_millis();
             let result = send_request(ports, &path, &options, &cancel).await;
@@ -1260,6 +1271,10 @@ impl State {
             };
             // A history that cannot be written does not hide the response.
             let entry = entry.filter(|entry| history.append(entry).is_ok());
+            let dependencies = result
+                .as_ref()
+                .map(|outcome| outcome.dependencies.clone())
+                .unwrap_or_default();
             let result = result.map(|outcome| Received {
                 checks: Checks {
                     captures: outcome.captures,
@@ -1269,7 +1284,12 @@ impl State {
             });
             // Gone only when the core is stopping, and then nobody waits.
             if let Some(messages) = messages.upgrade() {
-                let finished = Finished { id, result, entry };
+                let finished = Finished {
+                    id,
+                    result,
+                    entry,
+                    dependencies,
+                };
                 let _ = messages.send(Message::SendFinished(Box::new(finished)));
             }
         });

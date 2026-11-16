@@ -69,6 +69,7 @@ fn sends_a_bruno_collection_from_disk() {
         prompter: &NoPrompter,
         secrets: &apifast_app::NoSecrets,
         report: &|_| {},
+        history: None,
     };
     let options = SendOptions {
         environment: Some("prod".into()),

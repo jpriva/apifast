@@ -131,6 +131,18 @@ En la vista previa de la interfaz, `always` y `ttl` se comportan como `missing` 
 
 Se detectan ciclos entre requests encadenadas y se reportan como error.
 
+#### Cómo funciona
+
+- El renderizado es síncrono y enviar no lo es, así que se renderiza por rondas: una llamada cuya respuesta no está a mano anota la request y falla esa ronda; el envío ejecuta lo anotado y vuelve a renderizar. Por eso también funcionan las llamadas dentro de variables de entorno (`token: "{{ response(request='auth/login', path='$.token') }}"`). Hay un máximo de 16 rondas.
+- La dependencia se envía con el mismo entorno y las mismas variables de runtime. Si ella misma usa `response(...)`, se resuelve igual, de forma recursiva.
+- Cada dependencia se envía una sola vez por envío, aunque se use varias veces y aunque sea `always`.
+- La "respuesta guardada" es la última del historial cuyo cuerpo sigue guardado. La CLI no escribe historial, así que en `apifast send` toda dependencia `missing` o `ttl` se envía (una vez).
+- Las dependencias quedan en el historial y la interfaz las muestra. Sus capturas y aserciones se ejecutan pero no se informan.
+- Un ciclo se rechaza antes de enviar nada: `requests depend on each other: a.yml → b.yml → a.yml`. Si una dependencia falla, el error la nombra: `` `login.yml`, used by response(): ... ``.
+- `path` admite, por ahora, la forma simple de JSONPath (`$.data.token`, `$.items[0].id`); sin `path`, el resultado es el cuerpo entero. El JSONPath completo y XPath llegan con su tarea.
+- `header` une con `, ` los valores repetidos. En el historial los `Set-Cookie` se guardan ocultos, así que `header(name='set-cookie')` solo funciona con una respuesta enviada en el mismo envío.
+- Solo se lee para esto un cuerpo de hasta 16 MiB.
+
 ## Secretos en plantillas
 
 Los secretos **siempre son variables**. Un campo sensible referencia la variable (`{{api_key}}`) y la variable está marcada como secreta en el entorno. No existe una sintaxis para incrustar texto cifrado dentro de una plantilla.

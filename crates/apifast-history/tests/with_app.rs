@@ -52,6 +52,7 @@ fn a_sent_response_is_stored_and_a_cancelled_one_leaves_nothing() {
         prompter: &NoPrompter,
         secrets: &apifast_app::NoSecrets,
         report: &|_| {},
+        history: None,
     };
     let path = RequestPath::new("r.yml");
 

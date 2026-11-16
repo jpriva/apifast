@@ -5,12 +5,12 @@ use std::pin::pin;
 use std::task::{Context, Poll, Waker};
 
 use apifast_app::memory::{
-    CountingRandom, FixedClock, MemoryCollections, MemoryEnvironments, MemoryResponses,
-    MemorySecrets, MemoryTransport, ScriptedPrompter,
+    CountingRandom, FixedClock, MemoryCollections, MemoryEnvironments, MemoryHistory,
+    MemoryResponses, MemorySecrets, MemoryTransport, ScriptedPrompter,
 };
 use apifast_app::{
-    AppError, CancelToken, RenderedBody, RequestPath, ResponseStore, SendOptions, SendOutcome,
-    SendPorts, TransportError, TreeItem, open_collection, save_request, send_request,
+    AppError, CancelToken, HistoryStore, RenderedBody, RequestPath, ResponseStore, SendOptions,
+    SendOutcome, SendPorts, TransportError, TreeItem, open_collection, save_request, send_request,
 };
 use apifast_domain::{
     ApiKeyAuth, ApiKeyPlacement, AuthScheme, BasicAuth, BearerAuth, Body, Collection, Environment,
@@ -40,6 +40,7 @@ struct World {
     random: CountingRandom,
     prompter: ScriptedPrompter,
     secrets: MemorySecrets,
+    history: Option<MemoryHistory>,
 }
 
 impl World {
@@ -53,6 +54,7 @@ impl World {
             random: CountingRandom::new(7),
             prompter: ScriptedPrompter::default(),
             secrets: MemorySecrets::default(),
+            history: None,
         }
     }
 
@@ -76,6 +78,10 @@ impl World {
             prompter: &self.prompter,
             secrets: &self.secrets,
             report: &|_| {},
+            history: self
+                .history
+                .as_ref()
+                .map(|h| h as &(dyn HistoryStore + Sync)),
         };
         block_on(send_request(
             ports,
@@ -428,6 +434,7 @@ fn problems_are_reported_before_sending_even_if_the_send_fails() {
         prompter: &world.prompter,
         secrets: &world.secrets,
         report: &|problem: &Problem| reported.lock().unwrap().push(problem.clone()),
+        history: None,
     };
     let options = SendOptions {
         allow_unresolved: true,
@@ -466,6 +473,7 @@ fn send_request_can_run_on_any_thread() {
         prompter: &world.prompter,
         secrets: &world.secrets,
         report: &|_| {},
+        history: None,
     };
     let options = SendOptions::default();
     let cancel = CancelToken::new();
@@ -645,4 +653,142 @@ fn a_request_without_checks_does_not_read_its_body_back() {
     );
     let outcome = world.send("a.yml", &SendOptions::default()).unwrap();
     assert!(outcome.assertions.is_empty() && outcome.captures.is_empty());
+}
+
+/// `me.yml` takes its token from the response of `auth/login.yml`.
+fn chained(refresh: &str) -> World {
+    let mut me = get("http://h/me");
+    me.headers = vec![Header::new(
+        "Authorization",
+        format!("Bearer {{{{ response(request='auth/login', path='$.token'{refresh}) }}}}"),
+    )];
+    let mut world = World::new(
+        MemoryCollections::new(Collection::new("api"))
+            .with_request(
+                "auth/login.yml",
+                HttpRequest::new("login", Method::Post, "http://h/login"),
+            )
+            .with_request("me.yml", me),
+    );
+    world.transport = MemoryTransport::new(200, r#"{"token":"t0k"}"#);
+    world.history = Some(MemoryHistory::default());
+    world
+}
+
+fn urls(world: &World) -> Vec<String> {
+    world
+        .transport
+        .sent()
+        .iter()
+        .map(|r| r.url().to_owned())
+        .collect()
+}
+
+#[test]
+fn a_dependency_is_sent_first_then_its_saved_response_is_used() {
+    let world = chained("");
+    world.send("me.yml", &SendOptions::default()).unwrap();
+    assert_eq!(urls(&world), ["http://h/login", "http://h/me"]);
+    assert_eq!(header(&world.last_sent(), "authorization"), ["Bearer t0k"]);
+    // The dependency is in the history, so `missing` does not send it again.
+    let history = world.history.as_ref().unwrap().entries().unwrap();
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].request, RequestPath::new("auth/login.yml"));
+    world.send("me.yml", &SendOptions::default()).unwrap();
+    assert_eq!(
+        urls(&world),
+        ["http://h/login", "http://h/me", "http://h/me"]
+    );
+}
+
+#[test]
+fn refresh_policies_decide_when_to_send_again() {
+    let mut world = chained(", refresh='ttl', ttl='300'");
+    world.send("me.yml", &SendOptions::default()).unwrap();
+    world.send("me.yml", &SendOptions::default()).unwrap();
+    assert_eq!(urls(&world).len(), 3, "fresh enough: login once");
+    world.clock = FixedClock(world.clock.0 + 301_000);
+    world.send("me.yml", &SendOptions::default()).unwrap();
+    assert_eq!(urls(&world).len(), 5, "too old: login again");
+
+    let mut world = chained(", refresh='always'");
+    // Used twice in one request: sent once for it.
+    let mut me =
+        get("http://h/me?a={{ response(request='auth/login', path='token', refresh='always') }}");
+    me.headers = vec![Header::new(
+        "x",
+        "{{ response(request='auth/login', refresh='always') }}",
+    )];
+    world.collections = world.collections.with_request("me.yml", me);
+    world.send("me.yml", &SendOptions::default()).unwrap();
+    world.send("me.yml", &SendOptions::default()).unwrap();
+    assert_eq!(
+        urls(&world),
+        [
+            "http://h/login",
+            "http://h/me?a=t0k",
+            "http://h/login",
+            "http://h/me?a=t0k"
+        ]
+    );
+    assert_eq!(header(&world.last_sent(), "x"), [r#"{"token":"t0k"}"#]);
+
+    let world = chained(", refresh='never'");
+    let error = world.send("me.yml", &SendOptions::default()).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("`auth/login.yml` has no saved response"),
+        "{error}"
+    );
+    assert_eq!(urls(&world), Vec::<String>::new());
+}
+
+#[test]
+fn a_cycle_between_requests_is_refused() {
+    let a = get("http://h/a?b={{ response(request='b') }}");
+    let b = get("http://h/b?c={{ response(request='c') }}");
+    let c = get("http://h/c?a={{ response(request='a') }}");
+    let world = World::new(
+        MemoryCollections::new(Collection::new("api"))
+            .with_request("a.yml", a)
+            .with_request("b.yml", b)
+            .with_request("c.yml", c),
+    );
+    let error = world.send("a.yml", &SendOptions::default()).unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "requests depend on each other: a.yml → b.yml → c.yml → a.yml"
+    );
+    assert_eq!(urls(&world), Vec::<String>::new());
+}
+
+#[test]
+fn a_failing_dependency_names_itself() {
+    let world = World::new(
+        MemoryCollections::new(Collection::new("api"))
+            .with_request("login.yml", get("{{host}}/login"))
+            .with_request(
+                "me.yml",
+                get("http://h/me?t={{ response(request='login', path='$.ok') }}"),
+            ),
+    );
+    let error = world.send("me.yml", &SendOptions::default()).unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "`login.yml`, used by response(): variable `host` is not defined"
+    );
+    // The path must be in the response.
+    let mut world = chained("");
+    world.collections = world.collections.with_request(
+        "me.yml",
+        get("http://h/me?t={{ response(request='auth/login', path='$.missing') }}"),
+    );
+    let error = world.send("me.yml", &SendOptions::default()).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("`$.missing` is not in the response of `auth/login.yml`"),
+        "{error}"
+    );
 }

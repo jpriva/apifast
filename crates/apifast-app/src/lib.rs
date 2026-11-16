@@ -12,6 +12,7 @@ mod assertions;
 mod checks;
 mod environments;
 mod error;
+mod functions;
 mod history;
 mod host;
 pub mod memory;

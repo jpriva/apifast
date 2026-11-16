@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 
-use apifast_template::Host;
+use apifast_template::{FunctionArg, Host};
 
+use crate::functions::ResponseFunctions;
 use crate::{Clock, Prompter, Random};
 
 /// The template [`Host`] the use cases pass to the renderer, built from the ports.
@@ -12,6 +13,8 @@ pub struct AppHost<'a> {
     process_env: BTreeMap<String, String>,
     /// Answers already given, so a prompt used twice is asked once.
     answers: BTreeMap<String, Option<String>>,
+    /// `response` and `header`, when the host can reach other requests.
+    functions: Option<ResponseFunctions<'a>>,
 }
 
 impl<'a> AppHost<'a> {
@@ -28,7 +31,19 @@ impl<'a> AppHost<'a> {
             prompter,
             process_env,
             answers: BTreeMap::new(),
+            functions: None,
         }
+    }
+
+    /// With `response` and `header`.
+    pub(crate) fn with_functions(mut self, functions: ResponseFunctions<'a>) -> Self {
+        self.functions = Some(functions);
+        self
+    }
+
+    /// The `response` and `header` functions, if it has them.
+    pub(crate) fn functions(&mut self) -> Option<&mut ResponseFunctions<'a>> {
+        self.functions.as_mut()
     }
 }
 
@@ -43,6 +58,16 @@ impl Host for AppHost<'_> {
 
     fn process_env(&self, name: &str) -> Option<String> {
         self.process_env.get(name).cloned()
+    }
+
+    fn call(&mut self, name: &str, args: &[(String, FunctionArg)]) -> Result<String, String> {
+        match (name, &mut self.functions) {
+            ("response" | "header", Some(functions)) => functions.call(name, args),
+            ("response" | "header", None) => {
+                Err(format!("`{name}` cannot reach other requests here"))
+            }
+            _ => Err(format!("unknown function `{name}`")),
+        }
     }
 
     fn prompt(&mut self, label: &str) -> Option<String> {

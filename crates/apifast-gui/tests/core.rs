@@ -1196,3 +1196,32 @@ fn a_capture_feeds_the_next_send_and_checks_reach_the_tab() {
     let passed: Vec<bool> = checks.assertions.iter().map(|a| a.verdict.passed).collect();
     assert_eq!(passed, [true, false], "{checks:?}");
 }
+
+#[test]
+fn a_request_uses_another_ones_response_which_shows_in_the_history() {
+    let dir = collection(server(Duration::ZERO));
+    std::fs::write(
+        dir.path().join("chained.yml"),
+        "info:\n  name: Chained\n  type: http\nhttp:\n  method: GET\n  url: \"{{host}}/len/{{ header(request='health', name='content-length') }}\"\n",
+    )
+    .unwrap();
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    core.send(Command::OpenRequest(RequestPath::new("chained.yml")));
+    wait(&core, "the tab", |s| s.active_tab().is_some());
+    core.send(Command::Send);
+    let snapshot = wait(&core, "both entries", |s| s.history.len() == 2);
+    let requests: Vec<&str> = snapshot
+        .history
+        .iter()
+        .map(|e| e.request.as_str())
+        .collect();
+    assert_eq!(requests, ["health.yml", "chained.yml"]);
+    // The server answers with the request line: `GET /health HTTP/1.1`.
+    let snapshot = wait(&core, "the response", |s| {
+        matches!(response(s), ResponseState::Received(_))
+    });
+    let body = received(&snapshot).body.read(0, 100).unwrap();
+    assert_eq!(String::from_utf8(body).unwrap(), "GET /len/20 HTTP/1.1");
+}
