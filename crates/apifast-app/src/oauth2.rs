@@ -483,3 +483,150 @@ mod tests {
         );
     }
 }
+
+/// What the interface shows of a stored token; never the token itself.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TokenInfo {
+    /// When it expires, in milliseconds since the Unix epoch.
+    pub expires_at_ms: Option<i64>,
+    /// The scope granted.
+    pub scope: Option<String>,
+    /// `token_type`.
+    pub token_type: Option<String>,
+    /// Whether it has a refresh token.
+    pub refreshable: bool,
+}
+
+impl From<&OAuth2Token> for TokenInfo {
+    fn from(token: &OAuth2Token) -> Self {
+        Self {
+            expires_at_ms: token.expires_at_ms,
+            scope: token.scope.clone(),
+            token_type: token.token_type.clone(),
+            refreshable: token.refresh_token.is_some(),
+        }
+    }
+}
+
+/// The OAuth 2.0 auth of the request at `path`, inherited or its own, and
+/// its rendered fields; `None` when it has another auth.
+fn target<C, E, T, S>(
+    ports: &crate::SendPorts<'_, C, E, T, S>,
+    path: &crate::RequestPath,
+    options: &crate::SendOptions,
+) -> Result<Option<(OAuth2Auth, Rendered)>, AppError>
+where
+    C: crate::CollectionRepository,
+    E: crate::EnvironmentRepository,
+{
+    let mut loaded = ports.collections.request(path)?;
+    if let Some(draft) = &options.draft {
+        loaded.request = draft.clone();
+    }
+    let collection = ports.collections.collection()?;
+    let resolved = apifast_domain::resolve(apifast_domain::Chain::new(
+        &collection,
+        &loaded.folders,
+        &loaded.request,
+    ));
+    let AuthScheme::OAuth2(oauth) = &resolved.auth().value else {
+        return Ok(None);
+    };
+    let mut variables = crate::resolve_request_variables(
+        ports.collections,
+        ports.environments,
+        &loaded,
+        options.environment.as_deref(),
+        &options.runtime,
+    )?;
+    for (name, environment) in variables.secrets_without_value() {
+        if let Some(value) = ports.secrets.secret(&environment, &name)? {
+            variables.fill_secret(&name, VariableValue::text(value.expose()));
+        }
+    }
+    let mut host = crate::AppHost::new(
+        ports.clock,
+        ports.random,
+        ports.prompter,
+        ports.environments.process_env()?,
+    );
+    let rendered = render_fields(oauth, &variables, &mut host)?;
+    Ok(Some((oauth.as_ref().clone(), rendered)))
+}
+
+fn no_oauth2() -> AppError {
+    AppError::Validation("this request does not use OAuth 2.0".into())
+}
+
+/// The token stored for the request at `path`, as the interface shows it.
+///
+/// # Errors
+///
+/// If the request cannot be read or its fields rendered, or the store
+/// fails.
+pub fn stored_token<C, E, T, S>(
+    ports: &crate::SendPorts<'_, C, E, T, S>,
+    path: &crate::RequestPath,
+    options: &crate::SendOptions,
+) -> Result<Option<TokenInfo>, AppError>
+where
+    C: crate::CollectionRepository,
+    E: crate::EnvironmentRepository,
+{
+    let (Some((_, rendered)), Some(store)) = (target(ports, path, options)?, ports.tokens) else {
+        return Ok(None);
+    };
+    Ok(store.token(&rendered.key())?.as_ref().map(TokenInfo::from))
+}
+
+/// Gets a new token for the request at `path` from its token endpoint,
+/// whatever is stored, and stores it.
+///
+/// # Errors
+///
+/// If the request does not use OAuth 2.0, or the token request fails.
+pub async fn get_new_token<C, E, T, S>(
+    ports: crate::SendPorts<'_, C, E, T, S>,
+    path: &crate::RequestPath,
+    options: &crate::SendOptions,
+    cancel: &CancelToken,
+) -> Result<TokenInfo, AppError>
+where
+    C: crate::CollectionRepository + Sync,
+    E: crate::EnvironmentRepository + Sync,
+    T: HttpTransport + Sync,
+{
+    let (_, rendered) = target(&ports, path, options)?.ok_or_else(no_oauth2)?;
+    let token = fetch(
+        ports.transport,
+        &rendered,
+        ports.clock.unix_millis(),
+        cancel,
+    )
+    .await?;
+    if let Some(store) = ports.tokens {
+        store.save(&rendered.key(), &token)?;
+    }
+    Ok(TokenInfo::from(&token))
+}
+
+/// Forgets the token stored for the request at `path`.
+///
+/// # Errors
+///
+/// If the request does not use OAuth 2.0, or the store fails.
+pub fn forget_token<C, E, T, S>(
+    ports: &crate::SendPorts<'_, C, E, T, S>,
+    path: &crate::RequestPath,
+    options: &crate::SendOptions,
+) -> Result<(), AppError>
+where
+    C: crate::CollectionRepository,
+    E: crate::EnvironmentRepository,
+{
+    let (_, rendered) = target(ports, path, options)?.ok_or_else(no_oauth2)?;
+    if let Some(store) = ports.tokens {
+        store.forget(&rendered.key())?;
+    }
+    Ok(())
+}

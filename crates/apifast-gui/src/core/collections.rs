@@ -39,7 +39,7 @@ pub(super) struct Open {
     /// the collection is loaded.
     pub(super) runtime: Vec<Variable>,
     /// OAuth 2.0 tokens, kept while the collection is loaded.
-    pub(super) tokens: Arc<apifast_app::memory::MemoryTokens>,
+    pub(super) tokens: Arc<dyn apifast_app::TokenStore>,
     /// Values captured for the active environment, waiting for the user.
     pub(super) captured: Option<super::captures::Captured>,
     /// Its folders and requests.
@@ -271,6 +271,7 @@ impl State {
             sessions,
             history,
             vault,
+            tokens,
         } = stores(&self.data_dir, root, id, (shared, self.keyring))?;
 
         let (session, error) = match sessions.load() {
@@ -307,7 +308,7 @@ impl State {
                 opened,
                 vault,
                 runtime: Vec::new(),
-                tokens: Arc::default(),
+                tokens,
                 captured: None,
                 tree: Arc::new(tree),
                 environment_files: Arc::new(environment_files),

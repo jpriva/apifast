@@ -86,7 +86,7 @@ La cabecera de la barra lateral tiene:
 | Params | Tabla de parámetros de query y de ruta, sincronizada con la URL |
 | Headers | Tabla clave/valor; los heredados aparecen atenuados con su origen |
 | Body | Selector de tipo y editor: código, tabla de formulario o selector de archivo |
-| Auth | Selector de tipo y sus campos; "heredada" muestra de quién |
+| Auth | Selector de tipo y sus campos; "heredada" muestra de quién. Con OAuth 2.0 (propia o heredada), el estado del token guardado ("valid for 52 min", "expired", ninguno) y los botones "Get new token" y "Forget token" |
 | Vars | Variables de la request y capturas |
 | Tests | Aserciones (expresión, operador, valor esperado) y capturas (expresión, variable, ámbito) |
 | Docs | Markdown con vista previa |

@@ -87,8 +87,16 @@ pub fn history_file_in(data_dir: &Path, root: &Path, collection_id: Option<&str>
         .join(format!("{}.jsonl", collection_key(root, collection_id)))
 }
 
+/// File with the OAuth 2.0 tokens of the collection at `root`, sealed with
+/// the master key, under `data_dir`, keyed like [`responses_dir`].
+pub fn tokens_file_in(data_dir: &Path, root: &Path, collection_id: Option<&str>) -> PathBuf {
+    data_dir
+        .join("oauth2")
+        .join(format!("{}.tokens", collection_key(root, collection_id)))
+}
+
 /// Moves what apifast keeps of the collection at `root` under `data_dir`
-/// (responses, session and history) from its path's hash to `id`, when the
+/// (responses, session, history and tokens) from its path's hash to `id`, when the
 /// collection gets an id. What is already under `id` is left alone.
 ///
 /// # Errors
@@ -107,6 +115,10 @@ pub fn move_to_id(data_dir: &Path, root: &Path, id: &str) -> std::io::Result<()>
         (
             history_file_in(data_dir, root, None),
             history_file_in(data_dir, root, Some(id)),
+        ),
+        (
+            tokens_file_in(data_dir, root, None),
+            tokens_file_in(data_dir, root, Some(id)),
         ),
     ];
     for (from, to) in moves {

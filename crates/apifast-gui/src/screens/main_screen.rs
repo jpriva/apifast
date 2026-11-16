@@ -127,6 +127,8 @@ impl MainScreen {
         let sending = active.is_some_and(|tab| tab.response == ResponseState::Sending);
         let selected = snapshot.active.as_ref();
         self.request.format_shortcuts = Some(self.keymap.shortcuts(Action::FormatBody));
+        self.request.token_busy =
+            snapshot.getting_token.is_some() && snapshot.getting_token == snapshot.active;
         self.response.pretty_limit = Some(self.settings.pretty_limit());
         let focus_url = std::mem::take(&mut self.focus_url);
         let notice = self.notice.as_deref();
@@ -187,22 +189,12 @@ impl MainScreen {
             },
         );
 
-        let mut commands: Vec<Command> = pasted_key
-            .map(|key| Command::Vault(VaultCommand::ImportKey(key)))
-            .into_iter()
-            .collect();
-        if let (Some(save), Some(collection)) = (save_captures, collection) {
-            commands.push(Command::SaveCaptures {
-                root: collection.root.clone(),
-                save,
-            });
-        }
-        if let (Some(keep_draft), Some(tab)) = (resolve, active) {
-            commands.push(Command::ResolveConflict {
-                tab: tab.key(),
-                keep_draft,
-            });
-        }
+        let token = self.request.token_action.take();
+        let mut commands = banner_commands(
+            (pasted_key, token, save_captures, resolve),
+            collection,
+            active,
+        );
         if edit_environments {
             self.environments.open = !self.environments.open;
         }
@@ -723,6 +715,43 @@ fn key_banner(ui: &mut egui::Ui, text: &mut String, strings: &Strings) -> Option
         });
     ui.add_space(theme::space::S);
     key
+}
+
+/// What the banners and the token buttons asked for: a pasted key, the
+/// token of the active tab, the captures to save, a conflict resolved.
+fn banner_commands(
+    (pasted_key, token, save_captures, resolve): (
+        Option<Secret>,
+        Option<crate::organisms::TokenAction>,
+        Option<bool>,
+        Option<bool>,
+    ),
+    collection: Option<&crate::core::CollectionView>,
+    active: Option<&Tab>,
+) -> Vec<Command> {
+    let mut commands: Vec<Command> = pasted_key
+        .map(|key| Command::Vault(VaultCommand::ImportKey(key)))
+        .into_iter()
+        .collect();
+    if let (Some(action), Some(tab)) = (token, active) {
+        commands.push(match action {
+            crate::organisms::TokenAction::Get => Command::GetToken(tab.key()),
+            crate::organisms::TokenAction::Forget => Command::ForgetToken(tab.key()),
+        });
+    }
+    if let (Some(save), Some(collection)) = (save_captures, collection) {
+        commands.push(Command::SaveCaptures {
+            root: collection.root.clone(),
+            save,
+        });
+    }
+    if let (Some(keep_draft), Some(tab)) = (resolve, active) {
+        commands.push(Command::ResolveConflict {
+            tab: tab.key(),
+            keep_draft,
+        });
+    }
+    commands
 }
 
 /// The banners over the editor about the focused collection: its key is

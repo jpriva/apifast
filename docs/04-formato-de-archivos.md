@@ -416,6 +416,7 @@ El historial, las respuestas, las cookies y la bóveda local viven en el directo
 ├── keys/<collection-id>.key          # clave de la colección, envuelta
 ├── vault/<collection-id>.vault       # secretos solo locales, cifrados (JSON, 0600)
 ├── cookies/<collection-id>.jar       # cookies, cifradas
+├── oauth2/<collection-id>.tokens     # tokens OAuth 2.0, cada uno sellado (JSON, 0600)
 ├── history/<collection-id>.jsonl     # índice de ejecuciones
 ├── responses/<collection-id>/        # cuerpos de respuesta
 ├── sessions/<collection-id>/         # pestañas abiertas de la colección

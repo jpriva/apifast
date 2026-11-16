@@ -12,6 +12,7 @@
 mod captures;
 mod collections;
 mod runner;
+mod tokens;
 mod vault;
 mod workspace;
 
@@ -31,8 +32,8 @@ use apifast_app::{
     CollectionTree, HistoryEntry, HistoryLimits, HistoryOutcome, HistoryStore, ItemPath,
     NoPrompter, NoSecrets, Placement, RequestPath, ResponseHead, ResponseId, ResponseStore,
     SecretStore, SendOptions, SendPorts, Session, SessionStore, SessionTab, SharedSecretFiles,
-    TransportError, apply_captures, create_folder, create_request, delete_item, load_request,
-    move_item, rename_item, resolve_request_variables, save_request, send_request,
+    TokenStore, TransportError, apply_captures, create_folder, create_request, delete_item,
+    load_request, move_item, rename_item, resolve_request_variables, save_request, send_request,
 };
 use apifast_domain::{
     AuthScheme, Chain, Collection, Environment, Header, HttpRequest, Origin, Resolved,
@@ -47,6 +48,7 @@ use tokio::sync::mpsc;
 use crate::body::{BodyHandle, BodySource};
 use crate::system::{SystemClock, SystemRandom};
 pub use runner::{RunSettings, RunView};
+use tokens::token_state;
 
 /// How much history is kept by default: entries beyond these are removed
 /// when a collection opens (see [`Command::Configure`]).
@@ -87,11 +89,18 @@ fn stores(
         .map(|id| VaultSecrets::for_collection(data_dir, id, shared, keyring).map(Arc::new))
         .transpose()
         .map_err(|e| e.to_string())?;
+    // OAuth 2.0 tokens, sealed with the master key, for any collection.
+    let tokens = apifast_vault::FsTokenStore::new(
+        apifast_history::dirs::tokens_file_in(data_dir, root, id),
+        data_dir,
+        keyring,
+    );
     Ok(Stores {
         responses,
         sessions,
         history,
         vault: secrets,
+        tokens: Arc::new(tokens),
     })
 }
 
@@ -101,6 +110,7 @@ struct Stores {
     sessions: FsSessionStore,
     history: FsHistoryStore,
     vault: Option<Arc<VaultSecrets>>,
+    tokens: Arc<dyn TokenStore>,
 }
 
 /// A response whose body is in `store`.
@@ -343,6 +353,11 @@ pub enum Command {
         /// What to run and how.
         settings: RunSettings,
     },
+    /// Gets a new OAuth 2.0 token for the request of the tab, in the
+    /// background.
+    GetToken(TabKey),
+    /// Forgets the OAuth 2.0 token stored for the request of the tab.
+    ForgetToken(TabKey),
     /// Stops the run that is going.
     StopRun,
     /// Forgets a run that ended.
@@ -407,6 +422,8 @@ pub struct Snapshot {
     pub captured: Option<PendingCaptures>,
     /// The last run of the collection runner, of any collection.
     pub run: Option<RunView>,
+    /// The tab whose OAuth 2.0 token is being obtained.
+    pub getting_token: Option<TabKey>,
 }
 
 impl Snapshot {
@@ -516,8 +533,24 @@ pub struct TabContext {
     pub inherited_auth: Resolved<AuthScheme>,
     /// The settings the request gets for each one it inherits.
     pub inherited_settings: ResolvedSettings,
+    /// The OAuth 2.0 token stored for the request, when it uses OAuth 2.0.
+    pub token: TokenState,
     /// Changes whenever it is worked out again.
     pub revision: u64,
+}
+
+/// What the interface knows of a request's OAuth 2.0 token.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum TokenState {
+    /// The request does not use OAuth 2.0.
+    #[default]
+    NotUsed,
+    /// It does, and no token is stored.
+    Missing,
+    /// A token is stored.
+    Stored(apifast_app::TokenInfo),
+    /// The stored tokens cannot be read.
+    Unreadable(String),
 }
 
 impl Default for TabContext {
@@ -533,6 +566,7 @@ impl Default for TabContext {
             inherited_headers: Vec::new(),
             inherited_auth: Resolved::new(AuthScheme::None, Origin::Default),
             inherited_settings: nothing.settings().clone(),
+            token: TokenState::NotUsed,
             revision: 0,
         }
     }
@@ -617,6 +651,8 @@ enum Message {
     WriteSession,
     /// News of run number `.0`.
     Run(u64, runner::RunMessage),
+    /// The token for the tab was obtained, or why not.
+    TokenObtained(TabKey, Result<(), String>),
 }
 
 /// How a send ended: its number, its collection, its result and its
@@ -787,6 +823,7 @@ impl State {
                 }
                 Message::SendFinished(finished) => self.finish_send(*finished),
                 Message::Run(id, message) => self.run_message(id, message),
+                Message::TokenObtained(key, result) => self.token_obtained(&key, result),
                 Message::HistoryLoaded(opened, entries) => self.history_loaded(opened, entries),
                 Message::HideShown(shown) => self.hide_shown(shown),
                 Message::External(opened, changes) => {
@@ -911,6 +948,8 @@ impl State {
             Command::SaveCaptures { root, save } => self.save_captures(&root, save),
             Command::Run { root, settings } => self.start_run(&root, settings),
             Command::StopRun => self.stop_run(),
+            Command::GetToken(key) => self.get_token(key),
+            Command::ForgetToken(key) => self.forget_token(&key),
             Command::CloseRun => self.close_run(),
             Command::OpenRunStep(index) => self.open_run_step(index),
         }
@@ -1117,7 +1156,17 @@ impl State {
         bare.auth = Setting::Inherit;
         bare.settings = Settings::default();
         let inherited = resolve(Chain::new(&collection, &loaded.folders, &bare));
+        let uses_oauth2 = matches!(
+            (&request.auth, &inherited.auth().value),
+            (Setting::Set(AuthScheme::OAuth2(_)), _) | (Setting::Inherit, AuthScheme::OAuth2(_))
+        );
+        let token = if uses_oauth2 {
+            token_state(open, key, request)
+        } else {
+            TokenState::NotUsed
+        };
         TabContext {
+            token,
             variables,
             folders: loaded.folders.iter().map(|f| f.name.clone()).collect(),
             inherited_headers: inherited.headers().to_vec(),
@@ -1180,7 +1229,7 @@ impl State {
                 secrets: &*secrets,
                 report: &|_| {},
                 history: Some(&*history),
-                tokens: Some(&*tokens),
+                tokens: Some(tokens.as_ref()),
             };
             let at_ms = clock.unix_millis();
             let result = send_request(ports, &key.path, &options, &cancel).await;

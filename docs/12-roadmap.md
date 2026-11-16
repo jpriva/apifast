@@ -304,7 +304,7 @@ Siguiente, fuera de esta sección: los entornos globales del workspace (`environ
 - [ ] OAuth 2.0: authorization code con PKCE, client credentials, password; caché cifrada y refresco. Por fases:
   - [x] A. Modelo completo (`OAuth2Auth`): se lee y se guarda con el bloque de Bruno, cambiando solo las claves afectadas, y se edita en la pestaña Auth con los campos de cada flujo.
   - [x] B. Obtener y refrescar el token (client credentials y password) y aplicarlo al enviar. Antes de renderizar, el envío toma el token guardado, lo refresca o pide uno nuevo, y lo pone en el header o la query como variable secreta. Por ahora los tokens se guardan en memoria (`MemoryTokens`). Probado con un servidor guionizado (caché, refresco, errores, query, `id_token`) y de extremo a extremo con la CLI contra un servidor OAuth local.
-  - [ ] C. Caché de tokens cifrada con la clave maestra; ver y borrar el token en la interfaz.
+  - [x] C. Caché de tokens cifrada con la clave maestra; ver y borrar el token en la interfaz. `FsTokenStore` sella cada token en `oauth2/<colección>.tokens`, para cualquier colección (no necesita id); la interfaz lo usa y sobrevive a un reinicio, la CLI sigue en memoria. La pestaña Auth muestra el estado del token y obtiene uno nuevo o lo olvida.
   - [ ] D. Authorization code con PKCE: navegador del sistema y servidor local temporal para el *callback*.
 - [ ] Proxy: sistema y manual (HTTP, HTTPS, SOCKS5), exclusiones, por colección.
 - [ ] Autoridades certificadoras adicionales y certificados cliente por host.

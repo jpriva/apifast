@@ -287,7 +287,7 @@ struct Ports {
     transport: Arc<apifast_http::ReqwestTransport>,
     responses: Arc<apifast_history::FsResponseStore>,
     history: Arc<apifast_history::FsHistoryStore>,
-    tokens: Arc<apifast_app::memory::MemoryTokens>,
+    tokens: Arc<dyn apifast_app::TokenStore>,
     secrets: Arc<dyn SecretStore + Send>,
 }
 
@@ -321,7 +321,7 @@ fn spawn_run(
             secrets: &*secrets,
             report: &|_| {},
             history: Some(&*history),
-            tokens: Some(&*tokens),
+            tokens: Some(tokens.as_ref()),
         };
         let tell = |message: RunMessage| {
             if let Some(messages) = messages.upgrade() {

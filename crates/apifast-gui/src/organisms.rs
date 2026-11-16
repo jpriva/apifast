@@ -26,7 +26,7 @@ pub use history::{HistoryView, ago, matches};
 pub use kv_table::{BulkRow, KvRow, KvTable, from_bulk, to_bulk};
 pub use oauth2_editor::oauth2_fields;
 pub use palette::{CommandPalette, PaletteItem, PaletteMode, fuzzy};
-pub use request_panel::{RequestChange, RequestPanel, RequestTab};
+pub use request_panel::{RequestChange, RequestPanel, RequestTab, TokenAction};
 pub use response::{
     BodyMode, COPY_LIMIT, PRETTY_LIMIT, ResponseTab, ResponseView, describe, millis,
 };

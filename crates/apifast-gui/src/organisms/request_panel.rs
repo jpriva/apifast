@@ -10,7 +10,7 @@ use eframe::egui::{self, RichText};
 use crate::actions::Action;
 use crate::atoms::{CodeEditor, TemplateField, TemplateFieldTexts, VariableHints};
 use crate::code::{self, HIGHLIGHT_LIMIT, Language};
-use crate::core::TabContext;
+use crate::core::{TabContext, TokenState};
 use crate::organisms::KvTable;
 use crate::strings::Strings;
 use crate::theme;
@@ -56,6 +56,20 @@ pub struct RequestPanel {
     pub format_shortcuts: Option<Vec<egui::KeyboardShortcut>>,
     /// Format the body on the next frame, as if its button was pressed.
     pub format_now: bool,
+    /// Whether an OAuth 2.0 token is being obtained for this request.
+    pub token_busy: bool,
+    /// What the user asked of the OAuth 2.0 token, once, since the last
+    /// time it was taken.
+    pub token_action: Option<TokenAction>,
+}
+
+/// What the user can ask of a request's OAuth 2.0 token.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokenAction {
+    /// Get a new one now.
+    Get,
+    /// Forget the stored one.
+    Forget,
 }
 
 impl RequestPanel {
@@ -101,8 +115,16 @@ impl RequestPanel {
                     body(ui, &mut request.body, (&shortcuts, now), hints, strings)
                         .then_some(RequestChange::Other)
                 }
-                RequestTab::Auth => auth(ui, &mut request.auth, context, hints, strings)
-                    .then_some(RequestChange::Other),
+                RequestTab::Auth => {
+                    let changed = auth(ui, &mut request.auth, context, hints, strings);
+                    if context.token != TokenState::NotUsed {
+                        ui.add_space(theme::space::M);
+                        let busy = self.token_busy;
+                        self.token_action = token_row(ui, &context.token, busy, strings)
+                            .or(self.token_action.take());
+                    }
+                    changed.then_some(RequestChange::Other)
+                }
                 RequestTab::Tests => crate::organisms::tests_panel(ui, request, hints, strings)
                     .then_some(RequestChange::Other),
                 RequestTab::Settings => {
@@ -110,6 +132,60 @@ impl RequestPanel {
                 }
             })
             .inner
+    }
+}
+
+/// The stored OAuth 2.0 token: when it expires, and buttons to get a new
+/// one or forget it.
+fn token_row(
+    ui: &mut egui::Ui,
+    token: &TokenState,
+    busy: bool,
+    strings: &Strings,
+) -> Option<TokenAction> {
+    let palette = theme::palette(ui);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX));
+    let (text, color) = match token {
+        TokenState::NotUsed => return None,
+        TokenState::Missing => (strings.token_none.to_owned(), palette.text_muted),
+        TokenState::Unreadable(e) => (e.clone(), palette.danger),
+        TokenState::Stored(info) => match info.expires_at_ms {
+            Some(at) if at <= now => (strings.token_expired.to_owned(), palette.warning),
+            Some(at) => (
+                strings
+                    .token_expires_in
+                    .replace("{time}", &until(at.saturating_sub(now))),
+                palette.success,
+            ),
+            None => (strings.token_no_expiry.to_owned(), palette.success),
+        },
+    };
+    let mut action = None;
+    ui.horizontal_wrapped(|ui| {
+        ui.label(RichText::new(strings.token_label).strong());
+        ui.label(RichText::new(text).color(color));
+        if busy {
+            ui.spinner();
+        } else if ui.button(strings.token_get).clicked() {
+            action = Some(TokenAction::Get);
+        }
+        if matches!(token, TokenState::Stored(_)) && ui.button(strings.token_forget).clicked() {
+            action = Some(TokenAction::Forget);
+        }
+    });
+    action
+}
+
+/// A time span for people: `45 s`, `12 min`, `3 h`, `2 d`.
+fn until(ms: i64) -> String {
+    let s = ms / 1000;
+    match s {
+        ..60 => format!("{s} s"),
+        60..3600 => format!("{} min", s / 60),
+        3600..86_400 => format!("{} h", s / 3600),
+        _ => format!("{} d", s / 86_400),
     }
 }
 

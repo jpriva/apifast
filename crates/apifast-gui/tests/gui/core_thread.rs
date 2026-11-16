@@ -1767,3 +1767,107 @@ fn the_runner_runs_a_folder_in_the_background_and_opens_a_step() {
     core.send(Command::CloseRun);
     wait(&core, "closed", |s| s.run.is_none());
 }
+
+/// A token endpoint at `/token` that numbers its tokens, and an API that
+/// answers with the `Authorization` it got.
+fn token_server() -> (u16, Arc<AtomicUsize>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let issued = Arc::new(AtomicUsize::new(0));
+    let count = issued.clone();
+    std::thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut first = String::new();
+            reader.read_line(&mut first).ok();
+            let (mut line, mut length, mut authorization) = (String::new(), 0, String::new());
+            while reader.read_line(&mut line).is_ok_and(|n| n > 2) {
+                let lower = line.to_lowercase();
+                if let Some(v) = lower.strip_prefix("content-length:") {
+                    length = v.trim().parse().unwrap_or(0);
+                }
+                if lower.starts_with("authorization:") {
+                    line[14..].trim().clone_into(&mut authorization);
+                }
+                line.clear();
+            }
+            let mut body = vec![0; length];
+            std::io::Read::read_exact(&mut reader, &mut body).ok();
+            let reply = if first.contains("/token") {
+                let n = count.fetch_add(1, Ordering::Relaxed) + 1;
+                format!(r#"{{"access_token":"secret-token-{n}","expires_in":3600}}"#)
+            } else {
+                authorization
+            };
+            let mut stream = stream;
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
+                reply.len()
+            );
+        }
+    });
+    (port, issued)
+}
+
+#[test]
+fn oauth2_tokens_are_kept_sealed_got_on_demand_and_forgotten() {
+    use apifast_gui::core::TokenState;
+    let (port, issued) = token_server();
+    let dir = collection(port);
+    std::fs::write(
+        dir.path().join("users/get.yml"),
+        format!("info:\n  name: Get\n  type: http\nhttp:\n  method: GET\n  url: http://127.0.0.1:{port}/users\n  auth:\n    type: oauth2\n    flow: client_credentials\n    accessTokenUrl: http://127.0.0.1:{port}/token\n    credentials:\n      clientId: cli\n      clientSecret: shh\n"),
+    )
+    .unwrap();
+    let data = tempfile::tempdir().unwrap();
+    let start_core = || {
+        Core::start_with(data.path().to_path_buf(), SystemKeyring::off(), || {})
+    };
+    let token_of = |s: &Snapshot| s.active_tab().map(|t| t.context.token.clone());
+
+    let core = start_core();
+    open(&core, dir.path());
+    core.send(Command::OpenRequest(at(&core, "users/get.yml")));
+    wait(&core, "no token", |s| token_of(s) == Some(TokenState::Missing));
+
+    let key = at(&core, "users/get.yml");
+    core.send(Command::GetToken(key.clone()));
+    let snapshot = wait(&core, "a token", |s| {
+        matches!(token_of(s), Some(TokenState::Stored(_))) || s.error.is_some()
+    });
+    assert_eq!(snapshot.error, None);
+    let Some(TokenState::Stored(info)) = token_of(&snapshot) else {
+        unreachable!()
+    };
+    assert!(info.expires_at_ms.is_some());
+
+    // Sealed on disk.
+    let tokens = std::fs::read_dir(data.path().join("oauth2")).unwrap();
+    for file in tokens.flatten() {
+        let text = std::fs::read_to_string(file.path()).unwrap();
+        assert!(!text.contains("secret-token"), "{text}");
+    }
+
+    // A send uses it, without asking for another.
+    core.send(Command::Send);
+    let snapshot = wait(&core, "the response", |s| {
+        matches!(response(s), ResponseState::Received(_) | ResponseState::Failed(_))
+    });
+    let ResponseState::Received(received) = response(&snapshot) else {
+        panic!("{:?}", response(&snapshot));
+    };
+    assert_eq!(received.body.read(0, 100).unwrap(), b"Bearer secret-token-1");
+    assert_eq!(issued.load(Ordering::Relaxed), 1);
+    drop(core);
+
+    // Still there after a restart.
+    let core = start_core();
+    open(&core, dir.path());
+    core.send(Command::OpenRequest(at(&core, "users/get.yml")));
+    wait(&core, "the kept token", |s| {
+        matches!(token_of(s), Some(TokenState::Stored(_)))
+    });
+    core.send(Command::ForgetToken(at(&core, "users/get.yml")));
+    wait(&core, "forgotten", |s| token_of(s) == Some(TokenState::Missing));
+}

@@ -438,6 +438,20 @@ pub struct Strings {
     pub oauth2_auto_refresh: &'static str,
     /// OAuth 2.0: extra parameters; `{count}` is replaced.
     pub oauth2_parameters_kept: &'static str,
+    /// OAuth 2.0: before the token's state.
+    pub token_label: &'static str,
+    /// OAuth 2.0: no token stored.
+    pub token_none: &'static str,
+    /// OAuth 2.0: the token expired.
+    pub token_expired: &'static str,
+    /// OAuth 2.0: `{time}` is replaced.
+    pub token_expires_in: &'static str,
+    /// OAuth 2.0: a token without expiry.
+    pub token_no_expiry: &'static str,
+    /// OAuth 2.0: get a new token now.
+    pub token_get: &'static str,
+    /// OAuth 2.0: forget the stored token.
+    pub token_forget: &'static str,
     /// Mark of an assertion that held.
     pub pass: &'static str,
     /// Mark of an assertion that did not.
@@ -871,6 +885,13 @@ pub const EN: Strings = Strings {
     oauth2_auto_fetch: "Get a token when there is none",
     oauth2_auto_refresh: "Refresh an expired token",
     oauth2_parameters_kept: "{count} extra parameters, kept from the file",
+    token_label: "Token",
+    token_none: "none yet: one is obtained when sending",
+    token_expired: "expired",
+    token_expires_in: "valid for {time}",
+    token_no_expiry: "valid, no expiry given",
+    token_get: "Get new token",
+    token_forget: "Forget token",
     pass: "PASS",
     fail: "FAIL",
     captures: "Captures",
