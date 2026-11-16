@@ -78,48 +78,57 @@ fn param() -> impl Strategy<Value = Param> {
     })
 }
 
-fn auth() -> impl Strategy<Value = Setting<AuthScheme>> {
+/// Every alternative is boxed: unboxed, the type of the whole choice is too
+/// big for a test thread's stack in debug builds.
+fn auth() -> BoxedStrategy<Setting<AuthScheme>> {
+    let basic = (text(), text())
+        .prop_map(|(username, password)| AuthScheme::Basic(BasicAuth { username, password }));
+    let bearer = text().prop_map(|token| AuthScheme::Bearer(BearerAuth { token }));
+    let digest = (text(), text()).prop_map(|(username, password)| {
+        AuthScheme::Digest(apifast_domain::DigestAuth { username, password })
+    });
+    let ntlm = (text(), text(), text()).prop_map(|(username, password, domain)| {
+        AuthScheme::Ntlm(apifast_domain::NtlmAuth {
+            username,
+            password,
+            domain,
+        })
+    });
+    let api_key = (text(), text(), any::<bool>()).prop_map(|(key, value, query)| {
+        AuthScheme::ApiKey(ApiKeyAuth {
+            key,
+            value,
+            placement: if query {
+                ApiKeyPlacement::Query
+            } else {
+                ApiKeyPlacement::Header
+            },
+        })
+    });
+    let aws = ((text(), text(), text()), (text(), text(), text())).prop_map(
+        |((access_key_id, secret_access_key, session_token), (service, region, profile_name))| {
+            AuthScheme::AwsV4(Box::new(AwsV4Auth {
+                access_key_id,
+                secret_access_key,
+                session_token,
+                service,
+                region,
+                profile_name,
+            }))
+        },
+    );
+    let set = |scheme: BoxedStrategy<AuthScheme>| scheme.prop_map(Setting::Set).boxed();
     prop_oneof![
-        Just(Setting::Inherit),
-        Just(Setting::Set(AuthScheme::None)),
-        (text(), text()).prop_map(|(username, password)| Setting::Set(AuthScheme::Basic(
-            BasicAuth { username, password }
-        ))),
-        text().prop_map(|token| Setting::Set(AuthScheme::Bearer(BearerAuth { token }))),
-        (text(), text()).prop_map(|(username, password)| Setting::Set(AuthScheme::Digest(
-            apifast_domain::DigestAuth { username, password }
-        ))),
-        (text(), text(), text()).prop_map(|(username, password, domain)| Setting::Set(
-            AuthScheme::Ntlm(apifast_domain::NtlmAuth {
-                username,
-                password,
-                domain
-            })
-        )),
-        (text(), text(), any::<bool>()).prop_map(|(key, value, query)| Setting::Set(
-            AuthScheme::ApiKey(ApiKeyAuth {
-                key,
-                value,
-                placement: if query {
-                    ApiKeyPlacement::Query
-                } else {
-                    ApiKeyPlacement::Header
-                },
-            })
-        )),
-        (text(), text(), text(), text(), text(), text()).prop_map(
-            |(access_key_id, secret_access_key, session_token, service, region, profile_name)| {
-                Setting::Set(AuthScheme::AwsV4(Box::new(AwsV4Auth {
-                    access_key_id,
-                    secret_access_key,
-                    session_token,
-                    service,
-                    region,
-                    profile_name,
-                })))
-            }
-        ),
+        Just(Setting::Inherit).boxed(),
+        Just(Setting::Set(AuthScheme::None)).boxed(),
+        set(basic.boxed()),
+        set(bearer.boxed()),
+        set(digest.boxed()),
+        set(ntlm.boxed()),
+        set(api_key.boxed()),
+        set(aws.boxed()),
     ]
+    .boxed()
 }
 
 fn body() -> impl Strategy<Value = Body> {
