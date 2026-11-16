@@ -308,6 +308,81 @@ pub struct Strings {
     pub timeline: &'static str,
     /// Shown when a response has no timeline.
     pub timeline_empty: &'static str,
+    /// Request and response tab with the assertions and captures.
+    pub tests: &'static str,
+    /// Heading of the assertions.
+    pub assertions: &'static str,
+    /// Banner over the editor; `{environment}` and `{names}` are replaced.
+    pub captured_for_environment: &'static str,
+    /// Writes the captured values to the environment.
+    pub save_to_environment: &'static str,
+    /// Forgets the captured values.
+    pub discard_captures: &'static str,
+    /// Title of the runner window.
+    pub runner: &'static str,
+    /// Tree menu: open the runner on a collection or folder.
+    pub run_menu: &'static str,
+    /// Runner: include subfolders.
+    pub run_recursive: &'static str,
+    /// Runner: only requests with one of these tags.
+    pub run_tags: &'static str,
+    /// Runner: no requests with these tags.
+    pub run_exclude_tags: &'static str,
+    /// Runner: pause between requests.
+    pub run_delay: &'static str,
+    /// Runner: repetitions.
+    pub run_iterations: &'static str,
+    /// Runner: the data file, and the title of its picker.
+    pub run_data: &'static str,
+    /// Runner: choose a data file.
+    pub run_data_pick: &'static str,
+    /// Runner: stop using the data file.
+    pub run_data_clear: &'static str,
+    /// Runner: stop at the first failure.
+    pub run_bail: &'static str,
+    /// Runner: start.
+    pub run_start: &'static str,
+    /// Runner: stop the run.
+    pub run_stop: &'static str,
+    /// Runner: forget the results.
+    pub run_clear: &'static str,
+    /// Runner: before the iteration number.
+    pub run_iteration: &'static str,
+    /// Runner totals; the braces are replaced.
+    pub run_summary: &'static str,
+    /// Runner: before the report formats.
+    pub run_export: &'static str,
+    /// Runner: mark of a skipped request.
+    pub run_skip: &'static str,
+    /// Runner: mark of a request that could not be sent.
+    pub run_error: &'static str,
+    /// Runner: hover of a step.
+    pub run_open_step: &'static str,
+    /// Mark of an assertion that held.
+    pub pass: &'static str,
+    /// Mark of an assertion that did not.
+    pub fail: &'static str,
+    /// Heading of the captures.
+    pub captures: &'static str,
+    /// Placeholder and name of the field with what is checked or captured.
+    pub expression: &'static str,
+    /// Accessible name of an assertion's operator.
+    pub operator: &'static str,
+    /// Placeholder of an assertion's expected value.
+    pub expected: &'static str,
+    /// Shown instead of the expected value of an operator that takes none.
+    pub no_expected: &'static str,
+    /// Placeholder and name of the variable a capture sets.
+    pub capture_variable: &'static str,
+    /// Accessible name of a capture's scope.
+    pub capture_scope: &'static str,
+    /// Under the headings of the Tests tab.
+    pub tests_hint: &'static str,
+    /// Response tab when nothing ran after the response: the request has
+    /// no assertions or captures, or the response comes from the history.
+    pub tests_none: &'static str,
+    /// Between a capture's variable and its value.
+    pub captured_as: &'static str,
     /// Timeline event: a redirect was followed.
     pub event_redirect: &'static str,
     /// Timeline event: the status and headers arrived.
@@ -651,6 +726,43 @@ pub const EN: Strings = Strings {
     days_ago: "d ago",
     timeline: "Timeline",
     timeline_empty: "This response has no timeline.",
+    tests: "Tests",
+    assertions: "Assertions",
+    captured_for_environment: "Captured for the environment {environment}: {names}. They are used for now; save them to keep them.",
+    save_to_environment: "Save to environment",
+    discard_captures: "Discard",
+    runner: "Runner",
+    run_menu: "Run…",
+    run_recursive: "Subfolders",
+    run_tags: "Only tags",
+    run_exclude_tags: "Skip tags",
+    run_delay: "Delay",
+    run_iterations: "Iterations",
+    run_data: "Data file",
+    run_data_pick: "Choose CSV or JSON…",
+    run_data_clear: "Remove",
+    run_bail: "Stop at the first failure",
+    run_start: "Run",
+    run_stop: "Stop",
+    run_clear: "Clear results",
+    run_iteration: "iteration",
+    run_summary: "{passed} passed · {failed} failed · {errors} errors · {skipped} skipped · {time}",
+    run_export: "Save report:",
+    run_skip: "SKIP",
+    run_error: "ERROR",
+    run_open_step: "Open with this response",
+    pass: "PASS",
+    fail: "FAIL",
+    captures: "Captures",
+    expression: "res.body.id",
+    operator: "Operator",
+    expected: "Expected",
+    no_expected: "no value",
+    capture_variable: "Variable",
+    capture_scope: "Scope",
+    tests_hint: "Checked after every send, captures first. Expressions: res.status, res.headers.<name>, res.body.<path> (JSONPath too), res.responseTime, res.size.",
+    tests_none: "No assertions or captures ran. Responses from the history do not keep their results.",
+    captured_as: "=",
     event_redirect: "Redirect",
     event_headers: "Headers received",
     event_body: "Body received",

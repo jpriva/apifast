@@ -9,9 +9,11 @@ mod kv_table;
 mod palette;
 mod request_panel;
 mod response;
+mod runner_window;
 mod settings_window;
 mod shortcuts;
 mod tabs;
+mod tests_panel;
 mod tree;
 mod url_bar;
 mod vault_window;
@@ -26,9 +28,11 @@ pub use request_panel::{RequestChange, RequestPanel, RequestTab};
 pub use response::{
     BodyMode, COPY_LIMIT, PRETTY_LIMIT, ResponseTab, ResponseView, describe, millis,
 };
+pub use runner_window::{RunnerEvent, RunnerWindow};
 pub use settings_window::SettingsWindow;
 pub use shortcuts::{ShortcutEditor, shortcut_of};
 pub use tabs::{TabBar, TabEvent};
+pub use tests_panel::tests_panel;
 pub use tree::{TreeEvent, TreeView};
 pub use url_bar::{UrlBar, UrlBarEvent};
 pub use vault_window::{VaultWindow, paste_key};

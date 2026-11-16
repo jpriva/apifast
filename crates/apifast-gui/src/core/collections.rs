@@ -38,6 +38,8 @@ pub(super) struct Open {
     /// Values captured from responses, for the next sends. They last while
     /// the collection is loaded.
     pub(super) runtime: Vec<Variable>,
+    /// Values captured for the active environment, waiting for the user.
+    pub(super) captured: Option<super::captures::Captured>,
     /// Its folders and requests.
     pub(super) tree: Arc<CollectionTree>,
     /// Its environments, as in their files.
@@ -125,7 +127,9 @@ impl State {
             snapshot.environment.clone_from(&open.environment);
             snapshot.history = open.entries.clone();
             snapshot.vault = open.vault_view.clone();
+            snapshot.captured = open.captured.as_ref().map(super::captures::Captured::view);
         } else {
+            snapshot.captured = None;
             snapshot.collection = None;
             snapshot.environments = Vec::new();
             snapshot.environment_files = Arc::default();
@@ -301,6 +305,7 @@ impl State {
                 opened,
                 vault,
                 runtime: Vec::new(),
+                captured: None,
                 tree: Arc::new(tree),
                 environment_files: Arc::new(environment_files),
                 environment,

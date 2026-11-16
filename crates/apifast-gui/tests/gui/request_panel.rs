@@ -185,3 +185,58 @@ fn a_setting_inherits_until_it_is_set_and_starts_from_the_inherited_value() {
     );
     assert!(harness.query_by_label("30000 ms (Default)").is_none());
 }
+
+#[test]
+fn assertions_and_captures_are_added_by_typing_and_operators_change_the_value() {
+    use apifast_domain::{Capture, CaptureScope};
+    let mut harness = harness(RequestTab::Tests, request());
+    harness
+        .get_all_by_role_and_label(Role::TextInput, EN.expression)
+        .next()
+        .unwrap()
+        .focus();
+    harness.run();
+    type_slowly(&mut harness, "res.status");
+    let assertion = &harness.state().request.assertions[0];
+    assert_eq!(
+        (
+            assertion.expression.as_str(),
+            assertion.operator.as_str(),
+            assertion.value.as_deref()
+        ),
+        ("res.status", "eq", Some(""))
+    );
+    harness.get_by_label(EN.expected).focus();
+    harness.run();
+    type_slowly(&mut harness, "200");
+    assert_eq!(
+        harness.state().request.assertions[0].value.as_deref(),
+        Some("200")
+    );
+
+    // An operator without a value drops it.
+    harness.get_by_role(Role::ComboBox).click();
+    harness.run();
+    harness.get_by_label("isEmpty").click();
+    harness.run();
+    let assertion = &harness.state().request.assertions[0];
+    assert_eq!(
+        (assertion.operator.as_str(), assertion.value.as_deref()),
+        ("isEmpty", None)
+    );
+    assert!(harness.query_by_label(EN.no_expected).is_some());
+
+    // A capture from its variable.
+    harness.get_by_label(EN.capture_variable).focus();
+    harness.run();
+    type_slowly(&mut harness, "id");
+    let capture = &harness.state().request.captures[0];
+    assert_eq!(
+        *capture,
+        Capture {
+            scope: CaptureScope::Runtime,
+            ..Capture::new("", "id")
+        }
+    );
+    assert!(harness.query_by_label("Tests (2)").is_some());
+}

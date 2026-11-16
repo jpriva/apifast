@@ -79,6 +79,15 @@ Las reglas de dependencia de [arquitectura](03-arquitectura.md) se comprueban au
 | Fuzzing | Parser de plantillas, lector YAML, importadores | `cargo fuzz` |
 | Rendimiento | Presupuestos de [rendimiento](10-rendimiento-y-memoria.md) | `criterion`, scripts de memoria |
 
+**Pruebas de la interfaz en un solo binario.** Las de `apifast-gui` están en `crates/apifast-gui/tests/gui/`: `main.rs` declara un módulo por archivo. Cada archivo en `tests/` sería un ejecutable que enlaza egui y wgpu; con un solo binario, enlazar las pruebas tras un cambio en la interfaz tarda segundos. Una prueba nueva de la interfaz va en un módulo de esa carpeta, no en un archivo nuevo de `tests/`.
+
+**Compilación de desarrollo.** El perfil `dev` del workspace no genera información de depuración para las dependencias (la de nuestros crates se conserva, así que los backtraces muestran nuestras líneas) y la deja fuera de los ejecutables (`split-debuginfo = "unpacked"`). Con eso la compilación con todos los núcleos cabe en memoria. Un enlazador como mold acelera más el enlace; se configura por máquina en `~/.cargo/config.toml`, no en el repositorio:
+
+```toml
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+```
+
 ### Criterios
 
 - El dominio y las plantillas se desarrollan con las pruebas primero.

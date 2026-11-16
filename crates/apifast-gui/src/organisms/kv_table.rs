@@ -260,7 +260,7 @@ impl<'a, T: KvRow> KvTable<'a, T> {
                     );
                 } else {
                     let cell = id.with((index, 0));
-                    changed |= name_field(ui, row.name(), cell, widths.name, names, strings);
+                    changed |= name_field(ui, row.name(), cell, widths.name, names, strings.name);
                 }
                 changed |= TemplateField::new(row.value(), hints, texts)
                     .id(id.with((index, 1)))
@@ -284,7 +284,8 @@ impl<'a, T: KvRow> KvTable<'a, T> {
                     ui.add_enabled(false, egui::Checkbox::without_text(&mut true))
                         .accessible_name(strings.enabled);
                     let cell = id.with((index, 0));
-                    let typed_name = name_field(ui, &mut name, cell, widths.name, names, strings);
+                    let typed_name =
+                        name_field(ui, &mut name, cell, widths.name, names, strings.name);
                     let typed_value = TemplateField::new(&mut value, hints, texts)
                         .id(id.with((index, 1)))
                         .desired_width(widths.value)
@@ -329,24 +330,24 @@ impl Widths {
     }
 }
 
-/// A name cell, with `names` suggested as it is typed. Returns whether the
-/// name changed.
-fn name_field(
+/// A name cell, with `names` suggested as it is typed; `label` is its
+/// placeholder and accessible name. Returns whether the name changed.
+pub(crate) fn name_field(
     ui: &mut egui::Ui,
     name: &mut String,
     id: Id,
     width: f32,
     names: &[&str],
-    strings: &Strings,
+    label: &str,
 ) -> bool {
     let field = ui
         .add(
             egui::TextEdit::singleline(name)
                 .id(id)
-                .hint_text(strings.name)
+                .hint_text(label)
                 .desired_width(width),
         )
-        .accessible_name(strings.name);
+        .accessible_name(label);
     let mut changed = field.changed();
     if !names.is_empty() && !name.is_empty() {
         let found = completions(name, names.iter().copied());

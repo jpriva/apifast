@@ -31,6 +31,8 @@ pub enum RequestTab {
     Body,
     /// Authentication.
     Auth,
+    /// Assertions and captures.
+    Tests,
     /// Send settings.
     Settings,
 }
@@ -70,11 +72,14 @@ impl RequestPanel {
         ui.horizontal(|ui| {
             let params = request.params.iter().filter(|p| p.enabled).count();
             let headers = request.headers.iter().filter(|h| h.enabled).count();
+            let tests = request.assertions.iter().filter(|a| a.enabled).count()
+                + request.captures.iter().filter(|c| c.enabled).count();
             for (tab, label) in [
                 (RequestTab::Params, counted(strings.params, params)),
                 (RequestTab::Headers, counted(strings.headers, headers)),
                 (RequestTab::Body, strings.body.to_owned()),
                 (RequestTab::Auth, strings.auth.to_owned()),
+                (RequestTab::Tests, counted(strings.tests, tests)),
                 (RequestTab::Settings, strings.settings.to_owned()),
             ] {
                 ui.selectable_value(&mut self.tab, tab, label);
@@ -97,6 +102,8 @@ impl RequestPanel {
                         .then_some(RequestChange::Other)
                 }
                 RequestTab::Auth => auth(ui, &mut request.auth, context, hints, strings)
+                    .then_some(RequestChange::Other),
+                RequestTab::Tests => crate::organisms::tests_panel(ui, request, hints, strings)
                     .then_some(RequestChange::Other),
                 RequestTab::Settings => {
                     settings(ui, request, context, strings).then_some(RequestChange::Other)

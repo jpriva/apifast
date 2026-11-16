@@ -9,7 +9,9 @@
 //! collection, written shortly after each change and when the core stops,
 //! and restored when the collection is opened again.
 
+mod captures;
 mod collections;
+mod runner;
 mod vault;
 mod workspace;
 
@@ -44,6 +46,7 @@ use tokio::sync::mpsc;
 
 use crate::body::{BodyHandle, BodySource};
 use crate::system::{SystemClock, SystemRandom};
+pub use runner::{RunSettings, RunView};
 
 /// How much history is kept by default: entries beyond these are removed
 /// when a collection opens (see [`Command::Configure`]).
@@ -324,6 +327,28 @@ pub enum Command {
     SaveEnvironment(Box<Environment>),
     /// Deletes an environment.
     DeleteEnvironment(String),
+    /// Writes the values captured for the active environment of the
+    /// collection at `root` (`save`), or forgets them.
+    SaveCaptures {
+        /// The collection.
+        root: PathBuf,
+        /// Write them, or forget them.
+        save: bool,
+    },
+    /// Runs the requests of the collection at `root` (docs/08), in the
+    /// background. Ignored while a run is going.
+    Run {
+        /// The collection.
+        root: PathBuf,
+        /// What to run and how.
+        settings: RunSettings,
+    },
+    /// Stops the run that is going.
+    StopRun,
+    /// Forgets a run that ended.
+    CloseRun,
+    /// Opens the request of a step of the run, with its response.
+    OpenRunStep(usize),
     /// Settles a tab whose file changed outside apifast while it had a
     /// draft: keep the draft (saving then replaces the file) or take the
     /// file and drop the draft.
@@ -377,6 +402,11 @@ pub struct Snapshot {
     pub history: Arc<Vec<HistoryEntry>>,
     /// What the interface sees of the focused collection's vault.
     pub vault: VaultView,
+    /// Values captured for its active environment, waiting for the user to
+    /// write them there.
+    pub captured: Option<PendingCaptures>,
+    /// The last run of the collection runner, of any collection.
+    pub run: Option<RunView>,
 }
 
 impl Snapshot {
@@ -385,6 +415,15 @@ impl Snapshot {
         let active = self.active.as_ref()?;
         self.tabs.iter().find(|tab| tab.key() == *active)
     }
+}
+
+/// Values captured for an environment, waiting to be written there.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PendingCaptures {
+    /// The environment.
+    pub environment: String,
+    /// The variables, in capture order. Their values stay in the core.
+    pub names: Vec<String>,
 }
 
 /// A workspace.
@@ -576,6 +615,8 @@ enum Message {
     /// Hide what was shown of the vault, if it is still show number `.0`.
     HideShown(u64),
     WriteSession,
+    /// News of run number `.0`.
+    Run(u64, runner::RunMessage),
 }
 
 /// How a send ended: its number, its collection, its result and its
@@ -649,6 +690,7 @@ impl Core {
                     open: BTreeMap::new(),
                     focus: None,
                     sending: HashMap::new(),
+                    run: None,
                     revision: 0,
                     session_pending: false,
                     messages: own_sender,
@@ -713,6 +755,8 @@ struct State {
     /// Sends in progress, by tab: a number for the send, and its token.
     /// The entry moves with its tab.
     sending: HashMap<TabKey, (u64, CancelToken)>,
+    /// The run that is going: its number and how to stop it.
+    run: Option<(u64, CancelToken)>,
     /// Source of [`Tab::revision`], of send numbers and of openings.
     revision: u64,
     /// Whether the sessions changed and a write is scheduled.
@@ -742,6 +786,7 @@ impl State {
                     }
                 }
                 Message::SendFinished(finished) => self.finish_send(*finished),
+                Message::Run(id, message) => self.run_message(id, message),
                 Message::HistoryLoaded(opened, entries) => self.history_loaded(opened, entries),
                 Message::HideShown(shown) => self.hide_shown(shown),
                 Message::External(opened, changes) => {
@@ -863,6 +908,11 @@ impl State {
             | Command::RenameEnvironment { .. }
             | Command::SaveEnvironment(_)
             | Command::DeleteEnvironment(_) => self.handle_environment(command),
+            Command::SaveCaptures { root, save } => self.save_captures(&root, save),
+            Command::Run { root, settings } => self.start_run(&root, settings),
+            Command::StopRun => self.stop_run(),
+            Command::CloseRun => self.close_run(),
+            Command::OpenRunStep(index) => self.open_run_step(index),
         }
     }
 
@@ -1204,6 +1254,7 @@ impl State {
                 if let Some(open) = self.open.get_mut(&key.root) {
                     apply_captures(&mut open.runtime, &received.checks.captures);
                 }
+                self.note_environment_captures(&key.root, &received.checks.captures);
                 ResponseState::Received(received)
             }
             Err(AppError::Transport(TransportError::Cancelled)) => ResponseState::Cancelled,

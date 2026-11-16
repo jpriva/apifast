@@ -16,9 +16,9 @@ use crate::layout;
 use crate::molecules::EnvironmentSelector;
 use crate::organisms::{
     CollectionDialogs, CollectionRequest, CommandPalette, EnvironmentEditor, EnvironmentEvent,
-    HistoryView, PaletteItem, PaletteMode, RequestChange, RequestPanel, ResponseView,
-    SettingsWindow, ShortcutEditor, TabBar, TabEvent, TreeEvent, TreeView, UrlBar, UrlBarEvent,
-    VaultWindow, paste_key,
+    HistoryView, PaletteItem, PaletteMode, RequestChange, RequestPanel, ResponseView, RunnerEvent,
+    RunnerWindow, SettingsWindow, ShortcutEditor, TabBar, TabEvent, TreeEvent, TreeView, UrlBar,
+    UrlBarEvent, VaultWindow, paste_key,
 };
 use crate::settings::Settings;
 use crate::strings::Strings;
@@ -81,6 +81,8 @@ pub struct MainScreen {
     applied: Option<(ThemeChoice, f32)>,
     /// The collection key window.
     pub vault_window: VaultWindow,
+    /// The collection runner.
+    pub runner: RunnerWindow,
     /// The collection key being pasted in the banner.
     key_paste: String,
     /// Creating and opening collections.
@@ -139,6 +141,7 @@ impl MainScreen {
 
         let mut resolve = None;
         let mut pasted_key = None;
+        let mut save_captures = None;
         let mut create_here = None;
         let (
             (environment, edit_environments),
@@ -165,9 +168,7 @@ impl MainScreen {
                 ui.separator();
                 let palette = theme::palette(ui);
                 create_here = messages(ui, snapshot, notice, strings);
-                if snapshot.vault.shares && !snapshot.vault.has_key {
-                    pasted_key = key_banner(ui, key_paste, strings);
-                }
+                (pasted_key, save_captures) = banners(ui, snapshot, key_paste, strings);
                 let (Some(tab), Some(editor)) = (active, editor.as_mut()) else {
                     let hint = if collection.is_some() {
                         strings.no_request
@@ -190,6 +191,12 @@ impl MainScreen {
             .map(|key| Command::Vault(VaultCommand::ImportKey(key)))
             .into_iter()
             .collect();
+        if let (Some(save), Some(collection)) = (save_captures, collection) {
+            commands.push(Command::SaveCaptures {
+                root: collection.root.clone(),
+                save,
+            });
+        }
         if let (Some(keep_draft), Some(tab)) = (resolve, active) {
             commands.push(Command::ResolveConflict {
                 tab: tab.key(),
@@ -293,6 +300,10 @@ impl MainScreen {
             }
             TreeEvent::Close => vec![Command::CloseCollection(root)],
             TreeEvent::Remove => vec![Command::RemoveCollection(root)],
+            TreeEvent::Run { folder, label } => {
+                self.runner.open_for(root.clone(), folder, label);
+                vec![focus]
+            }
             TreeEvent::RequestSelected(path) => vec![Command::OpenRequest(TabKey::new(root, path))],
             TreeEvent::CreateRequest { folder, name } => {
                 vec![Command::CreateRequest { root, folder, name }]
@@ -390,6 +401,16 @@ impl MainScreen {
         commands.extend(events.into_iter().map(environment_command));
         let vault = self.vault_window.show(&ctx, &snapshot.vault, strings);
         commands.extend(vault.into_iter().map(Command::Vault));
+        commands.extend(
+            self.runner
+                .show(&ctx, snapshot.run.as_ref(), strings)
+                .map(|event| match event {
+                    RunnerEvent::Run { root, settings } => Command::Run { root, settings },
+                    RunnerEvent::Stop => Command::StopRun,
+                    RunnerEvent::Close => Command::CloseRun,
+                    RunnerEvent::OpenStep(index) => Command::OpenRunStep(index),
+                }),
+        );
         if self.shortcuts.show(&ctx, &mut self.keymap, strings) {
             self.unsaved.keymap = true;
         }
@@ -702,6 +723,54 @@ fn key_banner(ui: &mut egui::Ui, text: &mut String, strings: &Strings) -> Option
         });
     ui.add_space(theme::space::S);
     key
+}
+
+/// The banners over the editor about the focused collection: its key is
+/// missing, values were captured for its environment.
+fn banners(
+    ui: &mut egui::Ui,
+    snapshot: &Snapshot,
+    key_paste: &mut String,
+    strings: &Strings,
+) -> (Option<Secret>, Option<bool>) {
+    let key = (snapshot.vault.shares && !snapshot.vault.has_key)
+        .then(|| key_banner(ui, key_paste, strings))
+        .flatten();
+    let captures = (snapshot.captured.as_ref()).and_then(|c| captures_banner(ui, c, strings));
+    (key, captures)
+}
+
+/// Offers to write the values captured for the active environment there.
+/// Returns whether to, once the user chooses.
+fn captures_banner(
+    ui: &mut egui::Ui,
+    captured: &crate::core::PendingCaptures,
+    strings: &Strings,
+) -> Option<bool> {
+    let accent = theme::palette(ui).accent;
+    let mut choice = None;
+    egui::Frame::new()
+        .fill(accent.gamma_multiply(theme::BADGE_TINT))
+        .stroke(egui::Stroke::new(1.0, accent))
+        .corner_radius(theme::radius::MEDIUM)
+        .inner_margin(theme::space::M)
+        .show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                let text = strings
+                    .captured_for_environment
+                    .replace("{environment}", &captured.environment)
+                    .replace("{names}", &captured.names.join(", "));
+                ui.label(text);
+                if ui.button(strings.save_to_environment).clicked() {
+                    choice = Some(true);
+                }
+                if ui.button(strings.discard_captures).clicked() {
+                    choice = Some(false);
+                }
+            });
+        });
+    ui.add_space(theme::space::S);
+    choice
 }
 
 /// Shown over a request whose file changed outside apifast while it had

@@ -1633,3 +1633,137 @@ fn the_collection_key_is_never_asked_of_its_creator_nor_twice_on_a_machine() {
     let snapshot = wait(&core, "restored", |s| s.vault.shares);
     assert!(snapshot.vault.has_key && !needs_key(&snapshot));
 }
+
+#[test]
+fn environment_captures_are_saved_when_the_user_agrees_and_secrets_go_to_the_vault() {
+    let dir = collection(server(Duration::ZERO));
+    let capture = |expression: &str, name: &str| {
+        format!(
+            "    - type: set-variable\n      phase: after-response\n      selector:\n        expression: {expression}\n        method: jsonq\n      variable:\n        name: {name}\n        scope: environment\n"
+        )
+    };
+    std::fs::write(
+        dir.path().join("users/get.yml"),
+        format!(
+            "info:\n  name: Get\n  type: http\nhttp:\n  method: GET\n  url: \"{{{{host}}}}/users/1\"\nruntime:\n  actions:\n{}{}",
+            capture("res.status", "last_status"),
+            capture("res.body", "token"),
+        ),
+    )
+    .unwrap();
+    let local = dir.path().join("environments/local.yml");
+    let text = std::fs::read_to_string(&local).unwrap();
+    std::fs::write(&local, format!("{text}  - name: token\n    secret: true\n")).unwrap();
+
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    core.send(Command::OpenRequest(at(&core, "users/get.yml")));
+    wait(&core, "the request", |s| s.active_tab().is_some());
+    core.send(Command::Send);
+    let snapshot = wait(&core, "the captures", |s| s.captured.is_some());
+    let captured = snapshot.captured.as_ref().unwrap();
+    assert_eq!(captured.environment, "local");
+    assert_eq!(captured.names, ["last_status", "token"]);
+
+    // Discarding writes nothing.
+    core.send(Command::SaveCaptures {
+        root: root(&core),
+        save: false,
+    });
+    wait(&core, "discarded", |s| s.captured.is_none());
+    assert!(
+        !std::fs::read_to_string(&local)
+            .unwrap()
+            .contains("last_status")
+    );
+
+    core.send(Command::Send);
+    wait(&core, "the captures again", |s| s.captured.is_some());
+    core.send(Command::SaveCaptures {
+        root: root(&core),
+        save: true,
+    });
+    wait(&core, "saved", |s| s.captured.is_none());
+    let text = std::fs::read_to_string(&local).unwrap();
+    // A number keeps its type, as OpenCollection writes typed values.
+    assert!(
+        text.contains("- name: last_status\n    value:\n      type: number\n      data: \"200\""),
+        "{text}"
+    );
+    assert!(
+        !text.contains("GET /users"),
+        "a secret never reaches the file: {text}"
+    );
+
+    core.send(Command::Vault(apifast_gui::core::VaultCommand::Reveal {
+        environment: "local".into(),
+        name: "token".into(),
+    }));
+    let snapshot = wait(&core, "the secret", |s| {
+        s.vault.revealed.is_some() || s.error.is_some()
+    });
+    assert_eq!(snapshot.error, None);
+    assert_eq!(
+        snapshot.vault.revealed.as_ref().unwrap().value.expose(),
+        "GET /users/1 HTTP/1.1"
+    );
+}
+
+#[test]
+fn the_runner_runs_a_folder_in_the_background_and_opens_a_step() {
+    use apifast_gui::core::RunSettings;
+    let dir = collection(server(Duration::ZERO));
+    std::fs::write(
+        dir.path().join("users/get.yml"),
+        "info:\n  name: Get\n  type: http\nhttp:\n  method: GET\n  url: \"{{host}}/users/1\"\nruntime:\n  assertions:\n    - expression: res.status\n      operator: eq\n      value: \"201\"\n",
+    )
+    .unwrap();
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    core.send(Command::Run {
+        root: root(&core),
+        settings: RunSettings {
+            iterations: 2,
+            ..RunSettings::default()
+        },
+    });
+    let snapshot = wait(&core, "the run", |s| {
+        s.run.as_ref().is_some_and(|run| !run.running)
+    });
+    let run = snapshot.run.as_ref().unwrap();
+    assert_eq!(run.error, None);
+    assert_eq!((run.total, run.iterations, run.steps.len()), (2, 2, 4));
+    let report = run.report.as_ref().unwrap();
+    let summary = report.summary();
+    assert_eq!((summary.passed, summary.failed), (2, 2));
+    assert!((run.progress() - 1.0).abs() < f32::EPSILON);
+    // Each step went to the history.
+    wait(&core, "the history", |s| s.history.len() == 4);
+    // In tree order: the folder has `seq: 1`, so it comes before health.
+    let order: Vec<&str> = run.steps.iter().map(|s| s.path.as_str()).collect();
+    assert_eq!(
+        order,
+        ["users/get.yml", "health.yml", "users/get.yml", "health.yml"]
+    );
+
+    // A step opens its request with its response and checks.
+    let get = run
+        .steps
+        .iter()
+        .position(|s| s.path.as_str() == "users/get.yml")
+        .unwrap();
+    core.send(Command::OpenRunStep(get));
+    let snapshot = wait(&core, "the step", |s| {
+        matches!(response(s), ResponseState::Received(_))
+    });
+    let ResponseState::Received(received) = response(&snapshot) else {
+        unreachable!()
+    };
+    assert_eq!(received.checks.assertions.len(), 1);
+    assert!(!received.checks.assertions[0].verdict.passed);
+
+    core.send(Command::CloseRun);
+    wait(&core, "closed", |s| s.run.is_none());
+}

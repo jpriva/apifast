@@ -34,6 +34,8 @@ pub enum ResponseTab {
     Headers,
     /// What happened while sending, with times.
     Timeline,
+    /// The assertions and captures that ran.
+    Tests,
 }
 
 /// How the body is shown.
@@ -112,12 +114,18 @@ impl ResponseView {
             let headers = format!("{} ({})", strings.headers, received.head.headers.len());
             ui.selectable_value(&mut self.tab, ResponseTab::Headers, headers);
             ui.selectable_value(&mut self.tab, ResponseTab::Timeline, strings.timeline);
+            ui.selectable_value(
+                &mut self.tab,
+                ResponseTab::Tests,
+                tests_label(ui, received, strings),
+            );
         });
         ui.separator();
         match self.tab {
             ResponseTab::Body => self.body(ui, received, strings),
             ResponseTab::Headers => headers(ui, &received.head.headers),
             ResponseTab::Timeline => timeline(ui, received, strings),
+            ResponseTab::Tests => tests(ui, received, strings),
         }
     }
 
@@ -274,5 +282,83 @@ fn timeline(ui: &mut egui::Ui, received: &Received, strings: &Strings) {
                         ui.end_row();
                     }
                 });
+        });
+}
+
+/// "Tests 2/3", red when one failed, green when all passed.
+fn tests_label(ui: &egui::Ui, received: &Received, strings: &Strings) -> RichText {
+    let assertions = &received.checks.assertions;
+    if assertions.is_empty() {
+        return RichText::new(strings.tests);
+    }
+    let passed = assertions.iter().filter(|a| a.verdict.passed).count();
+    let palette = theme::palette(ui);
+    let color = if passed == assertions.len() {
+        palette.success
+    } else {
+        palette.danger
+    };
+    RichText::new(format!("{} {passed}/{}", strings.tests, assertions.len())).color(color)
+}
+
+/// The assertions, failures first, then the captures.
+fn tests(ui: &mut egui::Ui, received: &Received, strings: &Strings) {
+    let palette = theme::palette(ui);
+    let checks = &received.checks;
+    if checks.assertions.is_empty() && checks.captures.is_empty() {
+        ui.label(RichText::new(strings.tests_none).color(palette.text_muted));
+        return;
+    }
+    egui::ScrollArea::vertical()
+        .id_salt("response-tests")
+        .auto_shrink([false, true])
+        .show(ui, |ui| {
+            if !checks.assertions.is_empty() {
+                ui.label(RichText::new(strings.assertions).strong());
+                let mut ordered: Vec<_> = checks.assertions.iter().collect();
+                ordered.sort_by_key(|a| a.verdict.passed);
+                for outcome in ordered {
+                    let (mark, color) = if outcome.verdict.passed {
+                        (strings.pass, palette.success)
+                    } else {
+                        (strings.fail, palette.danger)
+                    };
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(RichText::new(mark).color(color).strong().monospace());
+                        ui.label(RichText::new(apifast_app::assertion_text(outcome)).monospace());
+                    });
+                    if let Some(message) = &outcome.verdict.message {
+                        ui.indent("why", |ui| {
+                            ui.label(RichText::new(message.as_str()).color(color));
+                        });
+                    }
+                }
+            }
+            if !checks.captures.is_empty() {
+                ui.add_space(theme::space::S);
+                ui.label(RichText::new(strings.captures).strong());
+                for capture in &checks.captures {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(
+                            RichText::new(capture.variable.as_str())
+                                .monospace()
+                                .strong(),
+                        );
+                        match &capture.value {
+                            Ok(_) if capture.secret => {
+                                ui.label(strings.captured_as);
+                                ui.label(RichText::new(apifast_app::HIDDEN).monospace());
+                            }
+                            Ok(value) => {
+                                ui.label(strings.captured_as);
+                                ui.label(RichText::new(value.data.as_str()).monospace());
+                            }
+                            Err(reason) => {
+                                ui.label(RichText::new(reason.as_str()).color(palette.warning));
+                            }
+                        }
+                    });
+                }
+            }
         });
 }

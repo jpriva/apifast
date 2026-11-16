@@ -194,3 +194,55 @@ fn a_masked_secret_in_the_timeline_is_drawn() {
     harness.run();
     assert!(has(&harness, &format!("GET {url}")));
 }
+
+#[test]
+fn the_tests_tab_shows_failures_first_and_masks_secret_captures() {
+    use apifast_app::{AssertionOutcome, CaptureOutcome, Verdict};
+    use apifast_domain::{Assertion, CaptureScope, Operator, VariableValue};
+    let ResponseState::Received(mut received) = received("application/json", "{}") else {
+        unreachable!()
+    };
+    let outcome = |expression: &str, passed: bool| AssertionOutcome {
+        assertion: Assertion::new(expression, Operator::parse("eq"), Some("200")),
+        expected: Some("200".into()),
+        verdict: Verdict {
+            passed,
+            actual: "404".into(),
+            message: (!passed).then(|| "expected eq 200, got 404".into()),
+        },
+    };
+    received.checks.assertions = vec![outcome("res.size", true), outcome("res.status", false)];
+    received.checks.captures = vec![
+        CaptureOutcome {
+            variable: "token".into(),
+            scope: CaptureScope::Runtime,
+            value: Ok(VariableValue::text("s3cret")),
+            secret: true,
+        },
+        CaptureOutcome {
+            variable: "id".into(),
+            scope: CaptureScope::Runtime,
+            value: Err("res.body.id is undefined".into()),
+            secret: false,
+        },
+    ];
+    let mut harness = harness(ResponseState::Received(received));
+    harness.get_by_label("Tests 1/2").click();
+    harness.run();
+    assert!(has(&harness, "res.status eq 200"));
+    assert!(has(&harness, "expected eq 200, got 404"));
+    assert!(has(&harness, apifast_app::HIDDEN));
+    assert!(!has(&harness, "s3cret"));
+    assert!(has(&harness, "res.body.id is undefined"));
+    // Failures first.
+    let top = |label: &str| harness.get_by_label(label).rect().min.y;
+    assert!(top("res.status eq 200") < top("res.size eq 200"));
+}
+
+#[test]
+fn the_tests_tab_says_when_nothing_ran() {
+    let mut harness = harness(received("application/json", "{}"));
+    harness.get_by_label(EN.tests).click();
+    harness.run();
+    assert!(has(&harness, EN.tests_none));
+}

@@ -34,6 +34,13 @@ pub enum TreeEvent {
     Close,
     /// Remove the collection from the workspace.
     Remove,
+    /// Open the runner on the collection, or on one of its folders.
+    Run {
+        /// The folder; `None` for the whole collection.
+        folder: Option<String>,
+        /// How the window names it.
+        label: String,
+    },
     /// The user clicked a request.
     RequestSelected(RequestPath),
     /// Create a request called `name` in `folder` (`""` for the root).
@@ -559,6 +566,15 @@ fn context_menu(ui: &mut egui::Ui, row: &Row, strings: &Strings) -> Option<RowAc
                 name_dialog(NameAction::NewFolder(folder.to_owned()), ""),
             ));
         }
+        if ui.button(strings.run_menu).clicked() {
+            action = Some(RowAction::Event(
+                row.root.clone(),
+                TreeEvent::Run {
+                    folder: Some(folder.to_owned()),
+                    label: row.label.clone(),
+                },
+            ));
+        }
         ui.separator();
     }
     if matches!(row.kind, RowKind::Folder { .. } | RowKind::Request { .. })
@@ -621,6 +637,13 @@ fn collection_menu(
             action = Some(RowAction::Open(root(), dialog));
         }
         ui.separator();
+    }
+    if ui.button(strings.run_menu).clicked() {
+        let event = TreeEvent::Run {
+            folder: None,
+            label: row.label.clone(),
+        };
+        action = Some(RowAction::Event(root(), event));
     }
     let events = [
         (strings.environments, TreeEvent::Environments, true),

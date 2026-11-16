@@ -115,8 +115,8 @@ Comportamiento actual:
 - Las capturas corren tras guardar el cuerpo, y lo capturado ya está disponible para las aserciones del mismo envío (`value: "{{user_id}}"`).
 - El valor toma el tipo de lo capturado: texto, número o booleano; un objeto, un array o `null` se guardan como variable de tipo objeto (JSON).
 - Una captura sin valor (`res.body.token` ausente) no cambia la variable y se informa como aviso; no hace fallar la request.
-- Una captura sobre una variable secreta conserva la marca de secreto: su valor se enmascara en resultados, historial y requests siguientes. Por ahora queda en memoria; escribirla en la bóveda llega con la interfaz de tests.
-- Ámbito `environment`: por ahora vive como `runtime`. Escribirlo en el entorno, con confirmación en la interfaz, llega con la pestaña Tests.
+- Una captura sobre una variable secreta conserva la marca de secreto: su valor se enmascara en resultados, historial y requests siguientes. Queda en memoria, salvo que su ámbito sea `environment` y el usuario la guarde: entonces va a la bóveda.
+- Ámbito `environment`: se usa enseguida como `runtime`. En la interfaz, un aviso ofrece escribirlo en el entorno activo ([docs/09](09-ui-ux.md#panel-de-respuesta)); la CLI no escribe nunca en los entornos.
 - En la interfaz, las variables de runtime duran mientras la colección está abierta; en la CLI, lo que dura `send` (y en `run`, toda la ejecución).
 - El cuerpo se lee para las comprobaciones solo si la request tiene alguna activa, y como mucho 16 MiB (`CHECK_LIMIT`).
 - Los valores real y esperado de los resultados llegan ya enmascarados con los secretos de la request y los capturados.

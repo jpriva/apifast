@@ -88,7 +88,7 @@ La cabecera de la barra lateral tiene:
 | Body | Selector de tipo y editor: código, tabla de formulario o selector de archivo |
 | Auth | Selector de tipo y sus campos; "heredada" muestra de quién |
 | Vars | Variables de la request y capturas |
-| Tests | Tabla de aserciones: expresión, operador, valor |
+| Tests | Aserciones (expresión, operador, valor esperado) y capturas (expresión, variable, ámbito) |
 | Docs | Markdown con vista previa |
 | Ajustes | Timeout, redirecciones, TLS; cada uno con "heredar" |
 
@@ -98,6 +98,14 @@ La cabecera de la barra lateral tiene:
 - Siempre hay una fila vacía al final para añadir.
 - Modo de edición masiva: la tabla como texto, una línea por entrada con el formato `nombre: valor`; las que empiezan por `//` se conservan sin enviarse.
 - Autocompletado de nombres de header y de variables.
+
+### Pestaña Tests
+
+- Dos tablas con la misma mecánica que las de clave/valor (casilla, fila vacía al final, botón para quitar): **aserciones** y **capturas**. La pestaña cuenta las que están habilitadas: `Tests (3)`.
+- La expresión sugiere `res.status`, `res.headers.`, `res.body.`, `res.responseTime` y `res.size` mientras se escribe.
+- El operador es un menú con los 28 de Bruno. Al elegir uno que no lleva valor (`isNull`, `isEmpty`…), el campo del valor esperado se sustituye por "no value" y el valor se descarta; al volver a uno que lo lleva, empieza vacío.
+- El valor esperado es un campo de plantilla: resalta las variables como el resto.
+- El ámbito de una captura es `runtime`, `request` o `environment`.
 
 ### Editor de código
 
@@ -117,10 +125,12 @@ La edición con resaltado se limita a unos 200 KB: con más texto, egui tarda de
 | Headers | Tabla de headers recibidos |
 | Cookies | Cookies fijadas por la respuesta |
 | Timeline | Eventos del envío con sus tiempos |
-| Tests | Aserciones con valor esperado y real |
+| Tests | Aserciones (primero las que fallan, con su motivo) y capturas con su valor; la pestaña dice `Tests 2/3` en verde o en rojo |
 
 - Los cuerpos grandes se muestran por ventanas; el formateo se desactiva por encima de un umbral (2 MB) y se ofrece verlos en crudo o guardarlos. La vista "Pretty" formatea y colorea JSON y XML; si no se pueden formatear (HTML con `<br>`, JSON roto), se muestran tal cual, coloreados y con un aviso. Los bodies binarios no se dibujan: se indica su tamaño.
 - El Timeline básico lista, con su tiempo desde el inicio, cada request que sale, cada redirección seguida, la llegada de los headers y el final del body. Las fases de DNS, conexión y TLS llegarán cuando el transporte las exponga.
+- La pestaña Tests enmascara el valor de una captura secreta. Una respuesta abierta desde el historial no tiene resultados: no se guardan en él.
+- **Capturas para el entorno:** las de ámbito `environment` se usan enseguida como variables de runtime, y un aviso sobre el editor dice cuáles se capturaron para el entorno activo, con "Save to environment" y "Discard". Al guardar, cada valor se escribe en el archivo del entorno, conservando su tipo; si la variable es secreta, va a la bóveda (local), nunca al archivo. Las capturas de envíos seguidos se acumulan en el mismo aviso. Sin entorno activo no hay aviso.
 - Acciones: copiar, guardar a archivo, guardar como ejemplo, "guardar como variable" desde un valor seleccionado.
 - Selector de respuestas anteriores de la misma request.
 
@@ -134,6 +144,15 @@ La edición con resaltado se limita a unos 200 KB: con más texto, egui tarda de
 - El valor de un secreto se escribe en un campo oculto. Su estado (guardado en esta máquina, compartido, bloqueado porque falta la clave de la colección, o sin valor) se ve en el campo vacío, al pasar el ratón y en su nombre accesible. Reveal lo muestra 15 segundos.
 - Los valores guardados que ya no usa ninguna variable secreta se listan bajo la tabla, con un botón para olvidarlos.
 - Vista "todas las variables": cada variable efectiva con su valor y el ámbito del que procede.
+
+## Runner
+
+"Run…" en el menú de la raíz de una colección o de una carpeta abre la ventana del runner sobre ella.
+
+- **Formulario:** subcarpetas, tags que incluir y que excluir (separados por comas), pausa entre requests, iteraciones, archivo de datos (CSV o JSON, con el selector del sistema; con datos, las iteraciones se desactivan) y detener al primer fallo. "Run" lo lanza con el entorno activo de la colección y sus variables de runtime.
+- **Durante la ejecución:** barra de progreso (`3 / 10`), la request que se está enviando con su iteración, y "Stop". La ejecución sigue en segundo plano si se cierra la ventana; solo hay una a la vez.
+- **Resultados:** una fila por request terminada: PASS, FAIL o ERROR, nombre (con la iteración si hay varias), ruta, estado y duración; debajo, las aserciones que fallan o el error. El nombre es un enlace que abre la request con esa respuesta y sus resultados en la pestaña Tests. Al terminar: los totales, las omitidas con su motivo y "Save report:" en HTML, JUnit o JSON, que pide dónde guardarlo.
+- Cada request del runner queda en el historial, y lo capturado sigue disponible para los envíos siguientes. Las capturas de ámbito `environment` del runner no se ofrecen para guardar en el entorno.
 
 ## Bóveda
 

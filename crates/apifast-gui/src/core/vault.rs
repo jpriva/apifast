@@ -296,7 +296,7 @@ impl State {
     /// it has none: its first secret is being stored. What apifast kept
     /// under the collection's path (session, history, responses) moves to
     /// the id, and the collection is loaded again with its tabs.
-    fn vault_or_new(&mut self) -> Result<Arc<VaultSecrets>, String> {
+    pub(super) fn vault_or_new(&mut self) -> Result<Arc<VaultSecrets>, String> {
         if let Some(vault) = self.vault() {
             return Ok(vault);
         }
