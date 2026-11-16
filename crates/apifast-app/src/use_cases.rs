@@ -110,6 +110,9 @@ pub struct SendPorts<'a, C, E, T, S> {
     /// Where `response(...)` finds saved responses, and where the requests
     /// it sends are recorded. `None`: every one is sent when needed.
     pub history: Option<&'a (dyn HistoryStore + Sync)>,
+    /// Where OAuth 2.0 tokens are kept between sends. `None`: a token is
+    /// obtained for every send that needs one.
+    pub tokens: Option<&'a dyn crate::TokenStore>,
 }
 
 // Only references: copying them is free, whatever the port types are.
@@ -287,6 +290,16 @@ where
     } else {
         Mode::Strict
     };
+    // An OAuth 2.0 token is obtained before rendering, and goes in as a
+    // header or a query parameter.
+    let token_ports = crate::oauth2::TokenPorts {
+        transport: ports.transport,
+        clock: ports.clock,
+        tokens: ports.tokens,
+    };
+    let resolved =
+        crate::oauth2::with_token(&token_ports, resolved, &mut variables, &mut host, cancel)
+            .await?;
     let rendered = render_with_dependencies(
         ports,
         (&resolved, &variables, &mut host),

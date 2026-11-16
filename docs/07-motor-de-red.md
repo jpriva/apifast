@@ -84,7 +84,7 @@ Implementada de forma nativa en Rust, con un enum tipado por esquema.
 | Basic, Bearer, API key | F1 | API key en header o en query |
 | Heredada (`inherit`) y ninguna (`none`) | F1 | Toma la del padre más cercano |
 | Digest | F5 (hecha) | Responde al reto del servidor, en el transporte |
-| OAuth 2.0 | F5 (en curso) | Authorization code con PKCE, client credentials, password; refresco automático. Hecho: se lee, se guarda y se edita; aún no obtiene tokens |
+| OAuth 2.0 | F5 (en curso) | Authorization code con PKCE, client credentials, password; refresco automático. Hecho: se lee, se guarda y se edita; obtiene y refresca tokens con client credentials y password |
 | AWS SigV4 | F5 (hecha) | Firma del request canónico, en el transporte |
 | NTLM | F5 (hecha) | NTLMv2 en tres mensajes sobre una conexión |
 
@@ -119,6 +119,15 @@ Basic, Bearer y API key se resuelven al renderizar: son headers o parámetros. L
 - Con una contraseña equivocada el resultado es el 401 del servidor, sin repetir. Tras una redirección al mismo origen se negocia de nuevo; a otro origen no van credenciales.
 - Se usa la hora que manda el servidor en el reto (`MsvAvTimestamp`) si la manda; si no, la del sistema. No se calculan clave de sesión, firma ni MIC: no se piden para autenticar por HTTP.
 - Comprobada con el ejemplo de la especificación de Microsoft ([MS-NLMP] 4.2.4: hash NT, clave NTOWFv2, prueba NTLMv2 y respuesta LMv2) y contra un servidor local que acepta el mensaje Authenticate solo en la conexión que recibió el reto y valida la prueba con su propio cálculo.
+
+**OAuth 2.0** (`apifast-app/src/oauth2.rs`):
+
+- Antes de renderizar la request, el envío consigue el token y sustituye la auth OAuth 2.0 por su equivalente: un header `Authorization: <prefijo> <token>` (solo el token si el prefijo está vacío) o un parámetro de query. El token entra como variable secreta, así que se enmascara en el historial y el timeline como cualquier secreto.
+- **De dónde sale el token**, en este orden: el guardado (`TokenStore`) si no ha caducado; refrescado (`grant_type=refresh_token`, en la URL de refresco o, si está vacía, la del token) si caducó, hay refresh token y `autoRefreshToken` está activo; uno nuevo si `autoFetchToken` está activo. Si no, un error que lo dice. Un token que caduca en menos de 5 s cuenta como caducado. Si el refresco falla (el refresh token también caduca), se pide uno nuevo cuando se puede.
+- **Flujos:** `client_credentials` y `password` piden el token directamente. `authorization_code` llega con la fase D (necesita el navegador). `implicit` no se envía.
+- **La petición de token:** `POST` con formulario a la URL del token, `Accept: application/json`, el `scope` si lo hay, y las credenciales del cliente en el body (`client_id`, `client_secret`) o como Basic, según `credentials.placement`. Los parámetros adicionales de cada petición van en el header, la query o el body que digan. Las credenciales se enmascaran en lo que se registre de esa petición.
+- **La respuesta:** JSON de RFC 6749. `expires_in` da la caducidad; sin él, el token no caduca. Un error del servidor se muestra con su `error` y su `error_description`: `the token request failed (400): invalid_grant: bad password`. `tokenConfig.source: id_token` envía el `id_token` en vez del de acceso.
+- **Dónde se guarda:** por ahora en memoria: en la CLI, durante un `send` o una ejecución de `run` (un token sirve para toda la ejecución); en la interfaz, mientras la colección está cargada. La clave es el id del token (`tokenConfig.id`), la URL del token y el cliente. La caché cifrada en disco llega con la fase C.
 
 Para OAuth 2.0 con authorization code se abre el navegador del sistema y se levanta un servidor local temporal para recibir el *callback*. Los tokens se guardan cifrados con la clave maestra.
 

@@ -1143,6 +1143,7 @@ impl State {
             open.responses.clone(),
             open.history.clone(),
         );
+        let tokens = open.tokens.clone();
         let secrets: Arc<dyn SecretStore + Send> = match &open.vault {
             Some(vault) => vault.clone(),
             None => Arc::new(NoSecrets),
@@ -1179,6 +1180,7 @@ impl State {
                 secrets: &*secrets,
                 report: &|_| {},
                 history: Some(&*history),
+                tokens: Some(&*tokens),
             };
             let at_ms = clock.unix_millis();
             let result = send_request(ports, &key.path, &options, &cancel).await;

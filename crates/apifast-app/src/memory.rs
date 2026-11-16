@@ -624,3 +624,24 @@ impl crate::Pause for RecordedPauses {
         Box::pin(std::future::ready(()))
     }
 }
+
+/// OAuth 2.0 tokens kept in memory: for a run of the CLI, or while a
+/// collection is loaded in the interface.
+#[derive(Debug, Default)]
+pub struct MemoryTokens(Mutex<BTreeMap<String, crate::OAuth2Token>>);
+
+impl crate::TokenStore for MemoryTokens {
+    fn token(&self, key: &str) -> Result<Option<crate::OAuth2Token>, StoreError> {
+        Ok(lock(&self.0).get(key).cloned())
+    }
+
+    fn save(&self, key: &str, token: &crate::OAuth2Token) -> Result<(), StoreError> {
+        lock(&self.0).insert(key.to_owned(), token.clone());
+        Ok(())
+    }
+
+    fn forget(&self, key: &str) -> Result<(), StoreError> {
+        lock(&self.0).remove(key);
+        Ok(())
+    }
+}

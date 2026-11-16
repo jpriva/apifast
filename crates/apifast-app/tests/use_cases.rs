@@ -82,6 +82,7 @@ impl World {
                 .history
                 .as_ref()
                 .map(|h| h as &(dyn HistoryStore + Sync)),
+            tokens: None,
         };
         block_on(send_request(
             ports,
@@ -435,6 +436,7 @@ fn problems_are_reported_before_sending_even_if_the_send_fails() {
         secrets: &world.secrets,
         report: &|problem: &Problem| reported.lock().unwrap().push(problem.clone()),
         history: None,
+        tokens: None,
     };
     let options = SendOptions {
         allow_unresolved: true,
@@ -474,6 +476,7 @@ fn send_request_can_run_on_any_thread() {
         secrets: &world.secrets,
         report: &|_| {},
         history: None,
+        tokens: None,
     };
     let options = SendOptions::default();
     let cancel = CancelToken::new();

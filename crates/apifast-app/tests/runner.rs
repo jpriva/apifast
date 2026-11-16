@@ -107,6 +107,7 @@ impl World {
             secrets: &self.secrets,
             report: &|_| {},
             history: None,
+            tokens: None,
         };
         let on_event = |event: RunEvent<'_>| {
             let line = match event {

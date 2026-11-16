@@ -134,6 +134,15 @@ impl ResolvedRequest {
         &self.method
     }
 
+    /// The same request with another auth, from the same origin: how an
+    /// auth that is obtained first (an OAuth 2.0 token) becomes one that is
+    /// sent.
+    #[must_use]
+    pub fn with_auth(mut self, auth: AuthScheme) -> Self {
+        self.auth.value = auth;
+        self
+    }
+
     /// URL.
     pub fn url(&self) -> &str {
         &self.url

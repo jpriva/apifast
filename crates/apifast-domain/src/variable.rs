@@ -134,6 +134,20 @@ impl ResolvedVariables {
         }
     }
 
+    /// Adds secret `name`, above every scope: a value obtained for this send,
+    /// such as an OAuth 2.0 token, that must be masked wherever it shows.
+    pub fn add_secret(&mut self, name: &str, value: VariableValue) {
+        self.by_name.insert(
+            name.to_owned(),
+            ResolvedVariable {
+                value: Some(value),
+                secret: true,
+                origin: Origin::Runtime,
+                overridden: Vec::new(),
+            },
+        );
+    }
+
     /// Sets `name` to a value captured from a response, above every scope.
     /// A secret stays a secret, so its new value is masked as well.
     pub fn capture(&mut self, name: &str, value: VariableValue) {

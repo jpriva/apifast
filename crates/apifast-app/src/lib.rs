@@ -17,6 +17,7 @@ mod functions;
 mod history;
 mod host;
 pub mod memory;
+mod oauth2;
 mod organize;
 mod ports;
 mod render;
@@ -35,6 +36,7 @@ pub use history::{
     HIDDEN, HistoryEntry, HistoryLimits, HistoryOutcome, HistoryStore, hide_query, within_limits,
 };
 pub use host::AppHost;
+pub use oauth2::{OAuth2Token, TokenStore};
 pub use organize::{
     Placement, create_folder, create_request, delete_item, move_item, rename_item, slug,
 };

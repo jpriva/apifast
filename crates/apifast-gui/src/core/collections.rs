@@ -38,6 +38,8 @@ pub(super) struct Open {
     /// Values captured from responses, for the next sends. They last while
     /// the collection is loaded.
     pub(super) runtime: Vec<Variable>,
+    /// OAuth 2.0 tokens, kept while the collection is loaded.
+    pub(super) tokens: Arc<apifast_app::memory::MemoryTokens>,
     /// Values captured for the active environment, waiting for the user.
     pub(super) captured: Option<super::captures::Captured>,
     /// Its folders and requests.
@@ -305,6 +307,7 @@ impl State {
                 opened,
                 vault,
                 runtime: Vec::new(),
+                tokens: Arc::default(),
                 captured: None,
                 tree: Arc::new(tree),
                 environment_files: Arc::new(environment_files),

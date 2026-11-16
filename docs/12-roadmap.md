@@ -303,7 +303,7 @@ Siguiente, fuera de esta sección: los entornos globales del workspace (`environ
 - [x] Digest, NTLM y AWS SigV4. Las tres se aplican en el transporte (`TransportAuth`), sobre la request tal como sale. AWS SigV4 firma cada request al mismo origen; Digest responde al 401 (MD5, SHA-256 y `-sess`, `qop=auth`) reenviando una vez; NTLMv2 hace el intercambio en una conexión, con un cliente HTTP/1.1 propio. Cada una tiene una prueba de integración contra un servidor local, además de los ejemplos oficiales (documentación de AWS, RFC 2617 y 7616, [MS-NLMP] 4.2.4).
 - [ ] OAuth 2.0: authorization code con PKCE, client credentials, password; caché cifrada y refresco. Por fases:
   - [x] A. Modelo completo (`OAuth2Auth`): se lee y se guarda con el bloque de Bruno, cambiando solo las claves afectadas, y se edita en la pestaña Auth con los campos de cada flujo.
-  - [ ] B. Obtener y refrescar el token (client credentials y password) y aplicarlo al enviar.
+  - [x] B. Obtener y refrescar el token (client credentials y password) y aplicarlo al enviar. Antes de renderizar, el envío toma el token guardado, lo refresca o pide uno nuevo, y lo pone en el header o la query como variable secreta. Por ahora los tokens se guardan en memoria (`MemoryTokens`). Probado con un servidor guionizado (caché, refresco, errores, query, `id_token`) y de extremo a extremo con la CLI contra un servidor OAuth local.
   - [ ] C. Caché de tokens cifrada con la clave maestra; ver y borrar el token en la interfaz.
   - [ ] D. Authorization code con PKCE: navegador del sistema y servidor local temporal para el *callback*.
 - [ ] Proxy: sistema y manual (HTTP, HTTPS, SOCKS5), exclusiones, por colección.

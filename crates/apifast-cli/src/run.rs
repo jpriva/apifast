@@ -162,6 +162,8 @@ pub fn run(args: &RunArgs) -> Result<ExitCode> {
         Console::header(&meta, options.folder.as_deref());
     }
 
+    // A token obtained once serves the whole run.
+    let tokens = apifast_app::memory::MemoryTokens::default();
     let (runtime, cancel) = runtime()?;
     let report = runtime.block_on(async {
         let ports = SendPorts {
@@ -182,6 +184,7 @@ pub fn run(args: &RunArgs) -> Result<ExitCode> {
                 }
             },
             history: None,
+            tokens: Some(&tokens),
         };
         let on_event = |event: RunEvent<'_>| console.event(&event);
         run_collection(ports, &system::TokioPause, &options, &cancel, &on_event).await

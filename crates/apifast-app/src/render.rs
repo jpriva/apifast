@@ -159,6 +159,30 @@ impl fmt::Debug for RenderedRequest {
 }
 
 impl RenderedRequest {
+    /// A request apifast makes on its own, such as an OAuth 2.0 token
+    /// request: redirects followed, a 30 s limit, and `secrets` masked.
+    pub(crate) fn own(
+        method: Method,
+        url: String,
+        headers: Vec<(String, String)>,
+        body: RenderedBody,
+        secrets: Vec<Secret>,
+    ) -> Self {
+        Self {
+            method,
+            url,
+            headers,
+            body,
+            timeout_ms: 30_000,
+            follow_redirects: true,
+            max_redirects: 5,
+            encode_url: true,
+            auth: TransportAuth::None,
+            contains_secret: !secrets.is_empty(),
+            secrets,
+        }
+    }
+
     /// Method.
     pub fn method(&self) -> &Method {
         &self.method
@@ -400,9 +424,11 @@ fn apply_auth(
                 ApiKeyPlacement::Query => append_query(url, &name, &value),
             }
         }
+        // The send gets the token first and swaps this auth for it; here
+        // only when rendering on its own.
         AuthScheme::OAuth2(_) => {
             return Err(AppError::Validation(
-                "OAuth 2.0 cannot get tokens yet; set the token as a Bearer auth for now".into(),
+                "an OAuth 2.0 request is rendered with its token, when it is sent".into(),
             ));
         }
         AuthScheme::None => {}
@@ -562,7 +588,7 @@ fn percent_encode(text: &str, out: &mut String) {
 }
 
 /// Standard base64 with padding.
-fn base64(input: &[u8]) -> String {
+pub(crate) fn base64(input: &[u8]) -> String {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
     for chunk in input.chunks(3) {

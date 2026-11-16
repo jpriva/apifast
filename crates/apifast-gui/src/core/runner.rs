@@ -166,6 +166,7 @@ impl State {
             transport: open.transport.clone(),
             responses: open.responses.clone(),
             history: open.history.clone(),
+            tokens: open.tokens.clone(),
             secrets: match &open.vault {
                 Some(vault) => vault.clone(),
                 None => Arc::new(NoSecrets),
@@ -286,6 +287,7 @@ struct Ports {
     transport: Arc<apifast_http::ReqwestTransport>,
     responses: Arc<apifast_history::FsResponseStore>,
     history: Arc<apifast_history::FsHistoryStore>,
+    tokens: Arc<apifast_app::memory::MemoryTokens>,
     secrets: Arc<dyn SecretStore + Send>,
 }
 
@@ -305,6 +307,7 @@ fn spawn_run(
             responses,
             history,
             secrets,
+            tokens,
         } = ports;
         let (clock, random) = (SystemClock, SystemRandom::default());
         let send = SendPorts {
@@ -318,6 +321,7 @@ fn spawn_run(
             secrets: &*secrets,
             report: &|_| {},
             history: Some(&*history),
+            tokens: Some(&*tokens),
         };
         let tell = |message: RunMessage| {
             if let Some(messages) = messages.upgrade() {

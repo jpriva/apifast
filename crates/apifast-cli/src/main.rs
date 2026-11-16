@@ -218,6 +218,7 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
         draft: None,
     };
 
+    let tokens = apifast_app::memory::MemoryTokens::default();
     let (runtime, cancel) = runtime()?;
     let outcome = runtime.block_on(async {
         let ports = SendPorts {
@@ -232,6 +233,7 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
             // Shown before sending, so they are seen even if the send fails.
             report: &|problem| eprintln!("warning: {problem}"),
             history: None,
+            tokens: Some(&tokens),
         };
         send_request(ports, &located.request, &options, &cancel).await
     })?;
