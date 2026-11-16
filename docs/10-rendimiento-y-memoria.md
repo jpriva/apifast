@@ -97,6 +97,19 @@ Dos decisiones salieron de estas medidas:
 
 Sin medir aún: la RAM extra al recibir 100 MB y la CPU por tecla en un body de 200 KB en la ventana real (el spike 2 las midió en un prototipo), y la sobrecarga de envío.
 
+## Mediciones con workspaces
+
+Medido el 2026-11-16 en la misma máquina y de la misma forma que F2, tras F3, las primeras tareas de F4 y los workspaces ([ADR 0009](adr/0009-workspaces-y-varias-colecciones.md)). Tres ejecuciones de cada caso; la primera, con la caché fría, se descarta.
+
+| Caso | PSS en reposo | Primera ventana | CPU en reposo |
+|---|---|---|---|
+| Una colección de 100 requests (cargada) | 52,9 MB | 44–57 ms | 0,0 % |
+| Workspace que lista tres colecciones de 1000 requests, ninguna desplegada | 51,2 MB | 43–44 ms | 0,0 % |
+
+- Las colecciones plegadas no cuestan memoria medible: el workspace con 3000 requests listadas usa lo mismo que la ventana con una colección pequeña.
+- Una colección de 100 requests usa 2,9 MB más que en F2 (50 MB). Sigue dentro del presupuesto de 60 MB.
+- El binario release pasa de 22,7 MiB a 24,6 MiB: dentro del presupuesto de 25 MB, pero con poco margen. Han entrado la bóveda (cifrado y keyring, que trae el cliente D-Bus) y `regex`. Falta ver qué parte aporta cada uno antes de añadir más dependencias.
+
 ## Perfil de compilación
 
 Configuración prevista para release:

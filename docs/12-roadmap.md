@@ -242,7 +242,7 @@ El cifrado del tarro de cookies pasa a F5, donde llega el tarro.
 
 **Objetivo:** trabajar con varias colecciones a la vez, agrupadas en workspaces compatibles con Bruno, entrando directamente al visor ([ADR 0009](adr/0009-workspaces-y-varias-colecciones.md)).
 
-**Estado:** en curso desde el 2026-11-16. Se intercala en F4, después de las funciones `response` y `header` y antes de JSONPath; nace de probar la interfaz: sin colección solo había una bienvenida, no se podía crear una colección y abrir otra cerraba la anterior.
+**Estado:** completada el 2026-11-16. Se intercaló en F4, después de las funciones `response` y `header` y antes de JSONPath; nace de probar la interfaz: sin colección solo había una bienvenida, no se podía crear una colección y abrir otra cerraba la anterior.
 
 ### Tareas
 
@@ -251,8 +251,8 @@ El cifrado del tarro de cookies pasa a F5, donde llega el tarro.
 - [x] `workspace.yml` en `apifast-storage-fs`: leer, añadir, quitar y renombrar conservando el resto del archivo; estado personal por workspace y lista de workspaces conocidos. Todo `workspace.yml` del corpus de Bruno se guarda byte a byte. Puerto `WorkspaceRepository` (con `MemoryWorkspace`) y adaptador `FsWorkspace`, que reutiliza el guardado por parches de las colecciones: al añadir una colección se respeta hasta el estilo de comillas del archivo. `entry_for` escribe la ruta relativa si la colección está dentro de la carpeta del workspace, y `resolve` la vuelve a absoluta. `FsWorkspaceState` y `FsKnownWorkspaces` guardan lo personal; sus rutas están en `apifast_history::dirs`.
 - [x] Núcleo de la GUI con un workspace activo y varias colecciones: pestañas y comandos por colección, carga perezosa, entorno activo por colección, cerrar y quitar colecciones, crear, abrir y cambiar de workspace, restaurar al reiniciar, `workspace.yml` vigilado sin recursión. Las pestañas se identifican por colección y ruta (`TabKey`). El snapshot mantiene los campos de "la colección enfocada" (la de la pestaña activa, o la última elegida), así que la barra superior, los entornos, la bóveda y el historial siguen la pestaña activa sin más cambios. `Restore` abre el último workspace (o crea "My workspace") después de los ajustes; cualquier comando que lo necesite también lo hace. Cerrar una colección guarda sus borradores en su sesión y vuelven al abrir la request. La lista de workspaces conocidos vive en el directorio de datos, no en el de configuración: es estado. `FsWatcher::start_shallow` vigila solo `workspace.yml`. Hasta la tarea de interfaz, el árbol muestra la colección enfocada.
 - [x] Interfaz: selector de workspace, una raíz por colección en el árbol con su menú, barra superior e historial de la colección activa, pestañas con su colección, paleta con todas las requests cargadas. El selector de la cabecera de la barra lateral cambia de workspace y ofrece New workspace…, Open workspace… y Rename workspace…; debajo, New collection… y Open collection…. Cada raíz se despliega con un clic (y se carga entonces). Una raíz que no carga se ve en rojo, con el motivo al pasar el ratón, y una que necesita su clave en ámbar. El menú de la raíz tiene New request, New folder, Environments, Collection key, Close, Remove from workspace y Copy folder path. Arrastrar solo funciona dentro de la colección, y soltar sobre la raíz lleva el elemento a su nivel superior. Dos pestañas con el mismo nombre de colecciones distintas llevan delante el nombre de la colección; el tooltip siempre lo dice. "Forget" de un workspace existe en el núcleo pero aún no tiene botón.
-- [ ] Clave de la colección por colección: nunca se pide a quien la creó ni dos veces en la misma máquina; verla, copiarla y rotarla desde el menú de la raíz. Fijado con pruebas.
-- [ ] Medición de memoria con un workspace de tres colecciones y una cargada.
+- [x] Clave de la colección por colección: nunca se pide a quien la creó ni dos veces en la misma máquina; verla, copiarla y rotarla desde el menú de la raíz. Fijado con pruebas. Una prueba recorre dos máquinas (dos directorios de datos): quien comparte el primer secreto no escribe la clave y, tras reiniciar, no se le pide; la otra máquina ve la marca en la raíz, pega la clave una vez y tras reiniciar ya no se le pide. El aviso para pegarla es el de la colección enfocada.
+- [x] Medición de memoria con un workspace de tres colecciones y una cargada. Medido con tres colecciones de 1000 requests sin desplegar: 51,2 MB, lo mismo que con una colección pequeña cargada (52,9 MB). El binario sube a 24,6 MiB, cerca del límite ([rendimiento](10-rendimiento-y-memoria.md)).
 
 Siguiente, fuera de esta sección: los entornos globales del workspace (`environments/` de Bruno) como ámbito `Global`.
 
@@ -262,6 +262,8 @@ Siguiente, fuera de esta sección: los entornos globales del workspace (`environ
 - Dos colecciones abiertas a la vez, cada una con su entorno, y al reiniciar todo vuelve como estaba.
 - Un workspace creado en Bruno se abre en apifast con sus colecciones, y uno guardado por apifast se abre en Bruno.
 - La clave de una colección no se pide a quien la creó ni a una máquina que ya la importó.
+
+**Resultado:** los cuatro se cumplen. Las pruebas de flujo arrancan sin colección, crean colecciones y un segundo workspace desde la interfaz; las del núcleo cubren dos colecciones con su entorno, el reinicio, cerrar y quitar, el cambio de workspace y la clave en dos máquinas. Los `workspace.yml` del corpus de Bruno se leen y se guardan byte a byte, y lo que apifast escribe usa el mismo formato; abrirlo en Bruno queda por comprobar a mano.
 
 ---
 

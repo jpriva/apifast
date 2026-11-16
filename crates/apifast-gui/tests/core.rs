@@ -1576,3 +1576,60 @@ fn a_collection_whose_folder_is_gone_shows_why() {
     });
     assert!(snapshot.collections[0].tree.is_none());
 }
+
+#[test]
+fn the_collection_key_is_never_asked_of_its_creator_nor_twice_on_a_machine() {
+    use apifast_gui::core::VaultCommand;
+
+    let dir = collection(server(Duration::ZERO));
+    let (alice, bob) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let needs_key = |s: &Snapshot| s.collections.first().is_some_and(|c| c.needs_key);
+
+    // Alice shares the first secret: the key is made, nothing is asked.
+    let key = {
+        let core = core_in(alice.path());
+        open_root(&core, dir.path());
+        let snapshot = core.snapshot();
+        core.send(Command::SaveEnvironment(Box::new(with_secret_token(
+            &snapshot,
+        ))));
+        wait(&core, "the secret variable", |s| {
+            !s.vault.secrets.is_empty()
+        });
+        core.send(Command::Vault(VaultCommand::Set {
+            environment: "local".into(),
+            name: "token".into(),
+            value: apifast_domain::Secret::new("t0k3n"),
+            shared: true,
+        }));
+        let snapshot = wait(&core, "shared", |s| s.vault.shares);
+        assert!(snapshot.vault.has_key && !needs_key(&snapshot));
+        // She does not remember it: it can be shown, to send it.
+        core.send(Command::Vault(VaultCommand::ShowKey));
+        let snapshot = wait(&core, "the key", |s| s.vault.shareable_key.is_some());
+        snapshot.vault.shareable_key.clone().unwrap()
+    };
+    // After a restart she is still not asked.
+    {
+        let core = core_in(alice.path());
+        core.send(Command::Restore);
+        let snapshot = wait(&core, "restored", |s| s.vault.shares);
+        assert!(snapshot.vault.has_key && !needs_key(&snapshot));
+    }
+
+    // Bob's machine has never seen it: asked once, by its root's mark.
+    {
+        let core = core_in(bob.path());
+        open_root(&core, dir.path());
+        let snapshot = wait(&core, "the vault", |s| s.vault.shares);
+        assert!(!snapshot.vault.has_key && needs_key(&snapshot));
+        core.send(Command::Vault(VaultCommand::ImportKey(key)));
+        let snapshot = wait(&core, "the key taken", |s| s.vault.has_key);
+        assert!(!needs_key(&snapshot));
+    }
+    // And never again on his machine.
+    let core = core_in(bob.path());
+    core.send(Command::Restore);
+    let snapshot = wait(&core, "restored", |s| s.vault.shares);
+    assert!(snapshot.vault.has_key && !needs_key(&snapshot));
+}
