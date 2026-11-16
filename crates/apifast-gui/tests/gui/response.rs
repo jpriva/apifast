@@ -246,3 +246,55 @@ fn the_tests_tab_says_when_nothing_ran() {
     harness.run();
     assert!(has(&harness, EN.tests_none));
 }
+
+#[test]
+fn the_filter_selects_with_jsonpath_or_xpath_and_reports_errors() {
+    let mut harness = harness(received(
+        "application/json",
+        r#"{"items":[{"id":7,"name":"Ana"},{"id":9,"name":"Bo"}]}"#,
+    ));
+    harness.run();
+    harness.state_mut().view.filter = "$.items[*].id".into();
+    harness.run();
+    assert!(has(&harness, "2 selected"));
+    assert!(has_text(&harness, "7"));
+    assert!(!has_text(&harness, "Ana"));
+
+    harness.state_mut().view.filter = "$.items[?@.id > 8].name".into();
+    harness.run();
+    assert!(has(&harness, "1 selected"));
+    assert!(has_text(&harness, "\"Bo\""));
+
+    harness.state_mut().view.filter = "$.items[".into();
+    harness.run();
+    assert!(
+        harness
+            .query_by_label_contains("invalid JSONPath")
+            .is_some()
+    );
+
+    // Empty: the whole body again.
+    harness.state_mut().view.filter.clear();
+    harness.run();
+    assert!(has_text(&harness, "\"Ana\""));
+
+    let mut harness = harness_with_xml();
+    harness.state_mut().view.filter = "//item/@id".into();
+    harness.run();
+    assert!(has(&harness, "2 selected"));
+    assert!(has_text(&harness, "a1"));
+}
+
+fn harness_with_xml() -> Harness<'static, State> {
+    let mut harness = harness(received(
+        "application/xml",
+        "<list><item id=\"a1\">x</item><item id=\"b2\">y</item></list>",
+    ));
+    harness.run();
+    harness
+}
+
+/// Whether some row of the viewer contains `text`.
+fn has_text(harness: &Harness<'_, State>, text: &str) -> bool {
+    harness.query_by_label_contains(text).is_some()
+}

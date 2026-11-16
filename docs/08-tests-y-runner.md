@@ -123,7 +123,7 @@ Comportamiento actual:
 
 ## JSONPath y XPath
 
-El crate `apifast-query` evalúa las dos lenguas sobre el cuerpo de una respuesta. Lo usan `res.body.<ruta>` en aserciones y capturas, `response(path=…)` en plantillas ([docs/05](05-variables-y-plantillas.md)) y, más adelante, el filtro del visor de respuestas.
+El crate `apifast-query` evalúa las dos lenguas sobre el cuerpo de una respuesta. Lo usan `res.body.<ruta>` en aserciones y capturas, `response(path=…)` en plantillas ([docs/05](05-variables-y-plantillas.md)) y el filtro del visor de respuestas ([docs/09](09-ui-ux.md#panel-de-respuesta)).
 
 **JSONPath** sigue el RFC 9535:
 

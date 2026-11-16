@@ -74,8 +74,21 @@ pub struct ResponseView {
     pub mode: BodyMode,
     /// The largest body shown pretty, in bytes; [`PRETTY_LIMIT`] if `None`.
     pub pretty_limit: Option<u64>,
+    /// The JSONPath or XPath that filters the body; empty shows it all.
+    pub filter: String,
     viewer: BodyViewer,
     prepared: Option<Prepared>,
+    /// What the filter selected, for the body and expression it ran on.
+    filtered: Option<Filtered>,
+}
+
+/// The result of the filter over one body.
+#[derive(Debug)]
+struct Filtered {
+    /// The body's key and the expression.
+    key: (String, String),
+    /// The selected values, shown formatted, or why there are none.
+    result: Result<(BodyHandle, Option<Language>, usize), String>,
 }
 
 impl ResponseView {
@@ -159,6 +172,10 @@ impl ResponseView {
         if language.is_some() && !can_pretty {
             ui.label(RichText::new(strings.pretty_off).color(muted));
         }
+        let can_filter = can_pretty && matches!(language, Some(Language::Json | Language::Xml));
+        if can_filter && self.filtered_view(ui, body, language, strings) {
+            return;
+        }
         let pretty = can_pretty && self.mode == BodyMode::Pretty;
         let Some(prepared) = self.prepared.as_mut() else {
             return;
@@ -180,6 +197,57 @@ impl ResponseView {
 
     /// The language of the body shown and whether it is binary, worked
     /// out once per body.
+    /// The filter field and, when it has an expression, what it selects
+    /// instead of the body. Returns whether it drew the result.
+    fn filtered_view(
+        &mut self,
+        ui: &mut egui::Ui,
+        body: &BodyHandle,
+        language: Option<Language>,
+        strings: &Strings,
+    ) -> bool {
+        let palette = theme::palette(ui);
+        let hint = if language == Some(Language::Xml) {
+            strings.filter_xpath
+        } else {
+            strings.filter_jsonpath
+        };
+        ui.add(
+            egui::TextEdit::singleline(&mut self.filter)
+                .hint_text(hint)
+                .font(egui::TextStyle::Monospace)
+                .desired_width(f32::INFINITY),
+        )
+        .accessible_name(strings.filter_body);
+        let expression = self.filter.trim().to_owned();
+        if expression.is_empty() {
+            return false;
+        }
+        let key = (body.key().to_owned(), expression);
+        if self.filtered.as_ref().is_none_or(|f| f.key != key) {
+            let result = filter(body, &key.1);
+            self.filtered = Some(Filtered { key, result });
+        }
+        let Some(filtered) = &self.filtered else {
+            return false;
+        };
+        match &filtered.result {
+            Err(message) => {
+                ui.label(RichText::new(message.as_str()).color(palette.danger));
+            }
+            Ok((shown, shown_language, count)) => {
+                let text = strings
+                    .filter_results
+                    .replace("{count}", &count.to_string());
+                ui.label(RichText::new(text).color(palette.text_muted));
+                let shown = shown.clone();
+                let shown_language = *shown_language;
+                self.viewer.show(ui, &shown, shown_language, strings);
+            }
+        }
+        true
+    }
+
     fn prepare(&mut self, received: &Received) -> (Option<Language>, bool) {
         let body = &received.body;
         let prepared = match self.prepared.take() {
@@ -207,6 +275,33 @@ impl ResponseView {
 }
 
 /// The body formatted as `language`, or as received if it cannot be.
+/// Runs `expression` over the whole body: the values a JSONPath selects
+/// as formatted JSON (one value, or an array of several), or the texts an
+/// XPath selects, one per line.
+fn filter(
+    body: &BodyHandle,
+    expression: &str,
+) -> Result<(BodyHandle, Option<Language>, usize), String> {
+    let bytes = body.read(0, usize::try_from(body.len()).unwrap_or(usize::MAX))?;
+    let text = String::from_utf8_lossy(&bytes);
+    let json = apifast_domain::Json::parse(&text).ok();
+    let values =
+        apifast_query::select(expression, &text, json.as_ref()).map_err(|e| e.to_string())?;
+    let count = values.len();
+    let key = format!("{}#filter#{expression}", body.key());
+    if apifast_query::Language::of(expression) == apifast_query::Language::XPath {
+        let lines: Vec<String> = values.iter().map(apifast_domain::Json::to_text).collect();
+        return Ok((BodyHandle::memory(key, lines.join("\n")), None, count));
+    }
+    let value = match values.as_slice() {
+        [one] => one.clone(),
+        _ => apifast_domain::Json::Array(values),
+    };
+    let compact = value.to_string();
+    let pretty = code::format(&compact, Language::Json).unwrap_or(compact);
+    Ok((BodyHandle::memory(key, pretty), Some(Language::Json), count))
+}
+
 fn make_pretty(body: &BodyHandle, language: Language) -> Pretty {
     let bytes = body
         .read(0, usize::try_from(body.len()).unwrap_or(usize::MAX))

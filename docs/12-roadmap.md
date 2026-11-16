@@ -283,7 +283,7 @@ Siguiente, fuera de esta sección: los entornos globales del workspace (`environ
 - [x] Ejecución dirigida por datos (CSV y JSON). `parse_data` lee CSV (RFC 4180, con cabecera) o un array JSON de objetos, con errores que dicen la línea o el elemento. `RunOptions.data` hace una iteración por fila, con sus columnas como variables runtime.
 - [x] `apifast run` con reporters de consola, JSON, JUnit y HTML. Los reporters son funciones puras de `apifast-app` (para que la interfaz pueda exportarlos); la consola muestra una línea por request en vivo. Códigos de salida 0, 1, 2 y 3, y el 3 pasa a ser el de uso en todos los comandos. Pendientes para F5: `--env-file`, `--insecure` y `--cacert`.
 - [x] Interfaz: pestaña Tests, resultados en la respuesta, vista del runner. La pestaña Tests del editor edita aserciones y capturas; la de la respuesta muestra los resultados, los fallos primero; un aviso guarda las capturas de ámbito `environment` en el entorno o, si son secretas, en la bóveda. La ventana del runner ("Run…" en el menú de una colección o carpeta) lanza la ejecución en segundo plano, muestra el progreso y los resultados, abre cada paso con su respuesta y guarda los informes. Corregido de paso: `run_collection` ordena el árbol por `seq`, como la interfaz, y no en el orden de los archivos.
-- [ ] Filtro de respuesta por JSONPath o XPath en el visor.
+- [x] Filtro de respuesta por JSONPath o XPath en el visor. Un campo sobre el body formateado (JSON o XML, hasta el umbral de 2 MB) con `apifast-query`: el valor o los valores seleccionados, formateados, cuántos son, y el error con su posición si la expresión no vale.
 
 ### Criterio de salida
 

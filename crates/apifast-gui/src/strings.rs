@@ -358,6 +358,14 @@ pub struct Strings {
     pub run_error: &'static str,
     /// Runner: hover of a step.
     pub run_open_step: &'static str,
+    /// Accessible name of the response filter.
+    pub filter_body: &'static str,
+    /// Placeholder of the filter on a JSON body.
+    pub filter_jsonpath: &'static str,
+    /// Placeholder of the filter on an XML body.
+    pub filter_xpath: &'static str,
+    /// Above the filtered values; `{count}` is replaced.
+    pub filter_results: &'static str,
     /// Mark of an assertion that held.
     pub pass: &'static str,
     /// Mark of an assertion that did not.
@@ -751,6 +759,10 @@ pub const EN: Strings = Strings {
     run_skip: "SKIP",
     run_error: "ERROR",
     run_open_step: "Open with this response",
+    filter_body: "Filter the body",
+    filter_jsonpath: "Filter with JSONPath: $.items[*].id",
+    filter_xpath: "Filter with XPath: //item/@id",
+    filter_results: "{count} selected",
     pass: "PASS",
     fail: "FAIL",
     captures: "Captures",

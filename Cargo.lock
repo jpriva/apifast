@@ -322,6 +322,7 @@ dependencies = [
  "apifast-domain",
  "apifast-history",
  "apifast-http",
+ "apifast-query",
  "apifast-storage-fs",
  "apifast-template",
  "apifast-vault",
