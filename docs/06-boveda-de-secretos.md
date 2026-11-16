@@ -135,9 +135,13 @@ Si la colección ya tiene *challenge* pero esta máquina no tiene su clave, comp
 
 ### Rotar la clave de la colección
 
-1. Se genera una clave nueva.
-2. Se vuelven a cifrar todos los secretos compartidos y el *challenge*.
-3. Los cambios quedan en los archivos para hacer commit; el equipo necesita la clave nueva.
+1. Se abren todos los secretos compartidos con la clave actual; si alguno no se abre, no se toca nada.
+2. Se genera una clave nueva y se guarda como la de la colección; la anterior se conserva en `keys/<collection-id>.previous.key`.
+3. Se vuelven a cifrar todos los secretos compartidos y el *challenge* con la nueva.
+4. Se borra la clave anterior y se muestra la nueva en formato compartible.
+5. Los cambios quedan en los archivos para hacer commit; el equipo necesita la clave nueva.
+
+Si la rotación se corta entre los pasos 2 y 4, cada valor se abre con la clave nueva o, si no, con la anterior: no se pierde nada, y volver a rotar la termina.
 
 La rotación no invalida los secretos antiguos del historial de git: si una clave se filtra, además hay que cambiar las credenciales reales.
 

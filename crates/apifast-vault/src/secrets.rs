@@ -358,6 +358,67 @@ impl<K: KeyBackend, F: KeyBackend> VaultSecrets<K, F> {
         {
             return Ok(Some(value.as_str().to_owned()));
         }
+        self.value_shared(environment, name)
+    }
+
+    fn previous_collection_key(&self) -> Result<Option<Key>, KeyStoreError> {
+        match self.existing_master()? {
+            Some(master) => self
+                .collection_keys
+                .load_previous(&master, &self.collection),
+            None => Ok(None),
+        }
+    }
+
+    /// Replaces the collection's key with a new one: every shared secret
+    /// and the challenge are sealed again with it. Returns the new key as
+    /// people pass it: the team needs it, since the old one no longer opens
+    /// the new files. Old values stay readable in git's history; if the old
+    /// key leaked, the real credentials must change too.
+    ///
+    /// Every value is opened before anything is written. Until the rotation
+    /// finishes, the old key is kept as "previous", so a rotation cut short
+    /// loses nothing and can simply be run again.
+    ///
+    /// # Errors
+    ///
+    /// [`KeyStoreError::NoCollectionKey`] if this machine has no key of the
+    /// collection; or if a value does not open, or a file cannot be
+    /// written.
+    pub fn rotate_collection_key(&self) -> Result<String, KeyStoreError> {
+        let Some(old) = self.existing_collection_key()? else {
+            return Err(KeyStoreError::NoCollectionKey);
+        };
+        let master = self.master_or_new()?;
+        let mut values = Vec::new();
+        for (environment, name) in self.shared.shared_secret_entries().map_err(|e| files(&e))? {
+            let value = self
+                .value_shared(&environment, &name)?
+                .ok_or(KeyStoreError::Damaged)?;
+            values.push((environment, name, value));
+        }
+        let new = Key::generate()?;
+        let challenge = new_challenge(&new, &self.collection)?;
+        self.collection_keys
+            .save_previous(&master, &self.collection, &old)?;
+        self.collection_keys.save(&master, &self.collection, &new)?;
+        *locked(&self.collection_key) = Some(new.clone());
+        for (environment, name, value) in &values {
+            let aad = Aad::variable(&self.collection, environment, name);
+            let envelope = seal(&new, value.as_bytes(), &aad)?;
+            self.shared
+                .set_shared_secret(environment, name, &envelope)
+                .map_err(|e| files(&e))?;
+        }
+        self.shared
+            .set_vault_challenge(&challenge)
+            .map_err(|e| files(&e))?;
+        self.collection_keys.remove_previous(&self.collection)?;
+        Ok(crate::shareable_key(&new))
+    }
+
+    /// The value of shared secret `name`, ignoring any local one.
+    fn value_shared(&self, environment: &str, name: &str) -> Result<Option<String>, KeyStoreError> {
         let Some(envelope) = self
             .shared
             .shared_secret(environment, name)
@@ -369,7 +430,15 @@ impl<K: KeyBackend, F: KeyBackend> VaultSecrets<K, F> {
             return Err(KeyStoreError::SharedWithoutKey(name.to_owned()));
         };
         let aad = Aad::variable(&self.collection, environment, name);
-        let bytes = open(&key, &envelope, &aad)?;
+        let bytes = match open(&key, &envelope, &aad) {
+            Ok(bytes) => bytes,
+            // A rotation stopped half way leaves some values sealed with the
+            // key from before it.
+            Err(rejected) => match self.previous_collection_key()? {
+                Some(previous) => open(&previous, &envelope, &aad)?,
+                None => return Err(rejected.into()),
+            },
+        };
         String::from_utf8(bytes.to_vec())
             .map(Some)
             .map_err(|_| KeyStoreError::Damaged)

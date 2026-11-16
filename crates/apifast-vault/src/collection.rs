@@ -60,6 +60,15 @@ pub(crate) fn check_id(dir: &Path, collection: &str) -> Result<(), KeyStoreError
     }
 }
 
+/// Which key of a collection a file holds.
+#[derive(Debug, Clone, Copy)]
+enum Slot {
+    /// The one in use.
+    Current,
+    /// The one before a rotation, kept until the rotation finishes.
+    Previous,
+}
+
 /// The collection keys of this user, each wrapped with the master key.
 #[derive(Debug, Clone)]
 pub struct CollectionKeyStore {
@@ -74,10 +83,14 @@ impl CollectionKeyStore {
         }
     }
 
-    /// The file of `collection`'s key.
-    fn file(&self, collection: &str) -> Result<PathBuf, KeyStoreError> {
+    /// The file of `collection`'s key in `slot`.
+    fn file(&self, collection: &str, slot: Slot) -> Result<PathBuf, KeyStoreError> {
         check_id(&self.dir, collection)?;
-        Ok(self.dir.join(format!("{collection}.key")))
+        let name = match slot {
+            Slot::Current => format!("{collection}.key"),
+            Slot::Previous => format!("{collection}.previous.key"),
+        };
+        Ok(self.dir.join(name))
     }
 
     fn error(path: &Path, e: &io::Error) -> KeyStoreError {
@@ -95,7 +108,30 @@ impl CollectionKeyStore {
     /// If the file cannot be read, or does not open with `master` (another
     /// master key, or a file copied from another collection).
     pub fn load(&self, master: &Key, collection: &str) -> Result<Option<Key>, KeyStoreError> {
-        let path = self.file(collection)?;
+        self.load_slot(master, collection, Slot::Current)
+    }
+
+    /// The key `collection` had before a rotation that did not finish;
+    /// `None` once it finished.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::load`].
+    pub fn load_previous(
+        &self,
+        master: &Key,
+        collection: &str,
+    ) -> Result<Option<Key>, KeyStoreError> {
+        self.load_slot(master, collection, Slot::Previous)
+    }
+
+    fn load_slot(
+        &self,
+        master: &Key,
+        collection: &str,
+        slot: Slot,
+    ) -> Result<Option<Key>, KeyStoreError> {
+        let path = self.file(collection, slot)?;
         let text = match fs::read_to_string(&path) {
             Ok(text) => text,
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
@@ -113,7 +149,32 @@ impl CollectionKeyStore {
     ///
     /// If the file cannot be written.
     pub fn save(&self, master: &Key, collection: &str, key: &Key) -> Result<(), KeyStoreError> {
-        let path = self.file(collection)?;
+        self.save_slot(master, collection, key, Slot::Current)
+    }
+
+    /// Keeps `key` as the one `collection` had before a rotation, until the
+    /// rotation finishes.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::save`].
+    pub fn save_previous(
+        &self,
+        master: &Key,
+        collection: &str,
+        key: &Key,
+    ) -> Result<(), KeyStoreError> {
+        self.save_slot(master, collection, key, Slot::Previous)
+    }
+
+    fn save_slot(
+        &self,
+        master: &Key,
+        collection: &str,
+        key: &Key,
+        slot: Slot,
+    ) -> Result<(), KeyStoreError> {
+        let path = self.file(collection, slot)?;
         let wrapped = seal(master, key.as_bytes(), &key_aad(collection))?;
         fs::create_dir_all(&self.dir).map_err(|e| Self::error(&self.dir, &e))?;
         let partial = path.with_extension("key.partial");
@@ -137,7 +198,21 @@ impl CollectionKeyStore {
     ///
     /// If the file cannot be removed.
     pub fn remove(&self, collection: &str) -> Result<(), KeyStoreError> {
-        let path = self.file(collection)?;
+        self.remove_slot(collection, Slot::Current)
+    }
+
+    /// Forgets the key `collection` had before a rotation, once it
+    /// finished.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::remove`].
+    pub fn remove_previous(&self, collection: &str) -> Result<(), KeyStoreError> {
+        self.remove_slot(collection, Slot::Previous)
+    }
+
+    fn remove_slot(&self, collection: &str, slot: Slot) -> Result<(), KeyStoreError> {
+        let path = self.file(collection, slot)?;
         match fs::remove_file(&path) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
