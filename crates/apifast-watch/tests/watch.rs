@@ -85,3 +85,22 @@ fn a_missing_folder_cannot_be_watched() {
     let error = FsWatcher::start(&dir.path().join("nope"), |_| {}).unwrap_err();
     assert!(error.to_string().contains("nope"), "{error}");
 }
+
+#[test]
+fn a_shallow_watch_sees_its_files_but_not_its_subfolders() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir(dir.path().join("collections")).unwrap();
+    let (sender, receiver) = mpsc::channel();
+    let _watcher = FsWatcher::start_shallow(dir.path(), move |changes| {
+        let _ = sender.send(changes);
+    })
+    .unwrap();
+    std::fs::write(dir.path().join("collections/inner.yml"), "a").unwrap();
+    std::fs::write(dir.path().join("workspace.yml"), "b").unwrap();
+    let seen = wait_for(&receiver, "workspace.yml");
+    assert!(
+        seen.iter()
+            .all(|c| !c.paths.contains("collections/inner.yml")),
+        "{seen:?}"
+    );
+}

@@ -8,7 +8,7 @@ use std::sync::Arc;
 use apifast_app::{CollectionTree, RequestPath, TreeItem};
 use apifast_domain::{Collection, HttpRequest, Method};
 use apifast_gui::actions::{Action, parse_shortcut};
-use apifast_gui::core::{CollectionView, Command, ResponseState, Snapshot, Tab};
+use apifast_gui::core::{CollectionView, Command, ResponseState, Snapshot, Tab, TabKey};
 use apifast_gui::organisms::{PaletteMode, fuzzy};
 use apifast_gui::screens::MainScreen;
 use apifast_gui::strings::EN;
@@ -27,6 +27,7 @@ fn request(path: &str, name: &str) -> TreeItem {
 
 fn tab(path: &str, name: &str) -> Tab {
     Tab {
+        root: "/c".into(),
         path: RequestPath::new(path),
         saved: HttpRequest::new(name, Method::Get, "{{host}}/x"),
         draft: None,
@@ -41,21 +42,21 @@ fn snapshot() -> Snapshot {
     Snapshot {
         collection: Some(CollectionView {
             root: "/c".into(),
-            tree: CollectionTree {
+            tree: std::sync::Arc::new(CollectionTree {
                 collection: Collection::new("C"),
                 items: vec![
                     request("health.yml", "Health"),
                     request("users/list.yml", "List users"),
                     request("users/create.yml", "Create user"),
                 ],
-            },
+            }),
         }),
         environments: vec!["local".into(), "prod".into()],
         tabs: vec![
             tab("health.yml", "Health"),
             tab("users/list.yml", "List users"),
         ],
-        active: Some(RequestPath::new("health.yml")),
+        active: Some(TabKey::new("/c", RequestPath::new("health.yml"))),
         ..Snapshot::default()
     }
 }
@@ -145,7 +146,10 @@ fn ctrl_k_opens_the_palette_and_enter_runs_the_selection() {
     press(&mut harness, Modifiers::NONE, Key::Enter);
     assert_eq!(
         take(&mut harness),
-        [Command::OpenRequest(RequestPath::new("users/list.yml"))]
+        [Command::OpenRequest(TabKey::new(
+            "/c",
+            RequestPath::new("users/list.yml")
+        ))]
     );
     assert_eq!(harness.state().screen.palette.open, None);
 }
@@ -186,7 +190,10 @@ fn tabs_are_walked_numbered_closed_and_reopened() {
     press(&mut harness, Modifiers::COMMAND, Key::Tab);
     assert_eq!(
         take(&mut harness),
-        [Command::ActivateTab(RequestPath::new("users/list.yml"))]
+        [Command::ActivateTab(TabKey::new(
+            "/c",
+            RequestPath::new("users/list.yml")
+        ))]
     );
     press(
         &mut harness,
@@ -195,23 +202,33 @@ fn tabs_are_walked_numbered_closed_and_reopened() {
     );
     assert_eq!(
         take(&mut harness),
-        [Command::ActivateTab(RequestPath::new("users/list.yml"))],
+        [Command::ActivateTab(TabKey::new(
+            "/c",
+            RequestPath::new("users/list.yml")
+        ))],
         "going back from the first wraps to the last"
     );
     press(&mut harness, Modifiers::COMMAND, Key::Num2);
     assert_eq!(
         take(&mut harness),
-        [Command::ActivateTab(RequestPath::new("users/list.yml"))]
+        [Command::ActivateTab(TabKey::new(
+            "/c",
+            RequestPath::new("users/list.yml")
+        ))]
     );
 
     press(&mut harness, Modifiers::COMMAND, Key::W);
     assert_eq!(
         take(&mut harness),
-        [Command::CloseTab(RequestPath::new("health.yml"))]
+        [Command::CloseTab(TabKey::new(
+            "/c",
+            RequestPath::new("health.yml")
+        ))]
     );
     // The core closed it.
     harness.state_mut().snapshot.tabs.remove(0);
-    harness.state_mut().snapshot.active = Some(RequestPath::new("users/list.yml"));
+    harness.state_mut().snapshot.active =
+        Some(TabKey::new("/c", RequestPath::new("users/list.yml")));
     harness.run();
     press(
         &mut harness,
@@ -220,7 +237,10 @@ fn tabs_are_walked_numbered_closed_and_reopened() {
     );
     assert_eq!(
         take(&mut harness),
-        [Command::OpenRequest(RequestPath::new("health.yml"))]
+        [Command::OpenRequest(TabKey::new(
+            "/c",
+            RequestPath::new("health.yml")
+        ))]
     );
 }
 

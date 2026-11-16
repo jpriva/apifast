@@ -69,6 +69,28 @@ impl FsWatcher {
         root: &Path,
         on_change: impl Fn(Changes) + Send + 'static,
     ) -> Result<Self, WatchError> {
+        Self::watch(root, RecursiveMode::Recursive, on_change)
+    }
+
+    /// Watches only the files directly in `root`, not its subfolders: for a
+    /// workspace's `workspace.yml`, whose collections are watched on their
+    /// own.
+    ///
+    /// # Errors
+    ///
+    /// If the folder does not exist or the system refuses to watch it.
+    pub fn start_shallow(
+        root: &Path,
+        on_change: impl Fn(Changes) + Send + 'static,
+    ) -> Result<Self, WatchError> {
+        Self::watch(root, RecursiveMode::NonRecursive, on_change)
+    }
+
+    fn watch(
+        root: &Path,
+        mode: RecursiveMode,
+        on_change: impl Fn(Changes) + Send + 'static,
+    ) -> Result<Self, WatchError> {
         let error = |e: &dyn std::fmt::Display| WatchError {
             path: root.to_owned(),
             message: e.to_string(),
@@ -78,9 +100,7 @@ impl FsWatcher {
         let roots = vec![root.to_owned(), root.canonicalize().map_err(|e| error(&e))?];
         let (sender, receiver) = mpsc::channel();
         let mut watcher = notify::recommended_watcher(sender).map_err(|e| error(&e))?;
-        watcher
-            .watch(root, RecursiveMode::Recursive)
-            .map_err(|e| error(&e))?;
+        watcher.watch(root, mode).map_err(|e| error(&e))?;
         let thread = std::thread::Builder::new()
             .name("apifast-watch".into())
             .spawn(move || gather(&receiver, &roots, &on_change))

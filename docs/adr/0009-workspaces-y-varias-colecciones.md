@@ -34,7 +34,7 @@ docs: ''
 
 | Dato | Dónde |
 |---|---|
-| Workspaces conocidos y el último activo | `~/.config/apifast/workspaces.yml` |
+| Workspaces conocidos y el último activo | `~/.local/share/apifast/workspaces.yml` (estado, no configuración) |
 | Colecciones desplegadas, pestañas abiertas y la activa | `~/.local/share/apifast/workspaces/<hash-de-la-ruta>/state.yml` |
 | Borradores y entorno activo de cada colección | La sesión de la colección, como hasta ahora |
 | Workspace por defecto ("My workspace") | `~/.local/share/apifast/default-workspace/` |

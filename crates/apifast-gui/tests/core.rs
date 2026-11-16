@@ -15,7 +15,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use apifast_app::{ItemPath, Placement, RequestPath, TreeItem};
-use apifast_gui::core::{Command, Core, ResponseState, Snapshot};
+use apifast_gui::core::{Command, Core, ResponseState, Snapshot, TabKey};
 use apifast_vault::SystemKeyring;
 
 /// Answers every request after `delay`, with the request line as the body.
@@ -101,6 +101,21 @@ fn wait(core: &Core, what: &str, done: impl Fn(&Snapshot) -> bool) -> Arc<Snapsh
     }
 }
 
+/// The tab of `path` in the focused collection.
+fn at(core: &Core, path: impl std::fmt::Display) -> TabKey {
+    TabKey::new(root(core), RequestPath::new(path.to_string()))
+}
+
+/// The folder of the focused collection.
+fn root(core: &Core) -> std::path::PathBuf {
+    core.snapshot()
+        .collection
+        .as_ref()
+        .expect("a collection is open")
+        .root
+        .clone()
+}
+
 fn open(core: &Core, root: &Path) -> Arc<Snapshot> {
     core.send(Command::OpenCollection(root.to_path_buf()));
     wait(core, "the collection", |s| {
@@ -157,7 +172,7 @@ fn sends_the_open_request_with_the_active_environment() {
     let (core, _, _data) = start();
     open(&core, dir.path());
     core.send(Command::SelectEnvironment(Some("local".into())));
-    core.send(Command::OpenRequest(RequestPath::new("users/get.yml")));
+    core.send(Command::OpenRequest(at(&core, "users/get.yml")));
     let snapshot = wait(&core, "the request", |s| s.active_tab().is_some());
     assert_eq!(snapshot.active_tab().unwrap().request().name, "Get");
 
@@ -189,7 +204,7 @@ fn a_failed_send_is_reported_without_breaking_the_core() {
     open(&core, dir.path());
 
     // No environment: `host` is missing.
-    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
     wait(&core, "the request", |s| s.active_tab().is_some());
     core.send(Command::Send);
     let snapshot = wait(&core, "the failure", |s| {
@@ -217,7 +232,7 @@ fn a_send_in_progress_can_be_cancelled() {
     let (core, _, _data) = start();
     open(&core, dir.path());
     core.send(Command::SelectEnvironment(Some("local".into())));
-    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
     wait(&core, "the request", |s| s.active_tab().is_some());
 
     core.send(Command::Send);
@@ -236,13 +251,13 @@ fn a_new_tab_starts_without_a_response() {
     let (core, _, _data) = start();
     open(&core, dir.path());
     core.send(Command::SelectEnvironment(Some("local".into())));
-    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
     core.send(Command::Send);
     wait(&core, "the response", |s| {
         matches!(response(s), ResponseState::Received(_))
     });
 
-    core.send(Command::OpenRequest(RequestPath::new("users/get.yml")));
+    core.send(Command::OpenRequest(at(&core, "users/get.yml")));
     let snapshot = wait(&core, "the new request", |s| {
         s.active_tab().is_some_and(|t| t.request().name == "Get")
     });
@@ -264,7 +279,7 @@ fn responses_are_stored_in_the_given_data_directory() {
     let (core, _, data) = start();
     open(&core, dir.path());
     core.send(Command::SelectEnvironment(Some("local".into())));
-    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
     core.send(Command::Send);
     wait(&core, "the response", |s| {
         matches!(response(s), ResponseState::Received(_))
@@ -299,6 +314,7 @@ fn a_created_request_appears_in_the_tree_and_opens() {
     let (core, _, _data) = start();
     let snapshot = open(&core, dir.path());
     core.send(Command::CreateRequest {
+        root: root(&core),
         folder: String::new(),
         name: "New one".into(),
     });
@@ -316,9 +332,10 @@ fn renaming_the_folder_of_the_open_request_keeps_it_open() {
     let dir = collection(server(Duration::ZERO));
     let (core, _, _data) = start();
     open(&core, dir.path());
-    core.send(Command::OpenRequest(RequestPath::new("users/get.yml")));
+    core.send(Command::OpenRequest(at(&core, "users/get.yml")));
     let snapshot = wait(&core, "the request", |s| s.active_tab().is_some());
     core.send(Command::Rename {
+        root: root(&core),
         item: ItemPath::Folder("users".into()),
         name: "People".into(),
     });
@@ -334,11 +351,12 @@ fn deleting_the_open_request_closes_it() {
     let dir = collection(server(Duration::ZERO));
     let (core, _, _data) = start();
     open(&core, dir.path());
-    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
     let snapshot = wait(&core, "the request", |s| s.active_tab().is_some());
-    core.send(Command::Delete(ItemPath::Request(RequestPath::new(
-        "health.yml",
-    ))));
+    core.send(Command::Delete {
+        root: root(&core),
+        item: ItemPath::Request(RequestPath::new("health.yml")),
+    });
     let snapshot = next(&core, snapshot.version);
     assert!(snapshot.active_tab().is_none());
     let tree = &snapshot.collection.as_ref().unwrap().tree;
@@ -351,6 +369,7 @@ fn moving_reorders_the_tree_and_errors_are_reported() {
     let (core, _, _data) = start();
     let snapshot = open(&core, dir.path());
     core.send(Command::Move {
+        root: root(&core),
         item: ItemPath::Request(RequestPath::new("health.yml")),
         placement: Placement::Before(ItemPath::Folder("users".into())),
     });
@@ -359,6 +378,7 @@ fn moving_reorders_the_tree_and_errors_are_reported() {
     assert_eq!(names(&tree.items), ["Health", "Users"]);
 
     core.send(Command::CreateFolder {
+        root: root(&core),
         parent: "missing".into(),
         name: "X".into(),
     });
@@ -389,22 +409,31 @@ fn requests_open_in_tabs_and_closing_shows_a_neighbour() {
     let dir = collection(server(Duration::ZERO));
     let (core, _, _data) = start();
     open(&core, dir.path());
-    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
-    core.send(Command::OpenRequest(RequestPath::new("users/get.yml")));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
+    core.send(Command::OpenRequest(at(&core, "users/get.yml")));
     let snapshot = wait(&core, "two tabs", |s| s.tabs.len() == 2);
     assert_eq!(tab_names(&snapshot), ["Health", "Get"]);
-    assert_eq!(snapshot.active, Some(RequestPath::new("users/get.yml")));
+    assert_eq!(
+        snapshot.active.as_ref().map(|k| k.path.clone()),
+        Some(RequestPath::new("users/get.yml"))
+    );
 
     // Opening an open request shows its tab instead of a second one.
-    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
     let snapshot = next(&core, snapshot.version);
     assert_eq!(snapshot.tabs.len(), 2);
-    assert_eq!(snapshot.active, Some(RequestPath::new("health.yml")));
+    assert_eq!(
+        snapshot.active.as_ref().map(|k| k.path.clone()),
+        Some(RequestPath::new("health.yml"))
+    );
 
-    core.send(Command::CloseTab(RequestPath::new("health.yml")));
+    core.send(Command::CloseTab(at(&core, "health.yml")));
     let snapshot = next(&core, snapshot.version);
     assert_eq!(tab_names(&snapshot), ["Get"]);
-    assert_eq!(snapshot.active, Some(RequestPath::new("users/get.yml")));
+    assert_eq!(
+        snapshot.active.as_ref().map(|k| k.path.clone()),
+        Some(RequestPath::new("users/get.yml"))
+    );
 }
 
 #[test]
@@ -413,13 +442,13 @@ fn edits_are_a_draft_that_is_sent_and_saved() {
     let (core, _, _data) = start();
     open(&core, dir.path());
     core.send(Command::SelectEnvironment(Some("local".into())));
-    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
     let snapshot = wait(&core, "the tab", |s| s.active_tab().is_some());
     let path = RequestPath::new("health.yml");
     let revision = snapshot.active_tab().unwrap().revision;
 
     core.send(Command::Edit {
-        path: path.clone(),
+        tab: at(&core, &path),
         request: edited(&snapshot, "{{host}}/draft"),
     });
     let snapshot = next(&core, snapshot.version);
@@ -440,7 +469,7 @@ fn edits_are_a_draft_that_is_sent_and_saved() {
     let file = dir.path().join("health.yml");
     assert!(!std::fs::read_to_string(&file).unwrap().contains("draft"));
 
-    core.send(Command::Save(path));
+    core.send(Command::Save(at(&core, &path)));
     let snapshot = next(&core, snapshot.version);
     let tab = snapshot.active_tab().unwrap();
     assert!(!tab.is_dirty());
@@ -457,15 +486,15 @@ fn editing_back_to_the_saved_contents_is_not_a_draft() {
     let dir = collection(server(Duration::ZERO));
     let (core, _, _data) = start();
     open(&core, dir.path());
-    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
     let snapshot = wait(&core, "the tab", |s| s.active_tab().is_some());
     let path = RequestPath::new("health.yml");
     core.send(Command::Edit {
-        path: path.clone(),
+        tab: at(&core, &path),
         request: edited(&snapshot, "x"),
     });
     core.send(Command::Edit {
-        path,
+        tab: at(&core, &path),
         request: edited(&snapshot, "{{host}}/health"),
     });
     let snapshot = wait(&core, "both edits", |s| s.version >= snapshot.version + 2);
@@ -478,14 +507,14 @@ fn tabs_drafts_and_environment_come_back_after_a_restart() {
     let (core, _, data) = start();
     open(&core, dir.path());
     core.send(Command::SelectEnvironment(Some("local".into())));
-    core.send(Command::OpenRequest(RequestPath::new("users/get.yml")));
-    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    core.send(Command::OpenRequest(at(&core, "users/get.yml")));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
     let snapshot = wait(&core, "two tabs", |s| s.tabs.len() == 2);
     core.send(Command::Edit {
-        path: RequestPath::new("health.yml"),
+        tab: at(&core, "health.yml"),
         request: edited(&snapshot, "{{host}}/unsaved"),
     });
-    core.send(Command::ActivateTab(RequestPath::new("users/get.yml")));
+    core.send(Command::ActivateTab(at(&core, "users/get.yml")));
     wait(&core, "the draft", |s| {
         s.tabs.iter().any(apifast_gui::core::Tab::is_dirty)
     });
@@ -495,7 +524,10 @@ fn tabs_drafts_and_environment_come_back_after_a_restart() {
     let core = Core::start_with(data.path().to_path_buf(), SystemKeyring::off(), || {});
     let snapshot = open(&core, dir.path());
     assert_eq!(tab_names(&snapshot), ["Get", "Health"]);
-    assert_eq!(snapshot.active, Some(RequestPath::new("users/get.yml")));
+    assert_eq!(
+        snapshot.active.as_ref().map(|k| k.path.clone()),
+        Some(RequestPath::new("users/get.yml"))
+    );
     assert_eq!(snapshot.environment.as_deref(), Some("local"));
     let health = &snapshot.tabs[1];
     assert_eq!(health.draft.as_ref().unwrap().url, "{{host}}/unsaved");
@@ -507,18 +539,19 @@ fn a_renamed_request_keeps_its_tab_and_draft() {
     let dir = collection(server(Duration::ZERO));
     let (core, _, _data) = start();
     open(&core, dir.path());
-    core.send(Command::OpenRequest(RequestPath::new("users/get.yml")));
+    core.send(Command::OpenRequest(at(&core, "users/get.yml")));
     let snapshot = wait(&core, "the tab", |s| s.active_tab().is_some());
     core.send(Command::Edit {
-        path: RequestPath::new("users/get.yml"),
+        tab: at(&core, "users/get.yml"),
         request: edited(&snapshot, "{{host}}/edited"),
     });
     core.send(Command::Rename {
+        root: root(&core),
         item: ItemPath::Request(RequestPath::new("users/get.yml")),
         name: "Fetch".into(),
     });
     let snapshot = wait(&core, "the rename", |s| {
-        s.active == Some(RequestPath::new("users/fetch.yml"))
+        s.active.as_ref().map(|k| &k.path) == Some(&RequestPath::new("users/fetch.yml"))
     });
     let tab = snapshot.active_tab().unwrap();
     assert_eq!(tab.saved.name, "Fetch");
@@ -535,7 +568,7 @@ fn each_tab_knows_its_variables_and_where_they_come_from() {
     let dir = collection(server(Duration::ZERO));
     let (core, _, _data) = start();
     open(&core, dir.path());
-    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
     let snapshot = wait(&core, "the tab", |s| s.active_tab().is_some());
     let context = snapshot.active_tab().unwrap().context.clone();
     assert!(context.variables.get("host").is_none());
@@ -560,7 +593,7 @@ fn each_tab_knows_its_variables_and_where_they_come_from() {
     // Typing in the URL does not work them out again.
     let revision = tab.context.revision;
     core.send(Command::Edit {
-        path: RequestPath::new("health.yml"),
+        tab: at(&core, "health.yml"),
         request: edited(&snapshot, "{{host}}/other"),
     });
     let snapshot = next(&core, snapshot.version);
@@ -577,7 +610,7 @@ fn each_tab_knows_what_it_inherits_from_its_folders() {
     .unwrap();
     let (core, _, _data) = start();
     open(&core, dir.path());
-    core.send(Command::OpenRequest(RequestPath::new("users/get.yml")));
+    core.send(Command::OpenRequest(at(&core, "users/get.yml")));
     let snapshot = wait(&core, "the tab", |s| s.active_tab().is_some());
     let context = &snapshot.active_tab().unwrap().context;
     assert_eq!(context.folders, ["Users"]);
@@ -610,7 +643,7 @@ fn each_send_goes_to_the_history_and_its_file() {
     let dir = collection(server(Duration::ZERO));
     let (core, _, data) = start();
     open(&core, dir.path());
-    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
     wait(&core, "the request", |s| s.active_tab().is_some());
     // Fails: no environment, so `host` is missing.
     core.send(Command::Send);
@@ -646,7 +679,7 @@ fn the_last_response_of_each_tab_comes_back_after_a_restart() {
     let (core, _, data) = start();
     open(&core, dir.path());
     core.send(Command::SelectEnvironment(Some("local".into())));
-    core.send(Command::OpenRequest(RequestPath::new("users/get.yml")));
+    core.send(Command::OpenRequest(at(&core, "users/get.yml")));
     wait(&core, "the request", |s| s.active_tab().is_some());
     core.send(Command::Send);
     wait(&core, "the response", |s| {
@@ -675,11 +708,11 @@ fn a_history_entry_opens_its_request_with_that_response() {
     open(&core, dir.path());
     core.send(Command::SelectEnvironment(Some("local".into())));
     for path in ["users/get.yml", "health.yml"] {
-        core.send(Command::OpenRequest(RequestPath::new(path)));
+        core.send(Command::OpenRequest(at(&core, path)));
         core.send(Command::Send);
     }
     wait(&core, "two entries", |s| s.history.len() == 2);
-    core.send(Command::CloseTab(RequestPath::new("users/get.yml")));
+    core.send(Command::CloseTab(at(&core, "users/get.yml")));
     wait(&core, "one tab", |s| s.tabs.len() == 1);
 
     let index = core
@@ -690,7 +723,7 @@ fn a_history_entry_opens_its_request_with_that_response() {
         .unwrap();
     core.send(Command::OpenHistory(index));
     let snapshot = wait(&core, "the old response", |s| {
-        s.active == Some(RequestPath::new("users/get.yml"))
+        s.active.as_ref().map(|k| &k.path) == Some(&RequestPath::new("users/get.yml"))
             && matches!(response(s), ResponseState::Received(_))
     });
     assert_eq!(
@@ -706,7 +739,7 @@ fn old_history_is_pruned_when_the_collection_opens() {
     let dir = collection(server(Duration::ZERO));
     let (core, _, data) = start();
     open(&core, dir.path());
-    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
     core.send(Command::Send);
     wait(&core, "one entry", |s| s.history.len() == 1);
     drop(core);
@@ -757,7 +790,7 @@ fn environments_are_created_renamed_saved_and_deleted() {
     let (core, _, _data) = start();
     open(&core, dir.path());
     core.send(Command::SelectEnvironment(Some("local".into())));
-    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
     wait(&core, "the request", |s| s.active_tab().is_some());
 
     core.send(Command::CreateEnvironment("qa".into()));
@@ -817,7 +850,7 @@ fn a_file_changed_outside_reaches_its_clean_tab_and_the_tree() {
     let dir = collection(server(Duration::ZERO));
     let (core, _, _data) = start();
     open(&core, dir.path());
-    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
     let before = wait(&core, "the tab", |s| s.active_tab().is_some());
     let revision = active_tab(&before).revision;
 
@@ -845,13 +878,13 @@ fn saving_is_not_taken_for_a_change_from_outside() {
     let dir = collection(server(Duration::ZERO));
     let (core, _, _data) = start();
     open(&core, dir.path());
-    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
     let snapshot = wait(&core, "the tab", |s| s.active_tab().is_some());
     core.send(Command::Edit {
-        path: RequestPath::new("health.yml"),
+        tab: at(&core, "health.yml"),
         request: edited(&snapshot, "{{host}}/saved"),
     });
-    core.send(Command::Save(RequestPath::new("health.yml")));
+    core.send(Command::Save(at(&core, "health.yml")));
     wait(&core, "saved", |s| !active_tab(s).is_dirty());
     // Longer than the watcher's quiet time.
     std::thread::sleep(Duration::from_millis(600));
@@ -867,10 +900,10 @@ fn a_draft_and_a_change_from_outside_are_a_conflict_to_settle() {
     let (core, _, _data) = start();
     open(&core, dir.path());
     let path = RequestPath::new("health.yml");
-    core.send(Command::OpenRequest(path.clone()));
+    core.send(Command::OpenRequest(at(&core, &path)));
     let snapshot = wait(&core, "the tab", |s| s.active_tab().is_some());
     core.send(Command::Edit {
-        path: path.clone(),
+        tab: at(&core, &path),
         request: edited(&snapshot, "{{host}}/mine"),
     });
     wait(&core, "the draft", |s| active_tab(s).is_dirty());
@@ -889,7 +922,7 @@ fn a_draft_and_a_change_from_outside_are_a_conflict_to_settle() {
     assert_eq!(tab.saved.url, "{{host}}/theirs");
 
     core.send(Command::ResolveConflict {
-        path: path.clone(),
+        tab: at(&core, &path),
         keep_draft: true,
     });
     let snapshot = wait(&core, "kept", |s| !active_tab(s).conflict);
@@ -898,7 +931,7 @@ fn a_draft_and_a_change_from_outside_are_a_conflict_to_settle() {
     theirs("{{host}}/again");
     wait(&core, "another conflict", |s| active_tab(s).conflict);
     core.send(Command::ResolveConflict {
-        path,
+        tab: at(&core, &path),
         keep_draft: false,
     });
     let snapshot = wait(&core, "taken from disk", |s| !active_tab(s).conflict);
@@ -912,11 +945,11 @@ fn a_file_removed_outside_closes_its_tab_unless_it_has_a_draft() {
     let dir = collection(server(Duration::ZERO));
     let (core, _, _data) = start();
     open(&core, dir.path());
-    core.send(Command::OpenRequest(RequestPath::new("users/get.yml")));
-    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    core.send(Command::OpenRequest(at(&core, "users/get.yml")));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
     let snapshot = wait(&core, "two tabs", |s| s.tabs.len() == 2);
     core.send(Command::Edit {
-        path: RequestPath::new("health.yml"),
+        tab: at(&core, "health.yml"),
         request: edited(&snapshot, "{{host}}/kept"),
     });
     wait(&core, "the draft", |s| {
@@ -935,7 +968,7 @@ fn an_environment_changed_outside_reaches_the_variables() {
     let (core, _, _data) = start();
     open(&core, dir.path());
     core.send(Command::SelectEnvironment(Some("staging".into())));
-    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
     wait(&core, "the tab", |s| s.active_tab().is_some());
     std::fs::write(
         dir.path().join("environments/staging.yml"),
@@ -955,7 +988,7 @@ fn the_history_limits_come_from_the_settings() {
     let dir = collection(server(Duration::ZERO));
     let (core, _, data) = start();
     open(&core, dir.path());
-    core.send(Command::OpenRequest(RequestPath::new("health.yml")));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
     for count in 1..=3 {
         core.send(Command::Send);
         wait(&core, "the entry", |s| s.history.len() == count);
@@ -1013,7 +1046,7 @@ fn a_first_secret_gives_the_collection_an_id_and_its_value_reaches_the_send() {
             .is_none()
     );
     core.send(Command::SelectEnvironment(Some("local".into())));
-    core.send(Command::OpenRequest(RequestPath::new("secret.yml")));
+    core.send(Command::OpenRequest(at(&core, "secret.yml")));
     core.send(Command::SaveEnvironment(Box::new(with_secret_token(
         &snapshot,
     ))));
@@ -1174,7 +1207,7 @@ fn a_capture_feeds_the_next_send_and_checks_reach_the_tab() {
     let (core, _, _data) = start();
     open(&core, dir.path());
     core.send(Command::SelectEnvironment(Some("local".into())));
-    core.send(Command::OpenRequest(RequestPath::new("first.yml")));
+    core.send(Command::OpenRequest(at(&core, "first.yml")));
     wait(&core, "the first tab", |s| s.active_tab().is_some());
     core.send(Command::Send);
     let snapshot = wait(&core, "the first response", |s| {
@@ -1183,7 +1216,7 @@ fn a_capture_feeds_the_next_send_and_checks_reach_the_tab() {
     let checks = received(&snapshot).checks;
     assert_eq!(checks.captures[0].variable, "code");
 
-    core.send(Command::OpenRequest(RequestPath::new("second.yml")));
+    core.send(Command::OpenRequest(at(&core, "second.yml")));
     wait(&core, "the second tab", |s| {
         s.active_tab()
             .is_some_and(|t| t.path == RequestPath::new("second.yml"))
@@ -1208,7 +1241,7 @@ fn a_request_uses_another_ones_response_which_shows_in_the_history() {
     let (core, _, _data) = start();
     open(&core, dir.path());
     core.send(Command::SelectEnvironment(Some("local".into())));
-    core.send(Command::OpenRequest(RequestPath::new("chained.yml")));
+    core.send(Command::OpenRequest(at(&core, "chained.yml")));
     wait(&core, "the tab", |s| s.active_tab().is_some());
     core.send(Command::Send);
     let snapshot = wait(&core, "both entries", |s| s.history.len() == 2);
@@ -1276,4 +1309,270 @@ fn a_folder_without_a_collection_is_remembered_to_offer_one() {
         s.missing_collection.is_none()
     });
     assert!(snapshot.error.is_some());
+}
+
+// --- Workspaces and several collections --------------------------------------
+
+/// A core on the data directory `data`, as after a restart.
+fn core_in(data: &Path) -> Core {
+    Core::start_with(data.to_path_buf(), SystemKeyring::off(), || {})
+}
+
+/// Opens the collection in `dir` and waits until it is the focused one.
+fn open_root(core: &Core, dir: &Path) -> std::path::PathBuf {
+    let root = dir.canonicalize().unwrap();
+    core.send(Command::OpenCollection(dir.to_path_buf()));
+    wait(core, "the collection focused", |s| {
+        s.collection.as_ref().is_some_and(|c| c.root == root)
+    });
+    root
+}
+
+/// A second collection, named `name`, on the same server.
+fn named(port: u16, name: &str) -> tempfile::TempDir {
+    let dir = collection(port);
+    std::fs::write(
+        dir.path().join("opencollection.yml"),
+        format!("opencollection: 1.0.0\ninfo:\n  name: {name}\n"),
+    )
+    .unwrap();
+    dir
+}
+
+#[test]
+fn two_collections_are_open_with_their_own_tabs_and_environments() {
+    let port = server(Duration::ZERO);
+    let (shop, billing) = (named(port, "Shop"), named(port, "Billing"));
+    let (core, _, data) = start();
+    let shop_root = open_root(&core, shop.path());
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    core.send(Command::OpenRequest(TabKey::new(
+        &shop_root,
+        RequestPath::new("health.yml"),
+    )));
+    let billing_root = open_root(&core, billing.path());
+    core.send(Command::SelectEnvironment(Some("staging".into())));
+    let billing_tab = TabKey::new(&billing_root, RequestPath::new("health.yml"));
+    core.send(Command::OpenRequest(billing_tab.clone()));
+    let snapshot = wait(&core, "both tabs", |s| s.tabs.len() == 2);
+
+    // Same request path, two tabs: one per collection.
+    let names: Vec<&str> = snapshot
+        .collections
+        .iter()
+        .map(|c| c.name.as_str())
+        .collect();
+    assert_eq!(names, ["Shop", "Billing"]);
+    assert!(
+        snapshot
+            .collections
+            .iter()
+            .all(|c| c.tree.is_some() && c.expanded)
+    );
+    assert_eq!(snapshot.active.as_ref(), Some(&billing_tab));
+    assert_eq!(snapshot.environment.as_deref(), Some("staging"));
+
+    // Each tab sends with its own collection's environment.
+    let shop_tab = TabKey::new(&shop_root, RequestPath::new("health.yml"));
+    core.send(Command::ActivateTab(shop_tab.clone()));
+    let snapshot = wait(&core, "the shop tab", |s| {
+        s.active.as_ref() == Some(&shop_tab)
+    });
+    assert_eq!(snapshot.environment.as_deref(), Some("local"));
+    core.send(Command::Send);
+    let snapshot = wait(&core, "the response", |s| {
+        matches!(response(s), ResponseState::Received(_))
+    });
+    assert_eq!(snapshot.history.len(), 1, "the shop's history only");
+
+    // Both are in the default workspace's file.
+    let workspace = data.path().join("default-workspace/workspace.yml");
+    let text = std::fs::read_to_string(workspace).unwrap();
+    assert!(
+        text.contains("name: Shop") || text.contains("Shop"),
+        "{text}"
+    );
+    assert!(text.contains("Billing"), "{text}");
+}
+
+#[test]
+fn everything_comes_back_after_a_restart_but_collapsed_collections_stay_unloaded() {
+    let port = server(Duration::ZERO);
+    let (shop, billing) = (named(port, "Shop"), named(port, "Billing"));
+    let data = tempfile::tempdir().unwrap();
+    let draft_key;
+    {
+        let core = core_in(data.path());
+        let shop_root = open_root(&core, shop.path());
+        core.send(Command::SelectEnvironment(Some("local".into())));
+        draft_key = TabKey::new(&shop_root, RequestPath::new("health.yml"));
+        core.send(Command::OpenRequest(draft_key.clone()));
+        let snapshot = wait(&core, "the tab", |s| s.active_tab().is_some());
+        core.send(Command::Edit {
+            tab: draft_key.clone(),
+            request: edited(&snapshot, "{{host}}/unsaved"),
+        });
+        let billing_root = open_root(&core, billing.path());
+        core.send(Command::ExpandCollection {
+            root: billing_root,
+            expanded: false,
+        });
+        core.send(Command::ActivateTab(draft_key.clone()));
+        wait(&core, "the draft", |s| {
+            s.active_tab().is_some_and(apifast_gui::core::Tab::is_dirty)
+        });
+    }
+    let core = core_in(data.path());
+    core.send(Command::Restore);
+    let snapshot = wait(&core, "the restored tab", |s| s.active.is_some());
+    assert_eq!(snapshot.active.as_ref(), Some(&draft_key));
+    assert_eq!(
+        snapshot.active_tab().unwrap().request().url,
+        "{{host}}/unsaved"
+    );
+    assert_eq!(snapshot.environment.as_deref(), Some("local"));
+    let billing = &snapshot.collections[1];
+    assert_eq!(billing.name, "Billing", "named from the workspace file");
+    assert!(!billing.expanded && billing.tree.is_none(), "not loaded");
+}
+
+#[test]
+fn closing_a_collection_keeps_its_drafts_and_removing_it_keeps_its_files() {
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, data) = start();
+    let root = open_root(&core, dir.path());
+    let key = TabKey::new(&root, RequestPath::new("health.yml"));
+    core.send(Command::OpenRequest(key.clone()));
+    let snapshot = wait(&core, "the tab", |s| s.active_tab().is_some());
+    core.send(Command::Edit {
+        tab: key.clone(),
+        request: edited(&snapshot, "{{host}}/kept"),
+    });
+    wait(&core, "the draft", |s| {
+        s.active_tab().is_some_and(apifast_gui::core::Tab::is_dirty)
+    });
+
+    core.send(Command::CloseCollection(root.clone()));
+    let snapshot = wait(&core, "closed", |s| s.tabs.is_empty());
+    assert!(snapshot.collection.is_none());
+    assert!(!snapshot.collections[0].expanded && snapshot.collections[0].tree.is_none());
+
+    core.send(Command::OpenRequest(key.clone()));
+    let snapshot = wait(&core, "reopened", |s| s.active_tab().is_some());
+    assert_eq!(
+        snapshot.active_tab().unwrap().request().url,
+        "{{host}}/kept"
+    );
+
+    core.send(Command::RemoveCollection(root));
+    let snapshot = wait(&core, "removed", |s| s.collections.is_empty());
+    assert_eq!(snapshot.tabs.len(), 0);
+    assert!(dir.path().join("health.yml").exists());
+    let text =
+        std::fs::read_to_string(data.path().join("default-workspace/workspace.yml")).unwrap();
+    assert!(!text.contains("path:"), "{text}");
+}
+
+#[test]
+fn workspaces_switch_with_their_own_collections_and_tabs() {
+    let port = server(Duration::ZERO);
+    let (shop, billing) = (named(port, "Shop"), named(port, "Billing"));
+    let team = tempfile::tempdir().unwrap();
+    let (core, _, _data) = start();
+    let shop_root = open_root(&core, shop.path());
+    let shop_tab = TabKey::new(&shop_root, RequestPath::new("health.yml"));
+    core.send(Command::OpenRequest(shop_tab.clone()));
+    wait(&core, "the shop tab", |s| s.active.is_some());
+    let default = core.snapshot().workspace.clone().unwrap();
+    assert_eq!(default.name, "My workspace");
+
+    core.send(Command::CreateWorkspace {
+        folder: team.path().join("team"),
+        name: "Team".into(),
+    });
+    let snapshot = wait(&core, "the team workspace", |s| {
+        s.workspace.as_ref().is_some_and(|w| w.name == "Team")
+    });
+    assert!(snapshot.collections.is_empty() && snapshot.tabs.is_empty());
+    assert_eq!(snapshot.workspaces.len(), 2);
+    // The same collection can be in both.
+    open_root(&core, shop.path());
+    open_root(&core, billing.path());
+    let snapshot = core.snapshot();
+    assert_eq!(snapshot.collections.len(), 2);
+    assert_eq!(
+        snapshot.default_parent,
+        team.path().join("team").canonicalize().unwrap()
+    );
+
+    core.send(Command::OpenWorkspace(default.folder.clone()));
+    let snapshot = wait(&core, "back", |s| {
+        s.workspace
+            .as_ref()
+            .is_some_and(|w| w.name == "My workspace")
+    });
+    assert_eq!(snapshot.collections.len(), 1);
+    assert_eq!(
+        snapshot.active.as_ref(),
+        Some(&shop_tab),
+        "its tabs came back"
+    );
+
+    core.send(Command::RenameWorkspace("Mine".into()));
+    wait(&core, "renamed", |s| {
+        s.workspace.as_ref().is_some_and(|w| w.name == "Mine")
+    });
+    core.send(Command::ForgetWorkspace(default.folder.clone()));
+    let snapshot = wait(&core, "the refusal", |s| s.error.is_some());
+    assert_eq!(
+        snapshot.workspaces.len(),
+        2,
+        "the active one is not forgotten"
+    );
+}
+
+#[test]
+fn a_workspace_file_changed_outside_updates_the_list() {
+    let port = server(Duration::ZERO);
+    let (shop, billing) = (named(port, "Shop"), named(port, "Billing"));
+    let (core, _, data) = start();
+    let shop_root = open_root(&core, shop.path());
+    open_root(&core, billing.path());
+    let file = data.path().join("default-workspace/workspace.yml");
+    // As after a `git pull` that removed Billing.
+    std::fs::write(
+        &file,
+        format!(
+            "opencollection: 1.0.0\ninfo:\n  name: Pulled\n  type: workspace\ncollections:\n  - name: Shop\n    path: {}\n",
+            shop_root.display()
+        ),
+    )
+    .unwrap();
+    let snapshot = wait(&core, "the pulled list", |s| s.collections.len() == 1);
+    assert_eq!(snapshot.collections[0].root, shop_root);
+    assert_eq!(snapshot.workspace.as_ref().unwrap().name, "Pulled");
+}
+
+#[test]
+fn a_collection_whose_folder_is_gone_shows_why() {
+    let dir = collection(server(Duration::ZERO));
+    let data = tempfile::tempdir().unwrap();
+    {
+        let core = core_in(data.path());
+        let root = open_root(&core, dir.path());
+        core.send(Command::CloseCollection(root));
+        wait(&core, "closed", |s| s.collection.is_none());
+    }
+    let gone = dir.path().to_path_buf();
+    drop(dir);
+    assert!(!gone.exists());
+    let core = core_in(data.path());
+    core.send(Command::ExpandCollection {
+        root: gone,
+        expanded: true,
+    });
+    let snapshot = wait(&core, "the error", |s| {
+        s.collections.first().is_some_and(|c| c.error.is_some())
+    });
+    assert!(snapshot.collections[0].tree.is_none());
 }

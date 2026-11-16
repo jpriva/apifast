@@ -1,7 +1,7 @@
 //! The tab bar: one tab per open request, a dot on those with unsaved
 //! changes, and a confirmation before closing one of them.
 
-use apifast_app::RequestPath;
+use crate::core::TabKey;
 use eframe::egui::{self, Id, RichText};
 
 use crate::atoms::CloseButton;
@@ -13,19 +13,19 @@ use crate::theme;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TabEvent {
     /// Show this tab.
-    Activate(RequestPath),
+    Activate(TabKey),
     /// Close this tab, discarding its unsaved changes (confirmed if it had
     /// any).
-    Close(RequestPath),
+    Close(TabKey),
     /// Save this tab's changes, then close it.
-    SaveAndClose(RequestPath),
+    SaveAndClose(TabKey),
 }
 
 /// The tab bar and its confirmation dialog.
 #[derive(Debug, Default)]
 pub struct TabBar {
     /// A dirty tab the user asked to close: its path and name.
-    confirming: Option<(RequestPath, String)>,
+    confirming: Option<(TabKey, String)>,
 }
 
 impl TabBar {
@@ -34,7 +34,7 @@ impl TabBar {
         &mut self,
         ui: &mut egui::Ui,
         tabs: &[Tab],
-        active: Option<&RequestPath>,
+        active: Option<&TabKey>,
         strings: &Strings,
     ) -> Option<TabEvent> {
         let mut event = None;
@@ -43,7 +43,9 @@ impl TabBar {
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     for tab in tabs {
-                        if let Some(e) = self.tab(ui, tab, active == Some(&tab.path), strings) {
+                        if let Some(e) =
+                            self.tab(ui, tab, active.is_some_and(|key| tab.is(key)), strings)
+                        {
                             event = Some(e);
                         }
                     }
@@ -59,10 +61,10 @@ impl TabBar {
     /// after the user confirms. For the close shortcut.
     pub fn request_close(&mut self, tab: &Tab) -> Option<TabEvent> {
         if tab.is_dirty() {
-            self.confirming = Some((tab.path.clone(), tab.request().name.clone()));
+            self.confirming = Some((tab.key(), tab.request().name.clone()));
             None
         } else {
-            Some(TabEvent::Close(tab.path.clone()))
+            Some(TabEvent::Close(tab.key()))
         }
     }
 
@@ -84,7 +86,7 @@ impl TabBar {
                 .selectable_label(active, name)
                 .on_hover_text(tab.path.as_str());
             if response.clicked() {
-                event = Some(TabEvent::Activate(tab.path.clone()));
+                event = Some(TabEvent::Activate(tab.key()));
             }
             let close = ui.add(CloseButton::new(strings.close_tab));
             if close.clicked() || response.middle_clicked() {

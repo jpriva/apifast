@@ -3,6 +3,7 @@
 
 use apifast_app::RequestPath;
 use apifast_domain::{HttpRequest, Method};
+use apifast_gui::core::TabKey;
 use apifast_gui::core::{ResponseState, Tab};
 use apifast_gui::organisms::{TabBar, TabEvent};
 use apifast_gui::strings::EN;
@@ -18,6 +19,7 @@ struct State {
 fn tab(path: &str, name: &str, dirty: bool) -> Tab {
     let saved = HttpRequest::new(name, Method::Get, "{{host}}");
     Tab {
+        root: "/c".into(),
         path: RequestPath::new(path),
         draft: dirty.then(|| HttpRequest::new(name, Method::Post, "{{host}}")),
         saved,
@@ -39,7 +41,7 @@ fn harness() -> Harness<'static, State> {
     };
     let mut harness = Harness::new_ui_state(
         |ui, state: &mut State| {
-            let active = state.tabs.first().map(|t| t.path.clone());
+            let active = state.tabs.first().map(apifast_gui::core::Tab::key);
             if let Some(event) = state.bar.show(ui, &state.tabs, active.as_ref(), &EN) {
                 state.events.push(event);
             }
@@ -73,8 +75,8 @@ fn clicking_a_tab_activates_it_and_a_clean_tab_closes_at_once() {
     assert_eq!(
         harness.state().events,
         [
-            TabEvent::Activate(RequestPath::new("users.yml")),
-            TabEvent::Close(RequestPath::new("login.yml")),
+            TabEvent::Activate(TabKey::new("/c", RequestPath::new("users.yml"))),
+            TabEvent::Close(TabKey::new("/c", RequestPath::new("login.yml"))),
         ]
     );
 }
@@ -84,11 +86,17 @@ fn closing_an_unsaved_tab_asks_first() {
     for (button, expected) in [
         (
             "Save",
-            Some(TabEvent::SaveAndClose(RequestPath::new("users.yml"))),
+            Some(TabEvent::SaveAndClose(TabKey::new(
+                "/c",
+                RequestPath::new("users.yml"),
+            ))),
         ),
         (
             "Don't save",
-            Some(TabEvent::Close(RequestPath::new("users.yml"))),
+            Some(TabEvent::Close(TabKey::new(
+                "/c",
+                RequestPath::new("users.yml"),
+            ))),
         ),
         ("Cancel", None),
     ] {

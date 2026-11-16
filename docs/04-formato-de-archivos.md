@@ -324,6 +324,7 @@ docs: ''
 - Una misma colección puede aparecer en varios workspaces.
 - Los entornos de `environments/` son los globales del workspace. Por ahora se conservan sin usarse; su uso como ámbito `Global` llega en una tarea posterior.
 - Lo personal (qué colecciones están desplegadas, las pestañas abiertas) no va en este archivo: ver "Estado local".
+- Cada colección sigue guardando su sesión: sus borradores y su entorno activo. Las pestañas abiertas y su orden son del workspace. Un borrador de una request sin pestaña (por ejemplo, tras cerrar su colección) vuelve al abrir esa request.
 
 ## Compatibilidad con Bruno
 
@@ -369,6 +370,7 @@ El historial, las respuestas, las cookies y la bóveda local viven en el directo
 ├── sessions/<collection-id>/         # pestañas abiertas de la colección
 │   ├── session.yml                   # rutas de las pestañas, la activa y el entorno
 │   └── drafts/<n>.yml                # cambios sin guardar de la pestaña n, como archivo de request
+├── workspaces.yml                    # workspaces conocidos y el último activo
 ├── workspaces/<hash-de-la-ruta>/
 │   └── state.yml                     # colecciones desplegadas, orden de pestañas y la activa
 ├── default-workspace/                # "My workspace", creado en el primer arranque
@@ -376,8 +378,7 @@ El historial, las respuestas, las cookies y la bóveda local viven en el directo
 └── ui-state.yml                      # tamaños de paneles
 ~/.config/apifast/
 ├── settings.yml
-├── keymap.yml                        # atajos cambiados por el usuario, por acción
-└── workspaces.yml                    # workspaces conocidos y el último activo
+└── keymap.yml                        # atajos cambiados por el usuario, por acción
 ```
 
 En macOS y Windows se usan los directorios equivalentes de cada plataforma.

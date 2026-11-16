@@ -1,14 +1,14 @@
 //! The vault in the core: what the interface sees of it (without opening any
 //! value) and the commands that store, show and forget secrets and keys.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
 use apifast_domain::{Environment, Secret};
 use apifast_vault::{Orphan, SecretKind, VaultSecrets};
 
-use super::{Message, State};
+use super::{Message, State, TabKey};
 use crate::system::SystemRandom;
 
 /// How long a revealed value or the shown collection key stays on screen.
@@ -174,47 +174,59 @@ pub(super) fn view(
 }
 
 impl State {
-    /// The collection's vault, if it has one (a collection id).
+    /// The focused collection's vault, if it has one (a collection id).
     fn vault(&self) -> Option<Arc<VaultSecrets>> {
-        self.open.as_ref()?.vault.clone()
+        self.focused()?.vault.clone()
     }
 
-    /// Builds the vault's view again, keeping what is shown.
-    pub(super) fn refresh_vault(&mut self) {
-        let shown = (
-            self.snapshot.vault.revealed.take(),
-            self.snapshot.vault.shareable_key.take(),
-        );
+    /// The focused collection's view of its vault, to change what it shows.
+    fn view_mut(&mut self) -> Option<&mut VaultView> {
+        Some(&mut self.focused_mut()?.vault_view)
+    }
+
+    /// Builds again the view of the vault of the collection at `root`,
+    /// keeping what is shown.
+    pub(super) fn refresh_vault_of(&mut self, root: &Path) {
         let master_in_file = apifast_vault::KeyFile::in_dir(&self.data_dir).holds_key();
-        let view = match self.vault() {
-            Some(vault) => view(&vault, &self.snapshot.environment_files, master_in_file),
+        let Some(open) = self.open.get_mut(root) else {
+            return;
+        };
+        let shown = (
+            open.vault_view.revealed.take(),
+            open.vault_view.shareable_key.take(),
+        );
+        let view = match &open.vault {
+            Some(vault) => view(vault, &open.environment_files, master_in_file),
             // No vault yet: every secret is without value.
             None => Ok(VaultView {
-                secrets: missing(&self.snapshot.environment_files),
+                secrets: missing(&open.environment_files),
                 master_in_file,
                 ..VaultView::default()
             }),
         };
         match view {
-            Ok(view) => self.snapshot.vault = view,
+            Ok(view) => open.vault_view = view,
             Err(e) => self.snapshot.error = Some(e),
         }
-        (
-            self.snapshot.vault.revealed,
-            self.snapshot.vault.shareable_key,
-        ) = shown;
+        (open.vault_view.revealed, open.vault_view.shareable_key) = shown;
+        // Shown even with no collection focused.
+        self.snapshot.vault.master_in_file = master_in_file;
     }
 
-    /// Runs a vault command; its error goes on screen.
+    /// Runs a vault command on the focused collection; its error goes on
+    /// screen.
     pub(super) fn vault_command(&mut self, command: VaultCommand) {
         if let Err(e) = self.try_vault_command(command) {
             self.snapshot.error = Some(e);
         }
-        self.refresh_vault();
+        if let Some(root) = self.focus.clone() {
+            self.refresh_vault_of(&root);
+        }
     }
 
     fn try_vault_command(&mut self, command: VaultCommand) -> Result<(), String> {
         let error = |e: apifast_vault::KeyStoreError| e.to_string();
+        let none = "this collection has no secrets yet";
         match command {
             VaultCommand::Set {
                 environment,
@@ -232,29 +244,35 @@ impl State {
                 self.snapshot.error = None;
             }
             VaultCommand::Reveal { environment, name } => {
-                let vault = self.vault().ok_or("this collection has no secrets yet")?;
+                let vault = self.vault().ok_or(none)?;
                 let value = vault.reveal(&environment, &name).map_err(error)?;
-                self.snapshot.vault.revealed = value.map(|value| Revealed {
-                    environment,
-                    name,
-                    value,
-                });
+                if let Some(view) = self.view_mut() {
+                    view.revealed = value.map(|value| Revealed {
+                        environment,
+                        name,
+                        value,
+                    });
+                }
                 self.hide_later();
             }
             VaultCommand::Hide => {
-                self.snapshot.vault.revealed = None;
-                self.snapshot.vault.shareable_key = None;
+                if let Some(view) = self.view_mut() {
+                    view.revealed = None;
+                    view.shareable_key = None;
+                }
             }
             VaultCommand::Forget(orphan) => {
-                let vault = self.vault().ok_or("this collection has no secrets yet")?;
+                let vault = self.vault().ok_or(none)?;
                 vault
                     .forget(&orphan.environment, &orphan.name, orphan.kind)
                     .map_err(error)?;
             }
             VaultCommand::ShowKey => {
-                let vault = self.vault().ok_or("this collection has no secrets yet")?;
+                let vault = self.vault().ok_or(none)?;
                 let key = vault.export_collection_key().map_err(error)?;
-                self.snapshot.vault.shareable_key = key.map(Secret::new);
+                if let Some(view) = self.view_mut() {
+                    view.shareable_key = key.map(Secret::new);
+                }
                 self.hide_later();
             }
             VaultCommand::ImportKey(text) => {
@@ -263,35 +281,47 @@ impl State {
                 self.snapshot.error = None;
             }
             VaultCommand::RotateKey => {
-                let vault = self.vault().ok_or("this collection has no secrets yet")?;
+                let vault = self.vault().ok_or(none)?;
                 let key = vault.rotate_collection_key().map_err(error)?;
-                self.snapshot.vault.shareable_key = Some(Secret::new(key));
+                if let Some(view) = self.view_mut() {
+                    view.shareable_key = Some(Secret::new(key));
+                }
                 self.hide_later();
             }
         }
         Ok(())
     }
 
-    /// The vault, giving the collection an id first if it has none: its
-    /// first secret is being stored. What apifast kept under the
-    /// collection's path (session, history, responses) moves to the id.
+    /// The focused collection's vault, giving the collection an id first if
+    /// it has none: its first secret is being stored. What apifast kept
+    /// under the collection's path (session, history, responses) moves to
+    /// the id, and the collection is loaded again with its tabs.
     fn vault_or_new(&mut self) -> Result<Arc<VaultSecrets>, String> {
         if let Some(vault) = self.vault() {
             return Ok(vault);
         }
-        let open = self.open.as_ref().ok_or("no collection is open")?;
-        let root: PathBuf = (self.snapshot.collection.as_ref())
-            .map(|c| c.root.clone())
-            .ok_or("no collection is open")?;
-        let id = open
-            .repo
+        let root: PathBuf = self.focus.clone().ok_or("no collection is open")?;
+        let repo = self.focused().ok_or("no collection is open")?.repo.clone();
+        let id = repo
             .ensure_id(&SystemRandom::default())
             .map_err(|e| e.to_string())?;
-        self.write_session();
-        self.session_pending = false;
+        // Its tabs come back after loading it again.
+        let tabs: Vec<TabKey> = (self.snapshot.tabs.iter())
+            .filter(|tab| tab.root == root)
+            .map(super::Tab::key)
+            .collect();
+        let active = self.snapshot.active.clone();
+        self.unload(&root);
         apifast_history::dirs::move_to_id(&self.data_dir, &root, id.as_str())
             .map_err(|e| format!("cannot move this collection's data: {e}"))?;
-        self.open_collection(root)?;
+        self.load(&root)?;
+        for key in &tabs {
+            self.restore_tab(key);
+        }
+        if active.as_ref().is_some_and(|key| self.tab(key).is_some()) {
+            self.snapshot.active = active;
+        }
+        self.focus = Some(root);
         self.vault()
             .ok_or_else(|| "the vault cannot be opened".to_owned())
     }
@@ -312,8 +342,10 @@ impl State {
     /// Hides what was shown, unless something was shown since.
     pub(super) fn hide_shown(&mut self, shown: u64) {
         if self.shown == shown {
-            self.snapshot.vault.revealed = None;
-            self.snapshot.vault.shareable_key = None;
+            for open in self.open.values_mut() {
+                open.vault_view.revealed = None;
+                open.vault_view.shareable_key = None;
+            }
         }
     }
 }

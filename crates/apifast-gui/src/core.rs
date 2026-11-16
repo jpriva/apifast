@@ -9,11 +9,16 @@
 //! collection, written shortly after each change and when the core stops,
 //! and restored when the collection is opened again.
 
+mod collections;
 mod vault;
+mod workspace;
+
+use collections::{Listed, Open};
+use workspace::ActiveWorkspace;
 
 pub use vault::{Revealed, SHOWN_FOR, SecretState, SecretStatus, VaultCommand, VaultView};
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
@@ -21,23 +26,20 @@ use std::time::{Duration, SystemTime};
 
 use apifast_app::{
     AppError, AssertionOutcome, CancelToken, CaptureOutcome, Clock, CollectionRepository,
-    CollectionTree, EnvironmentRepository, HistoryEntry, HistoryLimits, HistoryOutcome,
-    HistoryStore, ItemPath, NoPrompter, NoSecrets, Placement, RepositoryError, RequestPath,
-    ResponseHead, ResponseId, ResponseStore, SecretStore, SendOptions, SendPorts, Session,
-    SessionStore, SessionTab, SharedSecretFiles, TransportError, apply_captures,
-    create_environment, create_folder, create_request, delete_environment, delete_item,
-    load_request, move_item, open_collection, rename_environment, rename_item,
-    resolve_request_variables, save_environment, save_request, send_request,
+    CollectionTree, HistoryEntry, HistoryLimits, HistoryOutcome, HistoryStore, ItemPath,
+    NoPrompter, NoSecrets, Placement, RequestPath, ResponseHead, ResponseId, ResponseStore,
+    SecretStore, SendOptions, SendPorts, Session, SessionStore, SessionTab, SharedSecretFiles,
+    TransportError, apply_captures, create_folder, create_request, delete_item, load_request,
+    move_item, rename_item, resolve_request_variables, save_request, send_request,
 };
 use apifast_domain::{
     AuthScheme, Chain, Collection, Environment, Header, HttpRequest, Origin, Resolved,
-    ResolvedSettings, ResolvedVariables, Setting, Settings, Variable, resolve,
+    ResolvedSettings, ResolvedVariables, Setting, Settings, resolve,
 };
 use apifast_history::{FsHistoryStore, FsResponseStore, Limits};
-use apifast_http::ReqwestTransport;
-use apifast_storage_fs::{FsCollection, FsSessionStore};
+use apifast_storage_fs::FsSessionStore;
 use apifast_vault::{SystemKeyring, VaultSecrets};
-use apifast_watch::{Changes, FsWatcher};
+use apifast_watch::Changes;
 use tokio::sync::mpsc;
 
 use crate::body::{BodyHandle, BodySource};
@@ -163,10 +165,34 @@ const DEFAULT_WORKSPACE: &str = "default-workspace";
 /// The file that makes a folder a collection.
 const COLLECTION_FILE: &str = "opencollection.yml";
 
+/// A tab: the collection it belongs to and its request.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct TabKey {
+    /// The collection's folder.
+    pub root: PathBuf,
+    /// The request, relative to it.
+    pub path: RequestPath,
+}
+
+impl TabKey {
+    /// The tab of `path` in the collection at `root`.
+    pub fn new(root: impl Into<PathBuf>, path: RequestPath) -> Self {
+        Self {
+            root: root.into(),
+            path,
+        }
+    }
+}
+
 /// What the interface asks the core to do.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
-    /// Opens the collection in this folder, with the tabs it had open.
+    /// Opens the active workspace as it was left: its collections, the ones
+    /// expanded and the tabs. Done once; the first command that needs the
+    /// workspace does it too.
+    Restore,
+    /// Opens the collection in this folder, adding it to the workspace, and
+    /// shows it.
     OpenCollection(PathBuf),
     /// Creates a collection named `name` in `folder` (created if needed),
     /// then opens it. Refused if the folder already holds one.
@@ -176,34 +202,66 @@ pub enum Command {
         /// Its name.
         name: String,
     },
-    /// Picks the active environment, or none.
+    /// Makes this collection the one the environment selector, the
+    /// environment editor, the vault and the history are about.
+    FocusCollection(PathBuf),
+    /// Expands or collapses a collection in the tree; expanding loads it.
+    ExpandCollection {
+        /// The collection's folder.
+        root: PathBuf,
+        /// Whether it is expanded.
+        expanded: bool,
+    },
+    /// Unloads a collection and closes its tabs. Unsaved changes stay in
+    /// its session, and come back when the request is opened again.
+    CloseCollection(PathBuf),
+    /// Closes a collection and removes it from the workspace. Nothing is
+    /// deleted.
+    RemoveCollection(PathBuf),
+    /// Creates a workspace named `name` in `folder` and switches to it.
+    CreateWorkspace {
+        /// Its folder.
+        folder: PathBuf,
+        /// Its name.
+        name: String,
+    },
+    /// Switches to the workspace in this folder, remembering it.
+    OpenWorkspace(PathBuf),
+    /// Renames the active workspace.
+    RenameWorkspace(String),
+    /// Forgets a workspace on this machine. Nothing is deleted. The active
+    /// one cannot be forgotten.
+    ForgetWorkspace(PathBuf),
+    /// Picks the active environment of the focused collection, or none.
     SelectEnvironment(Option<String>),
     /// Opens a request in a tab, or shows its tab if it is open.
-    OpenRequest(RequestPath),
+    OpenRequest(TabKey),
     /// Shows an open tab.
-    ActivateTab(RequestPath),
+    ActivateTab(TabKey),
     /// Closes a tab, discarding its unsaved changes.
-    CloseTab(RequestPath),
+    CloseTab(TabKey),
     /// Replaces the contents of an open tab with the user's edits. They
     /// stay a draft until saved.
     Edit {
         /// The tab.
-        path: RequestPath,
+        tab: TabKey,
         /// Its new contents. Boxed: an edit is much larger than any other
         /// command.
         request: Box<HttpRequest>,
     },
     /// Saves the draft of a tab to its file.
-    Save(RequestPath),
+    Save(TabKey),
     /// Saves every draft.
     SaveAll,
     /// Sends the active tab, as it is on screen (with its draft).
     Send,
     /// Cancels the send of the active tab.
     Cancel,
-    /// Creates a request called `name` in `folder` (`""` for the root) and
-    /// opens it.
+    /// Creates a request called `name` in `folder` (`""` for the root) of
+    /// the collection at `root`, and opens it.
     CreateRequest {
+        /// The collection's folder.
+        root: PathBuf,
         /// Where.
         folder: String,
         /// Its name.
@@ -211,6 +269,8 @@ pub enum Command {
     },
     /// Creates a folder called `name` in `parent` (`""` for the root).
     CreateFolder {
+        /// The collection's folder.
+        root: PathBuf,
         /// Where.
         parent: String,
         /// Its name.
@@ -218,15 +278,24 @@ pub enum Command {
     },
     /// Renames a request or folder.
     Rename {
+        /// The collection's folder.
+        root: PathBuf,
         /// What.
         item: ItemPath,
         /// The new name.
         name: String,
     },
     /// Deletes a request or folder, with everything inside it.
-    Delete(ItemPath),
-    /// Moves a request or folder.
+    Delete {
+        /// The collection's folder.
+        root: PathBuf,
+        /// What.
+        item: ItemPath,
+    },
+    /// Moves a request or folder, inside its collection.
     Move {
+        /// The collection's folder.
+        root: PathBuf,
         /// What.
         item: ItemPath,
         /// Where to.
@@ -242,7 +311,7 @@ pub enum Command {
         /// Of the response bodies.
         responses: Limits,
     },
-    /// Creates an empty environment.
+    /// Creates an empty environment in the focused collection.
     CreateEnvironment(String),
     /// Renames an environment, and the `extends` that name it.
     RenameEnvironment {
@@ -260,11 +329,11 @@ pub enum Command {
     /// file and drop the draft.
     ResolveConflict {
         /// The tab.
-        path: RequestPath,
+        tab: TabKey,
         /// Whether the draft is kept.
         keep_draft: bool,
     },
-    /// Something of the vault: secrets and the collection's key.
+    /// Something of the focused collection's vault: secrets and its key.
     Vault(VaultCommand),
 }
 
@@ -273,19 +342,27 @@ pub enum Command {
 pub struct Snapshot {
     /// Increases with every change.
     pub version: u64,
-    /// The open collection.
+    /// The active workspace, once restored.
+    pub workspace: Option<WorkspaceView>,
+    /// The workspaces this machine knows, the active one among them.
+    pub workspaces: Vec<WorkspaceView>,
+    /// The collections of the active workspace, in its order.
+    pub collections: Vec<CollectionEntry>,
+    /// The focused collection: the one of the active tab, or the last one
+    /// picked. The fields below up to [`Self::environment`], and
+    /// [`Self::history`] and [`Self::vault`], are about it.
     pub collection: Option<CollectionView>,
-    /// Names of the collection's environments.
+    /// Names of its environments.
     pub environments: Vec<String>,
-    /// The collection's environments, as in their files, in the order of
+    /// Its environments, as in their files, in the order of
     /// [`Self::environments`].
     pub environment_files: Arc<Vec<Environment>>,
-    /// The active environment.
+    /// Its active environment.
     pub environment: Option<String>,
-    /// Open tabs, in order.
+    /// Open tabs, of any collection, in order.
     pub tabs: Vec<Tab>,
-    /// The request of the active tab.
-    pub active: Option<RequestPath>,
+    /// The active tab.
+    pub active: Option<TabKey>,
     /// The last error that is not about a send, such as a collection that
     /// cannot be opened.
     pub error: Option<String>,
@@ -293,12 +370,12 @@ pub struct Snapshot {
     /// interface offers to create one there.
     pub missing_collection: Option<PathBuf>,
     /// Where a new collection goes unless the user picks another folder:
-    /// the folder of the default workspace, in the data directory.
+    /// the active workspace's folder.
     pub default_parent: PathBuf,
-    /// The sends of the collection, oldest first. Loaded shortly after the
-    /// collection opens.
+    /// The sends of the focused collection, oldest first. Loaded shortly
+    /// after it opens.
     pub history: Arc<Vec<HistoryEntry>>,
-    /// What the interface sees of the vault.
+    /// What the interface sees of the focused collection's vault.
     pub vault: VaultView,
 }
 
@@ -306,22 +383,50 @@ impl Snapshot {
     /// The active tab.
     pub fn active_tab(&self) -> Option<&Tab> {
         let active = self.active.as_ref()?;
-        self.tabs.iter().find(|tab| tab.path == *active)
+        self.tabs.iter().find(|tab| tab.key() == *active)
     }
 }
 
-/// An open collection.
+/// A workspace.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkspaceView {
+    /// Its folder, which holds `workspace.yml`.
+    pub folder: PathBuf,
+    /// Its name.
+    pub name: String,
+}
+
+/// A collection of the workspace, loaded or not.
+#[derive(Debug, Clone)]
+pub struct CollectionEntry {
+    /// Its folder.
+    pub root: PathBuf,
+    /// Its name: the collection's own once loaded, the workspace's before.
+    pub name: String,
+    /// Whether it is expanded in the tree.
+    pub expanded: bool,
+    /// Its folders and requests, once loaded.
+    pub tree: Option<Arc<CollectionTree>>,
+    /// Why it cannot be loaded, if it cannot.
+    pub error: Option<String>,
+    /// It shares secrets and this machine lacks its key.
+    pub needs_key: bool,
+}
+
+/// A loaded collection.
 #[derive(Debug, Clone)]
 pub struct CollectionView {
     /// Its folder.
     pub root: PathBuf,
     /// Its folders and requests.
-    pub tree: CollectionTree,
+    pub tree: Arc<CollectionTree>,
 }
 
 /// An open request.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Tab {
+    /// The folder of its collection.
+    pub root: PathBuf,
     /// Its path in the collection.
     pub path: RequestPath,
     /// Its contents as saved.
@@ -390,6 +495,16 @@ impl Tab {
     pub fn is_dirty(&self) -> bool {
         self.draft.is_some()
     }
+
+    /// Which tab it is.
+    pub fn key(&self) -> TabKey {
+        TabKey::new(self.root.clone(), self.path.clone())
+    }
+
+    /// Whether it is the tab `key`.
+    pub fn is(&self, key: &TabKey) -> bool {
+        self.root == key.root && self.path == key.path
+    }
 }
 
 /// The state of the last send.
@@ -438,18 +553,22 @@ enum Message {
     /// A send ended; the number identifies it in [`State::sending`]. The
     /// entry, already in the history file, is there unless it was cancelled.
     SendFinished(Box<Finished>),
-    /// The history of collection number `.0` was pruned and read.
+    /// The history of collection opening number `.0` was pruned and read.
     HistoryLoaded(u64, Vec<HistoryEntry>),
-    /// Files of collection number `.0` changed outside apifast.
+    /// Files of collection opening number `.0` changed outside apifast.
     External(u64, Changes),
+    /// The `workspace.yml` of workspace opening number `.0` changed.
+    WorkspaceChanged(u64),
     /// Hide what was shown of the vault, if it is still show number `.0`.
     HideShown(u64),
     WriteSession,
 }
 
-/// How a send ended: its number, its result and its history entry.
+/// How a send ended: its number, its collection, its result and its
+/// history entry.
 struct Finished {
     id: u64,
+    root: PathBuf,
     result: Result<Received, AppError>,
     entry: Option<HistoryEntry>,
     /// Entries for the requests its `response(...)` sent first.
@@ -511,7 +630,10 @@ impl Core {
                     snapshot: first,
                     shared,
                     notify: Box::new(notify),
-                    open: None,
+                    workspace: None,
+                    listed: Vec::new(),
+                    open: BTreeMap::new(),
+                    focus: None,
                     sending: HashMap::new(),
                     revision: 0,
                     session_pending: false,
@@ -561,38 +683,25 @@ impl Drop for Core {
     }
 }
 
-/// The ports of an open collection.
-struct Open {
-    repo: Arc<FsCollection>,
-    transport: Arc<ReqwestTransport>,
-    responses: Arc<FsResponseStore>,
-    history: Arc<FsHistoryStore>,
-    sessions: FsSessionStore,
-    /// Numbers this opening, so a late history load for another is ignored.
-    opened: u64,
-    /// The collection's secrets. `None` without a collection id: no secret
-    /// was ever stored.
-    vault: Option<Arc<VaultSecrets>>,
-    /// Values captured from responses, for the next sends. They last while
-    /// the collection is open.
-    runtime: Vec<Variable>,
-    /// Watches the folder while the collection is open. `None` if the
-    /// system refused: changes made outside then show after reopening.
-    _watcher: Option<FsWatcher>,
-}
-
 struct State {
     data_dir: PathBuf,
     snapshot: Snapshot,
     shared: Arc<Mutex<Arc<Snapshot>>>,
     notify: Box<dyn Fn() + Send + Sync>,
-    open: Option<Open>,
+    /// The active workspace, once restored.
+    workspace: Option<ActiveWorkspace>,
+    /// Its collections, in its order.
+    listed: Vec<Listed>,
+    /// The loaded collections, by folder.
+    open: BTreeMap<PathBuf, Open>,
+    /// The focused collection (see [`Snapshot::collection`]).
+    focus: Option<PathBuf>,
     /// Sends in progress, by tab: a number for the send, and its token.
     /// The entry moves with its tab.
-    sending: HashMap<RequestPath, (u64, CancelToken)>,
-    /// Source of [`Tab::revision`] and of send numbers.
+    sending: HashMap<TabKey, (u64, CancelToken)>,
+    /// Source of [`Tab::revision`], of send numbers and of openings.
     revision: u64,
-    /// Whether the session changed and a write is scheduled.
+    /// Whether the sessions changed and a write is scheduled.
     session_pending: bool,
     /// How much history and how many response bodies are kept; applied
     /// when a collection opens.
@@ -618,25 +727,15 @@ impl State {
                         self.schedule_session_write();
                     }
                 }
-                Message::SendFinished(finished) => {
-                    let Finished {
-                        id,
-                        result,
-                        entry,
-                        dependencies,
-                    } = *finished;
-                    if !dependencies.is_empty() {
-                        Arc::make_mut(&mut self.snapshot.history).extend(dependencies);
-                    }
-                    self.finish_send(id, result, entry);
-                }
+                Message::SendFinished(finished) => self.finish_send(*finished),
                 Message::HistoryLoaded(opened, entries) => self.history_loaded(opened, entries),
                 Message::HideShown(shown) => self.hide_shown(shown),
                 Message::External(opened, changes) => {
-                    if self.open.as_ref().is_some_and(|open| open.opened == opened) {
-                        self.apply_external(&changes);
+                    if let Some(root) = self.root_of(opened) {
+                        self.apply_external(&root, &changes);
                     }
                 }
+                Message::WorkspaceChanged(opened) => self.workspace_changed(opened),
                 Message::WriteSession => {
                     self.session_pending = false;
                     self.write_session();
@@ -651,6 +750,7 @@ impl State {
     }
 
     fn publish(&mut self) {
+        self.mirror();
         self.snapshot.version += 1;
         *self.shared.lock().unwrap_or_else(PoisonError::into_inner) =
             Arc::new(self.snapshot.clone());
@@ -663,22 +763,38 @@ impl State {
     }
 
     fn handle(&mut self, command: Command) {
+        // Every command but the settings works in a workspace.
+        if self.workspace.is_none() && !matches!(command, Command::Configure { .. }) {
+            self.restore();
+        }
         match command {
-            Command::OpenCollection(root) => self.open_or_report(root),
-            Command::CreateCollection { folder, name } => self.create_collection(folder, name),
+            Command::Restore => {}
+            Command::OpenCollection(root) => self.open_or_report(&root),
+            Command::CreateCollection { folder, name } => self.create_collection(&folder, name),
+            Command::FocusCollection(root) => self.focus_on(&root),
+            Command::ExpandCollection { root, expanded } => self.expand(&root, expanded),
+            Command::CloseCollection(root) => self.close_collection(&root),
+            Command::RemoveCollection(root) => self.remove_collection(&root),
+            Command::CreateWorkspace { .. }
+            | Command::OpenWorkspace(_)
+            | Command::RenameWorkspace(_)
+            | Command::ForgetWorkspace(_) => self.handle_workspace(command),
             Command::SelectEnvironment(name) => {
-                self.snapshot.environment = name;
+                if let Some(open) = self.focused_mut() {
+                    open.environment = name;
+                }
                 self.refresh_variables(None);
             }
-            Command::OpenRequest(path) => self.open_request(path),
-            Command::ActivateTab(path) => {
-                if self.tab(&path).is_some() {
-                    self.snapshot.active = Some(path);
+            Command::OpenRequest(key) => self.open_request(&key),
+            Command::ActivateTab(key) => {
+                if self.tab(&key).is_some() {
+                    self.focus = Some(key.root.clone());
+                    self.snapshot.active = Some(key);
                 }
             }
-            Command::CloseTab(path) => self.close_tab(&path),
-            Command::Edit { path, request } => {
-                let Some(tab) = self.tab_mut(&path) else {
+            Command::CloseTab(key) => self.close_tab(&key),
+            Command::Edit { tab: key, request } => {
+                let Some(tab) = self.tab_mut(&key) else {
                     return;
                 };
                 // Only the request's own variables change what it sees; the
@@ -686,69 +802,48 @@ impl State {
                 let variables_changed = request.variables != tab.request().variables;
                 tab.draft = (*request != tab.saved).then_some(*request);
                 if variables_changed {
-                    self.refresh_variables(Some(&path));
+                    self.refresh_variables(Some(&key));
                 }
             }
-            Command::Save(path) => self.save(&path),
+            Command::Save(key) => self.save(&key),
             Command::SaveAll => {
-                let dirty: Vec<RequestPath> = (self.snapshot.tabs.iter())
+                let dirty: Vec<TabKey> = (self.snapshot.tabs.iter())
                     .filter(|tab| tab.is_dirty())
-                    .map(|tab| tab.path.clone())
+                    .map(Tab::key)
                     .collect();
-                for path in dirty {
-                    self.save(&path);
+                for key in dirty {
+                    self.save(&key);
                 }
             }
             Command::Send => self.start_send(),
             Command::Cancel => {
                 if let Some((_, token)) =
-                    (self.snapshot.active.as_ref()).and_then(|p| self.sending.get(p))
+                    (self.snapshot.active.as_ref()).and_then(|key| self.sending.get(key))
                 {
                     token.cancel();
                 }
             }
-            Command::CreateRequest { folder, name } => {
-                if let Some(path) = self.organize(|repo| create_request(repo, &folder, &name)) {
-                    self.open_request(path);
-                }
-            }
-            Command::CreateFolder { parent, name } => {
-                self.organize(|repo| create_folder(repo, &parent, &name));
-            }
-            Command::Rename { item, name } => {
-                if let Some(new) = self.organize(|repo| rename_item(repo, &item, &name)) {
-                    self.follow_move(&item, &new);
-                }
-            }
-            Command::Delete(item) => {
-                if self.organize(|repo| delete_item(repo, &item)).is_some() {
-                    let inside: Vec<RequestPath> = (self.snapshot.tabs.iter())
-                        .map(|tab| tab.path.clone())
-                        .filter(|path| ItemPath::Request(path.clone()).is_within(&item))
-                        .collect();
-                    for path in inside {
-                        self.close_tab(&path);
-                    }
-                }
-            }
-            Command::Move { item, placement } => {
-                if let Some(new) = self.organize(|repo| move_item(repo, &item, &placement)) {
-                    self.follow_move(&item, &new);
-                }
-            }
+            Command::CreateRequest { .. }
+            | Command::CreateFolder { .. }
+            | Command::Rename { .. }
+            | Command::Delete { .. }
+            | Command::Move { .. } => self.handle_tree(command),
             Command::OpenHistory(index) => self.open_history(index),
             Command::Configure { history, responses } => self.limits = (history, responses),
             Command::Vault(command) => self.vault_command(command),
-            Command::ResolveConflict { path, keep_draft } => {
+            Command::ResolveConflict {
+                tab: key,
+                keep_draft,
+            } => {
                 let revision = self.next_revision();
-                if let Some(tab) = self.tab_mut(&path) {
+                if let Some(tab) = self.tab_mut(&key) {
                     tab.conflict = false;
                     if !keep_draft {
                         tab.draft = None;
                         tab.revision = revision;
                     }
                 }
-                self.refresh_variables(Some(&path));
+                self.refresh_variables(Some(&key));
             }
             Command::CreateEnvironment(_)
             | Command::RenameEnvironment { .. }
@@ -757,268 +852,143 @@ impl State {
         }
     }
 
-    fn handle_environment(&mut self, command: Command) {
+    /// Commands that change a collection's folders and requests.
+    fn handle_tree(&mut self, command: Command) {
         match command {
-            Command::CreateEnvironment(name) => {
-                self.environments(|repo| create_environment(repo, &name).map(|_| ()));
+            Command::CreateRequest { root, folder, name } => {
+                if let Some(path) =
+                    self.organize(&root, |repo| create_request(repo, &folder, &name))
+                {
+                    self.open_request(&TabKey::new(root, path));
+                }
             }
-            Command::RenameEnvironment { from, to } => {
-                let was_active = self.snapshot.environment.as_deref() == Some(from.as_str());
-                let mut renamed = None;
-                self.environments(|repo| {
-                    renamed = Some(rename_environment(repo, &from, &to)?);
-                    Ok(())
-                });
-                if let Some(to) = &renamed {
-                    // The secrets' associated data hold the environment's
-                    // name: seal them again for the new one.
-                    let vault = self.open.as_ref().and_then(|open| open.vault.clone());
-                    if let Some(Err(e)) = vault.map(|vault| vault.rename_environment(&from, to)) {
-                        self.snapshot.error = Some(e.to_string());
+            Command::CreateFolder { root, parent, name } => {
+                self.organize(&root, |repo| create_folder(repo, &parent, &name));
+            }
+            Command::Rename { root, item, name } => {
+                if let Some(new) = self.organize(&root, |repo| rename_item(repo, &item, &name)) {
+                    self.follow_move(&root, &item, &new);
+                }
+            }
+            Command::Delete { root, item } => {
+                if self
+                    .organize(&root, |repo| delete_item(repo, &item))
+                    .is_some()
+                {
+                    let inside: Vec<TabKey> = (self.snapshot.tabs.iter())
+                        .filter(|tab| {
+                            tab.root == root && ItemPath::Request(tab.path.clone()).is_within(&item)
+                        })
+                        .map(Tab::key)
+                        .collect();
+                    for key in inside {
+                        self.close_tab(&key);
                     }
                 }
-                if let (true, Some(to)) = (was_active, renamed) {
-                    self.snapshot.environment = Some(to);
+            }
+            Command::Move {
+                root,
+                item,
+                placement,
+            } => {
+                if let Some(new) = self.organize(&root, |repo| move_item(repo, &item, &placement)) {
+                    self.follow_move(&root, &item, &new);
                 }
-                self.refresh_variables(None);
-            }
-            Command::SaveEnvironment(environment) => {
-                self.environments(|repo| save_environment(repo, &environment));
-                self.refresh_variables(None);
-            }
-            Command::DeleteEnvironment(name) => {
-                self.environments(|repo| delete_environment(repo, &name));
-                self.refresh_variables(None);
             }
             _ => {}
         }
     }
 
-    /// Runs `change` on the environments, reports its error, and reads them
-    /// again.
-    fn environments(&mut self, change: impl FnOnce(&FsCollection) -> Result<(), AppError>) {
-        let Some(open) = &self.open else { return };
-        let repo = open.repo.clone();
-        match change(&repo) {
-            Ok(()) => self.snapshot.error = None,
-            Err(e) => self.snapshot.error = Some(e.to_string()),
-        }
-        self.reload_environments();
+    fn tab(&self, key: &TabKey) -> Option<&Tab> {
+        self.snapshot.tabs.iter().find(|tab| tab.is(key))
     }
 
-    /// Reads the environments again.
-    fn reload_environments(&mut self) {
-        let Some(open) = &self.open else { return };
-        match open.repo.environments() {
-            Ok(environments) => {
-                self.snapshot.environments = environments.iter().map(|e| e.name.clone()).collect();
-                self.snapshot.environment_files = Arc::new(environments);
-                // An active environment that is gone is no longer active.
-                if let Some(active) = &self.snapshot.environment
-                    && !self.snapshot.environments.contains(active)
-                {
-                    self.snapshot.environment = None;
-                }
-            }
-            Err(e) => self.snapshot.error = Some(e.to_string()),
-        }
-        self.refresh_vault();
+    fn tab_mut(&mut self, key: &TabKey) -> Option<&mut Tab> {
+        self.snapshot.tabs.iter_mut().find(|tab| tab.is(key))
     }
 
-    fn tab(&self, path: &RequestPath) -> Option<&Tab> {
-        self.snapshot.tabs.iter().find(|tab| tab.path == *path)
-    }
-
-    fn tab_mut(&mut self, path: &RequestPath) -> Option<&mut Tab> {
-        self.snapshot.tabs.iter_mut().find(|tab| tab.path == *path)
-    }
-
-    /// Opens the collection in `root`, or tells why not; a folder without
-    /// a collection is remembered, so the interface can offer to create one.
-    fn open_or_report(&mut self, root: PathBuf) {
-        let missing = root.is_dir() && !root.join(COLLECTION_FILE).exists();
-        if let Err(message) = self.open_collection(root.clone()) {
-            self.snapshot.error = Some(message);
-            self.snapshot.missing_collection = missing.then_some(root);
+    /// The tab at `key` with `saved` and `draft`, ready to insert.
+    fn new_tab(&mut self, key: &TabKey, saved: HttpRequest, draft: Option<HttpRequest>) -> Tab {
+        Tab {
+            root: key.root.clone(),
+            path: key.path.clone(),
+            draft: draft.filter(|draft| *draft != saved),
+            saved,
+            response: ResponseState::Idle,
+            revision: self.next_revision(),
+            context: Arc::default(),
+            conflict: false,
         }
     }
 
-    /// Creates a collection named `name` in `folder` and opens it.
-    fn create_collection(&mut self, folder: PathBuf, name: String) {
-        let result = FsCollection::create(&folder, &Collection::new(name))
-            .map_err(|e| e.to_string())
-            .and_then(|_| self.open_collection(folder));
-        if let Err(message) = result {
-            self.snapshot.error = Some(message);
-        }
-    }
-
-    fn open_collection(&mut self, root: PathBuf) -> Result<(), String> {
-        let repo = Arc::new(FsCollection::open(&root).map_err(|e| e.to_string())?);
-        let tree = open_collection(&*repo).map_err(|e| e.to_string())?;
-        let environment_files = repo.environments().map_err(|e| e.to_string())?;
-        let environments: Vec<String> = environment_files.iter().map(|e| e.name.clone()).collect();
-        let transport = ReqwestTransport::new(&root).map_err(|e| e.to_string())?;
-        let id = tree
-            .collection
-            .id
-            .as_ref()
-            .map(apifast_domain::CollectionId::as_str);
-        let shared: Arc<dyn SharedSecretFiles> = repo.clone();
-        let Stores {
-            responses,
-            sessions,
-            history,
-            vault,
-        } = stores(&self.data_dir, &root, id, (shared, self.keyring))?;
-
-        // Leave the previous collection as it was.
-        if self.session_pending {
-            self.write_session();
-            self.session_pending = false;
-        }
-        for (_, token) in self.sending.values() {
-            token.cancel();
-        }
-        self.sending.clear();
-
-        let (session, error) = match sessions.load() {
-            Ok(session) => (session, None),
-            Err(e) => (Session::default(), Some(e.to_string())),
-        };
-        let mut tabs = Vec::with_capacity(session.tabs.len());
-        for SessionTab { path, draft } in session.tabs {
-            let (saved, draft) = match load_request(&*repo, &path) {
-                Ok(loaded) => {
-                    let saved = loaded.request;
-                    let draft = draft.filter(|draft| *draft != saved);
-                    (saved, draft)
-                }
-                // The file is gone but its changes are not: saving writes
-                // it again.
-                Err(_) => match draft {
-                    Some(draft) => (draft.clone(), Some(draft)),
-                    None => continue,
-                },
-            };
-            tabs.push(Tab {
-                path,
-                saved,
-                draft,
-                response: ResponseState::Idle,
-                revision: self.next_revision(),
-                context: Arc::default(),
-                conflict: false,
-            });
-        }
-        let active = (session.active)
-            .filter(|active| tabs.iter().any(|tab| tab.path == *active))
-            .or_else(|| tabs.first().map(|tab| tab.path.clone()));
-        let environment = (session.environment).filter(|name| environments.contains(name));
-
-        let opened = self.next_revision();
-        let (responses, history) = (Arc::new(responses), Arc::new(history));
-        self.load_history(opened, responses.clone(), history.clone());
-        let messages = self.messages.clone();
-        let watcher = FsWatcher::start(&root, move |changes| {
-            if let Some(messages) = messages.upgrade() {
-                let _ = messages.send(Message::External(opened, changes));
-            }
-        });
-        let (watcher, error) = match watcher {
-            Ok(watcher) => (Some(watcher), error),
-            Err(e) => (None, error.or_else(|| Some(e.to_string()))),
-        };
-        self.open = Some(Open {
-            repo,
-            transport: Arc::new(transport),
-            responses,
-            history,
-            sessions,
-            opened,
-            vault,
-            runtime: Vec::new(),
-            _watcher: watcher,
-        });
-        self.snapshot = Snapshot {
-            version: self.snapshot.version,
-            collection: Some(CollectionView { root, tree }),
-            environments,
-            environment_files: Arc::new(environment_files),
-            environment,
-            tabs,
-            active,
-            error,
-            missing_collection: None,
-            default_parent: self.snapshot.default_parent.clone(),
-            history: Arc::default(),
-            vault: VaultView::default(),
-        };
-        self.refresh_variables(None);
-        self.refresh_vault();
-        Ok(())
-    }
-
-    fn open_request(&mut self, path: RequestPath) {
-        if self.tab(&path).is_some() {
-            self.snapshot.active = Some(path);
+    fn open_request(&mut self, key: &TabKey) {
+        if self.tab(key).is_some() {
+            self.focus = Some(key.root.clone());
+            self.snapshot.active = Some(key.clone());
             return;
         }
-        let Some(open) = &self.open else { return };
-        match load_request(&*open.repo, &path) {
+        if let Err(message) = self.load(&key.root) {
+            self.snapshot.error = Some(message);
+            return;
+        }
+        let Some(open) = self.open.get_mut(&key.root) else {
+            return;
+        };
+        match load_request(&*open.repo, &key.path) {
             Ok(loaded) => {
-                let tab = Tab {
-                    path: path.clone(),
-                    saved: loaded.request,
-                    draft: None,
-                    response: ResponseState::Idle,
-                    revision: self.next_revision(),
-                    context: Arc::default(),
-                    conflict: false,
-                };
+                // Unsaved changes kept from when the tab was closed with
+                // its collection come back.
+                let draft = open.parked.remove(&key.path);
+                let tab = self.new_tab(key, loaded.request, draft);
                 // New tabs go right after the active one.
                 let at = (self.snapshot.active.as_ref())
-                    .and_then(|active| self.snapshot.tabs.iter().position(|t| t.path == *active))
+                    .and_then(|active| self.snapshot.tabs.iter().position(|t| t.is(active)))
                     .map_or(self.snapshot.tabs.len(), |i| i + 1);
                 self.snapshot.tabs.insert(at, tab);
-                self.refresh_variables(Some(&path));
-                self.snapshot.active = Some(path);
+                self.refresh_variables(Some(key));
+                self.focus = Some(key.root.clone());
+                self.snapshot.active = Some(key.clone());
                 self.snapshot.error = None;
             }
             Err(e) => self.snapshot.error = Some(e.to_string()),
         }
     }
 
-    fn close_tab(&mut self, path: &RequestPath) {
-        let Some(index) = self.snapshot.tabs.iter().position(|tab| tab.path == *path) else {
+    fn close_tab(&mut self, key: &TabKey) {
+        let Some(index) = self.snapshot.tabs.iter().position(|tab| tab.is(key)) else {
             return;
         };
-        if let Some((_, token)) = self.sending.remove(path) {
+        if let Some((_, token)) = self.sending.remove(key) {
             token.cancel();
         }
         self.snapshot.tabs.remove(index);
-        if self.snapshot.active.as_ref() == Some(path) {
+        if self.snapshot.active.as_ref() == Some(key) {
             // The tab that took its place, or the one before it.
             let next = self
                 .snapshot
                 .tabs
                 .get(index)
                 .or_else(|| index.checked_sub(1).and_then(|i| self.snapshot.tabs.get(i)));
-            self.snapshot.active = next.map(|tab| tab.path.clone());
+            self.snapshot.active = next.map(Tab::key);
+            if let Some(next) = &self.snapshot.active {
+                self.focus = Some(next.root.clone());
+            }
         }
     }
 
-    fn save(&mut self, path: &RequestPath) {
-        let Some(open) = &self.open else { return };
-        let Some(draft) = self.tab(path).and_then(|tab| tab.draft.clone()) else {
+    fn save(&mut self, key: &TabKey) {
+        let Some(repo) = self.open.get(&key.root).map(|open| open.repo.clone()) else {
             return;
         };
-        if let Err(e) = save_request(&*open.repo, path, &draft) {
+        let Some(draft) = self.tab(key).and_then(|tab| tab.draft.clone()) else {
+            return;
+        };
+        if let Err(e) = save_request(&*repo, &key.path, &draft) {
             self.snapshot.error = Some(e.to_string());
             return;
         }
         let revision = self.next_revision();
-        if let Some(tab) = self.tab_mut(path) {
+        if let Some(tab) = self.tab_mut(key) {
             tab.saved = draft;
             tab.draft = None;
             tab.revision = revision;
@@ -1026,33 +996,44 @@ impl State {
             tab.conflict = false;
         }
         self.snapshot.error = None;
-        self.refresh_variables(Some(path));
+        self.refresh_variables(Some(key));
         // The name or method shown in the tree may have changed.
-        self.reload_tree();
+        self.reload_tree(&key.root);
     }
 
     /// Works out again the context of the tab at `only`, or of every tab.
-    fn refresh_variables(&mut self, only: Option<&RequestPath>) {
+    fn refresh_variables(&mut self, only: Option<&TabKey>) {
         for index in 0..self.snapshot.tabs.len() {
             let tab = &self.snapshot.tabs[index];
-            if only.is_some_and(|path| *path != tab.path) {
+            if only.is_some_and(|key| !tab.is(key)) {
                 continue;
             }
-            let mut context = self.context(&tab.path, tab.request());
+            let mut context = self.context(&tab.key(), tab.request());
             context.revision = self.next_revision();
             self.snapshot.tabs[index].context = Arc::new(context);
         }
     }
 
-    /// What `request` sees at `path` from outside itself.
-    fn context(&self, path: &RequestPath, request: &HttpRequest) -> TabContext {
-        let Some(open) = &self.open else {
+    /// Works out again the context of every tab of the collection at `root`.
+    fn refresh_collection(&mut self, root: &Path) {
+        let keys: Vec<TabKey> = (self.snapshot.tabs.iter())
+            .filter(|tab| tab.root == root)
+            .map(Tab::key)
+            .collect();
+        for key in keys {
+            self.refresh_variables(Some(&key));
+        }
+    }
+
+    /// What `request` sees at `key` from outside itself.
+    fn context(&self, key: &TabKey, request: &HttpRequest) -> TabContext {
+        let Some(open) = self.open.get(&key.root) else {
             return TabContext::default();
         };
         // A request whose file is gone has no folders to read: it shows
         // nothing inherited until it is saved again.
         let (Ok(mut loaded), Ok(collection)) = (
-            load_request(&*open.repo, path),
+            load_request(&*open.repo, &key.path),
             CollectionRepository::collection(&*open.repo),
         ) else {
             return TabContext::default();
@@ -1062,7 +1043,7 @@ impl State {
             &*open.repo,
             &*open.repo,
             &loaded,
-            self.snapshot.environment.as_deref(),
+            open.environment.as_deref(),
             &[],
         )
         .unwrap_or_default();
@@ -1082,174 +1063,16 @@ impl State {
         }
     }
 
-    /// Reconciles files changed outside apifast with what is open. A file
-    /// that reads as what the tab already holds was written by apifast
-    /// itself, and changes nothing.
-    fn apply_external(&mut self, changes: &Changes) {
-        let Some(open) = &self.open else { return };
-        let repo = open.repo.clone();
-        // A changed path is a file, or a folder renamed or removed whole.
-        let touched = |path: &str| {
-            changes.rescan
-                || (changes.paths.iter())
-                    .any(|changed| path == changed || path.starts_with(&format!("{changed}/")))
-        };
-        let shared = changes.rescan
-            || changes.paths.iter().any(|path| {
-                path == "opencollection.yml"
-                    || path == ".env"
-                    || path == "environments"
-                    || path.starts_with("environments/")
-                    || path.ends_with("folder.yml")
-            });
-        self.reload_tree();
-        if shared {
-            self.reload_environments();
-        }
-        let tabs: Vec<RequestPath> = (self.snapshot.tabs.iter())
-            .map(|tab| tab.path.clone())
-            .filter(|path| touched(path.as_str()))
-            .collect();
-        for path in tabs {
-            match load_request(&*repo, &path) {
-                Ok(loaded) => self.take_external(&path, loaded.request),
-                Err(AppError::Repository(RepositoryError::NotFound(_))) => {
-                    // Gone. Changes not saved stay: saving writes the file
-                    // again. Without them, there is nothing left to show.
-                    if self.tab(&path).is_some_and(|tab| tab.draft.is_none()) {
-                        self.close_tab(&path);
-                    }
-                }
-                // Half written, or not valid yet: the next change will tell.
-                Err(_) => {}
-            }
-        }
-        if shared {
-            self.refresh_variables(None);
-        }
-        // Secrets shared by a teammate, or a new challenge, came with git.
-        if changes.rescan || changes.paths.iter().any(|p| p.starts_with(".apifast")) {
-            self.refresh_vault();
-        }
-    }
-
-    /// The file of tab `path` now holds `request`.
-    fn take_external(&mut self, path: &RequestPath, request: HttpRequest) {
-        let revision = self.next_revision();
-        let Some(tab) = self.tab_mut(path) else {
-            return;
-        };
-        if request == tab.saved {
-            return;
-        }
-        match &tab.draft {
-            None => tab.revision = revision,
-            // The file now says what the draft says: nothing to settle.
-            Some(draft) if *draft == request => {
-                tab.draft = None;
-                tab.conflict = false;
-                tab.revision = revision;
-            }
-            // Both changed: keep the draft on screen and ask.
-            Some(_) => tab.conflict = true,
-        }
-        tab.saved = request;
-        self.refresh_variables(Some(path));
-    }
-
-    fn reload_tree(&mut self) {
-        let Some(open) = &self.open else { return };
-        match open_collection(&*open.repo) {
-            Ok(tree) => {
-                if let Some(collection) = &mut self.snapshot.collection {
-                    collection.tree = tree;
-                }
-            }
-            Err(e) => self.snapshot.error = Some(e.to_string()),
-        }
-    }
-
-    /// Runs a use case that changes the collection's files, then reloads the
-    /// tree. Returns the use case's result, or `None` after reporting its
-    /// error.
-    fn organize<T>(
-        &mut self,
-        change: impl FnOnce(&FsCollection) -> Result<T, AppError>,
-    ) -> Option<T> {
-        let result = change(&self.open.as_ref()?.repo);
-        // Reload even after an error: part of the change may have happened.
-        self.reload_tree();
-        match result {
-            Ok(value) => {
-                self.snapshot.error = None;
-                Some(value)
-            }
-            Err(e) => {
-                self.snapshot.error = Some(e.to_string());
-                None
-            }
-        }
-    }
-
-    /// After `old` moved to `new`, the tabs of `old` and of everything
-    /// inside it follow, with their drafts and sends in progress. Their
-    /// saved contents are read again: the name may have changed.
-    fn follow_move(&mut self, old: &ItemPath, new: &ItemPath) {
-        let Some(open) = &self.open else { return };
-        let repo = open.repo.clone();
-        let moved = |path: &RequestPath| {
-            ItemPath::Request(path.clone()).is_within(old).then(|| {
-                RequestPath::new(format!(
-                    "{}{}",
-                    new.as_str(),
-                    &path.as_str()[old.as_str().len()..]
-                ))
-            })
-        };
-        let mut revisions = Vec::new();
-        for index in 0..self.snapshot.tabs.len() {
-            let Some(to) = moved(&self.snapshot.tabs[index].path) else {
-                continue;
-            };
-            revisions.push((index, to));
-        }
-        for (index, to) in revisions {
-            let revision = self.next_revision();
-            let from = self.snapshot.tabs[index].path.clone();
-            if let Some(send) = self.sending.remove(&from) {
-                self.sending.insert(to.clone(), send);
-            }
-            if self.snapshot.active.as_ref() == Some(&from) {
-                self.snapshot.active = Some(to.clone());
-            }
-            let tab = &mut self.snapshot.tabs[index];
-            match load_request(&*repo, &to) {
-                Ok(loaded) => {
-                    // A rename changes the name on disk; the draft keeps it,
-                    // or saving it would undo the rename.
-                    if let Some(draft) = &mut tab.draft
-                        && tab.saved.name != loaded.request.name
-                    {
-                        draft.name.clone_from(&loaded.request.name);
-                    }
-                    tab.saved = loaded.request;
-                }
-                Err(e) => self.snapshot.error = Some(e.to_string()),
-            }
-            tab.path = to.clone();
-            tab.revision = revision;
-            self.refresh_variables(Some(&to));
-        }
-    }
-
     fn start_send(&mut self) {
-        let Some(path) = self.snapshot.active.clone() else {
+        let Some(key) = self.snapshot.active.clone() else {
             return;
         };
-        if self.sending.contains_key(&path) {
+        if self.sending.contains_key(&key) {
             return;
         }
-        let Some(open) = &self.open else { return };
+        let Some(open) = self.open.get(&key.root) else {
+            return;
+        };
         let (repo, transport, responses, history) = (
             open.repo.clone(),
             open.transport.clone(),
@@ -1260,23 +1083,23 @@ impl State {
             Some(vault) => vault.clone(),
             None => Arc::new(NoSecrets),
         };
-        let Some(request) = self.tab(&path).map(Tab::request) else {
+        let Some(request) = self.tab(&key).map(Tab::request) else {
             return;
         };
         let written = (request.method.as_str().to_owned(), request.url.clone());
         let options = SendOptions {
-            environment: self.snapshot.environment.clone(),
-            draft: self.tab(&path).and_then(|tab| tab.draft.clone()),
+            environment: open.environment.clone(),
+            draft: self.tab(&key).and_then(|tab| tab.draft.clone()),
             runtime: open.runtime.clone(),
             ..SendOptions::default()
         };
-        let Some(tab) = self.tab_mut(&path) else {
+        let Some(tab) = self.tab_mut(&key) else {
             return;
         };
         tab.response = ResponseState::Sending;
         let cancel = CancelToken::new();
         let id = self.next_revision();
-        self.sending.insert(path.clone(), (id, cancel.clone()));
+        self.sending.insert(key.clone(), (id, cancel.clone()));
 
         let messages = self.messages.clone();
         tokio::spawn(async move {
@@ -1294,11 +1117,11 @@ impl State {
                 history: Some(&*history),
             };
             let at_ms = clock.unix_millis();
-            let result = send_request(ports, &path, &options, &cancel).await;
+            let result = send_request(ports, &key.path, &options, &cancel).await;
             let entry = match &result {
                 Ok(outcome) => Some(HistoryEntry::received(
                     at_ms,
-                    path.clone(),
+                    key.path.clone(),
                     written,
                     outcome.head.clone(),
                     (outcome.body.size, outcome.body.id.clone()),
@@ -1307,7 +1130,7 @@ impl State {
                 Err(AppError::Transport(TransportError::Cancelled)) => None,
                 Err(e) => Some(HistoryEntry::failed(
                     at_ms,
-                    path.clone(),
+                    key.path.clone(),
                     written,
                     e.to_string(),
                 )),
@@ -1329,6 +1152,7 @@ impl State {
             if let Some(messages) = messages.upgrade() {
                 let finished = Finished {
                     id,
+                    root: key.root,
                     result,
                     entry,
                     dependencies,
@@ -1338,28 +1162,32 @@ impl State {
         });
     }
 
-    /// Records the result of send number `id` in its tab, wherever the tab
-    /// is now. A tab closed meanwhile has no entry, and the result is
-    /// dropped.
-    fn finish_send(
-        &mut self,
-        id: u64,
-        result: Result<Received, AppError>,
-        entry: Option<HistoryEntry>,
-    ) {
-        if let Some(entry) = entry {
-            Arc::make_mut(&mut self.snapshot.history).push(entry);
+    /// Records the result of a send in its collection's history and in its
+    /// tab, wherever the tab is now. A tab closed meanwhile has no entry,
+    /// and the result is dropped.
+    fn finish_send(&mut self, finished: Finished) {
+        let Finished {
+            id,
+            root,
+            result,
+            entry,
+            dependencies,
+        } = finished;
+        if let Some(open) = self.open.get_mut(&root) {
+            let entries = Arc::make_mut(&mut open.entries);
+            entries.extend(dependencies);
+            entries.extend(entry);
         }
-        let Some(path) = (self.sending.iter())
+        let Some(key) = (self.sending.iter())
             .find(|(_, (send, _))| *send == id)
-            .map(|(path, _)| path.clone())
+            .map(|(key, _)| key.clone())
         else {
             return;
         };
-        self.sending.remove(&path);
+        self.sending.remove(&key);
         let response = match result {
             Ok(received) => {
-                if let Some(open) = &mut self.open {
+                if let Some(open) = self.open.get_mut(&key.root) {
                     apply_captures(&mut open.runtime, &received.checks.captures);
                 }
                 ResponseState::Received(received)
@@ -1367,7 +1195,7 @@ impl State {
             Err(AppError::Transport(TransportError::Cancelled)) => ResponseState::Cancelled,
             Err(e) => ResponseState::Failed(e.to_string()),
         };
-        if let Some(tab) = self.tab_mut(&path) {
+        if let Some(tab) = self.tab_mut(&key) {
             tab.response = response;
         }
     }
@@ -1399,14 +1227,17 @@ impl State {
         });
     }
 
-    /// Takes the history read for collection number `opened`, and shows in
-    /// each tab still empty its last response that is still kept.
+    /// Takes the history read for collection opening number `opened`, and
+    /// shows in each of its tabs still empty its last response still kept.
     fn history_loaded(&mut self, opened: u64, entries: Vec<HistoryEntry>) {
-        let Some(open) = self.open.as_ref().filter(|open| open.opened == opened) else {
+        let Some(root) = self.root_of(opened) else {
+            return;
+        };
+        let Some(open) = self.open.get_mut(&root) else {
             return;
         };
         let responses = open.responses.clone();
-        for tab in &mut self.snapshot.tabs {
+        for tab in self.snapshot.tabs.iter_mut().filter(|tab| tab.root == root) {
             if !matches!(tab.response, ResponseState::Idle) {
                 continue;
             }
@@ -1415,19 +1246,33 @@ impl State {
                 tab.response = response;
             }
         }
-        self.snapshot.history = Arc::new(entries);
+        // Sends that ended before the history was read are kept.
+        let meanwhile: Vec<HistoryEntry> = (open.entries.iter())
+            .filter(|entry| !entries.contains(entry))
+            .cloned()
+            .collect();
+        let mut all = entries;
+        all.extend(meanwhile);
+        open.entries = Arc::new(all);
     }
 
-    /// Shows history entry `index` in its request's tab.
+    /// Shows entry `index` of the focused collection's history in its
+    /// request's tab.
     fn open_history(&mut self, index: usize) {
-        let Some(entry) = self.snapshot.history.get(index).cloned() else {
+        let Some(root) = self.focus.clone() else {
             return;
         };
-        let Some(open) = &self.open else { return };
+        let Some(open) = self.open.get(&root) else {
+            return;
+        };
+        let Some(entry) = open.entries.get(index).cloned() else {
+            return;
+        };
         let responses = open.responses.clone();
-        self.open_request(entry.request.clone());
-        let sending = self.sending.contains_key(&entry.request);
-        match self.tab_mut(&entry.request) {
+        let key = TabKey::new(root, entry.request.clone());
+        self.open_request(&key);
+        let sending = self.sending.contains_key(&key);
+        match self.tab_mut(&key) {
             Some(tab) if !sending => {
                 if let Some(response) = response_of(&responses, &entry, false) {
                     tab.response = response;
@@ -1438,7 +1283,7 @@ impl State {
     }
 
     fn schedule_session_write(&mut self) {
-        if self.open.is_none() || self.session_pending {
+        if self.workspace.is_none() || self.session_pending {
             return;
         }
         self.session_pending = true;
@@ -1451,17 +1296,36 @@ impl State {
         });
     }
 
+    /// Writes the session of every loaded collection (its drafts and its
+    /// environment) and the workspace's state (its tabs).
     fn write_session(&mut self) {
-        let Some(open) = &self.open else { return };
+        let roots: Vec<PathBuf> = self.open.keys().cloned().collect();
+        for root in roots {
+            self.write_collection_session(&root);
+        }
+        self.write_workspace_state();
+    }
+
+    /// Writes the session of the collection at `root`.
+    fn write_collection_session(&mut self, root: &Path) {
+        let Some(open) = self.open.get(root) else {
+            return;
+        };
+        let mut tabs: Vec<SessionTab> = (self.snapshot.tabs.iter())
+            .filter(|tab| tab.root == root)
+            .map(|tab| SessionTab {
+                path: tab.path.clone(),
+                draft: tab.draft.clone(),
+            })
+            .collect();
+        tabs.extend(open.parked.iter().map(|(path, draft)| SessionTab {
+            path: path.clone(),
+            draft: Some(draft.clone()),
+        }));
         let session = Session {
-            tabs: (self.snapshot.tabs.iter())
-                .map(|tab| SessionTab {
-                    path: tab.path.clone(),
-                    draft: tab.draft.clone(),
-                })
-                .collect(),
-            active: self.snapshot.active.clone(),
-            environment: self.snapshot.environment.clone(),
+            tabs,
+            active: None,
+            environment: open.environment.clone(),
         };
         if let Err(e) = open.sessions.save(&session) {
             self.snapshot.error = Some(e.to_string());

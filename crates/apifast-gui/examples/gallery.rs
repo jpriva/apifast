@@ -186,7 +186,7 @@ fn showcase(
         });
     });
     section(ui, "TabBar", |ui| {
-        let _ = state.tab_bar.show(ui, tabs, Some(&tabs[1].path), &EN);
+        let _ = state.tab_bar.show(ui, tabs, Some(&tabs[1].key()), &EN);
     });
     section(ui, "TreeView", |ui| {
         ui.allocate_ui(egui::vec2(ui.available_width(), 160.0), |ui| {
@@ -308,6 +308,7 @@ fn sample_tabs() -> Vec<Tab> {
         let saved = HttpRequest::new(name, method, "{{host}}");
         let draft = dirty.then(|| HttpRequest::new(name, Method::Put, "{{host}}/x"));
         Tab {
+            root: "/c".into(),
             path: RequestPath::new(path),
             saved,
             draft,

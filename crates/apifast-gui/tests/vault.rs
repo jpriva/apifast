@@ -8,7 +8,7 @@ use std::sync::Arc;
 use apifast_app::{CollectionTree, RequestPath};
 use apifast_domain::{Collection, HttpRequest, Method, Secret};
 use apifast_gui::core::{
-    CollectionView, Command, ResponseState, Snapshot, Tab, VaultCommand, VaultView,
+    CollectionView, Command, ResponseState, Snapshot, Tab, TabKey, VaultCommand, VaultView,
 };
 use apifast_gui::screens::MainScreen;
 use apifast_gui::strings::EN;
@@ -21,12 +21,13 @@ fn snapshot(vault: VaultView) -> Snapshot {
     Snapshot {
         collection: Some(CollectionView {
             root: "/c".into(),
-            tree: CollectionTree {
+            tree: std::sync::Arc::new(CollectionTree {
                 collection: Collection::new("C"),
                 items: Vec::new(),
-            },
+            }),
         }),
         tabs: vec![Tab {
+            root: "/c".into(),
             path: path.clone(),
             saved: HttpRequest::new("Health", Method::Get, "{{host}}/health"),
             draft: None,
@@ -35,7 +36,7 @@ fn snapshot(vault: VaultView) -> Snapshot {
             context: Arc::default(),
             conflict: false,
         }],
-        active: Some(path),
+        active: Some(TabKey::new("/c", path)),
         vault,
         ..Snapshot::default()
     }

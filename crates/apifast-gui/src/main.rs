@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use apifast_gui::app::App;
 use apifast_gui::core::{Command, Core};
-use apifast_storage_fs::{FsKeymapStore, FsSettingsStore};
+use apifast_storage_fs::{FsKeymapStore, FsSettingsStore, WORKSPACE_FILE};
 use eframe::egui;
 use eframe::egui_wgpu::{WgpuConfiguration, WgpuSetup, WgpuSetupCreateNew};
 use eframe::wgpu::Backends;
@@ -64,8 +64,14 @@ fn run(
             if timings {
                 app = app.with_timings(started);
             }
-            if let Some(folder) = folder {
-                app.core().send(Command::OpenCollection(folder));
+            // The workspace opens once the core knows the settings.
+            app.core().send(Command::Restore);
+            match folder {
+                Some(folder) if folder.join(WORKSPACE_FILE).is_file() => {
+                    app.core().send(Command::OpenWorkspace(folder));
+                }
+                Some(folder) => app.core().send(Command::OpenCollection(folder)),
+                None => {}
             }
             Ok(Box::new(app))
         }),

@@ -11,7 +11,7 @@ use eframe::egui::{self, RichText};
 use crate::actions::{ALL, Action, Keymap};
 
 use crate::atoms::{ColorSwatch, HintsCache, VariableHint, VariableHints};
-use crate::core::{Command, ResponseState, Snapshot, Tab, TabContext, VaultCommand};
+use crate::core::{Command, ResponseState, Snapshot, Tab, TabContext, TabKey, VaultCommand};
 use crate::layout;
 use crate::molecules::EnvironmentSelector;
 use crate::organisms::{
@@ -70,7 +70,7 @@ pub struct MainScreen {
     /// Whether the sidebar is hidden.
     pub sidebar_hidden: bool,
     /// Tabs closed, most recent last, to open again.
-    closed: Vec<RequestPath>,
+    closed: Vec<TabKey>,
     /// Put the cursor in the URL on the next frame.
     focus_url: bool,
     /// The application's settings.
@@ -100,14 +100,14 @@ struct Unsaved {
 /// new [`Tab::revision`]), so keys typed before the core answers are kept.
 #[derive(Debug)]
 struct Editor {
-    path: RequestPath,
+    key: TabKey,
     revision: u64,
     request: HttpRequest,
 }
 
 impl Editor {
     fn follows(&self, tab: &Tab) -> bool {
-        self.path == tab.path && self.revision == tab.revision
+        tab.is(&self.key) && self.revision == tab.revision
     }
 }
 
@@ -124,6 +124,7 @@ impl MainScreen {
         let hints = self.follow(active, strings);
         let sending = active.is_some_and(|tab| tab.response == ResponseState::Sending);
         let selected = snapshot.active.as_ref();
+        let tree_selected = selected_in_tree(snapshot);
         self.request.format_shortcuts = Some(self.keymap.shortcuts(Action::FormatBody));
         self.response.pretty_limit = Some(self.settings.pretty_limit());
         let focus_url = std::mem::take(&mut self.focus_url);
@@ -155,7 +156,13 @@ impl MainScreen {
                 )
             },
             (!self.sidebar_hidden).then_some(|ui: &mut egui::Ui| {
-                sidebar_area(ui, (sidebar, tree, history), snapshot, selected, strings)
+                sidebar_area(
+                    ui,
+                    (sidebar, tree, history),
+                    snapshot,
+                    tree_selected,
+                    strings,
+                )
             }),
             |ui| {
                 let tab_event = tabs.show(ui, &snapshot.tabs, selected, strings);
@@ -189,7 +196,7 @@ impl MainScreen {
             .collect();
         if let (Some(keep_draft), Some(tab)) = (resolve, active) {
             commands.push(Command::ResolveConflict {
-                path: tab.path.clone(),
+                tab: tab.key(),
                 keep_draft,
             });
         }
@@ -199,27 +206,35 @@ impl MainScreen {
         commands.extend(self.collection_commands(ui, (create_here, asked), snapshot, strings));
         commands.extend(self.windows(ui, snapshot, &hints, strings));
         commands.extend(environment);
-        if let Some(event) = tree_event {
-            commands.push(tree_command(event));
+        if let (Some(event), Some(collection)) = (tree_event, collection) {
+            commands.push(tree_command(collection.root.clone(), event));
         }
         if let Some(index) = picked {
             commands.push(Command::OpenHistory(index));
         }
-        if let (true, Some(editor)) = (edited, &self.editor) {
-            commands.push(Command::Edit {
-                path: editor.path.clone(),
-                request: Box::new(editor.request.clone()),
-            });
-        }
+        commands.extend(self.editor_commands(edited, url_event));
         if let Some(event) = tab_event {
             commands.extend(self.tab_commands(event));
+        }
+        commands.extend(self.keys(ui, snapshot, sending, strings));
+        commands
+    }
+
+    /// The commands of the editor: the edits made, and sending or
+    /// cancelling from the URL bar.
+    fn editor_commands(&self, edited: bool, url_event: Option<UrlBarEvent>) -> Vec<Command> {
+        let mut commands = Vec::new();
+        if let (true, Some(editor)) = (edited, &self.editor) {
+            commands.push(Command::Edit {
+                tab: editor.key.clone(),
+                request: Box::new(editor.request.clone()),
+            });
         }
         match url_event {
             Some(UrlBarEvent::Send) => commands.push(Command::Send),
             Some(UrlBarEvent::Cancel) => commands.push(Command::Cancel),
             Some(UrlBarEvent::Edited) | None => {}
         }
-        commands.extend(self.keys(ui, snapshot, sending, strings));
         commands
     }
 
@@ -343,7 +358,12 @@ impl MainScreen {
                 Some(PaletteItem::Action(action, ..)) => {
                     commands.extend(self.run(action, snapshot, strings));
                 }
-                Some(PaletteItem::Request(path, ..)) => commands.push(Command::OpenRequest(path)),
+                Some(PaletteItem::Request(path, ..)) => {
+                    if let Some(collection) = &snapshot.collection {
+                        let key = TabKey::new(collection.root.clone(), path);
+                        commands.push(Command::OpenRequest(key));
+                    }
+                }
                 Some(PaletteItem::Environment(name, _)) => {
                     commands.push(Command::SelectEnvironment(name));
                 }
@@ -358,16 +378,15 @@ impl MainScreen {
         let active = snapshot.active_tab();
         let sending = active.is_some_and(|tab| tab.response == ResponseState::Sending);
         let position = (snapshot.active.as_ref())
-            .and_then(|path| snapshot.tabs.iter().position(|tab| tab.path == *path));
-        let tab_at = |index: usize| {
-            (snapshot.tabs.get(index)).map(|tab| Command::ActivateTab(tab.path.clone()))
-        };
+            .and_then(|key| snapshot.tabs.iter().position(|tab| tab.is(key)));
+        let tab_at =
+            |index: usize| (snapshot.tabs.get(index)).map(|tab| Command::ActivateTab(tab.key()));
         let count = snapshot.tabs.len();
         let one = |command: Option<Command>| command.into_iter().collect();
         match action {
             Action::Send => one((active.is_some() && !sending).then_some(Command::Send)),
             Action::Cancel => one(sending.then_some(Command::Cancel)),
-            Action::Save => one(active.map(|tab| Command::Save(tab.path.clone()))),
+            Action::Save => one(active.map(|tab| Command::Save(tab.key()))),
             Action::SaveAll => vec![Command::SaveAll],
             Action::Palette => {
                 self.palette.open(PaletteMode::All);
@@ -377,23 +396,21 @@ impl MainScreen {
                 self.palette.open(PaletteMode::Requests);
                 Vec::new()
             }
-            Action::NewRequest => vec![Command::CreateRequest {
-                folder: String::new(),
-                name: strings.new_request_name.to_owned(),
-            }],
+            Action::NewRequest => {
+                one(snapshot
+                    .collection
+                    .as_ref()
+                    .map(|collection| Command::CreateRequest {
+                        root: collection.root.clone(),
+                        folder: String::new(),
+                        name: strings.new_request_name.to_owned(),
+                    }))
+            }
             Action::CloseTab => match active.and_then(|tab| self.tabs.request_close(tab)) {
                 Some(event) => self.tab_commands(event),
                 None => Vec::new(),
             },
-            Action::ReopenTab => {
-                let open = |path: &RequestPath| snapshot.tabs.iter().any(|t| t.path == *path);
-                while let Some(path) = self.closed.pop() {
-                    if !open(&path) {
-                        return vec![Command::OpenRequest(path)];
-                    }
-                }
-                Vec::new()
-            }
+            Action::ReopenTab => one(self.reopen(snapshot)),
             Action::NextTab => one(position.and_then(|i| tab_at((i + 1) % count))),
             Action::PreviousTab => one(position.and_then(|i| tab_at((i + count - 1) % count))),
             Action::GoToTab(n) => one(tab_at(usize::from(n).saturating_sub(1))),
@@ -456,12 +473,22 @@ impl MainScreen {
         }
     }
 
+    /// The last closed tab that is not open again.
+    fn reopen(&mut self, snapshot: &Snapshot) -> Option<Command> {
+        while let Some(key) = self.closed.pop() {
+            if !snapshot.tabs.iter().any(|t| t.is(&key)) {
+                return Some(Command::OpenRequest(key));
+            }
+        }
+        None
+    }
+
     /// The commands of a tab event; a closed tab is remembered to open
     /// again.
     fn tab_commands(&mut self, event: TabEvent) -> Vec<Command> {
-        let mut closed = |path: &RequestPath| {
-            self.closed.retain(|p| p != path);
-            self.closed.push(path.clone());
+        let mut closed = |key: &TabKey| {
+            self.closed.retain(|k| k != key);
+            self.closed.push(key.clone());
             if self.closed.len() > CLOSED_TABS {
                 self.closed.remove(0);
             }
@@ -486,7 +513,7 @@ impl MainScreen {
             (Some(tab), Some(editor)) if editor.follows(tab) => {}
             (Some(tab), _) => {
                 self.editor = Some(Editor {
-                    path: tab.path.clone(),
+                    key: tab.key(),
                     revision: tab.revision,
                     request: tab.request().clone(),
                 });
@@ -569,14 +596,27 @@ fn hints(context: &TabContext, strings: &Strings) -> VariableHints {
         .collect()
 }
 
-fn tree_command(event: TreeEvent) -> Command {
+/// The request of the active tab, if the tree shows its collection (the
+/// focused one).
+fn selected_in_tree(snapshot: &Snapshot) -> Option<&RequestPath> {
+    let key = snapshot.active.as_ref()?;
+    let collection = snapshot.collection.as_ref()?;
+    (collection.root == key.root).then_some(&key.path)
+}
+
+/// The command of what the tree of the collection at `root` reported.
+fn tree_command(root: PathBuf, event: TreeEvent) -> Command {
     match event {
-        TreeEvent::RequestSelected(path) => Command::OpenRequest(path),
-        TreeEvent::CreateRequest { folder, name } => Command::CreateRequest { folder, name },
-        TreeEvent::CreateFolder { parent, name } => Command::CreateFolder { parent, name },
-        TreeEvent::Rename { item, name } => Command::Rename { item, name },
-        TreeEvent::Delete(item) => Command::Delete(item),
-        TreeEvent::Move { item, placement } => Command::Move { item, placement },
+        TreeEvent::RequestSelected(path) => Command::OpenRequest(TabKey::new(root, path)),
+        TreeEvent::CreateRequest { folder, name } => Command::CreateRequest { root, folder, name },
+        TreeEvent::CreateFolder { parent, name } => Command::CreateFolder { root, parent, name },
+        TreeEvent::Rename { item, name } => Command::Rename { root, item, name },
+        TreeEvent::Delete(item) => Command::Delete { root, item },
+        TreeEvent::Move { item, placement } => Command::Move {
+            root,
+            item,
+            placement,
+        },
     }
 }
 

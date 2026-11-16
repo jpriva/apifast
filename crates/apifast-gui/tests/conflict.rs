@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use apifast_app::{CollectionTree, RequestPath};
 use apifast_domain::{Collection, HttpRequest, Method};
-use apifast_gui::core::{CollectionView, Command, ResponseState, Snapshot, Tab};
+use apifast_gui::core::{CollectionView, Command, ResponseState, Snapshot, Tab, TabKey};
 use apifast_gui::screens::MainScreen;
 use apifast_gui::strings::EN;
 use eframe::egui;
@@ -19,12 +19,13 @@ fn snapshot(conflict: bool) -> Snapshot {
     Snapshot {
         collection: Some(CollectionView {
             root: "/c".into(),
-            tree: CollectionTree {
+            tree: std::sync::Arc::new(CollectionTree {
                 collection: Collection::new("C"),
                 items: Vec::new(),
-            },
+            }),
         }),
         tabs: vec![Tab {
+            root: "/c".into(),
             path: path.clone(),
             saved,
             draft: Some(draft),
@@ -33,7 +34,7 @@ fn snapshot(conflict: bool) -> Snapshot {
             context: Arc::default(),
             conflict,
         }],
-        active: Some(path),
+        active: Some(TabKey::new("/c", path)),
         ..Snapshot::default()
     }
 }
