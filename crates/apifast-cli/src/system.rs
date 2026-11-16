@@ -63,3 +63,12 @@ impl Prompter for TerminalPrompter {
         (!value.is_empty()).then(|| value.to_owned())
     }
 }
+
+/// Waits on the tokio timer.
+pub struct TokioPause;
+
+impl apifast_app::Pause for TokioPause {
+    fn pause(&self, ms: u64) -> std::pin::Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+        Box::pin(tokio::time::sleep(std::time::Duration::from_millis(ms)))
+    }
+}

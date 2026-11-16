@@ -233,22 +233,46 @@ apifast vault <subcomando>
 
 ### `apifast run`
 
+```
+apifast run [carpeta] [opciones]
+```
+
+La carpeta es la colección o una de sus carpetas; por defecto, la actual. La colección es la carpeta más cercana hacia arriba con `opencollection.yml`. Un archivo no se ejecuta con `run`: para una request está `apifast send`.
+
 | Opción | Descripción |
 |---|---|
-| `--env <nombre>` | Entorno activo |
-| `--env-var <k=v>` | Sobrescribe una variable (repetible) |
-| `--env-file <ruta>` | Archivo `.env` adicional |
+| `-e`, `--env <nombre>` | Entorno activo |
+| `--var <k=v>` (o `--env-var`) | Sobrescribe una variable (repetible) |
 | `-r`, `--recursive` | Incluye subcarpetas |
 | `--tags <a,b>` / `--exclude-tags <a,b>` | Filtro por tags |
 | `--bail` | Detiene al primer fallo |
 | `--delay <ms>` | Pausa entre requests |
-| `--iterations <n>` | Repeticiones |
+| `--iterations <n>` | Repeticiones (al menos 1; no se combina con `--data`) |
 | `--data <archivo>` | CSV o JSON para iterar |
-| `--reporter <tipo>=<ruta>` | `json`, `junit` o `html` (repetible) |
-| `--insecure` | No valida certificados |
-| `--cacert <ruta>` | Autoridad certificadora adicional |
+| `--reporter <tipo>=<ruta>` | `json`, `junit` o `html` (repetible); crea las carpetas que falten |
 | `--allow-unresolved` | Las variables sin resolver son advertencia |
-| `--no-color`, `--quiet`, `--verbose` | Salida |
+| `--no-color`, `-q`/`--quiet`, `-v`/`--verbose` | Salida |
+
+Pendientes: `--env-file` (un `.env` adicional) y `--insecure`/`--cacert`, que llegan con la configuración de red de F5; hoy los certificados salen de la configuración de la colección.
+
+#### Salida en consola
+
+Una línea por request al terminar, con su ruta, duración y estado; debajo, las aserciones que fallan, las capturas sin valor y el error de una request que no se pudo enviar. Al final, las omitidas y el resumen:
+
+```
+Running Shop with environment local
+PASS  Login login.yml · 12 ms · 200
+FAIL  Missing users/missing.yml · 4 ms · 404
+      ✗ res.status eq 200: expected eq 200, got 404
+ERROR Create users/create.yml · 0 ms
+      variable `name` is not defined
+SKIP  graphql.yml · graphql requests cannot run yet
+3 requests: 1 passed, 1 failed, 1 with errors, 1 skipped · 1/2 assertions · 16 ms
+```
+
+- Con varias iteraciones, cada una empieza con `Iteration 2 of 3`.
+- `--quiet` muestra solo los fallos y el resumen; `--verbose`, también las aserciones que pasan y los valores capturados (los secretos, ocultos).
+- Colores solo en una terminal, y nunca con `--no-color` o la variable `NO_COLOR`.
 
 ### Códigos de salida
 
@@ -258,6 +282,8 @@ apifast vault <subcomando>
 | 1 | Al menos una aserción falló |
 | 2 | Error de ejecución (red, archivo inválido, variable sin resolver) |
 | 3 | Error de uso (argumentos) |
+
+Se aplica el código más grave: una request que no se pudo enviar da 2 aunque otras tengan aserciones fallidas. Una ejecución cancelada con Ctrl+C también da 2. El 3 vale para todos los comandos: `apifast send` usaba antes el 2.
 
 ### Reporters
 
@@ -269,6 +295,28 @@ apifast vault <subcomando>
 | HTML | Informe autocontenido |
 
 Los reporters enmascaran los secretos igual que la interfaz.
+
+Son funciones puras de `apifast-app` (`ReportFormat::render`), así que la interfaz podrá exportar los mismos informes.
+
+- **JSON:** colección, entorno, inicio (ISO 8601), duración, `succeeded`, `bailed`, `cancelled`, los totales en `summary` y, por request, iteración, ruta, nombre, estado, tiempo, tamaño, aserciones (expresión, operador, esperado, actual, mensaje) y capturas (variable, ámbito, valor o error). Las omitidas, con su motivo.
+- **JUnit:** un `testsuite` por request enviada (con la iteración en el nombre si hay varias) y un `testcase` por aserción; una request sin aserciones es un caso `request`, y una que no se pudo enviar, un `<error>`. Las omitidas van en un `testsuite` `skipped`. Los atributos `tests`, `failures`, `errors`, `skipped`, `time` y `timestamp` son los que leen GitHub Actions, GitLab y Jenkins.
+- **HTML:** una página sin recursos externos ni scripts, con tema claro y oscuro: totales, y cada request plegable con sus aserciones y capturas; las que fallan empiezan desplegadas.
+- No incluyen URLs: su query puede llevar secretos.
+
+#### En CI
+
+```yaml
+# GitHub Actions
+- name: API tests
+  run: apifast run -r -e ci --reporter junit=reports/api.xml
+  env:
+    APIFAST_COLLECTION_KEY: ${{ secrets.APIFAST_COLLECTION_KEY }}
+    APIFAST_NO_KEYRING: "1"
+- uses: mikepenz/action-junit-report@v5
+  if: always()
+  with:
+    report_paths: reports/api.xml
+```
 
 ## Scripting en JavaScript (fase F9)
 

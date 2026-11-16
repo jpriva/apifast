@@ -4,6 +4,7 @@
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
 mod locate;
+mod run;
 mod system;
 mod vault;
 
@@ -46,6 +47,11 @@ enum Command {
     /// The body goes to stdout and a summary to stderr, so the output can be
     /// piped: `apifast send users/get.yml | jq`.
     Send(SendArgs),
+    /// Run the requests of a collection or a folder, with their assertions.
+    ///
+    /// Exits with 0 when everything passed, 1 when an assertion failed, 2
+    /// when a request could not be sent and 3 on a usage error.
+    Run(run::RunArgs),
     /// Secrets and the collection's key.
     Vault(vault::VaultArgs),
 }
@@ -91,34 +97,60 @@ fn parse_var(raw: &str) -> Result<(String, String), String> {
     }
 }
 
+/// Exit code of a usage error: unknown options, missing arguments.
+const EXIT_USAGE: u8 = 3;
+
 fn main() -> ExitCode {
-    let cli = Cli::parse();
-    let result = match cli.command {
-        Command::Send(args) => run_send(&args),
-        Command::Vault(args) => vault::run(&args).map(|()| ExitCode::SUCCESS),
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(error) => {
+            let _ = error.print();
+            // `--help` and `--version` also come here, and are no error.
+            return if error.use_stderr() {
+                ExitCode::from(EXIT_USAGE)
+            } else {
+                ExitCode::SUCCESS
+            };
+        }
+    };
+    let (result, failure) = match cli.command {
+        Command::Send(args) => (run_send(&args), ExitCode::FAILURE),
+        Command::Run(args) => (run::run(&args), ExitCode::from(run::EXIT_RUN_ERROR)),
+        Command::Vault(args) => (
+            vault::run(&args).map(|()| ExitCode::SUCCESS),
+            ExitCode::FAILURE,
+        ),
     };
     match result {
         Ok(code) => code,
         Err(error) => {
             // `{:#}` prints the whole chain of causes on one line.
             eprintln!("error: {error:#}");
-            ExitCode::FAILURE
+            failure
         }
     }
 }
 
-fn run_send(args: &SendArgs) -> Result<ExitCode> {
-    let located = locate::locate(&args.file, args.collection.as_deref())?;
-    let repo = Arc::new(FsCollection::open(&located.root)?);
+/// The adapters of one collection, as both `send` and `run` need them.
+struct Wired {
+    repo: Arc<FsCollection>,
+    collection: apifast_domain::Collection,
+    responses: FsResponseStore,
+    transport: ReqwestTransport,
+    secrets: Box<dyn SecretStore>,
+}
+
+fn wire(root: &std::path::Path) -> Result<Wired> {
+    let repo = Arc::new(FsCollection::open(root)?);
     let collection = repo.collection()?;
     let responses = FsResponseStore::new(apifast_history::dirs::responses_dir(
-        &located.root,
+        root,
         collection
             .id
             .as_ref()
             .map(apifast_domain::CollectionId::as_str),
     ));
-    let transport = ReqwestTransport::new(&located.root)?;
+    let transport = ReqwestTransport::new(root)?;
     // Secrets need the collection's id: without one, none was ever stored.
     let secrets: Box<dyn SecretStore> = match &collection.id {
         Some(id) => {
@@ -140,6 +172,40 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
         }
         None => Box::new(NoSecrets),
     };
+    Ok(Wired {
+        repo,
+        collection,
+        responses,
+        transport,
+        secrets,
+    })
+}
+
+/// A runtime for one command, and a token cancelled by Ctrl+C.
+fn runtime() -> Result<(tokio::runtime::Runtime, CancelToken)> {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("cannot start the async runtime")?;
+    let cancel = CancelToken::new();
+    let on_ctrl_c = cancel.clone();
+    runtime.spawn(async move {
+        if tokio::signal::ctrl_c().await.is_ok() {
+            on_ctrl_c.cancel();
+        }
+    });
+    Ok((runtime, cancel))
+}
+
+fn run_send(args: &SendArgs) -> Result<ExitCode> {
+    let located = locate::locate(&args.file, args.collection.as_deref())?;
+    let Wired {
+        repo,
+        responses,
+        transport,
+        secrets,
+        ..
+    } = wire(&located.root)?;
     let (clock, random) = (system::SystemClock, system::SystemRandom::new());
     let options = SendOptions {
         environment: args.env.clone(),
@@ -152,18 +218,8 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
         draft: None,
     };
 
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .context("cannot start the async runtime")?;
-    let cancel = CancelToken::new();
+    let (runtime, cancel) = runtime()?;
     let outcome = runtime.block_on(async {
-        let on_ctrl_c = cancel.clone();
-        tokio::spawn(async move {
-            if tokio::signal::ctrl_c().await.is_ok() {
-                on_ctrl_c.cancel();
-            }
-        });
         let ports = SendPorts {
             collections: &*repo,
             environments: &*repo,

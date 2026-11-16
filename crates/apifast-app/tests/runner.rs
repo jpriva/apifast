@@ -359,3 +359,99 @@ fn data_rows_drive_the_iterations() {
     assert_eq!(iterations, [1, 2, 3]);
     assert!(report.runtime.iter().any(|v| v.name == "id"));
 }
+
+mod reports {
+    use super::*;
+    use apifast_app::{ReportFormat, ReportMeta};
+    use apifast_domain::Json;
+    use apifast_query::XPath;
+
+    fn report() -> (RunReport, ReportMeta) {
+        let world = World::new();
+        let mut report = world.run(&RunOptions::default());
+        report.skipped.push(apifast_app::Skipped {
+            path: RequestPath::new("gql.yml"),
+            name: "Query <&>".into(),
+            reason: "graphql requests cannot run yet".into(),
+        });
+        let meta = ReportMeta {
+            collection: "Shop & Co".into(),
+            environment: Some("local".into()),
+            started_ms: 1_700_000_000_000,
+        };
+        (report, meta)
+    }
+
+    fn xpath(expression: &str, xml: &str) -> Vec<String> {
+        XPath::parse(expression)
+            .and_then(|x| x.evaluate(xml))
+            .unwrap_or_else(|e| panic!("{e}\n{xml}"))
+            .iter()
+            .map(Json::to_text)
+            .collect()
+    }
+
+    #[test]
+    fn json_has_the_summary_and_every_step() {
+        let (report, meta) = report();
+        let text = ReportFormat::Json.render(&report, &meta);
+        let json = Json::parse(&text).unwrap_or_else(|e| panic!("{e}\n{text}"));
+        let at = |path: &str| {
+            apifast_query::select(path, &text, Some(&json))
+                .unwrap_or_else(|e| panic!("{e}"))
+                .iter()
+                .map(Json::to_text)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(at("$.collection"), ["Shop & Co"]);
+        assert_eq!(at("$.startedAt"), ["2023-11-14T22:13:20.000Z"]);
+        assert_eq!(at("$.succeeded"), ["false"]);
+        assert_eq!(at("$.summary.requests"), ["4"]);
+        assert_eq!(at("$.summary.assertions.failed"), ["1"]);
+        assert_eq!(
+            at("$.results[?@.passed == false].path"),
+            ["users/admin/purge.yml"]
+        );
+        assert_eq!(at("$.results[0].captures[0].value"), ["true"]);
+        assert_eq!(at("$.results[3].assertions[0].expected"), ["204"]);
+        assert_eq!(
+            at("$.skipped[0].reason"),
+            ["graphql requests cannot run yet"]
+        );
+    }
+
+    #[test]
+    fn junit_is_valid_xml_with_a_case_per_assertion() {
+        let (report, meta) = report();
+        let xml = ReportFormat::Junit.render(&report, &meta);
+        assert_eq!(xpath("/testsuites/@name", &xml), ["Shop & Co"]);
+        assert_eq!(xpath("/testsuites/@tests", &xml), ["5"]);
+        assert_eq!(xpath("/testsuites/@failures", &xml), ["1"]);
+        assert_eq!(xpath("count(//testsuite)", &xml), ["5"]);
+        assert_eq!(
+            xpath("//testcase[failure]/@name", &xml),
+            ["res.status eq 204"]
+        );
+        assert_eq!(
+            xpath("//testsuite[@name='login.yml']/testcase/@name", &xml),
+            ["request"]
+        );
+        assert_eq!(
+            xpath("//testsuite[@name='skipped']//skipped/@message", &xml),
+            ["graphql requests cannot run yet"]
+        );
+    }
+
+    #[test]
+    fn html_is_self_contained_and_escaped() {
+        let (report, meta) = report();
+        let html = ReportFormat::Html.render(&report, &meta);
+        assert!(html.starts_with("<!doctype html>"));
+        assert!(html.contains("<title>Shop &amp; Co run</title>"));
+        assert!(html.contains("environment local"));
+        assert!(html.contains("<details open>"), "a failure starts open");
+        assert!(html.contains("res.status eq 204"));
+        assert!(!html.contains("<script"));
+        assert!(!html.contains("http"), "no URLs, no external resources");
+    }
+}

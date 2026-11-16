@@ -41,6 +41,14 @@ fn uuid_v4(high: u64, low: u64, out: &mut String) {
 }
 
 /// UTC date and time in ISO 8601 with milliseconds, such as
+/// `2023-11-14T22:13:20.123Z`, as `{{$isoTimestamp}}` gives it.
+pub fn iso_timestamp(unix_millis: i64) -> String {
+    let mut out = String::new();
+    iso_8601(unix_millis, &mut out);
+    out
+}
+
+/// UTC date and time in ISO 8601 with milliseconds, such as
 /// `2023-11-14T22:13:20.123Z`.
 fn iso_8601(unix_millis: i64, out: &mut String) {
     let secs = unix_millis.div_euclid(1000);

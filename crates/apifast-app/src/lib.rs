@@ -20,6 +20,7 @@ pub mod memory;
 mod organize;
 mod ports;
 mod render;
+mod report;
 mod runner;
 mod use_cases;
 
@@ -45,6 +46,9 @@ pub use ports::{
     WorkspaceEntry, WorkspaceRepository, sort_tree,
 };
 pub use render::{RenderOutcome, RenderedBody, RenderedPart, RenderedRequest, render_request};
+pub use report::{
+    ReportFormat, ReportMeta, assertion_text, duration, html_report, json_report, junit_report,
+};
 pub use runner::{
     RunEvent, RunOptions, RunReport, RunSummary, Selection, Skipped, StepResult, run_collection,
     run_selection,

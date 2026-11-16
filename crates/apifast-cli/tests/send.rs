@@ -326,10 +326,10 @@ fn a_refused_connection_fails_without_leaking_the_query() {
 }
 
 #[test]
-fn usage_errors_exit_with_2_and_version_works() {
+fn usage_errors_exit_with_3_and_version_works() {
     let data = tempfile::tempdir().unwrap();
     let out = apifast(data.path(), data.path(), &[]);
-    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(out.status.code(), Some(3));
     let out = apifast(data.path(), data.path(), &["--version"]);
     assert_eq!(
         text(&out.stdout),
