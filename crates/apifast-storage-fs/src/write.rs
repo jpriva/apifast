@@ -537,6 +537,10 @@ fn update_auth(parent: &mut Value, key: &str, old: &Auth, new: &Auth, level: Aut
                     placement(b.placement).into(),
                 ));
             }
+            (AuthScheme::Digest(a), AuthScheme::Digest(b)) => {
+                pairs.push(("username", a.username.clone(), b.username.clone()));
+                pairs.push(("password", a.password.clone(), b.password.clone()));
+            }
             (AuthScheme::AwsV4(a), AuthScheme::AwsV4(b)) => {
                 for ((field, before), (_, after)) in aws_fields(a).into_iter().zip(aws_fields(b)) {
                     pairs.push((field, before, after));
@@ -596,6 +600,11 @@ fn auth_value(scheme: &AuthScheme) -> Option<Value> {
             ("key", s(&k.key)),
             ("value", s(&k.value)),
             ("placement", s(placement(k.placement))),
+        ]),
+        AuthScheme::Digest(d) => mapping([
+            ("type", s("digest")),
+            ("username", s(&d.username)),
+            ("password", s(&d.password)),
         ]),
         AuthScheme::AwsV4(a) => {
             let fields = aws_fields(a);

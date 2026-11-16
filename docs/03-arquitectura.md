@@ -92,7 +92,7 @@ Tipos principales de `apifast-domain`:
 | `Request` | Enum: `Http`, `GraphQl`, `WebSocket`, `Grpc` |
 | `Environment` | Lista de variables, `extends`, color |
 | `Variable` | Nombre, valor, tipo (`String`, `Number`, `Bool`, `Object`), habilitada, clase de secreto |
-| `Auth` | `Setting<AuthScheme>`: `Inherit` o un esquema (`None`, `Basic`, `Bearer`, `ApiKey`, `AwsV4`, y en F5 `Digest`, `OAuth2` y `Ntlm`). Los que dependen de la request que sale o de la respuesta se aplican en el transporte (`TransportAuth`). Una request resuelta nunca tiene auth heredada |
+| `Auth` | `Setting<AuthScheme>`: `Inherit` o un esquema (`None`, `Basic`, `Bearer`, `ApiKey`, `Digest`, `AwsV4`, y en F5 `OAuth2` y `Ntlm`). Los que dependen de la request que sale o de la respuesta se aplican en el transporte (`TransportAuth`). Una request resuelta nunca tiene auth heredada |
 | `Body` | Enum: `None`, `Json`, `Text`, `Xml`, `FormUrlEncoded`, `Multipart`, `File`, `GraphQl` |
 | `Assertion` | Expresión, operador, valor esperado |
 | `Capture` | Selector sobre la respuesta, variable de destino y ámbito |

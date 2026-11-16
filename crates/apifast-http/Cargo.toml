@@ -17,6 +17,7 @@ tokio = { version = "1.54.1", features = ["time", "fs", "macros"] }
 futures-util = { version = "0.3.34", default-features = false }
 form_urlencoded = "1.2.2"
 hmac.workspace = true
+md-5.workspace = true
 sha2.workspace = true
 
 [lints]
@@ -25,5 +26,6 @@ workspace = true
 [dev-dependencies]
 apifast-template.workspace = true
 flate2 = "1.1.11"
+md-5.workspace = true
 tempfile.workspace = true
 tokio = { version = "1.54.1", features = ["rt", "macros", "net", "io-util", "time"] }

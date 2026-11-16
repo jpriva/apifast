@@ -201,7 +201,7 @@ Los campos sensibles de auth **no guardan el secreto**: referencian una variable
 | `folder.yml` sin `auth` | Anula la auth de la colección en esa carpeta. Una carpeta sin `folder.yml` hereda |
 | Colección sin `auth` | Sin autenticación (valor por defecto) |
 | Auth en `runtime.auth` (OpenCollection v3 rc1) | Se lee; al cambiar la auth se escribe en `http.auth` |
-| Auth de un tipo no implementado (`digest`, `oauth2`, `ntlm`) | Se conserva intacta; enviar la request da un error claro |
+| Auth de un tipo no implementado (`oauth2`, `ntlm`) | Se conserva intacta; enviar la request da un error claro |
 | Request sin bloque `settings` | Todos los ajustes se heredan |
 | `settings` con `timeout: 0` | Sin límite de tiempo |
 | `settings` con `timeout: inherit` | Se hereda |

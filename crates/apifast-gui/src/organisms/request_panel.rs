@@ -2,8 +2,8 @@
 //! settings of the request, each showing what it inherits.
 
 use apifast_domain::{
-    ApiKeyAuth, ApiKeyPlacement, AuthScheme, BasicAuth, BearerAuth, Body, FormField, Header,
-    HttpRequest, Param, ParamKind, Resolved, Setting,
+    ApiKeyAuth, ApiKeyPlacement, AuthScheme, BasicAuth, BearerAuth, Body, DigestAuth, FormField,
+    Header, HttpRequest, Param, ParamKind, Resolved, Setting,
 };
 use eframe::egui::{self, RichText};
 
@@ -428,17 +428,19 @@ enum AuthKind {
     Basic,
     Bearer,
     ApiKey,
+    Digest,
     AwsV4,
     Unsupported,
 }
 
 impl AuthKind {
-    const CHOICES: [Self; 6] = [
+    const CHOICES: [Self; 7] = [
         Self::Inherit,
         Self::None,
         Self::Basic,
         Self::Bearer,
         Self::ApiKey,
+        Self::Digest,
         Self::AwsV4,
     ];
 
@@ -449,6 +451,7 @@ impl AuthKind {
             Setting::Set(AuthScheme::Basic(_)) => Self::Basic,
             Setting::Set(AuthScheme::Bearer(_)) => Self::Bearer,
             Setting::Set(AuthScheme::ApiKey(_)) => Self::ApiKey,
+            Setting::Set(AuthScheme::Digest(_)) => Self::Digest,
             Setting::Set(AuthScheme::AwsV4(_)) => Self::AwsV4,
             // `Unsupported`, and schemes added after this version.
             Setting::Set(_) => Self::Unsupported,
@@ -462,6 +465,7 @@ impl AuthKind {
             Self::Basic => strings.auth_basic,
             Self::Bearer => strings.auth_bearer,
             Self::ApiKey => strings.auth_api_key,
+            Self::Digest => strings.auth_digest,
             Self::AwsV4 => strings.auth_aws_v4,
             Self::Unsupported => strings.auth_unsupported,
         }
@@ -483,6 +487,7 @@ impl AuthKind {
                 value: String::new(),
                 placement: ApiKeyPlacement::Header,
             })),
+            Self::Digest => Setting::Set(AuthScheme::Digest(DigestAuth::default())),
             Self::AwsV4 => Setting::Set(AuthScheme::AwsV4(Box::default())),
         }
     }
@@ -568,6 +573,10 @@ fn auth(
                     }
                 });
                 ui.end_row();
+            }
+            Setting::Set(AuthScheme::Digest(digest)) => {
+                changed |= field(ui, strings.username, &mut digest.username, false);
+                changed |= field(ui, strings.password, &mut digest.password, true);
             }
             Setting::Set(AuthScheme::AwsV4(aws)) => {
                 for (label, text, hidden) in [

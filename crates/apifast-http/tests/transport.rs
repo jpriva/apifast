@@ -785,3 +785,92 @@ fn aws_credentials_never_show_in_debug_output() {
         "{shown}"
     );
 }
+
+/// MD5 in hex, for the test's own Digest server.
+fn md5_hex(text: &str) -> String {
+    use md5::{Digest, Md5};
+    use std::fmt::Write as _;
+    let mut out = String::new();
+    for byte in Md5::digest(text.as_bytes()) {
+        let _ = write!(out, "{byte:02x}");
+    }
+    out
+}
+
+/// A Digest server (RFC 2617, MD5, qop=auth) written apart from the
+/// transport's code: it challenges, then checks the answer itself.
+fn digest_server(r: &Received) -> Reply {
+    const NONCE: &str = "dcd98b7102dd2f0e8b11d0f600bfb0c093";
+    let challenge = || {
+        Reply::status(401)
+            .header(
+                "WWW-Authenticate",
+                format!("Digest realm=\"apifast\", qop=\"auth\", nonce=\"{NONCE}\", opaque=\"op\""),
+            )
+            .header("WWW-Authenticate", "Basic realm=\"apifast\"")
+    };
+    let Some(header) = r.headers.get("authorization") else {
+        return challenge();
+    };
+    let field = |name: &str| {
+        header
+            .split(", ")
+            .find_map(|part| {
+                part.trim_start_matches("Digest ")
+                    .strip_prefix(&format!("{name}="))
+            })
+            .map(|v| v.trim_matches('"').to_owned())
+            .unwrap_or_default()
+    };
+    let ha1 = md5_hex("ana:apifast:s3cret");
+    let ha2 = md5_hex(&format!("{}:{}", r.method, field("uri")));
+    let expected = md5_hex(&format!(
+        "{ha1}:{NONCE}:{}:{}:auth:{ha2}",
+        field("nc"),
+        field("cnonce")
+    ));
+    if field("uri") == r.path && field("opaque") == "op" && field("response") == expected {
+        Reply::ok("welcome")
+    } else {
+        challenge()
+    }
+}
+
+fn with_digest(url: String, password: &str) -> HttpRequest {
+    use apifast_domain::{AuthScheme, DigestAuth, Setting};
+    let mut request = HttpRequest::new("d", Method::Post, url);
+    request.body = Body::Json(r#"{"a":1}"#.into());
+    request.auth = Setting::Set(AuthScheme::Digest(DigestAuth {
+        username: "ana".into(),
+        password: password.into(),
+    }));
+    request
+}
+
+#[tokio::test]
+async fn digest_answers_the_challenge_and_sends_the_body_again() {
+    let server = Server::start(digest_server).await;
+    let (result, body) = send(&with_digest(server.url("/private?x=1"), "s3cret")).await;
+    let head = result.unwrap();
+    assert_eq!(head.status, 200);
+    assert_eq!(body.body, b"welcome");
+    let received = server.received();
+    assert_eq!(received.len(), 2, "the challenge, then the answer");
+    assert!(!received[0].headers.contains_key("authorization"));
+    assert_eq!(received[1].body, br#"{"a":1}"#, "the body goes again");
+    // The timeline shows both requests and the 401 between them.
+    let kinds: Vec<String> = head
+        .timeline
+        .iter()
+        .map(|e| format!("{:?}", e.kind))
+        .collect();
+    assert!(kinds[1].contains("status: 401"), "{kinds:?}");
+}
+
+#[tokio::test]
+async fn a_wrong_digest_password_ends_in_the_401_without_looping() {
+    let server = Server::start(digest_server).await;
+    let (result, _) = send(&with_digest(server.url("/private"), "wrong")).await;
+    assert_eq!(result.unwrap().status, 401);
+    assert_eq!(server.received().len(), 2, "answered once, not again");
+}

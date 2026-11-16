@@ -62,6 +62,13 @@ pub enum TransportAuth {
     None,
     /// Sign with AWS Signature Version 4.
     AwsV4(AwsV4Credentials),
+    /// Answer an HTTP Digest challenge.
+    Digest {
+        /// User name.
+        username: String,
+        /// Password.
+        password: String,
+    },
 }
 
 /// Rendered AWS credentials and the scope of the signature.
@@ -90,6 +97,10 @@ impl fmt::Debug for TransportAuth {
                 .field("access_key_id", &c.access_key_id)
                 .field("service", &c.service)
                 .field("region", &c.region)
+                .finish_non_exhaustive(),
+            Self::Digest { username, .. } => f
+                .debug_struct("Digest")
+                .field("username", username)
                 .finish_non_exhaustive(),
         }
     }
@@ -329,6 +340,12 @@ fn apply_auth(
                 }
             }
             auth = TransportAuth::AwsV4(credentials);
+        }
+        AuthScheme::Digest(digest) => {
+            auth = TransportAuth::Digest {
+                username: r.text(&digest.username)?,
+                password: r.text(&digest.password)?,
+            };
         }
         AuthScheme::Basic(basic) => {
             let credentials = format!("{}:{}", r.text(&basic.username)?, r.text(&basic.password)?);

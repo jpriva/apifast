@@ -83,7 +83,7 @@ Implementada de forma nativa en Rust, con un enum tipado por esquema.
 |---|---|---|
 | Basic, Bearer, API key | F1 | API key en header o en query |
 | Heredada (`inherit`) y ninguna (`none`) | F1 | Toma la del padre más cercano |
-| Digest | F5 | Requiere un intercambio previo |
+| Digest | F5 (hecha) | Responde al reto del servidor, en el transporte |
 | OAuth 2.0 | F5 | Authorization code con PKCE, client credentials, password; refresco automático |
 | AWS SigV4 | F5 (hecha) | Firma del request canónico, en el transporte |
 | NTLM | F5 | Intercambio en tres pasos |
@@ -101,6 +101,14 @@ Basic, Bearer y API key se resuelven al renderizar: son headers o parámetros. L
 - Faltar la clave, el secreto, el servicio o la región es un error antes de enviar.
 - `profileName` se conserva del archivo de Bruno, pero apifast no lee los archivos de configuración de AWS.
 - Comprobada con el ejemplo de la documentación de AWS (IAM `ListUsers`, firma `5d672d79…`).
+
+**Digest** (`apifast-http/src/digest.rs`, RFC 7616 y el MD5 de RFC 2617):
+
+- La primera request sale sin credenciales. Si la respuesta es un 401 con `WWW-Authenticate: Digest`, se descarta y la misma request vuelve a salir, body incluido, con la respuesta al reto. El timeline muestra las dos requests y el 401 entre ellas.
+- Se responde una sola vez por URL: con una contraseña equivocada el resultado es el segundo 401, sin bucle. Tras una redirección al mismo origen se responde de nuevo; a otro origen no van credenciales.
+- Algoritmos `MD5`, `MD5-sess`, `SHA-256` y `SHA-256-sess`, con `qop=auth` o sin `qop` (servidores RFC 2069). Un reto que solo ofrece `auth-int`, u otro algoritmo, es un error que lo dice.
+- Entre varios `WWW-Authenticate` se elige el `Digest`. Se reenvían `opaque` y `realm`; `cnonce` es nuevo en cada respuesta.
+- Comprobado con los ejemplos de RFC 2617 y RFC 7616 (MD5 y SHA-256) y contra un servidor local que valida la respuesta con su propio cálculo.
 
 Para OAuth 2.0 con authorization code se abre el navegador del sistema y se levanta un servidor local temporal para recibir el *callback*. Los tokens se guardan cifrados con la clave maestra.
 

@@ -300,7 +300,7 @@ Siguiente, fuera de esta sección: los entornos globales del workspace (`environ
 
 ### Tareas
 
-- [ ] Digest, NTLM y AWS SigV4. Hecha AWS SigV4: se lee y se guarda (`awsv4`), se edita en la pestaña Auth y la firma el transporte en cada request al mismo origen, comprobada con el ejemplo de la documentación de AWS y contra un servidor local. Faltan Digest y NTLM.
+- [ ] Digest, NTLM y AWS SigV4. Hecha AWS SigV4: se lee y se guarda (`awsv4`), se edita en la pestaña Auth y la firma el transporte en cada request al mismo origen, comprobada con el ejemplo de la documentación de AWS y contra un servidor local. Hecha Digest: responde al 401 con `WWW-Authenticate: Digest` (MD5, SHA-256 y sus `-sess`, `qop=auth`) reenviando la request una vez, comprobada con los ejemplos de RFC 2617 y 7616 y contra un servidor local. Falta NTLM.
 - [ ] OAuth 2.0: authorization code con PKCE, client credentials, password; caché cifrada y refresco.
 - [ ] Proxy: sistema y manual (HTTP, HTTPS, SOCKS5), exclusiones, por colección.
 - [ ] Autoridades certificadoras adicionales y certificados cliente por host.

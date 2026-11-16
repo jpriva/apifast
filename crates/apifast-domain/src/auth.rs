@@ -21,6 +21,8 @@ pub enum AuthScheme {
     Bearer(BearerAuth),
     /// Key sent in a header or in the query.
     ApiKey(ApiKeyAuth),
+    /// HTTP Digest: the credentials answer the server's challenge.
+    Digest(DigestAuth),
     /// AWS Signature Version 4: the request is signed with an access key.
     AwsV4(Box<AwsV4Auth>),
     /// A scheme of the file format that apifast cannot send yet, such as
@@ -54,6 +56,15 @@ pub struct ApiKeyAuth {
     pub value: String,
     /// Where it is sent.
     pub placement: ApiKeyPlacement,
+}
+
+/// HTTP Digest credentials.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DigestAuth {
+    /// User name (template).
+    pub username: String,
+    /// Password (template).
+    pub password: String,
 }
 
 /// AWS Signature Version 4 credentials and scope. Every field is a

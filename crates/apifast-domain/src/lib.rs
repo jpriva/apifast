@@ -29,7 +29,9 @@ mod url_params;
 mod variable;
 
 pub use assertion::{Assertion, Capture, CaptureScope, Operator};
-pub use auth::{ApiKeyAuth, ApiKeyPlacement, Auth, AuthScheme, AwsV4Auth, BasicAuth, BearerAuth};
+pub use auth::{
+    ApiKeyAuth, ApiKeyPlacement, Auth, AuthScheme, AwsV4Auth, BasicAuth, BearerAuth, DigestAuth,
+};
 pub use body::{Body, FormField, MultipartPart, MultipartValue};
 pub use collection::{Collection, CollectionId, Folder, RequestDefaults};
 pub use environment::{Environment, EnvironmentError, environment_chain};

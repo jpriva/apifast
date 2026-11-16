@@ -86,6 +86,9 @@ fn auth() -> impl Strategy<Value = Setting<AuthScheme>> {
             BasicAuth { username, password }
         ))),
         text().prop_map(|token| Setting::Set(AuthScheme::Bearer(BearerAuth { token }))),
+        (text(), text()).prop_map(|(username, password)| Setting::Set(AuthScheme::Digest(
+            apifast_domain::DigestAuth { username, password }
+        ))),
         (text(), text(), any::<bool>()).prop_map(|(key, value, query)| Setting::Set(
             AuthScheme::ApiKey(ApiKeyAuth {
                 key,

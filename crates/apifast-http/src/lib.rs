@@ -4,6 +4,7 @@
 //!
 //! Must run inside a tokio runtime with the time driver enabled.
 
+mod digest;
 mod sigv4;
 
 use std::error::Error as _;
@@ -68,16 +69,12 @@ impl ReqwestTransport {
         writer: &mut W,
         started: Instant,
     ) -> Result<ResponseHead, TransportError> {
-        let mut url = parse_url(request.url())?;
-        let mut method = Method::from_bytes(request.method().as_str().as_bytes())
-            .map_err(|_| TransportError::InvalidRequest("invalid method".into()))?;
-        let mut headers = header_map(request.headers())?;
-        if !headers.contains_key(USER_AGENT) {
-            headers.insert(USER_AGENT, HeaderValue::from_static(DEFAULT_USER_AGENT));
-        }
+        let (mut url, mut method, mut headers) = first_request(request)?;
         let mut send_body = true;
         let mut redirects = 0;
         let first_origin = origin(&url);
+        // The URL whose Digest challenge was answered: answered once.
+        let mut answered: Option<Url> = None;
         let mut timeline = Vec::new();
         let at = || u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
 
@@ -105,6 +102,21 @@ impl ReqwestTransport {
             });
             let response = builder.send().await.map_err(|e| classify(&e, &url))?;
             let status = response.status().as_u16();
+
+            if status == 401
+                && answered.as_ref() != Some(&url)
+                && let Some(answer) = digest_answer(request, &response, &sent)?
+            {
+                // Sent again, body and all, with the answer. The 401 is
+                // dropped.
+                headers.insert(AUTHORIZATION, answer);
+                answered = Some(url.clone());
+                timeline.push(TimelineEvent {
+                    at_us: at(),
+                    kind: TimelineKind::Headers { status },
+                });
+                continue;
+            }
 
             if request.follow_redirects()
                 && matches!(status, 301 | 302 | 303 | 307 | 308)
@@ -150,14 +162,7 @@ impl ReqwestTransport {
                 at_us: at(),
                 kind: TimelineKind::Headers { status },
             });
-            let mut response = response;
-            let mut bytes = 0;
-            while let Some(chunk) = response.chunk().await.map_err(|e| classify(&e, &url))? {
-                writer.write(&chunk).map_err(|e| {
-                    TransportError::Other(format!("cannot store the response body: {e}"))
-                })?;
-                bytes += chunk.len() as u64;
-            }
+            let bytes = stream_body(response, writer, &url).await?;
             timeline.push(TimelineEvent {
                 at_us: at(),
                 kind: TimelineKind::Body { bytes },
@@ -366,6 +371,94 @@ fn signed_headers(
         )?;
     }
     Ok(headers)
+}
+
+/// The `Authorization` answering a `Digest` challenge in `response`, when
+/// the request uses Digest and goes to the origin the user wrote.
+///
+/// # Errors
+///
+/// If the challenge asks for something apifast does not support.
+fn digest_answer(
+    request: &RenderedRequest,
+    response: &reqwest::Response,
+    out: &Outgoing<'_>,
+) -> Result<Option<HeaderValue>, TransportError> {
+    let TransportAuth::Digest { username, password } = request.auth() else {
+        return Ok(None);
+    };
+    if origin(out.url) != *out.first_origin {
+        return Ok(None);
+    }
+    let offered = response
+        .headers()
+        .get_all(reqwest::header::WWW_AUTHENTICATE)
+        .iter()
+        .filter_map(|v| v.to_str().ok());
+    let Some(challenge) = digest::Challenge::find(offered) else {
+        return Ok(None);
+    };
+    let mut uri = out.url.path().to_owned();
+    if let Some(query) = out.url.query() {
+        uri.push('?');
+        uri.push_str(query);
+    }
+    let header = digest::authorization(
+        &challenge,
+        &digest::Answer {
+            username,
+            password,
+            method: out.method.as_str(),
+            uri: &uri,
+            cnonce: &cnonce(),
+        },
+    )
+    .map_err(TransportError::Other)?;
+    HeaderValue::from_str(&header)
+        .map(Some)
+        .map_err(|_| TransportError::InvalidRequest("invalid Digest credentials".into()))
+}
+
+/// A fresh client nonce: 16 hex digits from the standard library's randomly
+/// seeded hasher and the time. A nonce only needs to be unpredictable
+/// enough not to repeat.
+fn cnonce() -> String {
+    use std::hash::{BuildHasher, Hasher};
+    let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
+    hasher.write_u128(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos()),
+    );
+    format!("{:016x}", hasher.finish())
+}
+
+/// Writes the body of `response` to `writer` as it arrives; returns its size.
+async fn stream_body<W: BodyWriter>(
+    mut response: reqwest::Response,
+    writer: &mut W,
+    url: &Url,
+) -> Result<u64, TransportError> {
+    let mut bytes = 0;
+    while let Some(chunk) = response.chunk().await.map_err(|e| classify(&e, url))? {
+        writer
+            .write(&chunk)
+            .map_err(|e| TransportError::Other(format!("cannot store the response body: {e}")))?;
+        bytes += chunk.len() as u64;
+    }
+    Ok(bytes)
+}
+
+/// The URL, method and headers of the first request of an exchange.
+fn first_request(request: &RenderedRequest) -> Result<(Url, Method, HeaderMap), TransportError> {
+    let url = parse_url(request.url())?;
+    let method = Method::from_bytes(request.method().as_str().as_bytes())
+        .map_err(|_| TransportError::InvalidRequest("invalid method".into()))?;
+    let mut headers = header_map(request.headers())?;
+    if !headers.contains_key(USER_AGENT) {
+        headers.insert(USER_AGENT, HeaderValue::from_static(DEFAULT_USER_AGENT));
+    }
+    Ok((url, method, headers))
 }
 
 /// A form body as it is sent.
