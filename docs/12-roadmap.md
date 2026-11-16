@@ -189,7 +189,7 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
 - [x] `apifast-vault`: sobre XChaCha20-Poly1305 con datos asociados y vector fijo de prueba. El cifrado se comprueba con el vector publicado (apéndice A.3.1 de `draft-irtf-cfrg-xchacha-03`) y el formato `enc:v1:` con un vector propio. Un valor abierto con otra clave, otra variable, otro entorno u otra colección, o con un byte cambiado, se rechaza. Las claves se borran de memoria al liberarse y no se imprimen.
 - [x] `KeyStore` sobre keyring, con respaldo en archivo `0600` e indicador en la interfaz. La clave maestra se busca en el keyring (crate `keyring`, Secret Service en Linux) y luego en `master.key`; una nueva va al keyring, o al archivo si el sistema no tiene keyring. Un keyring que existe pero falla o está bloqueado es un error, nunca un paso al archivo. `master_key` devuelve dónde está la clave para el indicador, que se dibujará con la interfaz de la bóveda.
 - [x] Clave de colección: generación, envoltura, *challenge*. `CollectionKeyStore` guarda cada clave en `keys/<collection-id>.key`, cifrada con la maestra y atada a su colección por los datos asociados, con permisos `0600`. El *challenge* son 32 bytes aleatorios cifrados con la clave de la colección, en `vault.challenge` de `.apifast/collection.yml`; abrirlo dice si una clave es la correcta. Generar la clave al guardar el primer secreto compartido llega con la tarea de secretos.
-- [ ] Secretos solo locales (por defecto) y secretos compartidos en `.apifast/secrets/`; detección de entradas huérfanas.
+- [x] Secretos solo locales (por defecto) y secretos compartidos en `.apifast/secrets/`; detección de entradas huérfanas.
   - [x] Solo locales: `vault/<collection-id>.vault` (JSON, `0600`), cada valor en su sobre con la clave maestra y atado a colección, entorno y variable. El envío pide los valores por el puerto `SecretStore`, solo para las variables secretas sin valor; la GUI y la CLI usan `VaultSecrets`, que lee la clave maestra la primera vez que hace falta y nunca la crea al leer.
   - [x] Compartidos en `.apifast/secrets/<entorno>.yml`, con la clave de la colección generada al compartir el primero.
     - El envío busca primero el secreto local y luego el compartido. `apifast-vault` lee los archivos de la colección por el puerto `SharedSecretFiles`, que implementa `FsCollection`.
@@ -197,7 +197,7 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
     - `use_collection_key` acepta la clave del equipo solo si abre el *challenge*.
     - Pasar un secreto de local a compartido o al revés lo quita del otro sitio.
     - Un secreto compartido sin la clave en esta máquina hace fallar el envío con ese motivo, en vez de enviarse sin él.
-  - [ ] Entradas huérfanas: secretos guardados cuya variable ya no existe o ya no es secreta.
+  - [x] Entradas huérfanas: secretos guardados cuya variable ya no existe o ya no es secreta. `VaultSecrets::orphans` las lista, locales y compartidas, y `forget` las borra; mostrarlas y limpiarlas desde el editor de entornos llega con la interfaz de la bóveda. Al renombrar un entorno, sus secretos se cifran de nuevo con el nombre nuevo (los datos asociados lo incluyen), cada uno en su sitio. Renombrar una variable secreta deja su valor huérfano hasta volver a escribirlo: desde un archivo no se distingue un renombrado de un borrado más un alta.
 - [ ] Clave compartible: exportar, importar y validar.
 - [ ] Rotación de clave y conversión entre modelos.
 - [ ] Tipo `Secret` y enmascarado en timeline, historial, logs y CLI.

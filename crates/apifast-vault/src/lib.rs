@@ -22,7 +22,7 @@ pub use keys::{
     SystemKeyring, existing_master_key, master_key,
 };
 pub use local::{LocalVault, SecretEntry};
-pub use secrets::VaultSecrets;
+pub use secrets::{Orphan, SecretKind, VaultSecrets};
 
 use std::fmt;
 

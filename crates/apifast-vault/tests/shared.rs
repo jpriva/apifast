@@ -159,3 +159,85 @@ fn a_shared_value_moved_to_another_variable_does_not_open() {
         .unwrap();
     assert!(alice.secrets.secret("prod", "password").is_err());
 }
+
+fn env(name: &str, variables: Vec<apifast_domain::Variable>) -> apifast_domain::Environment {
+    apifast_domain::Environment::new(name, variables)
+}
+
+#[test]
+fn stored_secrets_no_secret_variable_uses_are_orphans_and_can_be_forgotten() {
+    use apifast_domain::Variable;
+    use apifast_vault::{Orphan, SecretKind};
+
+    let collection = Arc::new(MemorySharedSecrets::default());
+    let alice = machine(&collection);
+    alice.secrets.set_local("prod", "token", "t").unwrap();
+    alice.secrets.set_local("prod", "gone", "g").unwrap();
+    alice.secrets.share("prod", "plain_now", "p").unwrap();
+    alice.secrets.set_local("old_env", "token", "o").unwrap();
+
+    let environments = [env(
+        "prod",
+        vec![
+            Variable::secret("token"),
+            // Bruno turned it into a plain variable.
+            Variable::text("plain_now", "visible"),
+        ],
+    )];
+    let orphans = alice.secrets.orphans(&environments).unwrap();
+    let orphan = |environment: &str, name: &str, kind| Orphan {
+        environment: environment.into(),
+        name: name.into(),
+        kind,
+    };
+    assert_eq!(
+        orphans,
+        [
+            orphan("old_env", "token", SecretKind::Local),
+            orphan("prod", "gone", SecretKind::Local),
+            orphan("prod", "plain_now", SecretKind::Shared),
+        ]
+    );
+    for orphan in &orphans {
+        alice
+            .secrets
+            .forget(&orphan.environment, &orphan.name, orphan.kind)
+            .unwrap();
+    }
+    assert_eq!(alice.secrets.orphans(&environments).unwrap(), []);
+    assert_eq!(
+        alice.secrets.secret("prod", "token").unwrap().as_deref(),
+        Some("t")
+    );
+}
+
+#[test]
+fn renaming_an_environment_seals_its_secrets_again_under_the_new_name() {
+    let collection = Arc::new(MemorySharedSecrets::default());
+    let alice = machine(&collection);
+    alice.secrets.set_local("prod", "token", "t0k").unwrap();
+    alice.secrets.share("prod", "key", "k3y").unwrap();
+    alice.secrets.set_local("dev", "token", "dev").unwrap();
+
+    alice
+        .secrets
+        .rename_environment("prod", "production")
+        .unwrap();
+    let secret = |env: &str, name: &str| alice.secrets.secret(env, name).unwrap();
+    assert_eq!(secret("production", "token").as_deref(), Some("t0k"));
+    assert_eq!(secret("production", "key").as_deref(), Some("k3y"));
+    assert_eq!(secret("prod", "token"), None);
+    assert_eq!(secret("prod", "key"), None);
+    assert_eq!(
+        secret("dev", "token").as_deref(),
+        Some("dev"),
+        "others untouched"
+    );
+    // Still shared: the team sees it under the new name.
+    assert!(
+        collection
+            .shared_secret("production", "key")
+            .unwrap()
+            .is_some()
+    );
+}

@@ -69,7 +69,8 @@ enc:v1:<base64url sin relleno de ( nonce de 24 bytes | texto cifrado | etiqueta 
 - El nonce es aleatorio en cada cifrado. Con 24 bytes no hace falta llevar contador.
 - `v1` identifica el algoritmo y el formato; un cambio futuro usará `v2` y la aplicación seguirá leyendo `v1`.
 - **Datos asociados (AAD):** `apifast/v1|<collection-id>|<nombre del entorno>|<nombre de la variable>`. Un valor copiado a otra variable, otro entorno u otra colección no se descifra.
-- Al renombrar una variable o un entorno, la aplicación vuelve a cifrar los valores afectados.
+- Al renombrar un entorno, la aplicación vuelve a cifrar sus valores con el nombre nuevo, locales y compartidos. Si falta la clave de la colección, los compartidos se quedan con el nombre anterior y se avisa.
+- Una variable secreta renombrada deja su valor anterior como entrada huérfana: al leer el archivo no se distingue de un borrado más una variable nueva. Su valor se vuelve a escribir y la entrada huérfana se limpia desde el editor de entornos.
 
 Un test con un vector fijo (clave, nonce, texto y resultado conocidos) garantiza que el formato no cambie al actualizar dependencias.
 

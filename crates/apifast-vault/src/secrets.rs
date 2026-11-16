@@ -5,11 +5,33 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use apifast_app::{SecretStore, SharedSecretFiles, StoreError};
+use apifast_domain::Environment;
 
 use crate::{
     Aad, CollectionKeyStore, Key, KeyBackend, KeyFile, KeyStoreError, LocalVault, SystemKeyring,
     check_challenge, existing_master_key, master_key, new_challenge, open, seal,
 };
+
+/// Where a stored secret lives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SecretKind {
+    /// Only on this machine, sealed with the master key.
+    Local,
+    /// In the collection, sealed with the collection's key.
+    Shared,
+}
+
+/// A stored secret that no variable uses: its variable is gone or is no
+/// longer secret, as after editing the collection with Bruno.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Orphan {
+    /// Its environment.
+    pub environment: String,
+    /// Its variable.
+    pub name: String,
+    /// Where it is stored.
+    pub kind: SecretKind,
+}
 
 /// The secrets of one collection. The master key is read the first time a
 /// secret is, and never made by reading.
@@ -202,6 +224,106 @@ impl<K: KeyBackend, F: KeyBackend> VaultSecrets<K, F> {
         let master = self.master_or_new()?;
         self.collection_keys.save(&master, &self.collection, &key)?;
         *locked(&self.collection_key) = Some(key);
+        Ok(())
+    }
+
+    /// The stored secrets that no secret variable of `environments` uses,
+    /// sorted.
+    ///
+    /// # Errors
+    ///
+    /// If the vault or the collection's files cannot be read.
+    pub fn orphans(&self, environments: &[Environment]) -> Result<Vec<Orphan>, KeyStoreError> {
+        let used = |environment: &str, name: &str| {
+            environments.iter().any(|env| {
+                env.name == environment
+                    && env
+                        .variables
+                        .iter()
+                        .any(|var| var.secret && var.name == name)
+            })
+        };
+        let local = self
+            .local
+            .entries()?
+            .into_iter()
+            .map(|e| (e.environment, e.name, SecretKind::Local));
+        let shared = self
+            .shared
+            .shared_secret_entries()
+            .map_err(|e| files(&e))?
+            .into_iter()
+            .map(|(environment, name)| (environment, name, SecretKind::Shared));
+        let mut orphans: Vec<Orphan> = local
+            .chain(shared)
+            .filter(|(environment, name, _)| !used(environment, name))
+            .map(|(environment, name, kind)| Orphan {
+                environment,
+                name,
+                kind,
+            })
+            .collect();
+        orphans.sort();
+        Ok(orphans)
+    }
+
+    /// Removes a stored secret, such as an orphan.
+    ///
+    /// # Errors
+    ///
+    /// If the vault or the collection's files cannot be written.
+    pub fn forget(
+        &self,
+        environment: &str,
+        name: &str,
+        kind: SecretKind,
+    ) -> Result<(), KeyStoreError> {
+        match kind {
+            SecretKind::Local => self.local.remove(environment, name).map(drop),
+            SecretKind::Shared => self
+                .shared
+                .remove_shared_secret(environment, name)
+                .map(drop)
+                .map_err(|e| files(&e)),
+        }
+    }
+
+    /// Seals again the secrets of environment `from` for its new name `to`:
+    /// their associated data hold the environment's name, so without this
+    /// they would no longer open. Each stays local or shared.
+    ///
+    /// # Errors
+    ///
+    /// If a key is missing (a shared secret without the collection's key on
+    /// this machine), or a file cannot be read or written. Secrets already
+    /// moved stay moved; the rest stay under `from`.
+    pub fn rename_environment(&self, from: &str, to: &str) -> Result<(), KeyStoreError> {
+        let local: Vec<String> = (self.local.entries()?.into_iter())
+            .filter(|e| e.environment == from)
+            .map(|e| e.name)
+            .collect();
+        if !local.is_empty() {
+            let master = self.master_or_new()?;
+            for name in local {
+                if let Some(value) = self.local.get(&master, from, &name)? {
+                    self.local.set(&master, to, &name, &value)?;
+                    self.local.remove(from, &name)?;
+                }
+            }
+        }
+        let shared: Vec<String> = (self.shared.shared_secret_entries())
+            .map_err(|e| files(&e))?
+            .into_iter()
+            .filter(|(environment, _)| environment == from)
+            .map(|(_, name)| name)
+            .collect();
+        for name in shared {
+            let Some(value) = self.value(from, &name)? else {
+                continue;
+            };
+            self.share(to, &name, &value)?;
+            self.forget(from, &name, SecretKind::Shared)?;
+        }
         Ok(())
     }
 

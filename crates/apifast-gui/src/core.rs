@@ -67,27 +67,30 @@ fn stores(
     root: &Path,
     id: Option<&str>,
     shared: Arc<dyn SharedSecretFiles>,
-) -> Result<
-    (
-        FsResponseStore,
-        FsSessionStore,
-        FsHistoryStore,
-        Arc<dyn SecretStore + Send>,
-    ),
-    String,
-> {
+) -> Result<Stores, String> {
     let responses =
         FsResponseStore::new(apifast_history::dirs::responses_dir_in(data_dir, root, id));
     let sessions = FsSessionStore::new(apifast_history::dirs::sessions_dir_in(data_dir, root, id));
     let history = FsHistoryStore::new(apifast_history::dirs::history_file_in(data_dir, root, id));
     // Secrets need the collection's id: without one, none was ever stored.
-    let secrets: Arc<dyn SecretStore + Send> = match id {
-        Some(id) => {
-            Arc::new(VaultSecrets::for_collection(data_dir, id, shared).map_err(|e| e.to_string())?)
-        }
-        None => Arc::new(NoSecrets),
-    };
-    Ok((responses, sessions, history, secrets))
+    let secrets = id
+        .map(|id| VaultSecrets::for_collection(data_dir, id, shared).map(Arc::new))
+        .transpose()
+        .map_err(|e| e.to_string())?;
+    Ok(Stores {
+        responses,
+        sessions,
+        history,
+        vault: secrets,
+    })
+}
+
+/// What [`stores`] makes.
+struct Stores {
+    responses: FsResponseStore,
+    sessions: FsSessionStore,
+    history: FsHistoryStore,
+    vault: Option<Arc<VaultSecrets>>,
 }
 
 /// A response whose body is in `store`.
@@ -501,8 +504,9 @@ struct Open {
     sessions: FsSessionStore,
     /// Numbers this opening, so a late history load for another is ignored.
     opened: u64,
-    /// The values of the collection's secrets, from the vault.
-    secrets: Arc<dyn SecretStore + Send>,
+    /// The collection's secrets. `None` without a collection id: no secret
+    /// was ever stored.
+    vault: Option<Arc<VaultSecrets>>,
     /// Watches the folder while the collection is open. `None` if the
     /// system refused: changes made outside then show after reopening.
     _watcher: Option<FsWatcher>,
@@ -684,6 +688,14 @@ impl State {
                     renamed = Some(rename_environment(repo, &from, &to)?);
                     Ok(())
                 });
+                if let Some(to) = &renamed {
+                    // The secrets' associated data hold the environment's
+                    // name: seal them again for the new one.
+                    let vault = self.open.as_ref().and_then(|open| open.vault.clone());
+                    if let Some(Err(e)) = vault.map(|vault| vault.rename_environment(&from, to)) {
+                        self.snapshot.error = Some(e.to_string());
+                    }
+                }
                 if let (true, Some(to)) = (was_active, renamed) {
                     self.snapshot.environment = Some(to);
                 }
@@ -751,7 +763,12 @@ impl State {
             .as_ref()
             .map(apifast_domain::CollectionId::as_str);
         let shared: Arc<dyn SharedSecretFiles> = repo.clone();
-        let (responses, sessions, history, secrets) = stores(&self.data_dir, &root, id, shared)?;
+        let Stores {
+            responses,
+            sessions,
+            history,
+            vault,
+        } = stores(&self.data_dir, &root, id, shared)?;
 
         // Leave the previous collection as it was.
         if self.session_pending {
@@ -817,7 +834,7 @@ impl State {
             history,
             sessions,
             opened,
-            secrets,
+            vault,
             _watcher: watcher,
         });
         self.snapshot = Snapshot {
@@ -1128,7 +1145,10 @@ impl State {
             open.responses.clone(),
             open.history.clone(),
         );
-        let secrets = open.secrets.clone();
+        let secrets: Arc<dyn SecretStore + Send> = match &open.vault {
+            Some(vault) => vault.clone(),
+            None => Arc::new(NoSecrets),
+        };
         let Some(request) = self.tab(&path).map(Tab::request) else {
             return;
         };
