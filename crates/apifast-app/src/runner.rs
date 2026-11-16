@@ -9,6 +9,7 @@ use crate::use_cases::send_request;
 use crate::{
     AppError, CancelToken, CollectionRepository, EnvironmentRepository, HttpTransport, Pause,
     RequestPath, ResponseStore, SendOptions, SendOutcome, SendPorts, TreeItem, apply_captures,
+    sort_tree,
 };
 
 /// What to run and how.
@@ -300,7 +301,9 @@ where
     S::Writer: Send,
 {
     let started = ports.clock.unix_millis();
-    let tree = ports.collections.tree()?;
+    let mut tree = ports.collections.tree()?;
+    // Repositories list files as they find them; a run follows `seq`.
+    sort_tree(&mut tree.items);
     let Selection {
         runnable: candidates,
         mut skipped,
