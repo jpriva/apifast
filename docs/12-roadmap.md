@@ -246,7 +246,7 @@ El cifrado del tarro de cookies pasa a F5, donde llega el tarro.
 
 - [ ] Rutas en variables de tipo objeto (`{{user.address.city}}`), que necesitan las capturas: requiere leer JSON fuera del dominio o un lector propio en `apifast-template`. Pasado desde F1.
 - [ ] Variables dinámicas de datos de prueba (`$randomEmail`, `$randomFullName`, `$randomWord`). Pasado desde F1.
-- [ ] Evaluador de aserciones con todos los operadores.
+- [x] Evaluador de aserciones con todos los operadores. Las aserciones y capturas de Bruno (`runtime.assertions` y las acciones `set-variable`) se leen y se guardan en su sitio; las acciones de otro tipo se conservan. Un lector JSON propio en el dominio (`Json`) sirve al evaluador y servirá a las rutas en variables objeto. `check` evalúa los 28 operadores contra `ResponseFacts` con conversión al tipo del valor real y mensajes con ambos valores. Falta conectarlo al envío, con las capturas.
 - [ ] Capturas con selector JSON; variables de runtime.
 - [ ] Funciones de plantilla `response` y `header`, con política de refresco y detección de ciclos.
 - [ ] JSONPath y XPath.

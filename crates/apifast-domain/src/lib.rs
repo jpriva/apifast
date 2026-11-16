@@ -17,6 +17,7 @@ mod auth;
 mod body;
 mod collection;
 mod environment;
+mod json;
 mod origin;
 mod request;
 mod resolve;
@@ -32,6 +33,7 @@ pub use auth::{ApiKeyAuth, ApiKeyPlacement, Auth, AuthScheme, BasicAuth, BearerA
 pub use body::{Body, FormField, MultipartPart, MultipartValue};
 pub use collection::{Collection, CollectionId, Folder, RequestDefaults};
 pub use environment::{Environment, EnvironmentError, environment_chain};
+pub use json::{Json, JsonError, MAX_DEPTH as MAX_JSON_DEPTH, PathError};
 pub use origin::Origin;
 pub use request::{Header, HttpRequest, Method, Param, ParamKind, Request};
 pub use resolve::{Chain, ResolvedRequest, resolve};

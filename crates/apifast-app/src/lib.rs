@@ -8,6 +8,7 @@
 //! a request file → [`apifast_domain::ResolvedRequest`] (inheritance applied)
 //! → [`RenderedRequest`] (templates and auth applied) → the [`HttpTransport`].
 
+mod assertions;
 mod environments;
 mod error;
 mod history;
@@ -18,6 +19,7 @@ mod ports;
 mod render;
 mod use_cases;
 
+pub use assertions::{ExpressionError, ResponseFacts, Verdict, check, reason_phrase};
 pub use environments::{
     create_environment, delete_environment, rename_environment, save_environment,
 };

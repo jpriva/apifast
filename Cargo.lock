@@ -276,6 +276,7 @@ version = "0.0.0"
 dependencies = [
  "apifast-domain",
  "apifast-template",
+ "regex",
  "thiserror 2.0.21",
 ]
 

@@ -57,6 +57,32 @@ Es la misma lista que usa Bruno, para que las colecciones importadas funcionen s
 
 - El valor esperado se escribe como texto y se convierte al tipo del valor real antes de comparar (`"200"` frente al número `200`).
 - Si la conversión no es posible, la aserción falla con un mensaje que muestra ambos tipos.
+- Un valor esperado entre comillas (`"'200'"`) es siempre texto, nunca número.
+- Los números se comparan por valor (`200` y `200.0` son iguales) y los objetos sin importar el orden de las claves; un array o un objeto esperado se escribe en JSON.
+- Un valor que no existe (un header o un campo ausente) es `undefined`: cumple `isUndefined`, `isFalsy`, `notIn`, `notContains`, `notMatches` y `eq undefined`, y falla el resto.
+
+### Detalles de los operadores
+
+| Operador | Detalle |
+|---|---|
+| `gt`, `gte`, `lt`, `lte` | El valor real debe ser número, o texto que se lea como número (`"9.5"`) |
+| `between` | Dos valores separados por coma, ambos incluidos: `200,299` |
+| `in`, `notIn` | Valores separados por coma (`200,201,204`) o un array JSON |
+| `contains` | Texto dentro de texto, un elemento en un array o una clave en un objeto |
+| `matches` | Expresión regular de Rust (crate `regex`): tiempo lineal, sin *backtracking*, con límite de tamaño |
+| `length`, `isEmpty` | Caracteres de un texto, elementos de un array o claves de un objeto |
+| `isTruthy`, `isFalsy` | Como en JavaScript: `false`, `0`, `""`, `null` y `undefined` son falsos |
+| `isJson` | Un objeto o un array |
+
+Un operador desconocido se conserva en el archivo y la aserción falla diciendo que no lo conoce.
+
+### Lectura de la respuesta
+
+- `res.statusText` es la frase estándar del código (`OK`, `Not Found`); HTTP/2 no envía frase.
+- Un header repetido se lee con sus valores unidos por `, `.
+- El cuerpo se lee como JSON una sola vez por respuesta, con un lector propio del dominio (`apifast-domain::Json`, sin `serde`) que conserva el texto de los números y rechaza anidamientos de más de 128 niveles. Si no es JSON, `res.body` es su texto y `res.body.<ruta>` falla con "the body is not JSON".
+- Las rutas usan puntos e índices (`items[0].id`); `["a.b"]` nombra una clave con puntos.
+- Un cuerpo demasiado grande para leerlo entero hace fallar las aserciones sobre `res.body`, con su motivo; las demás se evalúan igual.
 
 ## Capturas
 
