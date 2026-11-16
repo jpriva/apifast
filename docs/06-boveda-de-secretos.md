@@ -56,6 +56,7 @@ flowchart TD
 
 - Se genera al guardar el primer secreto compartido de una colección.
 - Se guarda envuelta con la clave maestra, indexada por el **identificador estable** de la colección (`id` en `.apifast/collection.yml`), no por su ruta. Mover o renombrar la carpeta no afecta.
+- El archivo `keys/<collection-id>.key` contiene un sobre `enc:v1:` con datos asociados `apifast/v1|<collection-id>|collection-key`: copiado a otra colección no se abre. Se escribe con permisos `0600`. Solo se aceptan identificadores de letras, números, `_` y `-`, para que uno dañado no apunte fuera de `keys/`.
 
 ## Formato del sobre
 
@@ -74,7 +75,7 @@ Un test con un vector fijo (clave, nonce, texto y resultado conocidos) garantiza
 
 ## Challenge
 
-`.apifast/collection.yml` guarda en `vault.challenge` una cadena aleatoria cifrada con la clave de la colección. Sirve para:
+`.apifast/collection.yml` guarda en `vault.challenge` 32 bytes aleatorios cifrados con la clave de la colección, con datos asociados `apifast/v1|<collection-id>|challenge`. Una clave es la de la colección si el *challenge* se abre con ella. Sirve para:
 
 - Avisar de inmediato si un compañero introduce una clave equivocada.
 - Saber, al clonar un repositorio, que la colección tiene secretos compartidos y hay que pedir la clave.

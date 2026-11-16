@@ -10,7 +10,10 @@
 //! the value to its collection, environment and variable: a value copied
 //! anywhere else does not open.
 
+mod collection;
 mod keys;
+
+pub use collection::{CollectionKeyStore, check_challenge, new_challenge};
 
 pub use keys::{
     KEY_FILE, KEYRING_ENTRY, KEYRING_SERVICE, KeyBackend, KeyFile, KeyLocation, KeyStoreError,

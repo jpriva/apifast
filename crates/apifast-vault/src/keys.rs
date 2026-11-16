@@ -169,7 +169,7 @@ impl KeyBackend for KeyFile {
 }
 
 /// A new file that only its owner can read and write.
-fn owner_only(path: &Path) -> io::Result<fs::File> {
+pub(crate) fn owner_only(path: &Path) -> io::Result<fs::File> {
     let mut options = fs::OpenOptions::new();
     options.write(true).create(true).truncate(true);
     #[cfg(unix)]

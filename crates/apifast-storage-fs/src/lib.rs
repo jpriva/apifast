@@ -106,6 +106,49 @@ impl FsCollection {
         Ok(id)
     }
 
+    /// The vault's challenge in `.apifast/collection.yml`, if the
+    /// collection has shared secrets.
+    ///
+    /// # Errors
+    ///
+    /// If the file exists but cannot be read.
+    pub fn vault_challenge(&self) -> Result<Option<String>, RepositoryError> {
+        Ok(self
+            .read_value(APIFAST_COLLECTION_FILE)?
+            .and_then(|doc| yaml::text(yaml::get_in(&doc, &["vault", "challenge"])))
+            .filter(|challenge| !challenge.is_empty()))
+    }
+
+    /// Writes the vault's challenge, keeping the rest of
+    /// `.apifast/collection.yml`.
+    ///
+    /// # Errors
+    ///
+    /// `NotFound` if the collection has no id yet (see [`Self::ensure_id`]),
+    /// or if the file cannot be written.
+    pub fn set_vault_challenge(&self, challenge: &str) -> Result<(), RepositoryError> {
+        if self.collection()?.id.is_none() {
+            return Err(RepositoryError::NotFound(APIFAST_COLLECTION_FILE.into()));
+        }
+        let read = |doc: &Value| {
+            Ok(yaml::text(yaml::get_in(doc, &["vault", "challenge"])).unwrap_or_default())
+        };
+        self.save_document(
+            APIFAST_COLLECTION_FILE,
+            &challenge.to_owned(),
+            read,
+            |doc, _, new| {
+                yaml::set(
+                    yaml::child_mut(doc, "vault"),
+                    "challenge",
+                    yaml::string(new),
+                );
+            },
+            // The file exists: the id is in it.
+            |_| Value::Null,
+        )
+    }
+
     fn path(&self, relative: &str) -> Result<PathBuf, RepositoryError> {
         fs::resolve(&self.root, relative).map_err(|problem| RepositoryError::Invalid {
             path: relative.to_owned(),
