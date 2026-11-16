@@ -384,6 +384,60 @@ pub struct Strings {
     pub aws_service: &'static str,
     /// AWS auth field.
     pub aws_region: &'static str,
+    /// Auth type: OAuth 2.0.
+    pub auth_oauth2: &'static str,
+    /// OAuth 2.0: the grant type.
+    pub oauth2_flow: &'static str,
+    /// OAuth 2.0 grant.
+    pub oauth2_client_credentials: &'static str,
+    /// OAuth 2.0 grant.
+    pub oauth2_password: &'static str,
+    /// OAuth 2.0 grant.
+    pub oauth2_authorization_code: &'static str,
+    /// OAuth 2.0 grant, read from files but not sent.
+    pub oauth2_implicit: &'static str,
+    /// OAuth 2.0 field.
+    pub oauth2_authorization_url: &'static str,
+    /// OAuth 2.0 field.
+    pub oauth2_callback_url: &'static str,
+    /// OAuth 2.0 field.
+    pub oauth2_access_token_url: &'static str,
+    /// OAuth 2.0 field, optional.
+    pub oauth2_refresh_token_url: &'static str,
+    /// OAuth 2.0 field.
+    pub oauth2_client_id: &'static str,
+    /// OAuth 2.0 field.
+    pub oauth2_client_secret: &'static str,
+    /// OAuth 2.0 field.
+    pub oauth2_scope: &'static str,
+    /// OAuth 2.0 field.
+    pub oauth2_state: &'static str,
+    /// OAuth 2.0: how the client credentials travel.
+    pub oauth2_send_credentials: &'static str,
+    /// OAuth 2.0: credentials in the body.
+    pub oauth2_in_body: &'static str,
+    /// OAuth 2.0: credentials as Basic auth.
+    pub oauth2_in_basic: &'static str,
+    /// OAuth 2.0: use PKCE.
+    pub oauth2_pkce: &'static str,
+    /// OAuth 2.0: where the token goes.
+    pub oauth2_token_in: &'static str,
+    /// OAuth 2.0: the prefix before the token in the header.
+    pub oauth2_header_prefix: &'static str,
+    /// OAuth 2.0: the query parameter of the token.
+    pub oauth2_query_key: &'static str,
+    /// OAuth 2.0: the token's name in the cache.
+    pub oauth2_token_id: &'static str,
+    /// OAuth 2.0: which token of the response is sent.
+    pub oauth2_token_source: &'static str,
+    /// OAuth 2.0: automatic behaviour.
+    pub oauth2_automatic: &'static str,
+    /// OAuth 2.0 option.
+    pub oauth2_auto_fetch: &'static str,
+    /// OAuth 2.0 option.
+    pub oauth2_auto_refresh: &'static str,
+    /// OAuth 2.0: extra parameters; `{count}` is replaced.
+    pub oauth2_parameters_kept: &'static str,
     /// Mark of an assertion that held.
     pub pass: &'static str,
     /// Mark of an assertion that did not.
@@ -790,6 +844,33 @@ pub const EN: Strings = Strings {
     aws_session_token: "Session token (optional)",
     aws_service: "Service",
     aws_region: "Region",
+    auth_oauth2: "OAuth 2.0",
+    oauth2_flow: "Grant type",
+    oauth2_client_credentials: "Client credentials",
+    oauth2_password: "Password",
+    oauth2_authorization_code: "Authorization code",
+    oauth2_implicit: "Implicit (not supported)",
+    oauth2_authorization_url: "Authorization URL",
+    oauth2_callback_url: "Callback URL",
+    oauth2_access_token_url: "Access token URL",
+    oauth2_refresh_token_url: "Refresh token URL (optional)",
+    oauth2_client_id: "Client ID",
+    oauth2_client_secret: "Client secret",
+    oauth2_scope: "Scope",
+    oauth2_state: "State",
+    oauth2_send_credentials: "Send client credentials",
+    oauth2_in_body: "In the body",
+    oauth2_in_basic: "As Basic auth",
+    oauth2_pkce: "Use PKCE",
+    oauth2_token_in: "Send the token",
+    oauth2_header_prefix: "Prefix",
+    oauth2_query_key: "Parameter",
+    oauth2_token_id: "Token ID",
+    oauth2_token_source: "Token to send",
+    oauth2_automatic: "Automatically",
+    oauth2_auto_fetch: "Get a token when there is none",
+    oauth2_auto_refresh: "Refresh an expired token",
+    oauth2_parameters_kept: "{count} extra parameters, kept from the file",
     pass: "PASS",
     fail: "FAIL",
     captures: "Captures",

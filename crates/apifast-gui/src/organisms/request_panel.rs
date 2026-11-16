@@ -431,11 +431,12 @@ enum AuthKind {
     Digest,
     Ntlm,
     AwsV4,
+    OAuth2,
     Unsupported,
 }
 
 impl AuthKind {
-    const CHOICES: [Self; 8] = [
+    const CHOICES: [Self; 9] = [
         Self::Inherit,
         Self::None,
         Self::Basic,
@@ -444,6 +445,7 @@ impl AuthKind {
         Self::Digest,
         Self::Ntlm,
         Self::AwsV4,
+        Self::OAuth2,
     ];
 
     fn of(auth: &Setting<AuthScheme>) -> Self {
@@ -456,6 +458,7 @@ impl AuthKind {
             Setting::Set(AuthScheme::Digest(_)) => Self::Digest,
             Setting::Set(AuthScheme::Ntlm(_)) => Self::Ntlm,
             Setting::Set(AuthScheme::AwsV4(_)) => Self::AwsV4,
+            Setting::Set(AuthScheme::OAuth2(_)) => Self::OAuth2,
             // `Unsupported`, and schemes added after this version.
             Setting::Set(_) => Self::Unsupported,
         }
@@ -471,6 +474,7 @@ impl AuthKind {
             Self::Digest => strings.auth_digest,
             Self::Ntlm => strings.auth_ntlm,
             Self::AwsV4 => strings.auth_aws_v4,
+            Self::OAuth2 => strings.auth_oauth2,
             Self::Unsupported => strings.auth_unsupported,
         }
     }
@@ -494,6 +498,7 @@ impl AuthKind {
             Self::Digest => Setting::Set(AuthScheme::Digest(DigestAuth::default())),
             Self::Ntlm => Setting::Set(AuthScheme::Ntlm(NtlmAuth::default())),
             Self::AwsV4 => Setting::Set(AuthScheme::AwsV4(Box::default())),
+            Self::OAuth2 => Setting::Set(AuthScheme::OAuth2(Box::default())),
         }
     }
 }
@@ -595,6 +600,9 @@ fn auth(
                 changed |= field(ui, strings.username, &mut ntlm.username, false);
                 changed |= field(ui, strings.password, &mut ntlm.password, true);
                 changed |= field(ui, strings.ntlm_domain, &mut ntlm.domain, false);
+            }
+            Setting::Set(AuthScheme::OAuth2(oauth)) => {
+                changed |= crate::organisms::oauth2_fields(ui, oauth, hints, strings);
             }
             Setting::Set(AuthScheme::AwsV4(aws)) => {
                 for (label, text, hidden) in [

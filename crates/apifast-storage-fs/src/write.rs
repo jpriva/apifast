@@ -13,6 +13,9 @@ use apifast_domain::{
     Environment, Folder, FormField, Header, HttpRequest, MultipartPart, MultipartValue, Param,
     ParamKind, RequestDefaults, Setting, ValueKind, Variable, VariableValue,
 };
+use apifast_domain::{
+    CredentialsPlacement, OAuth2Auth, OAuth2Flow, OAuth2Request, ParameterPlacement, TokenPlacement,
+};
 use oneyaml::Value;
 
 use crate::diff::{Step, align};
@@ -512,6 +515,17 @@ fn update_auth(parent: &mut Value, key: &str, old: &Auth, new: &Auth, level: Aut
     if old == new {
         return;
     }
+    // OAuth 2.0 nests its fields: merge what changed into the block, so
+    // keys apifast does not model stay.
+    if let (Setting::Set(AuthScheme::OAuth2(o)), Setting::Set(AuthScheme::OAuth2(n))) = (old, new)
+        && let Some(existing) = parent
+            .as_mapping_mut()
+            .and_then(|m| m.get_mut(&string(key)))
+        && existing.as_mapping().is_some()
+    {
+        merge(existing, &oauth2_value(o), &oauth2_value(n));
+        return;
+    }
     // Same scheme: write only the fields, keeping any the domain does not model.
     if let (Setting::Set(o), Setting::Set(n)) = (old, new)
         && let Some(existing) = parent
@@ -590,6 +604,144 @@ fn aws_fields(auth: &AwsV4Auth) -> [(&'static str, String); 6] {
     ]
 }
 
+/// Writes into `existing` what changed from `old` to `new`, recursively in
+/// mappings: keys of `existing` that neither has stay as they are.
+fn merge(existing: &mut Value, old: &Value, new: &Value) {
+    match (existing.as_mapping().is_some(), old, new) {
+        (true, Value::Mapping(o), Value::Mapping(n)) => {
+            for (key, _) in o {
+                if !n.contains_key(key)
+                    && let Some(key) = key.as_str()
+                {
+                    remove(existing, key);
+                }
+            }
+            for (key, value) in n {
+                let Some(name) = key.as_str() else { continue };
+                match (o.get(key), get(existing, name)) {
+                    (Some(before), _) if before == value => {}
+                    (Some(before @ Value::Mapping(_)), Some(Value::Mapping(_)))
+                        if matches!(value, Value::Mapping(_)) =>
+                    {
+                        merge(child_mut(existing, name), before, value);
+                    }
+                    _ => set(existing, name, value.clone()),
+                }
+            }
+        }
+        _ => {
+            if old != new {
+                *existing = new.clone();
+            }
+        }
+    }
+}
+
+/// The YAML of an `oauth2` auth, in Bruno's key order; empty texts are left
+/// out, as Bruno does.
+fn oauth2_value(auth: &OAuth2Auth) -> Value {
+    let text = |v: &str| (!v.is_empty()).then(|| string(v));
+    let section = |pairs: Vec<(&str, Option<Value>)>| {
+        let value = mapping(pairs);
+        value
+            .as_mapping()
+            .is_some_and(|m| !m.is_empty())
+            .then_some(value)
+    };
+    let parameters = |request: OAuth2Request| {
+        let list: Vec<Value> = (auth.parameters.iter())
+            .filter(|p| p.request == request)
+            .map(|p| {
+                mapping([
+                    ("name", Some(string(&p.name))),
+                    (
+                        "placement",
+                        Some(string(match p.placement {
+                            ParameterPlacement::Header => "header",
+                            ParameterPlacement::Query => "query",
+                            ParameterPlacement::Body => "body",
+                        })),
+                    ),
+                    ("value", text(&p.value)),
+                ])
+            })
+            .collect();
+        (!list.is_empty()).then(|| Value::from(list))
+    };
+    let flow = auth.flow;
+    let placement = match &auth.token_placement {
+        TokenPlacement::Header(prefix) => mapping([("header", Some(string(prefix)))]),
+        TokenPlacement::Query(key) => mapping([("query", Some(string(key)))]),
+    };
+    mapping([
+        ("type", Some(string("oauth2"))),
+        ("flow", Some(string(flow.as_str()))),
+        ("authorizationUrl", text(&auth.authorization_url)),
+        ("accessTokenUrl", text(&auth.access_token_url)),
+        ("refreshTokenUrl", text(&auth.refresh_token_url)),
+        ("callbackUrl", text(&auth.callback_url)),
+        (
+            "credentials",
+            section(vec![
+                ("clientId", text(&auth.client_id)),
+                ("clientSecret", text(&auth.client_secret)),
+                (
+                    "placement",
+                    Some(string(match auth.credentials_placement {
+                        CredentialsPlacement::Body => "body",
+                        CredentialsPlacement::BasicAuthHeader => "basic_auth_header",
+                    })),
+                ),
+            ]),
+        ),
+        (
+            "resourceOwner",
+            section(vec![
+                ("username", text(&auth.username)),
+                ("password", text(&auth.password)),
+            ]),
+        ),
+        (
+            "additionalParameters",
+            section(vec![
+                (
+                    "authorizationRequest",
+                    parameters(OAuth2Request::Authorization),
+                ),
+                ("accessTokenRequest", parameters(OAuth2Request::Token)),
+                ("refreshTokenRequest", parameters(OAuth2Request::Refresh)),
+            ]),
+        ),
+        ("scope", text(&auth.scope)),
+        ("state", text(&auth.state)),
+        (
+            "pkce",
+            (flow == OAuth2Flow::AuthorizationCode).then(|| {
+                if auth.pkce {
+                    mapping([])
+                } else {
+                    mapping([("disabled", Some(Value::Bool(true)))])
+                }
+            }),
+        ),
+        (
+            "tokenConfig",
+            Some(mapping([
+                ("id", text(&auth.token_id)),
+                ("placement", Some(placement)),
+                ("source", text(&auth.token_source)),
+            ])),
+        ),
+        (
+            "settings",
+            Some(mapping([
+                ("autoFetchToken", Some(Value::Bool(auth.auto_fetch))),
+                ("autoRefreshToken", Some(Value::Bool(auth.auto_refresh))),
+            ])),
+        ),
+    ])
+}
+
 /// The YAML for a scheme; `None` for no auth, which Bruno writes as no key.
 fn auth_value(scheme: &AuthScheme) -> Option<Value> {
     let s = |v: &str| Some(string(v));
@@ -617,6 +769,7 @@ fn auth_value(scheme: &AuthScheme) -> Option<Value> {
             ("password", s(&n.password)),
             ("domain", s(&n.domain)),
         ]),
+        AuthScheme::OAuth2(o) => oauth2_value(o),
         AuthScheme::AwsV4(a) => {
             let fields = aws_fields(a);
             let mut pairs = vec![("type", s("awsv4"))];

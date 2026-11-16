@@ -323,11 +323,11 @@ fn switching_auth_schemes() {
 
 #[test]
 fn an_unsupported_auth_survives_other_edits() {
-    let oauth = "info:\n  name: O\n  type: http\nhttp:\n  method: GET\n  url: x\n  auth:\n    type: oauth2\n    flow: client_credentials\n    clientId: abc\n";
+    let oauth = "info:\n  name: O\n  type: http\nhttp:\n  method: GET\n  url: x\n  auth:\n    type: wsse\n    flow: client_credentials\n    clientId: abc\n";
     let (dir, repo) = setup(&[("o.yml", oauth)]);
     assert_eq!(
         load(&repo, "o.yml").auth,
-        Setting::Set(AuthScheme::Unsupported("oauth2".into()))
+        Setting::Set(AuthScheme::Unsupported("wsse".into()))
     );
     edit(&dir, &repo, "o.yml", |r| r.url = "y".into());
     assert!(read(&dir, "o.yml").contains("clientId: abc"));
@@ -807,4 +807,125 @@ fn assertions_and_captures_are_read_and_edited_in_place() {
     assert_eq!(after, expected);
     assert!(after.contains("type: future-action\n      note: kept as is"));
     assert_eq!(load(&repo, "login.yml"), request);
+}
+
+const OAUTH2: &str = "info:
+  name: Orders
+  type: http
+http:
+  method: GET
+  url: \"{{host}}/orders\"
+  auth:
+    type: oauth2
+    flow: authorization_code
+    authorizationUrl: http://localhost:8081/authorize
+    accessTokenUrl: http://localhost:8081/token
+    callbackUrl: http://localhost:8081/callback
+    credentials:
+      clientId: the-client
+      clientSecret: \"{{client_secret}}\"
+      placement: body
+    additionalParameters:
+      authorizationRequest:
+        - name: audience
+          placement: query
+          value: api
+    scope: read write
+    pkce:
+      disabled: true
+    tokenConfig:
+      id: credentials
+      placement:
+        header: Bearer
+      source: access_token
+      unknownKey: kept
+    settings:
+      autoFetchToken: true
+      autoRefreshToken: false
+";
+
+#[test]
+fn oauth2_is_read_and_one_field_changes_one_line() {
+    use apifast_domain::{OAuth2Flow, OAuth2Request, ParameterPlacement, TokenPlacement};
+    let (dir, repo) = setup(&[("orders.yml", OAUTH2)]);
+    let loaded = repo.request(&path("orders.yml")).unwrap().request;
+    let Setting::Set(AuthScheme::OAuth2(oauth)) = &loaded.auth else {
+        panic!("{:?}", loaded.auth);
+    };
+    assert_eq!(oauth.flow, OAuth2Flow::AuthorizationCode);
+    assert_eq!(oauth.client_secret, "{{client_secret}}");
+    assert_eq!(oauth.scope, "read write");
+    assert!(!oauth.pkce);
+    assert_eq!(
+        oauth.token_placement,
+        TokenPlacement::Header("Bearer".into())
+    );
+    assert!(oauth.auto_fetch && !oauth.auto_refresh);
+    assert_eq!(oauth.parameters.len(), 1);
+    assert_eq!(oauth.parameters[0].request, OAuth2Request::Authorization);
+    assert_eq!(oauth.parameters[0].placement, ParameterPlacement::Query);
+
+    let changes = edit(&dir, &repo, "orders.yml", |r| {
+        let Setting::Set(AuthScheme::OAuth2(oauth)) = &mut r.auth else {
+            unreachable!()
+        };
+        oauth.scope = "read".into();
+        oauth.pkce = true;
+    });
+    assert_eq!(
+        changes,
+        [
+            "-    scope: read write",
+            "-    pkce:",
+            "-      disabled: true",
+            "+    scope: read",
+            "+    pkce: {}",
+        ]
+    );
+    assert!(read(&dir, "orders.yml").contains("unknownKey: kept"));
+}
+
+#[test]
+fn a_new_oauth2_auth_reads_back_the_same() {
+    use apifast_domain::{
+        CredentialsPlacement, OAuth2Auth, OAuth2Flow, OAuth2Parameter, OAuth2Request,
+        ParameterPlacement, TokenPlacement,
+    };
+    let (dir, repo) = setup(&[("login.yml", LOGIN)]);
+    let oauth = OAuth2Auth {
+        flow: OAuth2Flow::Password,
+        access_token_url: "{{host}}/token".into(),
+        refresh_token_url: "{{host}}/refresh".into(),
+        client_id: "cli".into(),
+        client_secret: "{{secret}}".into(),
+        credentials_placement: CredentialsPlacement::BasicAuthHeader,
+        username: "ana".into(),
+        password: "{{password}}".into(),
+        scope: "openid".into(),
+        token_id: "mine".into(),
+        token_placement: TokenPlacement::Query("access_token".into()),
+        token_source: "id_token".into(),
+        auto_fetch: false,
+        auto_refresh: true,
+        parameters: vec![OAuth2Parameter {
+            request: OAuth2Request::Refresh,
+            name: "x".into(),
+            value: "1".into(),
+            placement: ParameterPlacement::Body,
+        }],
+        ..OAuth2Auth::default()
+    };
+    edit(&dir, &repo, "login.yml", |r| {
+        r.auth = Setting::Set(AuthScheme::OAuth2(Box::new(oauth.clone())));
+    });
+    let text = read(&dir, "login.yml");
+    assert!(
+        text.contains("flow: resource_owner_password_credentials"),
+        "{text}"
+    );
+    assert!(text.contains("placement: basic_auth_header"), "{text}");
+    assert!(
+        !text.contains("pkce"),
+        "PKCE is only for the code flow: {text}"
+    );
 }

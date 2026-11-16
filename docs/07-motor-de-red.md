@@ -84,7 +84,7 @@ Implementada de forma nativa en Rust, con un enum tipado por esquema.
 | Basic, Bearer, API key | F1 | API key en header o en query |
 | Heredada (`inherit`) y ninguna (`none`) | F1 | Toma la del padre más cercano |
 | Digest | F5 (hecha) | Responde al reto del servidor, en el transporte |
-| OAuth 2.0 | F5 | Authorization code con PKCE, client credentials, password; refresco automático |
+| OAuth 2.0 | F5 (en curso) | Authorization code con PKCE, client credentials, password; refresco automático. Hecho: se lee, se guarda y se edita; aún no obtiene tokens |
 | AWS SigV4 | F5 (hecha) | Firma del request canónico, en el transporte |
 | NTLM | F5 (hecha) | NTLMv2 en tres mensajes sobre una conexión |
 

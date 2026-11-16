@@ -6,6 +6,7 @@ mod collection_dialogs;
 mod environments;
 mod history;
 mod kv_table;
+mod oauth2_editor;
 mod palette;
 mod request_panel;
 mod response;
@@ -23,6 +24,7 @@ pub use collection_dialogs::{CollectionDialogs, CollectionRequest, folder_name};
 pub use environments::{EnvironmentEditor, EnvironmentEvent, EnvironmentsView};
 pub use history::{HistoryView, ago, matches};
 pub use kv_table::{BulkRow, KvRow, KvTable, from_bulk, to_bulk};
+pub use oauth2_editor::oauth2_fields;
 pub use palette::{CommandPalette, PaletteItem, PaletteMode, fuzzy};
 pub use request_panel::{RequestChange, RequestPanel, RequestTab};
 pub use response::{

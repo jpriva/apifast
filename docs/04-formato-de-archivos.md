@@ -189,6 +189,46 @@ auth:
   profileName: ""
 ```
 
+`oauth2` es un bloque anidado, como lo escribe Bruno:
+
+```yaml
+auth:
+  type: oauth2
+  flow: authorization_code        # client_credentials, resource_owner_password_credentials, implicit
+  authorizationUrl: https://id.example.com/authorize
+  accessTokenUrl: https://id.example.com/token
+  refreshTokenUrl: ""             # opcional; si falta, la del token
+  callbackUrl: http://localhost:8081/callback
+  credentials:
+    clientId: my-app
+    clientSecret: "{{client_secret}}"
+    placement: body               # o basic_auth_header
+  resourceOwner:                  # solo en el flujo password
+    username: ana
+    password: "{{password}}"
+  additionalParameters:
+    authorizationRequest:
+      - name: audience
+        placement: query          # header, query o body
+        value: api
+  scope: read write
+  state: xyz
+  pkce: {}                        # `disabled: true` lo apaga; sin bloque, apagado
+  tokenConfig:
+    id: credentials               # nombre del token en la caché
+    placement:
+      header: Bearer              # o `query: access_token`
+    source: access_token          # o id_token
+  settings:
+    autoFetchToken: true
+    autoRefreshToken: false
+```
+
+- Lo que falta toma los valores por defecto de Bruno: token en el header con `Bearer`, se obtiene solo y no se refresca, PKCE apagado.
+- Al editar, solo se reescriben las claves que cambian dentro del bloque; las que apifast no modela se conservan. Los textos vacíos no se escriben, como hace Bruno.
+- Los parámetros adicionales se leen y se conservan; la interfaz aún no los edita.
+- `implicit` se lee y se conserva, pero no se envía: es un flujo obsoleto.
+
 Los campos sensibles de auth **no guardan el secreto**: referencian una variable secreta, por ejemplo `token: "{{access_token}}"`.
 
 ### Semántica al leer (igual que Bruno)

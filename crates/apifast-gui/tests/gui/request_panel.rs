@@ -240,3 +240,52 @@ fn assertions_and_captures_are_added_by_typing_and_operators_change_the_value() 
     );
     assert!(harness.query_by_label("Tests (2)").is_some());
 }
+
+#[test]
+fn oauth2_shows_the_fields_of_its_grant() {
+    use apifast_domain::{AuthScheme, OAuth2Flow};
+    let mut harness = harness(RequestTab::Auth, request());
+    harness.get_by_label(EN.auth_type).click();
+    harness.run();
+    harness.get_by_label(EN.auth_oauth2).click();
+    harness.run();
+    // Client credentials by default: no user, no authorization URL.
+    assert!(
+        harness
+            .query_by_role_and_label(Role::TextInput, EN.oauth2_access_token_url)
+            .is_some()
+    );
+    assert!(
+        harness
+            .query_by_label(EN.oauth2_authorization_url)
+            .is_none()
+    );
+    assert!(
+        harness
+            .query_by_role_and_label(Role::TextInput, EN.username)
+            .is_none()
+    );
+
+    harness
+        .get_by_role_and_label(Role::ComboBox, EN.oauth2_flow)
+        .click();
+    harness.run();
+    harness.get_by_label(EN.oauth2_password).click();
+    harness.run();
+    assert!(
+        harness
+            .query_by_role_and_label(Role::TextInput, EN.username)
+            .is_some()
+    );
+
+    harness
+        .get_by_role_and_label(Role::TextInput, EN.oauth2_scope)
+        .focus();
+    harness.run();
+    type_slowly(&mut harness, "read");
+    let Setting::Set(AuthScheme::OAuth2(oauth)) = &harness.state().request.auth else {
+        panic!("{:?}", harness.state().request.auth);
+    };
+    assert_eq!(oauth.flow, OAuth2Flow::Password);
+    assert_eq!(oauth.scope, "read");
+}

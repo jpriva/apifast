@@ -8,6 +8,10 @@ use apifast_domain::{
     HttpRequest, Method, MultipartPart, MultipartValue, NtlmAuth, Operator, Param, ParamKind,
     RequestDefaults, Setting, Settings, ValueKind, Variable, VariableValue,
 };
+use apifast_domain::{
+    CredentialsPlacement, OAuth2Auth, OAuth2Flow, OAuth2Parameter, OAuth2Request,
+    ParameterPlacement, TokenPlacement,
+};
 use oneyaml::Value;
 
 use crate::yaml::{boolean, get, get_in, is_disabled, items, text, text_or_empty, unsigned};
@@ -165,6 +169,7 @@ pub(crate) fn auth(value: Option<&Value>) -> Auth {
             password: field("password"),
             domain: field("domain"),
         }),
+        Some("oauth2") => AuthScheme::OAuth2(Box::new(oauth2(value))),
         Some("awsv4") => AuthScheme::AwsV4(Box::new(AwsV4Auth {
             access_key_id: field("accessKeyId"),
             secret_access_key: field("secretAccessKey"),
@@ -176,6 +181,70 @@ pub(crate) fn auth(value: Option<&Value>) -> Auth {
         Some(other) => AuthScheme::Unsupported(other.to_owned()),
         None => AuthScheme::Unsupported("unknown".into()),
     })
+}
+
+/// An `oauth2` auth, with Bruno's defaults for what is missing: the token
+/// as a `Bearer` header, fetched automatically and not refreshed, PKCE off.
+fn oauth2(value: &Value) -> OAuth2Auth {
+    let field = |path: &[&str]| text_or_empty(get_in(value, path));
+    let defaults = OAuth2Auth::default();
+    let token_placement = match get_in(value, &["tokenConfig", "placement"]) {
+        Some(placement) if get(placement, "query").is_some() => {
+            TokenPlacement::Query(text_or_empty(get(placement, "query")))
+        }
+        Some(placement) if get(placement, "header").is_some() => {
+            TokenPlacement::Header(text_or_empty(get(placement, "header")))
+        }
+        _ => defaults.token_placement.clone(),
+    };
+    let mut parameters = Vec::new();
+    for (key, request) in [
+        ("authorizationRequest", OAuth2Request::Authorization),
+        ("accessTokenRequest", OAuth2Request::Token),
+        ("refreshTokenRequest", OAuth2Request::Refresh),
+    ] {
+        for item in items(get_in(value, &["additionalParameters", key])) {
+            let placement = match text(get(item, "placement")).as_deref() {
+                Some("query" | "queryparams") => ParameterPlacement::Query,
+                Some("body") => ParameterPlacement::Body,
+                _ => ParameterPlacement::Header,
+            };
+            parameters.push(OAuth2Parameter {
+                request,
+                name: text_or_empty(get(item, "name")),
+                value: text_or_empty(get(item, "value")),
+                placement,
+            });
+        }
+    }
+    let flag =
+        |key: &str, default: bool| boolean(get_in(value, &["settings", key])).unwrap_or(default);
+    OAuth2Auth {
+        flow: OAuth2Flow::parse(&field(&["flow"])),
+        authorization_url: field(&["authorizationUrl"]),
+        access_token_url: field(&["accessTokenUrl"]),
+        refresh_token_url: field(&["refreshTokenUrl"]),
+        callback_url: field(&["callbackUrl"]),
+        client_id: field(&["credentials", "clientId"]),
+        client_secret: field(&["credentials", "clientSecret"]),
+        credentials_placement: match field(&["credentials", "placement"]).as_str() {
+            "basic_auth_header" => CredentialsPlacement::BasicAuthHeader,
+            _ => CredentialsPlacement::Body,
+        },
+        username: field(&["resourceOwner", "username"]),
+        password: field(&["resourceOwner", "password"]),
+        scope: field(&["scope"]),
+        state: field(&["state"]),
+        // A `pkce` block turns it on, unless it says `disabled: true`.
+        pkce: get(value, "pkce").is_some_and(|p| !is_disabled(p)),
+        token_id: text(get_in(value, &["tokenConfig", "id"])).unwrap_or(defaults.token_id),
+        token_placement,
+        token_source: text(get_in(value, &["tokenConfig", "source"]))
+            .unwrap_or(defaults.token_source),
+        auto_fetch: flag("autoFetchToken", defaults.auto_fetch),
+        auto_refresh: flag("autoRefreshToken", defaults.auto_refresh),
+        parameters,
+    }
 }
 
 fn body(value: Option<&Value>) -> Body {
@@ -476,8 +545,8 @@ mod tests {
             }))
         );
         assert_eq!(
-            auth(Some(&yaml("{type: oauth2, flow: client_credentials}"))),
-            Setting::Set(AuthScheme::Unsupported("oauth2".into()))
+            auth(Some(&yaml("{type: wsse, username: u}"))),
+            Setting::Set(AuthScheme::Unsupported("wsse".into()))
         );
     }
 

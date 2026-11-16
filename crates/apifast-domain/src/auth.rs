@@ -27,6 +27,8 @@ pub enum AuthScheme {
     Ntlm(NtlmAuth),
     /// AWS Signature Version 4: the request is signed with an access key.
     AwsV4(Box<AwsV4Auth>),
+    /// OAuth 2.0: a token obtained from an authorization server.
+    OAuth2(Box<OAuth2Auth>),
     /// A scheme of the file format that apifast cannot send yet, such as
     /// `digest` or `oauth2`, by its `type`. It is kept so that reading and
     /// saving a collection never loses it; sending a request with it fails.
@@ -97,6 +99,165 @@ pub struct AwsV4Auth {
     /// A profile of the AWS configuration files. Kept from Bruno's files;
     /// apifast does not read those files.
     pub profile_name: String,
+}
+
+/// OAuth 2.0, as Bruno's files describe it. Texts are templates; empty
+/// means not set.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OAuth2Auth {
+    /// How the token is obtained.
+    pub flow: OAuth2Flow,
+    /// Where the user authorizes (authorization code and implicit flows).
+    pub authorization_url: String,
+    /// Where tokens are requested.
+    pub access_token_url: String,
+    /// Where tokens are refreshed; the token URL when empty.
+    pub refresh_token_url: String,
+    /// Where the authorization server sends the user back.
+    pub callback_url: String,
+    /// Client id.
+    pub client_id: String,
+    /// Client secret.
+    pub client_secret: String,
+    /// How the client credentials are sent.
+    pub credentials_placement: CredentialsPlacement,
+    /// Resource owner's user name (password flow).
+    pub username: String,
+    /// Resource owner's password (password flow).
+    pub password: String,
+    /// Scopes, separated by spaces.
+    pub scope: String,
+    /// The `state` of the authorization request.
+    pub state: String,
+    /// Proof Key for Code Exchange, in the authorization code flow.
+    pub pkce: bool,
+    /// Names the token in the cache, so several auths can share one.
+    pub token_id: String,
+    /// Where the token goes in the request.
+    pub token_placement: TokenPlacement,
+    /// Which token of the response is sent: `access_token` or `id_token`.
+    pub token_source: String,
+    /// Get a token before sending when there is none.
+    pub auto_fetch: bool,
+    /// Refresh an expired token before sending.
+    pub auto_refresh: bool,
+    /// Extra parameters of the authorization, token and refresh requests.
+    pub parameters: Vec<OAuth2Parameter>,
+}
+
+impl Default for OAuth2Auth {
+    fn default() -> Self {
+        Self {
+            flow: OAuth2Flow::ClientCredentials,
+            authorization_url: String::new(),
+            access_token_url: String::new(),
+            refresh_token_url: String::new(),
+            callback_url: String::new(),
+            client_id: String::new(),
+            client_secret: String::new(),
+            credentials_placement: CredentialsPlacement::Body,
+            username: String::new(),
+            password: String::new(),
+            scope: String::new(),
+            state: String::new(),
+            pkce: false,
+            token_id: "credentials".into(),
+            token_placement: TokenPlacement::Header("Bearer".into()),
+            token_source: "access_token".into(),
+            auto_fetch: true,
+            auto_refresh: false,
+            parameters: Vec::new(),
+        }
+    }
+}
+
+/// An OAuth 2.0 grant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OAuth2Flow {
+    /// `client_credentials`: the client authenticates as itself.
+    ClientCredentials,
+    /// `resource_owner_password_credentials`: the user's name and password.
+    Password,
+    /// `authorization_code`: the user authorizes in a browser.
+    AuthorizationCode,
+    /// `implicit`: kept from the files; deprecated and not sent.
+    Implicit,
+}
+
+impl OAuth2Flow {
+    /// Its name in the files.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ClientCredentials => "client_credentials",
+            Self::Password => "resource_owner_password_credentials",
+            Self::AuthorizationCode => "authorization_code",
+            Self::Implicit => "implicit",
+        }
+    }
+
+    /// The flow named `name` in a file; client credentials when unknown.
+    pub fn parse(name: &str) -> Self {
+        match name {
+            "resource_owner_password_credentials" | "password" => Self::Password,
+            "authorization_code" => Self::AuthorizationCode,
+            "implicit" => Self::Implicit,
+            _ => Self::ClientCredentials,
+        }
+    }
+}
+
+/// How the client id and secret travel to the token endpoint.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CredentialsPlacement {
+    /// As form fields of the body.
+    #[default]
+    Body,
+    /// As HTTP Basic credentials.
+    BasicAuthHeader,
+}
+
+/// Where the token goes in the request.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TokenPlacement {
+    /// `Authorization: <prefix> <token>`; just the token with no prefix.
+    Header(String),
+    /// A query parameter with this name.
+    Query(String),
+}
+
+/// Which request an extra parameter belongs to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OAuth2Request {
+    /// The authorization request, in the browser.
+    Authorization,
+    /// The token request.
+    Token,
+    /// The refresh request.
+    Refresh,
+}
+
+/// Where an extra parameter goes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParameterPlacement {
+    /// A header.
+    Header,
+    /// A query parameter.
+    Query,
+    /// A form field of the body.
+    Body,
+}
+
+/// An extra parameter of an OAuth 2.0 request.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OAuth2Parameter {
+    /// The request it goes in.
+    pub request: OAuth2Request,
+    /// Name.
+    pub name: String,
+    /// Value (template).
+    pub value: String,
+    /// Where it goes.
+    pub placement: ParameterPlacement,
 }
 
 /// Where an API key is sent.

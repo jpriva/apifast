@@ -30,8 +30,9 @@ mod variable;
 
 pub use assertion::{Assertion, Capture, CaptureScope, Operator};
 pub use auth::{
-    ApiKeyAuth, ApiKeyPlacement, Auth, AuthScheme, AwsV4Auth, BasicAuth, BearerAuth, DigestAuth,
-    NtlmAuth,
+    ApiKeyAuth, ApiKeyPlacement, Auth, AuthScheme, AwsV4Auth, BasicAuth, BearerAuth,
+    CredentialsPlacement, DigestAuth, NtlmAuth, OAuth2Auth, OAuth2Flow, OAuth2Parameter,
+    OAuth2Request, ParameterPlacement, TokenPlacement,
 };
 pub use body::{Body, FormField, MultipartPart, MultipartValue};
 pub use collection::{Collection, CollectionId, Folder, RequestDefaults};

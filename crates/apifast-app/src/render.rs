@@ -400,6 +400,11 @@ fn apply_auth(
                 ApiKeyPlacement::Query => append_query(url, &name, &value),
             }
         }
+        AuthScheme::OAuth2(_) => {
+            return Err(AppError::Validation(
+                "OAuth 2.0 cannot get tokens yet; set the token as a Bearer auth for now".into(),
+            ));
+        }
         AuthScheme::None => {}
         AuthScheme::Unsupported(kind) => {
             return Err(AppError::Validation(format!(
