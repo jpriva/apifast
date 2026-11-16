@@ -500,6 +500,13 @@ pub trait Random: Send + Sync {
     fn next_u64(&self) -> u64;
 }
 
+/// Waits between the requests of a run. `Send + Sync` so use cases can run
+/// as tasks on any thread.
+pub trait Pause: Send + Sync {
+    /// Waits `ms` milliseconds.
+    fn pause(&self, ms: u64) -> std::pin::Pin<Box<dyn Future<Output = ()> + Send + '_>>;
+}
+
 /// Asks the user for `{{?Label}}` values. `Send + Sync` so use cases can run
 /// as tasks on any thread.
 pub trait Prompter: Send + Sync {

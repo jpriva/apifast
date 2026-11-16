@@ -128,6 +128,7 @@ Definidos como traits en `apifast-app`:
 | `FsWatcher` | Notificar cambios externos en la colección, agrupados en lotes de rutas relativas. No implementa un puerto: el driver lo arranca al abrir la colección y reconcilia cada lote (`ApplyExternalChange`) | `apifast-watch` |
 | `ScriptEngine` | Ejecutar scripts de usuario | `apifast-script-js` |
 | `Clock` | Hora actual y medición de tiempos | Sistema, o falso en tests |
+| `Pause` | Esperar entre las requests de una ejecución del runner | tokio, o una que no espera en tests |
 | `Prompter` | Pedir un valor al usuario (`{{?Texto}}`) | GUI o terminal |
 
 Cada puerto tiene además una implementación en memoria para tests, en `apifast_app::memory`.

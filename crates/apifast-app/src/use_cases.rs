@@ -112,6 +112,15 @@ pub struct SendPorts<'a, C, E, T, S> {
     pub history: Option<&'a (dyn HistoryStore + Sync)>,
 }
 
+// Only references: copying them is free, whatever the port types are.
+impl<C, E, T, S> Clone for SendPorts<'_, C, E, T, S> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<C, E, T, S> Copy for SendPorts<'_, C, E, T, S> {}
+
 /// Options for [`send_request`].
 #[derive(Debug, Clone, Default)]
 pub struct SendOptions {

@@ -19,6 +19,7 @@ pub mod memory;
 mod organize;
 mod ports;
 mod render;
+mod runner;
 mod use_cases;
 
 pub use assertions::{ExpressionError, ResponseFacts, Verdict, check, reason_phrase};
@@ -36,12 +37,16 @@ pub use organize::{
 };
 pub use ports::{
     BodyWriter, CancelToken, Clock, CollectionRepository, CollectionTree, EnvironmentRepository,
-    HttpTransport, ItemPath, LoadedRequest, NoPrompter, NoSecrets, Prompter, Random, RequestPath,
-    ResponseHead, ResponseId, ResponseStore, SecretStore, Session, SessionStore, SessionTab,
-    SharedSecretFiles, StoredBody, TimelineEvent, TimelineKind, TreeItem, Workspace,
+    HttpTransport, ItemPath, LoadedRequest, NoPrompter, NoSecrets, Pause, Prompter, Random,
+    RequestPath, ResponseHead, ResponseId, ResponseStore, SecretStore, Session, SessionStore,
+    SessionTab, SharedSecretFiles, StoredBody, TimelineEvent, TimelineKind, TreeItem, Workspace,
     WorkspaceEntry, WorkspaceRepository, sort_tree,
 };
 pub use render::{RenderOutcome, RenderedBody, RenderedPart, RenderedRequest, render_request};
+pub use runner::{
+    RunEvent, RunOptions, RunReport, RunSummary, Selection, Skipped, StepResult, run_collection,
+    run_selection,
+};
 pub use use_cases::{
     SendOptions, SendOutcome, SendPorts, load_request, open_collection, resolve_request_variables,
     save_request, send_request,

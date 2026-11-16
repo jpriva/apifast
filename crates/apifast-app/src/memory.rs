@@ -104,6 +104,8 @@ impl MemoryCollections {
                     children: Self::items_under(path, folders, requests),
                 }),
         );
+        // In the order of a real collection: by `seq`, then by name.
+        crate::sort_tree(&mut items);
         items
     }
 }
@@ -599,5 +601,26 @@ impl SharedSecretFiles for MemorySharedSecrets {
     fn set_vault_challenge(&self, challenge: &str) -> Result<(), RepositoryError> {
         *lock(&self.challenge) = Some(challenge.to_owned());
         Ok(())
+    }
+}
+
+/// A pause that does not wait and records how long it was asked to.
+#[derive(Debug, Default)]
+pub struct RecordedPauses(Mutex<Vec<u64>>);
+
+impl RecordedPauses {
+    /// The pauses asked for, in milliseconds.
+    pub fn asked(&self) -> Vec<u64> {
+        lock(&self.0).clone()
+    }
+}
+
+impl crate::Pause for RecordedPauses {
+    fn pause(
+        &self,
+        ms: u64,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
+        lock(&self.0).push(ms);
+        Box::pin(std::future::ready(()))
     }
 }

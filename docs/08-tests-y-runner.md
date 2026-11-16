@@ -183,6 +183,22 @@ Ejecuta varias requests en secuencia y agrega los resultados.
 
 Las ejecuciones dirigidas por datos son una mejora respecto a Bruno, que no las incluye en su versión de código abierto.
 
+### Cómo funciona
+
+El caso de uso `run_collection` (`apifast-app`) es el mismo para la CLI y la interfaz:
+
+- **Selección:** la colección entera o una carpeta (`folder`), con sus subcarpetas o sin ellas (`recursive`), en el orden del árbol: por `seq`, luego por nombre, y cada carpeta en su lugar. Una carpeta que no existe es un error antes de enviar nada.
+- **Tags:** con `tags`, solo corren las requests que tienen al menos uno; con `exclude_tags`, no corre ninguna que tenga alguno. Sin distinguir mayúsculas.
+- **Omitidas:** las requests filtradas por tags, las de tipos que aún no se pueden enviar (GraphQL…) y los archivos ilegibles no corren y quedan en el informe con su motivo.
+- **Variables:** cada request ve lo que capturaron las anteriores, también entre iteraciones. El informe devuelve los valores finales.
+- **Errores:** una request que no se puede enviar (variable sin resolver, red…) queda en el informe con su error y la ejecución sigue.
+- **`bail`:** detiene la ejecución tras la primera request con un error o una aserción fallida.
+- **Pausa:** `delay_ms` se espera entre dos requests, no antes de la primera. La espera es un puerto (`Pause`), así que las pruebas no esperan.
+- **Iteraciones:** la selección entera se repite `iterations` veces; cada paso del informe dice a qué iteración pertenece.
+- **Cancelación:** se comprueba antes de cada request y corta la que está en vuelo; el informe queda marcado como cancelado.
+- **Progreso:** un callback recibe `Started` y `Finished` de cada request, para mostrar el avance en vivo.
+- **Resultado:** el informe tiene los pasos (respuesta, capturas, aserciones y duración), las omitidas, la duración total y si se detuvo por `bail` o por cancelación. `summary()` da los totales y `succeeded()` dice si todo se envió y todas las aserciones pasaron.
+
 ### Resultado
 
 Por request: estado, duración, aserciones (aprobadas y fallidas con valor esperado y real) y capturas realizadas. Por ejecución: totales, duración y las requests omitidas.
