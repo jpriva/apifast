@@ -182,9 +182,11 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
 
 **Objetivo:** ningún secreto en claro.
 
+**Estado:** en curso desde el 2026-11-16.
+
 ### Tareas
 
-- [ ] `apifast-vault`: sobre XChaCha20-Poly1305 con datos asociados y vector fijo de prueba.
+- [x] `apifast-vault`: sobre XChaCha20-Poly1305 con datos asociados y vector fijo de prueba. El cifrado se comprueba con el vector publicado (apéndice A.3.1 de `draft-irtf-cfrg-xchacha-03`) y el formato `enc:v1:` con un vector propio. Un valor abierto con otra clave, otra variable, otro entorno u otra colección, o con un byte cambiado, se rechaza. Las claves se borran de memoria al liberarse y no se imprimen.
 - [ ] `KeyStore` sobre keyring, con respaldo en archivo `0600` e indicador en la interfaz.
 - [ ] Clave de colección: generación, envoltura, *challenge*.
 - [ ] Secretos solo locales (por defecto) y secretos compartidos en `.apifast/secrets/`; detección de entradas huérfanas.

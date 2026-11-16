@@ -19,8 +19,13 @@ apifast-storage-fs = { path = "crates/apifast-storage-fs" }
 apifast-http = { path = "crates/apifast-http" }
 apifast-history = { path = "crates/apifast-history" }
 apifast-watch = { path = "crates/apifast-watch" }
+apifast-vault = { path = "crates/apifast-vault" }
 
 # External
+base64 = "0.23.1"
+chacha20poly1305 = "0.11.0"
+getrandom = "0.4.3"
+zeroize = "1.9.1"
 notify = { version = "8.2.2", default-features = false, features = ["macos_fsevent"] }
 oneyaml = "1.2.0"
 serde_json = "1.0.154"
