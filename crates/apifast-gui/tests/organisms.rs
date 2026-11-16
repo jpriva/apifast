@@ -51,11 +51,11 @@ fn tree() -> CollectionTree {
 
 #[test]
 fn the_tree_lists_every_item_and_opens_folders_on_click() {
-    let tree = tree();
+    let collections = [apifast_gui::core::CollectionEntry::loaded("/c", tree())];
     let mut events = Vec::new();
     let mut harness = Harness::new_ui_state(
         |ui, view: &mut TreeView| {
-            if let Some(event) = view.show(ui, &tree, 1, None, &EN) {
+            if let Some((_, event)) = view.show(ui, &collections, 1, (None, None), &EN) {
                 events.push(event);
             }
         },

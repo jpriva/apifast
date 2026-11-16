@@ -5,6 +5,7 @@
 
 use apifast_app::{CollectionTree, ItemPath, Placement, RequestPath, TreeItem};
 use apifast_domain::{Collection, Folder, Method};
+use apifast_gui::core::CollectionEntry;
 use apifast_gui::organisms::{TreeEvent, TreeView};
 use apifast_gui::strings::EN;
 use eframe::egui;
@@ -12,7 +13,7 @@ use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 
 struct State {
-    tree: CollectionTree,
+    tree: Vec<CollectionEntry>,
     view: TreeView,
     events: Vec<TreeEvent>,
 }
@@ -41,7 +42,7 @@ fn harness() -> Harness<'static, State> {
         ],
     };
     let state = State {
-        tree,
+        tree: vec![CollectionEntry::loaded("/c", tree)],
         view: TreeView::default(),
         events: Vec::new(),
     };
@@ -49,7 +50,11 @@ fn harness() -> Harness<'static, State> {
         .with_size(egui::vec2(400.0, 500.0))
         .build_ui_state(
             |ui, state: &mut State| {
-                if let Some(event) = state.view.show(ui, &state.tree, 1, None, &EN) {
+                let focused = Some(std::path::Path::new("/c"));
+                if let Some((root, event)) =
+                    state.view.show(ui, &state.tree, 1, (None, focused), &EN)
+                {
+                    assert_eq!(root, std::path::Path::new("/c"));
                     state.events.push(event);
                 }
             },

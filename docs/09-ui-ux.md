@@ -42,7 +42,7 @@ La interfaz se construye con egui (eframe). El objetivo es que resulte familiar 
 |---|---|
 | Barra superior | Nombre de la colección de la pestaña activa, búsqueda y paleta de comandos, selector de entorno de esa colección con su color |
 | Barra lateral | Selector de workspace, árbol con una raíz por colección, historial de la colección activa. Se puede ocultar y redimensionar |
-| Pestañas | Una por request abierta, de cualquier colección; un punto indica cambios sin guardar. El nombre de la colección aparece en el tooltip, y delante del nombre cuando dos pestañas se llaman igual |
+| Pestañas | Una por request abierta, de cualquier colección; un punto indica cambios sin guardar. El nombre de la colección aparece en el tooltip, y delante del nombre ("Billing / Health") cuando dos pestañas de colecciones distintas se llaman igual |
 | Barra de URL | Método, URL con resaltado de variables, botón de enviar o cancelar |
 | Panel de request | Pestañas de edición |
 | Panel de respuesta | Estado, tiempo, tamaño y pestañas de visualización |
@@ -71,7 +71,10 @@ La cabecera de la barra lateral tiene:
 - Menú de la raíz: nueva request, nueva carpeta, entornos, clave de la colección, mostrar la carpeta, cerrar (la descarga y cierra sus pestañas, preguntando si hay cambios sin guardar) y quitar del workspace (no borra archivos).
 - Árbol con carpetas plegables. Solo se dibujan las filas visibles.
 - Arrastrar y soltar para reordenar (actualiza `seq`) y mover entre carpetas (mueve el archivo), dentro de la misma colección.
-- El historial lateral es el de la colección de la pestaña activa.
+- El historial lateral es el de la colección de la pestaña activa, con su nombre encima.
+- Arriba del árbol, "New request" y "New folder" crean en la colección enfocada (la de la pestaña activa, o la última elegida en el árbol); desde el menú de una raíz, en esa colección.
+- Una raíz en rojo no se pudo cargar (el motivo, al pasar el ratón); en ámbar, la colección comparte secretos y falta su clave en esta máquina.
+- Soltar un elemento sobre la raíz de su colección lo lleva al nivel superior; no se puede soltar en otra colección.
 - Menú contextual: nueva request, nueva carpeta, duplicar, renombrar, borrar, ejecutar carpeta, mostrar en el explorador de archivos, copiar como cURL.
 - Filtro rápido por nombre, método o tag (`Ctrl+F`).
 - Los archivos con error de parseo aparecen marcados y se pueden abrir como texto.

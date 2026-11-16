@@ -26,6 +26,24 @@ pub struct Strings {
     pub pick_parent: &'static str,
     /// Offers to create a collection in a folder that has none.
     pub create_here: &'static str,
+    /// Root menu: unload the collection.
+    pub close_collection: &'static str,
+    /// Root menu: remove the collection from the workspace.
+    pub remove_collection: &'static str,
+    /// Root menu: copy the collection's folder.
+    pub copy_folder_path: &'static str,
+    /// Accessible name of the workspace selector.
+    pub workspace: &'static str,
+    /// Creates a workspace.
+    pub new_workspace: &'static str,
+    /// Opens a workspace folder.
+    pub open_workspace: &'static str,
+    /// Renames the active workspace.
+    pub rename_workspace: &'static str,
+    /// Title of the picker of a workspace folder.
+    pub pick_workspace: &'static str,
+    /// Before the name of the collection whose history is shown.
+    pub history_of: &'static str,
     /// Button that opens something.
     pub open: &'static str,
     /// Environment selector entry for "no environment".
@@ -492,6 +510,15 @@ pub const EN: Strings = Strings {
     collection_goes_in: "It goes in",
     pick_parent: "Choose where to create the collection",
     create_here: "Create one here",
+    close_collection: "Close",
+    remove_collection: "Remove from workspace",
+    copy_folder_path: "Copy folder path",
+    workspace: "Workspace",
+    new_workspace: "New workspace…",
+    open_workspace: "Open workspace…",
+    rename_workspace: "Rename workspace…",
+    pick_workspace: "Open a workspace folder",
+    history_of: "History of",
     open: "Open",
     no_environment: "No environment",
     environment: "Environment",

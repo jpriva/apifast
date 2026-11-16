@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use apifast_app::{RequestPath, TreeItem};
+use apifast_app::TreeItem;
 use apifast_domain::{HttpRequest, Secret, sync_params_from_url, sync_url_from_params};
 use eframe::egui::{self, RichText};
 
@@ -124,7 +124,6 @@ impl MainScreen {
         let hints = self.follow(active, strings);
         let sending = active.is_some_and(|tab| tab.response == ResponseState::Sending);
         let selected = snapshot.active.as_ref();
-        let tree_selected = selected_in_tree(snapshot);
         self.request.format_shortcuts = Some(self.keymap.shortcuts(Action::FormatBody));
         self.response.pretty_limit = Some(self.settings.pretty_limit());
         let focus_url = std::mem::take(&mut self.focus_url);
@@ -156,15 +155,12 @@ impl MainScreen {
                 )
             },
             (!self.sidebar_hidden).then_some(|ui: &mut egui::Ui| {
-                sidebar_area(
-                    ui,
-                    (sidebar, tree, history),
-                    snapshot,
-                    tree_selected,
-                    strings,
-                )
+                sidebar_area(ui, (sidebar, tree, history), snapshot, strings)
             }),
             |ui| {
+                tabs.names = (snapshot.collections.iter())
+                    .map(|c| (c.root.clone(), c.name.clone()))
+                    .collect();
                 let tab_event = tabs.show(ui, &snapshot.tabs, selected, strings);
                 ui.separator();
                 let palette = theme::palette(ui);
@@ -206,8 +202,8 @@ impl MainScreen {
         commands.extend(self.collection_commands(ui, (create_here, asked), snapshot, strings));
         commands.extend(self.windows(ui, snapshot, &hints, strings));
         commands.extend(environment);
-        if let (Some(event), Some(collection)) = (tree_event, collection) {
-            commands.push(tree_command(collection.root.clone(), event));
+        if let Some((root, event)) = tree_event {
+            commands.extend(self.tree_commands(root, event));
         }
         if let Some(index) = picked {
             commands.push(Command::OpenHistory(index));
@@ -243,7 +239,7 @@ impl MainScreen {
     fn collection_commands(
         &mut self,
         ui: &egui::Ui,
-        (create_here, asked): (Option<PathBuf>, Option<Action>),
+        (create_here, asked): (Option<PathBuf>, Option<SidebarAsk>),
         snapshot: &Snapshot,
         strings: &Strings,
     ) -> Vec<Command> {
@@ -257,13 +253,61 @@ impl MainScreen {
                 folder,
             }));
         }
-        if let Some(action) = asked {
-            commands.extend(self.run(action, snapshot, strings));
+        match asked {
+            Some(SidebarAsk::Action(action)) => {
+                commands.extend(self.run(action, snapshot, strings));
+            }
+            Some(SidebarAsk::Workspace(folder)) => commands.push(Command::OpenWorkspace(folder)),
+            Some(SidebarAsk::NewWorkspace) => {
+                let workspace = snapshot.workspace.as_ref();
+                let parent = (workspace.and_then(|w| w.folder.parent()))
+                    .map_or_else(|| snapshot.default_parent.clone(), Path::to_path_buf);
+                self.collections.new_workspace(&parent);
+            }
+            Some(SidebarAsk::OpenWorkspace) => self.collections.open_workspace(),
+            Some(SidebarAsk::RenameWorkspace) => {
+                let name = snapshot.workspace.as_ref().map_or("", |w| w.name.as_str());
+                self.collections.rename_workspace(name);
+            }
+            None => {}
         }
         if let Some(request) = self.collections.show(ui.ctx(), strings) {
             commands.push(collection_command(request));
         }
         commands
+    }
+
+    /// The commands of what the tree reported about the collection at
+    /// `root`; some open a window about it.
+    fn tree_commands(&mut self, root: PathBuf, event: TreeEvent) -> Vec<Command> {
+        let focus = Command::FocusCollection(root.clone());
+        match event {
+            TreeEvent::Expand(expanded) => vec![Command::ExpandCollection { root, expanded }],
+            TreeEvent::Environments => {
+                self.environments.open = true;
+                vec![focus]
+            }
+            TreeEvent::CollectionKey => {
+                self.vault_window.open = true;
+                vec![focus]
+            }
+            TreeEvent::Close => vec![Command::CloseCollection(root)],
+            TreeEvent::Remove => vec![Command::RemoveCollection(root)],
+            TreeEvent::RequestSelected(path) => vec![Command::OpenRequest(TabKey::new(root, path))],
+            TreeEvent::CreateRequest { folder, name } => {
+                vec![Command::CreateRequest { root, folder, name }]
+            }
+            TreeEvent::CreateFolder { parent, name } => {
+                vec![Command::CreateFolder { root, parent, name }]
+            }
+            TreeEvent::Rename { item, name } => vec![Command::Rename { root, item, name }],
+            TreeEvent::Delete(item) => vec![Command::Delete { root, item }],
+            TreeEvent::Move { item, placement } => vec![Command::Move {
+                root,
+                item,
+                placement,
+            }],
+        }
     }
 
     /// The commands of the shortcuts pressed this frame. Keys go to the
@@ -358,12 +402,7 @@ impl MainScreen {
                 Some(PaletteItem::Action(action, ..)) => {
                     commands.extend(self.run(action, snapshot, strings));
                 }
-                Some(PaletteItem::Request(path, ..)) => {
-                    if let Some(collection) = &snapshot.collection {
-                        let key = TabKey::new(collection.root.clone(), path);
-                        commands.push(Command::OpenRequest(key));
-                    }
-                }
+                Some(PaletteItem::Request(key, ..)) => commands.push(Command::OpenRequest(key)),
                 Some(PaletteItem::Environment(name, _)) => {
                     commands.push(Command::SelectEnvironment(name));
                 }
@@ -453,12 +492,8 @@ impl MainScreen {
                 Vec::new()
             }
             Action::NewCollection => {
-                let parent = snapshot
-                    .collection
-                    .as_ref()
-                    .and_then(|c| c.root.parent().map(Path::to_path_buf))
-                    .unwrap_or_else(|| snapshot.default_parent.clone());
-                self.collections.new_collection(&parent);
+                // In the active workspace's folder unless another is chosen.
+                self.collections.new_collection(&snapshot.default_parent);
                 Vec::new()
             }
             Action::ThemeSystem | Action::ThemeLight | Action::ThemeDark => {
@@ -596,30 +631,6 @@ fn hints(context: &TabContext, strings: &Strings) -> VariableHints {
         .collect()
 }
 
-/// The request of the active tab, if the tree shows its collection (the
-/// focused one).
-fn selected_in_tree(snapshot: &Snapshot) -> Option<&RequestPath> {
-    let key = snapshot.active.as_ref()?;
-    let collection = snapshot.collection.as_ref()?;
-    (collection.root == key.root).then_some(&key.path)
-}
-
-/// The command of what the tree of the collection at `root` reported.
-fn tree_command(root: PathBuf, event: TreeEvent) -> Command {
-    match event {
-        TreeEvent::RequestSelected(path) => Command::OpenRequest(TabKey::new(root, path)),
-        TreeEvent::CreateRequest { folder, name } => Command::CreateRequest { root, folder, name },
-        TreeEvent::CreateFolder { parent, name } => Command::CreateFolder { root, parent, name },
-        TreeEvent::Rename { item, name } => Command::Rename { root, item, name },
-        TreeEvent::Delete(item) => Command::Delete { root, item },
-        TreeEvent::Move { item, placement } => Command::Move {
-            root,
-            item,
-            placement,
-        },
-    }
-}
-
 /// What the palette offers: every action but the tab numbers, then every
 /// request, then every environment.
 fn palette_items(
@@ -635,8 +646,13 @@ fn palette_items(
             PaletteItem::Action(action, action.label(strings), shortcut)
         })
         .collect();
-    if let Some(collection) = &snapshot.collection {
-        requests(&collection.tree.items, &mut items);
+    // Every loaded collection's requests; with several, named after it.
+    let loaded: Vec<_> = (snapshot.collections.iter())
+        .filter_map(|c| Some((c, c.tree.as_ref()?)))
+        .collect();
+    for (collection, tree) in &loaded {
+        let prefix = (loaded.len() > 1).then_some(collection.name.as_str());
+        requests(&tree.items, (&collection.root, prefix), &mut items);
     }
     items.push(PaletteItem::Environment(
         None,
@@ -648,15 +664,21 @@ fn palette_items(
     items
 }
 
-fn requests(tree: &[TreeItem], out: &mut Vec<PaletteItem>) {
+/// The requests of `tree`, of the collection at `root`; their names start
+/// with `prefix` when given.
+fn requests(
+    tree: &[TreeItem],
+    (root, prefix): (&PathBuf, Option<&str>),
+    out: &mut Vec<PaletteItem>,
+) {
     for item in tree {
         match item {
-            TreeItem::Folder { children, .. } => requests(children, out),
+            TreeItem::Folder { children, .. } => requests(children, (root, prefix), out),
             TreeItem::Request {
                 path, name, method, ..
             } => out.push(PaletteItem::Request(
-                path.clone(),
-                name.clone(),
+                TabKey::new(root.clone(), path.clone()),
+                prefix.map_or_else(|| name.clone(), |p| format!("{p} / {name}")),
                 method.clone(),
             )),
             _ => {}
@@ -774,48 +796,116 @@ fn environment_command(event: EnvironmentEvent) -> Command {
     }
 }
 
-/// The sidebar: a switch between the collection's tree and the history.
-/// Returns what the tree reported, the history entry picked and an action
-/// asked for (creating or opening a collection).
+/// What the sidebar asks for besides the tree and the history.
+enum SidebarAsk {
+    /// An action, such as creating or opening a collection.
+    Action(Action),
+    /// Switch to this workspace.
+    Workspace(PathBuf),
+    /// Create a workspace.
+    NewWorkspace,
+    /// Open a workspace folder.
+    OpenWorkspace,
+    /// Rename the active workspace.
+    RenameWorkspace,
+}
+
+/// The sidebar: the workspace, then a switch between its collections and
+/// the focused collection's history. Returns what the tree reported, with
+/// its collection, the history entry picked and what else was asked for.
 fn sidebar_area(
     ui: &mut egui::Ui,
     (sidebar, tree, history): (&mut Sidebar, &mut TreeView, &mut HistoryView),
     snapshot: &Snapshot,
-    selected: Option<&RequestPath>,
     strings: &Strings,
-) -> (Option<TreeEvent>, Option<usize>, Option<Action>) {
+) -> (
+    Option<(PathBuf, TreeEvent)>,
+    Option<usize>,
+    Option<SidebarAsk>,
+) {
+    let ask = workspace_header(ui, snapshot, strings);
     ui.horizontal(|ui| {
         ui.selectable_value(sidebar, Sidebar::Collection, strings.sidebar_collection);
         ui.selectable_value(sidebar, Sidebar::History, strings.sidebar_history);
     });
     ui.separator();
-    match (*sidebar, &snapshot.collection) {
-        (Sidebar::Collection, Some(collection)) => (
-            tree.show(ui, &collection.tree, snapshot.version, selected, strings),
-            None,
-            None,
-        ),
-        (Sidebar::History, _) => (
-            None,
-            history.show(ui, &snapshot.history, now_ms(), strings),
-            None,
-        ),
-        (Sidebar::Collection, None) => (None, None, empty_sidebar(ui, strings)),
+    match *sidebar {
+        Sidebar::History => {
+            if let Some(collection) = &snapshot.collection {
+                let name = &collection.tree.collection.name;
+                let muted = theme::palette(ui).text_muted;
+                ui.label(RichText::new(format!("{} {name}", strings.history_of)).color(muted));
+            }
+            (
+                None,
+                history.show(ui, &snapshot.history, now_ms(), strings),
+                ask,
+            )
+        }
+        Sidebar::Collection if snapshot.collections.is_empty() => {
+            let muted = theme::palette(ui).text_muted;
+            ui.label(RichText::new(strings.no_collection).color(muted));
+            (None, None, ask)
+        }
+        Sidebar::Collection => {
+            let focused = snapshot.collection.as_ref().map(|c| c.root.as_path());
+            let selected = snapshot.active.as_ref();
+            let event = tree.show(
+                ui,
+                &snapshot.collections,
+                snapshot.version,
+                (selected, focused),
+                strings,
+            );
+            (event, None, ask)
+        }
     }
 }
 
-/// The sidebar without a collection: how to start. Returns the action of
-/// the button pressed.
-fn empty_sidebar(ui: &mut egui::Ui, strings: &Strings) -> Option<Action> {
-    ui.label(RichText::new(strings.no_collection).color(theme::palette(ui).text_muted));
-    ui.add_space(theme::space::M);
-    let new = ui.button(strings.new_collection).clicked();
-    let open = ui.button(strings.open_collection).clicked();
-    if new {
-        Some(Action::NewCollection)
-    } else {
-        open.then_some(Action::OpenCollection)
-    }
+/// The workspace selector and the buttons that create or open a
+/// collection. Returns what was asked for.
+fn workspace_header(
+    ui: &mut egui::Ui,
+    snapshot: &Snapshot,
+    strings: &Strings,
+) -> Option<SidebarAsk> {
+    let mut ask = None;
+    let active = snapshot.workspace.as_ref();
+    let current = active.map_or("", |w| w.name.as_str());
+    let response = egui::ComboBox::from_id_salt("workspace")
+        .selected_text(RichText::new(current).strong())
+        .width(ui.available_width() - theme::space::S)
+        .show_ui(ui, |ui| {
+            for workspace in &snapshot.workspaces {
+                let is_active = active.is_some_and(|a| a.folder == workspace.folder);
+                let item = ui
+                    .selectable_label(is_active, workspace.name.as_str())
+                    .on_hover_text(workspace.folder.display().to_string());
+                if item.clicked() && !is_active {
+                    ask = Some(SidebarAsk::Workspace(workspace.folder.clone()));
+                }
+            }
+            ui.separator();
+            if ui.button(strings.new_workspace).clicked() {
+                ask = Some(SidebarAsk::NewWorkspace);
+            }
+            if ui.button(strings.open_workspace).clicked() {
+                ask = Some(SidebarAsk::OpenWorkspace);
+            }
+            if ui.button(strings.rename_workspace).clicked() {
+                ask = Some(SidebarAsk::RenameWorkspace);
+            }
+        });
+    response.response.accessible_name(strings.workspace);
+    ui.horizontal(|ui| {
+        if ui.small_button(strings.new_collection).clicked() {
+            ask = Some(SidebarAsk::Action(Action::NewCollection));
+        }
+        if ui.small_button(strings.open_collection).clicked() {
+            ask = Some(SidebarAsk::Action(Action::OpenCollection));
+        }
+    });
+    ask
 }
 
 /// The error and the notice, if any. A folder without a collection gets a
@@ -845,6 +935,11 @@ fn collection_command(request: CollectionRequest) -> Command {
     match request {
         CollectionRequest::Open(folder) => Command::OpenCollection(folder),
         CollectionRequest::Create { folder, name } => Command::CreateCollection { folder, name },
+        CollectionRequest::OpenWorkspace(folder) => Command::OpenWorkspace(folder),
+        CollectionRequest::CreateWorkspace { folder, name } => {
+            Command::CreateWorkspace { folder, name }
+        }
+        CollectionRequest::RenameWorkspace(name) => Command::RenameWorkspace(name),
     }
 }
 

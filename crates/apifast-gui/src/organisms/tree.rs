@@ -1,10 +1,12 @@
-//! The collection tree of the sidebar: only the visible rows are drawn. A
+//! The tree of the sidebar: one root per collection of the workspace, and
+//! under each its folders and requests. Only the visible rows are drawn. A
 //! context menu creates, renames, moves and deletes; rows can be dragged to
-//! reorder them or move them to another folder.
+//! reorder them or move them to another folder of the same collection.
 
 use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
-use apifast_app::{CollectionTree, ItemPath, Placement, RequestPath, TreeItem};
+use apifast_app::{ItemPath, Placement, RequestPath, TreeItem};
 use apifast_domain::Method;
 use eframe::egui::{
     self, Align2, Id, Rect, RichText, Sense, Shape, Stroke, TextStyle, TextWrapMode, UiBuilder,
@@ -12,15 +14,26 @@ use eframe::egui::{
 };
 
 use crate::atoms::MethodBadge;
+use crate::core::{CollectionEntry, TabKey};
 use crate::strings::Strings;
 use crate::theme;
 
 /// Width of the name field in the dialogs, in points.
 const DIALOG_FIELD_WIDTH: f32 = 280.0;
 
-/// What the user did in the tree.
+/// What the user did in the tree, about one collection.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TreeEvent {
+    /// Expand or collapse the collection.
+    Expand(bool),
+    /// Edit the collection's environments.
+    Environments,
+    /// Show the collection's key.
+    CollectionKey,
+    /// Unload the collection and close its tabs.
+    Close,
+    /// Remove the collection from the workspace.
+    Remove,
     /// The user clicked a request.
     RequestSelected(RequestPath),
     /// Create a request called `name` in `folder` (`""` for the root).
@@ -59,15 +72,26 @@ pub enum TreeEvent {
 /// those on screen are drawn, and the open dialog.
 #[derive(Debug, Default)]
 pub struct TreeView {
-    expanded: HashSet<String>,
+    /// Open folders: a collection's folder and the folder's path in it.
+    expanded: HashSet<(PathBuf, String)>,
     rows: Vec<Row>,
     /// The tree version the rows were built from.
     built_from: Option<u64>,
-    dialog: Option<Dialog>,
+    /// The open dialog, and the collection it is about.
+    dialog: Option<(PathBuf, Dialog)>,
+}
+
+/// What is dragged: an item of a collection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Dragged {
+    root: PathBuf,
+    item: ItemPath,
 }
 
 #[derive(Debug)]
 struct Row {
+    /// The folder of its collection.
+    root: PathBuf,
     depth: u16,
     item: ItemPath,
     /// The name shown, built once so frames do not format text.
@@ -80,6 +104,15 @@ struct Row {
 
 #[derive(Debug)]
 enum RowKind {
+    /// A collection of the workspace.
+    Collection {
+        open: bool,
+        loaded: bool,
+        /// Why it cannot be loaded.
+        error: Option<String>,
+        /// It shares secrets and this machine lacks its key.
+        needs_key: bool,
+    },
     Folder {
         open: bool,
     },
@@ -116,39 +149,47 @@ enum NameAction {
 
 /// What a row asks for in this frame.
 enum RowAction {
-    Toggle(String),
-    Event(TreeEvent),
-    Open(Dialog),
+    Toggle(PathBuf, String),
+    Event(PathBuf, TreeEvent),
+    Open(PathBuf, Dialog),
 }
 
 impl TreeView {
-    /// Draws `tree`. `version` changes whenever `tree` does, so the rows are
-    /// rebuilt only then. `selected` is highlighted.
+    /// Draws the `collections`. `version` changes whenever they do, so the
+    /// rows are rebuilt only then. `selected` is highlighted; the toolbar
+    /// creates in the `focused` collection. Returns what was done, and the
+    /// folder of the collection it is about.
     pub fn show(
         &mut self,
         ui: &mut egui::Ui,
-        tree: &CollectionTree,
+        collections: &[CollectionEntry],
         version: u64,
-        selected: Option<&RequestPath>,
+        (selected, focused): (Option<&TabKey>, Option<&Path>),
         strings: &Strings,
-    ) -> Option<TreeEvent> {
+    ) -> Option<(PathBuf, TreeEvent)> {
         if self.built_from != Some(version) {
-            self.rebuild(tree);
+            self.rebuild(collections);
             self.built_from = Some(version);
         }
         let mut action = None;
         ui.horizontal(|ui| {
-            if ui.small_button(strings.new_request).clicked() {
-                action = Some(RowAction::Open(name_dialog(
-                    NameAction::NewRequest(String::new()),
-                    "",
-                )));
-            }
-            if ui.small_button(strings.new_folder).clicked() {
-                action = Some(RowAction::Open(name_dialog(
-                    NameAction::NewFolder(String::new()),
-                    "",
-                )));
+            let new_request = ui.add_enabled(
+                focused.is_some(),
+                egui::Button::new(strings.new_request).small(),
+            );
+            let new_folder = ui.add_enabled(
+                focused.is_some(),
+                egui::Button::new(strings.new_folder).small(),
+            );
+            let dialog = if new_request.clicked() {
+                Some(NameAction::NewRequest(String::new()))
+            } else {
+                new_folder
+                    .clicked()
+                    .then(|| NameAction::NewFolder(String::new()))
+            };
+            if let (Some(dialog), Some(root)) = (dialog, focused) {
+                action = Some(RowAction::Open(root.to_path_buf(), name_dialog(dialog, "")));
             }
         });
         ui.add_space(theme::space::S);
@@ -167,46 +208,72 @@ impl TreeView {
 
         let mut event = None;
         match action {
-            Some(RowAction::Toggle(path)) => {
-                if !self.expanded.remove(&path) {
-                    self.expanded.insert(path);
+            Some(RowAction::Toggle(root, path)) => {
+                let key = (root, path);
+                if !self.expanded.remove(&key) {
+                    self.expanded.insert(key);
                 }
-                self.rebuild(tree);
+                self.rebuild(collections);
             }
-            Some(RowAction::Event(e)) => event = Some(e),
-            Some(RowAction::Open(dialog)) => self.dialog = Some(dialog),
+            Some(RowAction::Event(root, e)) => event = Some((root, e)),
+            Some(RowAction::Open(root, dialog)) => self.dialog = Some((root, dialog)),
             None => {}
         }
-        if let Some(dialog) = &mut self.dialog {
+        if let Some((root, dialog)) = &mut self.dialog {
             match show_dialog(ui, dialog, strings) {
                 DialogOutcome::Open => {}
                 DialogOutcome::Closed => self.dialog = None,
                 DialogOutcome::Done(e) => {
+                    event = Some((root.clone(), e));
                     self.dialog = None;
-                    event = Some(e);
                 }
             }
         }
         // Show what is created inside a closed folder.
-        if let Some(
+        if let Some((
+            root,
             TreeEvent::CreateRequest { folder, .. }
             | TreeEvent::CreateFolder { parent: folder, .. },
-        ) = &event
+        )) = &event
             && !folder.is_empty()
-            && self.expanded.insert(folder.clone())
+            && self.expanded.insert((root.clone(), folder.clone()))
         {
-            self.rebuild(tree);
+            self.rebuild(collections);
         }
         event
     }
 
-    fn rebuild(&mut self, tree: &CollectionTree) {
+    fn rebuild(&mut self, collections: &[CollectionEntry]) {
         self.rows.clear();
-        push_rows(&mut self.rows, &self.expanded, &tree.items, 0);
+        for collection in collections {
+            self.rows.push(Row {
+                root: collection.root.clone(),
+                depth: 0,
+                item: ItemPath::Folder(String::new()),
+                label: collection.name.clone(),
+                kind: RowKind::Collection {
+                    open: collection.expanded,
+                    loaded: collection.tree.is_some(),
+                    error: collection.error.clone(),
+                    needs_key: collection.needs_key,
+                },
+                previous: None,
+                next: None,
+            });
+            if let (true, Some(tree)) = (collection.expanded, &collection.tree) {
+                let place = (&collection.root, &self.expanded);
+                push_rows(&mut self.rows, place, &tree.items, 1);
+            }
+        }
     }
 }
 
-fn push_rows(rows: &mut Vec<Row>, expanded: &HashSet<String>, items: &[TreeItem], depth: u16) {
+fn push_rows(
+    rows: &mut Vec<Row>,
+    (root, expanded): (&PathBuf, &HashSet<(PathBuf, String)>),
+    items: &[TreeItem],
+    depth: u16,
+) {
     let paths: Vec<ItemPath> = items.iter().map(item_path).collect();
     for (index, item) in items.iter().enumerate() {
         let previous = index.checked_sub(1).map(|i| paths[i].clone());
@@ -215,7 +282,7 @@ fn push_rows(rows: &mut Vec<Row>, expanded: &HashSet<String>, items: &[TreeItem]
             TreeItem::Folder { path, folder, .. } => (
                 folder.name.clone(),
                 RowKind::Folder {
-                    open: expanded.contains(path),
+                    open: expanded.contains(&(root.clone(), path.clone())),
                 },
             ),
             TreeItem::Request { name, method, .. } => (
@@ -234,6 +301,7 @@ fn push_rows(rows: &mut Vec<Row>, expanded: &HashSet<String>, items: &[TreeItem]
         };
         let open = matches!(kind, RowKind::Folder { open: true });
         rows.push(Row {
+            root: root.clone(),
             depth,
             item: paths[index].clone(),
             label,
@@ -242,7 +310,7 @@ fn push_rows(rows: &mut Vec<Row>, expanded: &HashSet<String>, items: &[TreeItem]
             next,
         });
         if let (true, TreeItem::Folder { children, .. }) = (open, item) {
-            push_rows(rows, expanded, children, depth.saturating_add(1));
+            push_rows(rows, (root, expanded), children, depth.saturating_add(1));
         }
     }
 }
@@ -262,14 +330,16 @@ fn draw_row(
     ui: &mut egui::Ui,
     row: &Row,
     row_height: f32,
-    selected: Option<&RequestPath>,
+    selected: Option<&TabKey>,
     strings: &Strings,
 ) -> Option<RowAction> {
     let (rect, response) = ui.allocate_exact_size(
         vec2(ui.available_width(), row_height),
         Sense::click_and_drag(),
     );
-    let is_selected = matches!(&row.item, ItemPath::Request(p) if Some(p) == selected);
+    let is_selected = selected.is_some_and(|key| {
+        key.root == row.root && matches!(&row.item, ItemPath::Request(p) if *p == key.path)
+    });
     response.widget_info(|| {
         egui::WidgetInfo::selected(egui::Role::TreeItem, true, is_selected, &row.label)
     });
@@ -279,40 +349,67 @@ fn draw_row(
 
     let mut action = None;
     if response.clicked() {
+        let root = row.root.clone();
         action = match (&row.kind, &row.item) {
-            (RowKind::Folder { .. }, item) => Some(RowAction::Toggle(item.as_str().to_owned())),
-            (RowKind::Request { .. }, ItemPath::Request(path)) => {
-                Some(RowAction::Event(TreeEvent::RequestSelected(path.clone())))
+            (RowKind::Collection { open, .. }, _) => {
+                Some(RowAction::Event(root, TreeEvent::Expand(!open)))
             }
+            (RowKind::Folder { .. }, item) => {
+                Some(RowAction::Toggle(root, item.as_str().to_owned()))
+            }
+            (RowKind::Request { .. }, ItemPath::Request(path)) => Some(RowAction::Event(
+                root,
+                TreeEvent::RequestSelected(path.clone()),
+            )),
             _ => None,
         };
     }
 
-    if !matches!(row.kind, RowKind::Invalid { .. }) {
-        response.dnd_set_drag_payload(row.item.clone());
+    if !matches!(
+        row.kind,
+        RowKind::Invalid { .. } | RowKind::Collection { .. }
+    ) {
+        response.dnd_set_drag_payload(Dragged {
+            root: row.root.clone(),
+            item: row.item.clone(),
+        });
     }
     let pointer_y = ui.ctx().pointer_interact_pos().map(|p| p.y);
-    if let (Some(dragged), Some(y)) = (response.dnd_hover_payload::<ItemPath>(), pointer_y)
+    if let (Some(dragged), Some(y)) = (response.dnd_hover_payload::<Dragged>(), pointer_y)
         && let Some(placement) = drop_placement(row, &dragged, rect, y)
     {
         paint_drop(ui, rect, &placement);
     }
-    if let (Some(dragged), Some(y)) = (response.dnd_release_payload::<ItemPath>(), pointer_y)
+    if let (Some(dragged), Some(y)) = (response.dnd_release_payload::<Dragged>(), pointer_y)
         && let Some(placement) = drop_placement(row, &dragged, rect, y)
     {
-        action = Some(RowAction::Event(TreeEvent::Move {
-            item: (*dragged).clone(),
-            placement,
-        }));
+        action = Some(RowAction::Event(
+            row.root.clone(),
+            TreeEvent::Move {
+                item: dragged.item.clone(),
+                placement,
+            },
+        ));
     }
 
     response.context_menu(|ui| {
-        if let Some(a) = context_menu(ui, row, strings) {
+        let chosen = match &row.kind {
+            RowKind::Collection { loaded, .. } => collection_menu(ui, row, *loaded, strings),
+            _ => context_menu(ui, row, strings),
+        };
+        if let Some(a) = chosen {
             action = Some(a);
             ui.close();
         }
     });
     match &row.kind {
+        RowKind::Collection { error, .. } => {
+            let path = row.root.display().to_string();
+            match error {
+                Some(error) => response.on_hover_text(format!("{path}\n{error}")),
+                None => response.on_hover_text(path),
+            };
+        }
         RowKind::Other => {
             response.on_hover_text(strings.unsupported_kind);
         }
@@ -340,11 +437,14 @@ fn paint_row(ui: &mut egui::Ui, row: &Row, rect: Rect, selected: bool, hovered: 
     let mut x = rect.left() + theme::space::S + f32::from(row.depth) * theme::space::XL;
     let color = match row.kind {
         RowKind::Other => palette.text_muted,
-        RowKind::Invalid { .. } => palette.danger,
+        RowKind::Invalid { .. } | RowKind::Collection { error: Some(_), .. } => palette.danger,
+        RowKind::Collection {
+            needs_key: true, ..
+        } => palette.warning,
         _ => palette.text,
     };
     match &row.kind {
-        RowKind::Folder { open } => {
+        RowKind::Folder { open } | RowKind::Collection { open, .. } => {
             let size = ui.spacing().icon_width;
             let icon =
                 Rect::from_center_size(pos2(x + size / 2.0, rect.center().y), vec2(size, size));
@@ -365,8 +465,16 @@ fn paint_row(ui: &mut egui::Ui, row: &Row, rect: Rect, selected: bool, hovered: 
         RowKind::Other | RowKind::Invalid { .. } => {}
     }
     let width = (rect.right() - x - theme::space::S).max(0.0);
-    let galley = egui::WidgetText::from(RichText::new(row.label.as_str()).color(color))
-        .into_galley(ui, Some(TextWrapMode::Truncate), width, TextStyle::Body);
+    let mut text = RichText::new(row.label.as_str()).color(color);
+    if matches!(row.kind, RowKind::Collection { .. }) {
+        text = text.strong();
+    }
+    let galley = egui::WidgetText::from(text).into_galley(
+        ui,
+        Some(TextWrapMode::Truncate),
+        width,
+        TextStyle::Body,
+    );
     let pos = Align2::LEFT_CENTER
         .align_size_within_rect(
             galley.size(),
@@ -391,10 +499,16 @@ fn paint_arrow(ui: &egui::Ui, rect: Rect, open: bool, color: egui::Color32) {
 
 /// Where `dragged` goes if dropped at height `y` of this row, if it can go
 /// there at all.
-fn drop_placement(row: &Row, dragged: &ItemPath, rect: Rect, y: f32) -> Option<Placement> {
-    if row.item == *dragged
-        || (matches!(dragged, ItemPath::Folder(_)) && row.item.is_within(dragged))
-    {
+fn drop_placement(row: &Row, dragged: &Dragged, rect: Rect, y: f32) -> Option<Placement> {
+    let item = &dragged.item;
+    // Only inside its own collection.
+    if row.root != dragged.root {
+        return None;
+    }
+    if let RowKind::Collection { .. } = row.kind {
+        return Some(Placement::Inside(String::new()));
+    }
+    if row.item == *item || (matches!(item, ItemPath::Folder(_)) && row.item.is_within(item)) {
         return None;
     }
     let fraction = (y - rect.top()) / rect.height();
@@ -434,26 +548,26 @@ fn context_menu(ui: &mut egui::Ui, row: &Row, strings: &Strings) -> Option<RowAc
     if let RowKind::Folder { .. } = row.kind {
         let folder = row.item.as_str();
         if ui.button(strings.new_request).clicked() {
-            action = Some(RowAction::Open(name_dialog(
-                NameAction::NewRequest(folder.to_owned()),
-                "",
-            )));
+            action = Some(RowAction::Open(
+                row.root.clone(),
+                name_dialog(NameAction::NewRequest(folder.to_owned()), ""),
+            ));
         }
         if ui.button(strings.new_folder).clicked() {
-            action = Some(RowAction::Open(name_dialog(
-                NameAction::NewFolder(folder.to_owned()),
-                "",
-            )));
+            action = Some(RowAction::Open(
+                row.root.clone(),
+                name_dialog(NameAction::NewFolder(folder.to_owned()), ""),
+            ));
         }
         ui.separator();
     }
     if matches!(row.kind, RowKind::Folder { .. } | RowKind::Request { .. })
         && ui.button(strings.rename).clicked()
     {
-        action = Some(RowAction::Open(name_dialog(
-            NameAction::Rename(row.item.clone()),
-            &row.label,
-        )));
+        action = Some(RowAction::Open(
+            row.root.clone(),
+            name_dialog(NameAction::Rename(row.item.clone()), &row.label),
+        ));
     }
     if !matches!(row.kind, RowKind::Invalid { .. }) {
         let moves = [
@@ -465,19 +579,63 @@ fn context_menu(ui: &mut egui::Ui, row: &Row, strings: &Strings) -> Option<RowAc
                 .add_enabled(placement.is_some(), egui::Button::new(label))
                 .clicked();
             if let (true, Some(placement)) = (clicked, placement) {
-                action = Some(RowAction::Event(TreeEvent::Move {
-                    item: row.item.clone(),
-                    placement,
-                }));
+                action = Some(RowAction::Event(
+                    row.root.clone(),
+                    TreeEvent::Move {
+                        item: row.item.clone(),
+                        placement,
+                    },
+                ));
             }
         }
         ui.separator();
     }
     if ui.button(strings.delete).clicked() {
-        action = Some(RowAction::Open(Dialog::Delete {
-            item: row.item.clone(),
-            label: row.label.clone(),
-        }));
+        action = Some(RowAction::Open(
+            row.root.clone(),
+            Dialog::Delete {
+                item: row.item.clone(),
+                label: row.label.clone(),
+            },
+        ));
+    }
+    action
+}
+
+/// The menu of a collection's root row.
+fn collection_menu(
+    ui: &mut egui::Ui,
+    row: &Row,
+    loaded: bool,
+    strings: &Strings,
+) -> Option<RowAction> {
+    let root = || row.root.clone();
+    let mut action = None;
+    if loaded {
+        if ui.button(strings.new_request).clicked() {
+            let dialog = name_dialog(NameAction::NewRequest(String::new()), "");
+            action = Some(RowAction::Open(root(), dialog));
+        }
+        if ui.button(strings.new_folder).clicked() {
+            let dialog = name_dialog(NameAction::NewFolder(String::new()), "");
+            action = Some(RowAction::Open(root(), dialog));
+        }
+        ui.separator();
+    }
+    let events = [
+        (strings.environments, TreeEvent::Environments, true),
+        (strings.collection_key, TreeEvent::CollectionKey, true),
+        (strings.close_collection, TreeEvent::Close, loaded),
+        (strings.remove_collection, TreeEvent::Remove, true),
+    ];
+    for (label, event, shown) in events {
+        if shown && ui.button(label).clicked() {
+            action = Some(RowAction::Event(root(), event));
+        }
+    }
+    if ui.button(strings.copy_folder_path).clicked() {
+        ui.ctx().copy_text(row.root.display().to_string());
+        ui.close();
     }
     action
 }

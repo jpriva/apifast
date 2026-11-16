@@ -26,6 +26,9 @@ pub enum TabEvent {
 pub struct TabBar {
     /// A dirty tab the user asked to close: its path and name.
     confirming: Option<(TabKey, String)>,
+    /// The name of each collection, by folder: shown in a tab's tooltip,
+    /// and before its name when another tab has the same one.
+    pub names: Vec<(std::path::PathBuf, String)>,
 }
 
 impl TabBar {
@@ -43,9 +46,11 @@ impl TabBar {
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     for tab in tabs {
-                        if let Some(e) =
-                            self.tab(ui, tab, active.is_some_and(|key| tab.is(key)), strings)
-                        {
+                        let is_active = active.is_some_and(|key| tab.is(key));
+                        let clash = tabs.iter().any(|other| {
+                            other.root != tab.root && other.request().name == tab.request().name
+                        });
+                        if let Some(e) = self.tab(ui, tab, (is_active, clash), strings) {
                             event = Some(e);
                         }
                     }
@@ -72,19 +77,27 @@ impl TabBar {
         &mut self,
         ui: &mut egui::Ui,
         tab: &Tab,
-        active: bool,
+        (active, clash): (bool, bool),
         strings: &Strings,
     ) -> Option<TabEvent> {
         let mut event = None;
-        let name = tab.request().name.as_str();
+        let collection = (self.names.iter())
+            .find(|(root, _)| *root == tab.root)
+            .map(|(_, name)| name.as_str());
+        let name = match (clash, collection) {
+            (true, Some(collection)) => format!("{collection} / {}", tab.request().name),
+            _ => tab.request().name.clone(),
+        };
+        let hover = match collection {
+            Some(collection) => format!("{collection} / {}", tab.path.as_str()),
+            None => tab.path.as_str().to_owned(),
+        };
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = theme::space::XS;
             if tab.is_dirty() {
                 unsaved_dot(ui, strings);
             }
-            let response = ui
-                .selectable_label(active, name)
-                .on_hover_text(tab.path.as_str());
+            let response = ui.selectable_label(active, name).on_hover_text(hover);
             if response.clicked() {
                 event = Some(TabEvent::Activate(tab.key()));
             }

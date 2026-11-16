@@ -1,12 +1,12 @@
 //! The command palette: one search for actions, requests and environments.
 //! Fuzzy matching, recent picks first, each action's shortcut on the right.
 
-use apifast_app::RequestPath;
 use apifast_domain::Method;
 use eframe::egui::{self, Key, RichText};
 
 use crate::actions::Action;
 use crate::atoms::MethodBadge;
+use crate::core::TabKey;
 use crate::strings::Strings;
 use crate::theme;
 
@@ -22,8 +22,8 @@ const WIDTH: f32 = 560.0;
 pub enum PaletteItem {
     /// An action, with its shortcut written out.
     Action(Action, String, Option<String>),
-    /// A request: its path, name and method.
-    Request(RequestPath, String, Method),
+    /// A request: its tab, name and method.
+    Request(TabKey, String, Method),
     /// An environment to make active, or none.
     Environment(Option<String>, String),
 }
@@ -33,7 +33,7 @@ impl PaletteItem {
     fn text(&self) -> String {
         match self {
             Self::Action(_, label, _) | Self::Environment(_, label) => label.clone(),
-            Self::Request(path, name, _) => format!("{name} {}", path.as_str()),
+            Self::Request(key, name, _) => format!("{name} {}", key.path.as_str()),
         }
     }
 
@@ -41,7 +41,9 @@ impl PaletteItem {
     fn key(&self) -> String {
         match self {
             Self::Action(action, ..) => format!("action:{}", action.id()),
-            Self::Request(path, ..) => format!("request:{}", path.as_str()),
+            Self::Request(key, ..) => {
+                format!("request:{}:{}", key.root.display(), key.path.as_str())
+            }
             Self::Environment(name, _) => format!("environment:{}", name.as_deref().unwrap_or("")),
         }
     }
@@ -229,10 +231,10 @@ fn row(ui: &mut egui::Ui, item: &PaletteItem, selected: bool, strings: &Strings)
                 }
                 response
             }
-            PaletteItem::Request(path, name, method) => {
+            PaletteItem::Request(key, name, method) => {
                 ui.add(MethodBadge::new(method));
                 let response = ui.selectable_label(selected, name.as_str());
-                ui.label(RichText::new(path.as_str()).color(muted).small());
+                ui.label(RichText::new(key.path.as_str()).color(muted).small());
                 response
             }
             PaletteItem::Environment(_, label) => {

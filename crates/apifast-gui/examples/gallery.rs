@@ -10,7 +10,7 @@ use apifast_app::{
 use apifast_domain::{Body, Collection, Folder, Header, HttpRequest, Method};
 use apifast_gui::atoms::{VariableHint, VariableHints};
 use apifast_gui::body::BodyHandle;
-use apifast_gui::core::{Received, ResponseState, Tab, TabContext};
+use apifast_gui::core::{CollectionEntry, Received, ResponseState, Tab, TabContext, TabKey};
 use apifast_gui::molecules::EnvironmentSelector;
 use apifast_gui::organisms::{HistoryView, RequestPanel, ResponseView, TabBar, TreeView, UrlBar};
 use apifast_gui::strings::EN;
@@ -190,9 +190,15 @@ fn showcase(
     });
     section(ui, "TreeView", |ui| {
         ui.allocate_ui(egui::vec2(ui.available_width(), 160.0), |ui| {
-            let _ = state
-                .tree
-                .show(ui, tree, 0, Some(&RequestPath::new("login.yml")), &EN);
+            let collections = [CollectionEntry::loaded("/c", tree.clone())];
+            let selected = TabKey::new("/c", RequestPath::new("login.yml"));
+            let _ = state.tree.show(
+                ui,
+                &collections,
+                0,
+                (Some(&selected), Some(std::path::Path::new("/c"))),
+                &EN,
+            );
         });
     });
     section(ui, "HistoryView", |ui| {

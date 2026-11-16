@@ -67,7 +67,7 @@ fn wait_for(harness: &mut Harness<'_, App>, label: &str) {
     let start = Instant::now();
     loop {
         harness.step();
-        if harness.query_by_label(label).is_some() {
+        if harness.query_all_by_label(label).next().is_some() {
             return;
         }
         assert!(
@@ -402,5 +402,84 @@ fn the_query_table_and_the_url_follow_each_other() {
             .value()
             .as_deref(),
         Some("{{host}}/health?page=2&q")
+    );
+}
+
+#[test]
+fn two_collections_and_a_second_workspace() {
+    let port = server();
+    let (shop, billing) = (collection(port), collection(port));
+    std::fs::write(
+        billing.path().join("opencollection.yml"),
+        "opencollection: 1.0.0\ninfo:\n  name: Billing\n",
+    )
+    .unwrap();
+    let data = tempfile::tempdir().unwrap();
+    let mut harness = open_app(shop.path(), data.path());
+    open_folder(&mut harness, billing.path());
+    wait_for(&mut harness, "Billing");
+
+    // Both collections are roots; each request opens in its own tab.
+    harness.get_by_role_and_label(Role::TreeItem, "Shop API");
+    harness.get_by_role_and_label(Role::TreeItem, "Billing");
+    // No tab yet: every "Health" is a row, one per collection.
+    let healths: Vec<_> = harness
+        .get_all_by_label("Health")
+        .map(|n| n.rect().center())
+        .collect();
+    assert_eq!(healths.len(), 2);
+    for center in healths {
+        harness.input_mut().events.push(egui::Event::PointerButton {
+            pos: center,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: egui::Modifiers::NONE,
+        });
+        harness.input_mut().events.push(egui::Event::PointerButton {
+            pos: center,
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: egui::Modifiers::NONE,
+        });
+        harness.step();
+        std::thread::sleep(Duration::from_millis(50));
+        harness.step();
+    }
+    // Two tabs named alike: each shows its collection.
+    wait_for(&mut harness, "Shop API / Health");
+    wait_for(&mut harness, "Billing / Health");
+
+    // A second workspace, from the selector.
+    harness.get_by_label(EN.workspace).click();
+    harness.run();
+    harness.get_by_label(EN.new_workspace).click();
+    wait_for(&mut harness, EN.new_workspace.trim_end_matches('…'));
+    type_into_focus(&mut harness, "Team");
+    harness.step();
+    harness.get_by_label(EN.create).click();
+    let start = Instant::now();
+    while harness.query_all_by_label("Shop API").next().is_some() {
+        harness.step();
+        assert!(
+            start.elapsed() < Duration::from_secs(10),
+            "still on the first workspace"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let snapshot = harness.state().core().snapshot();
+    let workspace = snapshot.workspace.as_ref().unwrap();
+    assert_eq!(workspace.name, "Team");
+    // Next to the first one, in the data directory here.
+    assert_eq!(
+        workspace.folder,
+        data.path().canonicalize().unwrap().join("team")
+    );
+    assert_eq!(snapshot.workspaces.len(), 2);
+    // Empty: how to start, in the sidebar and in the middle.
+    assert!(
+        harness
+            .query_all_by_label(EN.no_collection)
+            .next()
+            .is_some()
     );
 }

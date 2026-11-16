@@ -49,14 +49,13 @@ Architecture decisions live in [docs/adr/](docs/adr/).
 
 ## Usage
 
-The desktop app starts in its main view; collections are created and opened from inside it (sidebar, command palette or `Ctrl+O`). A collection folder can also be given:
+The desktop app starts in its main view, in the last workspace used: a Bruno-compatible folder with a `workspace.yml` that groups collections, all shown at once in the sidebar. Collections and workspaces are created, opened and switched from inside it (sidebar, command palette or `Ctrl+O`). The first time, "My workspace" is made in the data directory. A folder can also be given:
 
 ```
-apifast-gui
-apifast-gui path/to/collection
+apifast-gui                          # the last workspace
+apifast-gui path/to/workspace        # a folder with workspace.yml
+apifast-gui path/to/collection       # added to the active workspace
 ```
-
-Workspaces with several collections open at once are in progress ([roadmap](docs/12-roadmap.md)).
 
 From the command line:
 

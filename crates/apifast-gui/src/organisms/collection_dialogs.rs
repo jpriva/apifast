@@ -1,5 +1,5 @@
-//! Creating and opening collections: the system's folder picker and the
-//! "New collection" dialog.
+//! Creating and opening collections and workspaces: the system's folder
+//! picker and the dialogs that ask for a name and a folder.
 
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
@@ -24,6 +24,17 @@ pub enum CollectionRequest {
         /// Its name.
         name: String,
     },
+    /// Switch to the workspace in this folder.
+    OpenWorkspace(PathBuf),
+    /// Create a workspace named `name` in `folder`, which is created.
+    CreateWorkspace {
+        /// Its folder.
+        folder: PathBuf,
+        /// Its name.
+        name: String,
+    },
+    /// Rename the active workspace.
+    RenameWorkspace(String),
 }
 
 /// Which picker is open.
@@ -31,13 +42,28 @@ pub enum CollectionRequest {
 enum Picking {
     /// A collection to open.
     Collection,
-    /// The folder a new collection goes in.
+    /// The folder a new collection or workspace goes in.
     Parent,
+    /// A workspace to open.
+    Workspace,
+}
+
+/// What the dialog asks a name for.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum Naming {
+    /// A new collection, in a folder.
+    #[default]
+    Collection,
+    /// A new workspace, in a folder.
+    Workspace,
+    /// The active workspace, renamed.
+    Rename,
 }
 
 /// The "New collection" dialog's fields.
 #[derive(Debug, Default)]
 struct NewCollection {
+    naming: Naming,
     name: String,
     parent: String,
     /// Whether the name took the focus, which it does once.
@@ -80,9 +106,33 @@ impl CollectionDialogs {
         self.wanted = Some(Picking::Collection);
     }
 
+    /// Opens the system's picker to choose a workspace.
+    pub fn open_workspace(&mut self) {
+        self.wanted = Some(Picking::Workspace);
+    }
+
+    /// Opens the "New workspace" dialog, its folder set to `parent`.
+    pub fn new_workspace(&mut self, parent: &Path) {
+        self.new_collection(parent);
+        if let Some(dialog) = &mut self.creating {
+            dialog.naming = Naming::Workspace;
+        }
+    }
+
+    /// Opens the dialog that renames the active workspace, now `name`.
+    pub fn rename_workspace(&mut self, name: &str) {
+        self.creating = Some(NewCollection {
+            naming: Naming::Rename,
+            name: name.to_owned(),
+            parent: String::new(),
+            focused: false,
+        });
+    }
+
     /// Opens the "New collection" dialog, its folder set to `parent`.
     pub fn new_collection(&mut self, parent: &Path) {
         self.creating = Some(NewCollection {
+            naming: Naming::Collection,
             name: String::new(),
             parent: parent.display().to_string(),
             focused: false,
@@ -103,6 +153,7 @@ impl CollectionDialogs {
             let title = match kind {
                 Picking::Collection => strings.pick_collection,
                 Picking::Parent => strings.pick_parent,
+                Picking::Workspace => strings.pick_workspace,
             };
             self.picking = Some((kind, pick_folder(ctx.clone(), title)));
         }
@@ -110,6 +161,7 @@ impl CollectionDialogs {
             match (kind, &mut self.creating) {
                 (Picking::Parent, Some(dialog)) => dialog.parent = folder.display().to_string(),
                 (Picking::Collection, _) => return Some(CollectionRequest::Open(folder)),
+                (Picking::Workspace, _) => return Some(CollectionRequest::OpenWorkspace(folder)),
                 (Picking::Parent, None) => {}
             }
         }
@@ -118,7 +170,12 @@ impl CollectionDialogs {
         let mut done = None;
         let modal = egui::Modal::new(egui::Id::unique("new-collection")).show(ctx, |ui| {
             ui.set_max_width(FIELD_WIDTH + 120.0);
-            ui.heading(strings.new_collection_title);
+            let naming = dialog.naming;
+            ui.heading(match naming {
+                Naming::Collection => strings.new_collection_title,
+                Naming::Workspace => strings.new_workspace.trim_end_matches('…'),
+                Naming::Rename => strings.rename_workspace.trim_end_matches('…'),
+            });
             ui.add_space(theme::space::M);
             ui.label(strings.collection_name);
             let name = ui
@@ -135,16 +192,21 @@ impl CollectionDialogs {
                 name.request_focus();
             }
             let entered = name.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            ui.add_space(theme::space::S);
-            ui.label(strings.collection_parent);
-            ui.horizontal(|ui| {
-                ui.add(egui::TextEdit::singleline(&mut dialog.parent).desired_width(FIELD_WIDTH))
-                    .accessible_name(strings.collection_parent);
-                browse = ui.button(strings.browse).clicked();
-            });
-            let ready = !dialog.name.trim().is_empty() && !dialog.parent.trim().is_empty();
+            let renaming = naming == Naming::Rename;
+            if !renaming {
+                ui.add_space(theme::space::S);
+                ui.label(strings.collection_parent);
+                ui.horizontal(|ui| {
+                    let field = egui::TextEdit::singleline(&mut dialog.parent);
+                    ui.add(field.desired_width(FIELD_WIDTH))
+                        .accessible_name(strings.collection_parent);
+                    browse = ui.button(strings.browse).clicked();
+                });
+            }
+            let ready =
+                !dialog.name.trim().is_empty() && (renaming || !dialog.parent.trim().is_empty());
             let folder = PathBuf::from(dialog.parent.trim()).join(folder_name(&dialog.name));
-            if ready {
+            if ready && !renaming {
                 ui.label(
                     egui::RichText::new(format!(
                         "{} {}",
@@ -157,11 +219,18 @@ impl CollectionDialogs {
             }
             ui.add_space(theme::space::M);
             ui.horizontal(|ui| {
-                let create = ui.add_enabled(ready, egui::Button::new(strings.create));
+                let label = if renaming {
+                    strings.rename
+                } else {
+                    strings.create
+                };
+                let create = ui.add_enabled(ready, egui::Button::new(label));
                 if ready && (create.clicked() || entered) {
-                    done = Some(Some(CollectionRequest::Create {
-                        folder: folder.clone(),
-                        name: dialog.name.trim().to_owned(),
+                    let (folder, name) = (folder.clone(), dialog.name.trim().to_owned());
+                    done = Some(Some(match naming {
+                        Naming::Collection => CollectionRequest::Create { folder, name },
+                        Naming::Workspace => CollectionRequest::CreateWorkspace { folder, name },
+                        Naming::Rename => CollectionRequest::RenameWorkspace(name),
                     }));
                 }
                 if ui.button(strings.cancel).clicked() {

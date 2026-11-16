@@ -39,17 +39,22 @@ fn tab(path: &str, name: &str) -> Tab {
 }
 
 fn snapshot() -> Snapshot {
+    let tree = CollectionTree {
+        collection: Collection::new("C"),
+        items: vec![
+            request("health.yml", "Health"),
+            request("users/list.yml", "List users"),
+            request("users/create.yml", "Create user"),
+        ],
+    };
     Snapshot {
+        collections: vec![apifast_gui::core::CollectionEntry::loaded(
+            "/c",
+            tree.clone(),
+        )],
         collection: Some(CollectionView {
             root: "/c".into(),
-            tree: std::sync::Arc::new(CollectionTree {
-                collection: Collection::new("C"),
-                items: vec![
-                    request("health.yml", "Health"),
-                    request("users/list.yml", "List users"),
-                    request("users/create.yml", "Create user"),
-                ],
-            }),
+            tree: std::sync::Arc::new(tree),
         }),
         environments: vec!["local".into(), "prod".into()],
         tabs: vec![

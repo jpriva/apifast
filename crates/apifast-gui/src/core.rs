@@ -413,6 +413,20 @@ pub struct CollectionEntry {
     pub needs_key: bool,
 }
 
+impl CollectionEntry {
+    /// A loaded and expanded collection at `root`, named after its tree.
+    pub fn loaded(root: impl Into<PathBuf>, tree: CollectionTree) -> Self {
+        Self {
+            root: root.into(),
+            name: tree.collection.name.clone(),
+            expanded: true,
+            tree: Some(Arc::new(tree)),
+            error: None,
+            needs_key: false,
+        }
+    }
+}
+
 /// A loaded collection.
 #[derive(Debug, Clone)]
 pub struct CollectionView {
