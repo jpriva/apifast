@@ -5,6 +5,7 @@
 //! by [`layout`] and filled with data by [`screens`]. [`app`] ties the
 //! screens to the [`core`].
 
+pub mod actions;
 pub mod app;
 pub mod atoms;
 pub mod body;

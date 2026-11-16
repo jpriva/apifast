@@ -10,23 +10,27 @@ const SIDEBAR_WIDTH: f32 = 260.0;
 const SIDEBAR_MIN_WIDTH: f32 = 180.0;
 
 /// The main window: a top bar across the window, a resizable sidebar on the
-/// left and the content in the rest. Returns what each part returns.
-pub fn workbench<T, S, C>(
+/// left (when `sidebar` is given; hidden otherwise) and the content in the
+/// rest. Returns what each part returns.
+pub fn workbench<T, S: Default, C>(
     ui: &mut egui::Ui,
     top: impl FnOnce(&mut egui::Ui) -> T,
-    sidebar: impl FnOnce(&mut egui::Ui) -> S,
+    sidebar: Option<impl FnOnce(&mut egui::Ui) -> S>,
     content: impl FnOnce(&mut egui::Ui) -> C,
 ) -> (T, S, C) {
     let top = egui::Panel::top("top-bar")
         .frame(egui::Frame::side_top_panel(ui.style()).inner_margin(theme::space::M))
         .show(ui, top)
         .inner;
-    let sidebar = egui::Panel::left("sidebar")
-        .resizable(true)
-        .default_size(SIDEBAR_WIDTH)
-        .min_size(SIDEBAR_MIN_WIDTH)
-        .show(ui, sidebar)
-        .inner;
+    // Hidden, it gives what it gives when there is nothing to report.
+    let sidebar = sidebar.map_or_else(S::default, |sidebar| {
+        egui::Panel::left("sidebar")
+            .resizable(true)
+            .default_size(SIDEBAR_WIDTH)
+            .min_size(SIDEBAR_MIN_WIDTH)
+            .show(ui, sidebar)
+            .inner
+    });
     let content = egui::CentralPanel::default().show(ui, content).inner;
     (top, sidebar, content)
 }

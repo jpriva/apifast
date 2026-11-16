@@ -39,7 +39,10 @@ fn harness(tab: RequestTab, request: HttpRequest) -> Harness<'static, State> {
     };
     let state = State {
         request,
-        panel: RequestPanel { tab },
+        panel: RequestPanel {
+            tab,
+            ..RequestPanel::default()
+        },
         context,
         changes: Vec::new(),
     };

@@ -26,6 +26,7 @@ fn harness(body: Body) -> Harness<'static, State> {
         request,
         panel: RequestPanel {
             tab: RequestTab::Body,
+            ..RequestPanel::default()
         },
     };
     let context = TabContext::default();

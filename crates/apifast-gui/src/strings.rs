@@ -92,6 +92,66 @@ pub struct Strings {
     pub keep_mine: &'static str,
     /// Drops the draft for the file changed on disk.
     pub load_from_disk: &'static str,
+    /// Action: send.
+    pub action_send: &'static str,
+    /// Action: cancel the send.
+    pub action_cancel: &'static str,
+    /// Action: save.
+    pub action_save: &'static str,
+    /// Action: save every tab.
+    pub action_save_all: &'static str,
+    /// Action: command palette.
+    pub action_palette: &'static str,
+    /// Action: open a request by name.
+    pub action_quick_open: &'static str,
+    /// Action: new request.
+    pub action_new_request: &'static str,
+    /// Action: close the tab.
+    pub action_close_tab: &'static str,
+    /// Action: reopen the tab closed last.
+    pub action_reopen_tab: &'static str,
+    /// Action: next tab.
+    pub action_next_tab: &'static str,
+    /// Action: previous tab.
+    pub action_previous_tab: &'static str,
+    /// Action: go to tab, before its number.
+    pub action_go_to_tab: &'static str,
+    /// Action: put the cursor in the URL.
+    pub action_focus_url: &'static str,
+    /// Action: environment editor.
+    pub action_environments: &'static str,
+    /// Action: show or hide the sidebar.
+    pub action_toggle_sidebar: &'static str,
+    /// Action: show the history.
+    pub action_show_history: &'static str,
+    /// Action: format the body.
+    pub action_format_body: &'static str,
+    /// Action: edit keyboard shortcuts.
+    pub action_shortcuts: &'static str,
+    /// Placeholder of the command palette.
+    pub palette_hint: &'static str,
+    /// Placeholder of the palette on requests only.
+    pub palette_requests_hint: &'static str,
+    /// Shown when nothing matches in the palette.
+    pub palette_nothing: &'static str,
+    /// Before an environment's name in the palette.
+    pub palette_environment: &'static str,
+    /// Title of the shortcut editor.
+    pub shortcuts_title: &'static str,
+    /// Button that waits for a new shortcut.
+    pub shortcut_change: &'static str,
+    /// Shown while waiting for the new shortcut.
+    pub shortcut_press: &'static str,
+    /// Button that puts back the default.
+    pub shortcut_reset: &'static str,
+    /// Shown for an action without a shortcut.
+    pub shortcut_none: &'static str,
+    /// Tells a shortcut was taken from an action, before its name.
+    pub shortcut_moved: &'static str,
+    /// Before the entries of keymap.yml that were not understood.
+    pub keymap_problems: &'static str,
+    /// Name of a request created from the keyboard.
+    pub new_request_name: &'static str,
     /// Sidebar tab with the collection's tree.
     pub sidebar_collection: &'static str,
     /// Sidebar tab with the history of sends.
@@ -351,6 +411,36 @@ pub const EN: Strings = Strings {
     changed_on_disk: "This request changed on disk while you were editing it.",
     keep_mine: "Keep my changes",
     load_from_disk: "Load from disk",
+    action_send: "Send request",
+    action_cancel: "Cancel send",
+    action_save: "Save",
+    action_save_all: "Save all",
+    action_palette: "Command palette",
+    action_quick_open: "Go to request",
+    action_new_request: "New request",
+    action_close_tab: "Close tab",
+    action_reopen_tab: "Reopen closed tab",
+    action_next_tab: "Next tab",
+    action_previous_tab: "Previous tab",
+    action_go_to_tab: "Go to tab",
+    action_focus_url: "Focus URL",
+    action_environments: "Edit environments",
+    action_toggle_sidebar: "Toggle sidebar",
+    action_show_history: "Show history",
+    action_format_body: "Format body",
+    action_shortcuts: "Keyboard shortcuts",
+    palette_hint: "Type a command, request or environment",
+    palette_requests_hint: "Type a request name or path",
+    palette_nothing: "Nothing matches.",
+    palette_environment: "Environment:",
+    shortcuts_title: "Keyboard shortcuts",
+    shortcut_change: "Change",
+    shortcut_press: "Press the new shortcut, or Escape",
+    shortcut_reset: "Reset",
+    shortcut_none: "none",
+    shortcut_moved: "Taken from",
+    keymap_problems: "Some entries of keymap.yml were ignored:",
+    new_request_name: "New request",
     sidebar_collection: "Collection",
     sidebar_history: "History",
     filter: "Filter",

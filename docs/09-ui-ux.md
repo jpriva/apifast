@@ -150,8 +150,18 @@ Búsqueda difusa, resultados recientes primero y el atajo de cada acción a la d
 | Duplicar / renombrar | `Ctrl+D` / `F2` |
 | Formatear body | `Alt+Shift+F` |
 | Zoom | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` |
+| Mostrar historial | (sin atajo) |
+| Editor de atajos | (sin atajo; desde la paleta) |
 
-En macOS, `Ctrl` se sustituye por `Cmd`. Todos los atajos se pueden reasignar; se guardan en `keymap.yml`.
+En macOS, `Ctrl` se sustituye por `Cmd`. Todos los atajos se pueden reasignar desde el editor de atajos; se guardan en `keymap.yml`, solo los que cambian:
+
+```yaml
+send: Ctrl+R
+palette: [Ctrl+K, Ctrl+Shift+P]
+reopen_tab: []        # sin atajo
+```
+
+Mientras la paleta está abierta o el editor espera una combinación, los demás atajos no actúan. `Esc` solo cancela un envío cuando hay uno en curso; si no, queda libre para cerrar diálogos.
 
 ## Estados y mensajes
 

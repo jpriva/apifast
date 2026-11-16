@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use apifast_gui::app::App;
 use apifast_gui::core::{Command, Core};
+use apifast_storage_fs::FsKeymapStore;
 use eframe::egui;
 
 fn main() -> eframe::Result {
@@ -27,7 +28,9 @@ fn main() -> eframe::Result {
             if let Some(folder) = folder {
                 core.send(Command::OpenCollection(folder));
             }
-            Ok(Box::new(App::new(core)))
+            let dirs = apifast_history::dirs::config_dir();
+            let keymap = FsKeymapStore::new(apifast_history::dirs::keymap_file_in(&dirs));
+            Ok(Box::new(App::new(core).with_keymap(keymap)))
         }),
     )
 }

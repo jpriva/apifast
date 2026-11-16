@@ -7,6 +7,7 @@ use apifast_domain::{
 };
 use eframe::egui::{self, RichText};
 
+use crate::actions::Action;
 use crate::atoms::{CodeEditor, TemplateField, TemplateFieldTexts, VariableHints};
 use crate::code::{self, HIGHLIGHT_LIMIT, Language};
 use crate::core::TabContext;
@@ -48,6 +49,11 @@ pub enum RequestChange {
 pub struct RequestPanel {
     /// The open tab.
     pub tab: RequestTab,
+    /// The shortcuts that format the body while it is edited; the default
+    /// (`Alt+Shift+F`) when `None`.
+    pub format_shortcuts: Option<Vec<egui::KeyboardShortcut>>,
+    /// Format the body on the next frame, as if its button was pressed.
+    pub format_now: bool,
 }
 
 impl RequestPanel {
@@ -84,7 +90,11 @@ impl RequestPanel {
                     headers(ui, request, context, hints, strings).then_some(RequestChange::Other)
                 }
                 RequestTab::Body => {
-                    body(ui, &mut request.body, hints, strings).then_some(RequestChange::Other)
+                    let shortcuts = (self.format_shortcuts.clone())
+                        .unwrap_or_else(|| Action::FormatBody.defaults());
+                    let now = std::mem::take(&mut self.format_now);
+                    body(ui, &mut request.body, (&shortcuts, now), hints, strings)
+                        .then_some(RequestChange::Other)
                 }
                 RequestTab::Auth => auth(ui, &mut request.auth, context, hints, strings)
                     .then_some(RequestChange::Other),
@@ -270,7 +280,13 @@ impl BodyKind {
     }
 }
 
-fn body(ui: &mut egui::Ui, body: &mut Body, hints: &VariableHints, strings: &Strings) -> bool {
+fn body(
+    ui: &mut egui::Ui,
+    body: &mut Body,
+    (shortcuts, now): (&[egui::KeyboardShortcut], bool),
+    hints: &VariableHints,
+    strings: &Strings,
+) -> bool {
     let current = BodyKind::of(body);
     let editor = ui.make_persistent_id("body-text");
     let formats = Language::of(body).is_some_and(Language::formats);
@@ -302,12 +318,12 @@ fn body(ui: &mut egui::Ui, body: &mut Body, hints: &VariableHints, strings: &Str
                 .clicked();
         }
     });
-    // Alt+Shift+F while the editor has the focus. Taken before the editor
-    // runs, so the key does not also type a letter.
+    format |= formats && now;
+    // The shortcut (Alt+Shift+F) while the editor has the focus. Taken
+    // before the editor runs, so the key does not also type a letter.
     if formats && ui.memory(|m| m.has_focus(editor)) {
         format |= ui.input_mut(|i| {
-            let pressed =
-                i.consume_key(egui::Modifiers::ALT | egui::Modifiers::SHIFT, egui::Key::F);
+            let pressed = shortcuts.iter().any(|s| i.consume_shortcut(s));
             if pressed {
                 i.events.retain(|e| !matches!(e, egui::Event::Text(_)));
             }

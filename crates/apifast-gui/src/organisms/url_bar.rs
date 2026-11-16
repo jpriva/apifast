@@ -39,6 +39,7 @@ pub struct UrlBar<'a> {
     hints: &'a VariableHints,
     sending: bool,
     strings: &'a Strings,
+    focus: bool,
 }
 
 impl<'a> UrlBar<'a> {
@@ -57,7 +58,15 @@ impl<'a> UrlBar<'a> {
             hints,
             sending,
             strings,
+            focus: false,
         }
+    }
+
+    /// Puts the cursor in the URL field.
+    #[must_use]
+    pub fn focus(mut self, focus: bool) -> Self {
+        self.focus = focus;
+        self
     }
 
     /// Draws the bar.
@@ -68,6 +77,7 @@ impl<'a> UrlBar<'a> {
             hints,
             sending,
             strings,
+            focus,
         } = self;
         let mut event = None;
         ui.horizontal(|ui| {
@@ -92,6 +102,9 @@ impl<'a> UrlBar<'a> {
                     .accessible_name(strings.url)
                     .desired_width(ui.available_width())
                     .show(ui);
+                if focus {
+                    field.request_focus();
+                }
                 if field.changed() {
                     event = Some(UrlBarEvent::Edited);
                 }

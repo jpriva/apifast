@@ -12,6 +12,7 @@
 
 mod diff;
 mod fs;
+mod keymap;
 mod read;
 mod session;
 mod write;
@@ -28,6 +29,7 @@ use apifast_app::{
 use apifast_domain::{Collection, CollectionId, Environment, Folder, HttpRequest};
 use oneyaml::Value;
 
+pub use keymap::FsKeymapStore;
 pub use session::FsSessionStore;
 
 const COLLECTION_FILE: &str = "opencollection.yml";

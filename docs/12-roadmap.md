@@ -127,7 +127,11 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
     - si no tiene borrador, toma lo nuevo;
     - si tiene borrador, mantiene el borrador en pantalla y ofrece "Keep my changes" o "Load from disk";
     - si el archivo se borró, se cierra si estaba limpia, y con borrador se queda (guardar lo vuelve a escribir).
-- [ ] Paleta de comandos y atajos reasignables.
+- [x] Paleta de comandos y atajos reasignables.
+  - Todas las acciones están en un registro único (`actions.rs`), con su nombre estable para `keymap.yml` y sus atajos por defecto. Funcionan los de la tabla de `docs/09-ui-ux.md` salvo Duplicar, Renombrar, Filtrar barra lateral y Cambiar disposición, que esperan a sus funciones; el zoom lo da egui.
+  - `Ctrl+K` abre la paleta: acciones con su atajo, requests y entornos, con búsqueda difusa y lo último elegido primero. `Ctrl+P` busca solo requests.
+  - El editor de atajos (desde la paleta, "Keyboard shortcuts") cambia uno pulsando la combinación nueva, avisa si se la quita a otra acción y permite restablecer el predeterminado.
+  - `~/.config/apifast/keymap.yml` guarda solo lo que difiere de lo predeterminado; las entradas que no se entienden se ignoran y se avisa en pantalla.
 - [ ] Temas claro y oscuro.
 - [ ] Ajustes de la aplicación.
 

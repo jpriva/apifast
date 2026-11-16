@@ -3,28 +3,26 @@
 
 use std::sync::Arc;
 
-use apifast_app::RequestPath;
+use apifast_app::{RequestPath, TreeItem};
 use apifast_domain::{HttpRequest, sync_params_from_url, sync_url_from_params};
-use eframe::egui::{self, Key, KeyboardShortcut, Modifiers, RichText};
+use eframe::egui::{self, RichText};
+
+use crate::actions::{ALL, Action, Keymap};
 
 use crate::atoms::{ColorSwatch, HintsCache, VariableHint, VariableHints};
 use crate::core::{Command, ResponseState, Snapshot, Tab, TabContext};
 use crate::layout;
 use crate::molecules::EnvironmentSelector;
 use crate::organisms::{
-    EnvironmentEditor, EnvironmentEvent, HistoryView, RequestChange, RequestPanel, ResponseView,
-    TabBar, TabEvent, TreeEvent, TreeView, UrlBar, UrlBarEvent,
+    CommandPalette, EnvironmentEditor, EnvironmentEvent, HistoryView, PaletteItem, PaletteMode,
+    RequestChange, RequestPanel, ResponseView, ShortcutEditor, TabBar, TabEvent, TreeEvent,
+    TreeView, UrlBar, UrlBarEvent,
 };
 use crate::strings::Strings;
 use crate::theme;
 
-const SEND: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Enter);
-const CANCEL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::Escape);
-const SAVE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::S);
-const SAVE_ALL: KeyboardShortcut =
-    KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::S);
-const ENVIRONMENTS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::E);
-const CLOSE_TAB: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::W);
+/// Closed tabs remembered, to open again.
+const CLOSED_TABS: usize = 20;
 
 /// Default height of the request panel, above the response, in points.
 const REQUEST_PANEL_HEIGHT: f32 = 280.0;
@@ -55,6 +53,23 @@ pub struct MainScreen {
     response: ResponseView,
     editor: Option<Editor>,
     hints: HintsCache,
+    /// The shortcuts of every action.
+    pub keymap: Keymap,
+    /// Whether the keymap changed since [`Self::take_keymap_change`].
+    keymap_changed: bool,
+    /// Something to tell about the keymap, such as entries of
+    /// `keymap.yml` that were ignored.
+    pub keymap_notice: Option<String>,
+    /// The command palette.
+    pub palette: CommandPalette,
+    /// The editor of shortcuts.
+    pub shortcuts: ShortcutEditor,
+    /// Whether the sidebar is hidden.
+    pub sidebar_hidden: bool,
+    /// Tabs closed, most recent last, to open again.
+    closed: Vec<RequestPath>,
+    /// Put the cursor in the URL on the next frame.
+    focus_url: bool,
 }
 
 /// The interface's own copy of the active tab's contents. Edits change it
@@ -89,6 +104,9 @@ impl MainScreen {
         let hints = self.follow(active, strings);
         let sending = active.is_some_and(|tab| tab.response == ResponseState::Sending);
         let selected = snapshot.active.as_ref();
+        self.request.format_shortcuts = Some(self.keymap.shortcuts(Action::FormatBody));
+        let focus_url = std::mem::take(&mut self.focus_url);
+        let notice = self.keymap_notice.as_deref();
         let (sidebar, history) = (&mut self.sidebar, &mut self.history);
         let (tree, tabs, panels, editor) = (
             &mut self.tree,
@@ -105,31 +123,31 @@ impl MainScreen {
         ) = layout::workbench(
             ui,
             |ui| top_bar(ui, &collection.tree.collection.name, snapshot, strings),
-            |ui| sidebar_area(ui, (sidebar, tree, history), snapshot, selected, strings),
+            (!self.sidebar_hidden).then_some(|ui: &mut egui::Ui| {
+                sidebar_area(ui, (sidebar, tree, history), snapshot, selected, strings)
+            }),
             |ui| {
                 let tab_event = tabs.show(ui, &snapshot.tabs, selected, strings);
                 ui.separator();
-                if let Some(error) = &snapshot.error {
-                    ui.label(RichText::new(error.as_str()).color(theme::palette(ui).danger));
-                    ui.add_space(theme::space::M);
+                let palette = theme::palette(ui);
+                for (message, color) in [
+                    (snapshot.error.as_deref(), palette.danger),
+                    (notice, palette.warning),
+                ] {
+                    if let Some(message) = message {
+                        ui.label(RichText::new(message).color(color));
+                        ui.add_space(theme::space::M);
+                    }
                 }
                 let (Some(tab), Some(editor)) = (active, editor.as_mut()) else {
-                    let muted = theme::palette(ui).text_muted;
-                    ui.label(RichText::new(strings.no_request).color(muted));
+                    ui.label(RichText::new(strings.no_request).color(palette.text_muted));
                     return (tab_event, (None, false));
                 };
                 if tab.conflict {
                     resolve = conflict_banner(ui, strings);
                 }
-                let edits = editor_area(
-                    ui,
-                    tab,
-                    &mut editor.request,
-                    panels,
-                    &hints,
-                    sending,
-                    strings,
-                );
+                let area = (panels, &*hints, sending, focus_url);
+                let edits = editor_area(ui, tab, &mut editor.request, area, strings);
                 (tab_event, edits)
             },
         );
@@ -141,17 +159,10 @@ impl MainScreen {
                 keep_draft,
             });
         }
-        if edit_environments || ui.input_mut(|i| i.consume_shortcut(&ENVIRONMENTS)) {
+        if edit_environments {
             self.environments.open = !self.environments.open;
         }
-        let context = active.map(|tab| tab.context.as_ref());
-        let files = &snapshot.environment_files;
-        if let Some(event) = self
-            .environments
-            .show(ui.ctx(), files, context, &hints, strings)
-        {
-            commands.push(environment_command(event));
-        }
+        commands.extend(self.windows(ui, snapshot, &hints, strings));
         commands.extend(environment);
         if let Some(event) = tree_event {
             commands.push(tree_command(event));
@@ -165,23 +176,168 @@ impl MainScreen {
                 request: Box::new(editor.request.clone()),
             });
         }
-        let tab_event = tab_event.or_else(|| self.close_shortcut(ui, active));
-        match tab_event {
-            Some(TabEvent::Activate(path)) => commands.push(Command::ActivateTab(path)),
-            Some(TabEvent::Close(path)) => commands.push(Command::CloseTab(path)),
-            Some(TabEvent::SaveAndClose(path)) => {
-                commands.push(Command::Save(path.clone()));
-                commands.push(Command::CloseTab(path));
-            }
-            None => {}
+        if let Some(event) = tab_event {
+            commands.extend(self.tab_commands(event));
         }
-        commands.extend(shortcuts(ui, active, sending));
         match url_event {
             Some(UrlBarEvent::Send) => commands.push(Command::Send),
             Some(UrlBarEvent::Cancel) => commands.push(Command::Cancel),
             Some(UrlBarEvent::Edited) | None => {}
         }
+        // Keys go to the palette or the shortcut editor while they are up.
+        if self.palette.open.is_none() && !self.shortcuts.capturing() {
+            let available: Vec<Action> = (ALL.iter().copied())
+                .filter(|action| match action {
+                    // Escape is free for everything else when not sending.
+                    Action::Cancel => sending,
+                    Action::Send => !sending,
+                    // The body editor takes its own shortcut.
+                    Action::FormatBody => false,
+                    _ => true,
+                })
+                .collect();
+            let pressed = ui.input_mut(|i| self.keymap.pressed(i, &available));
+            for action in pressed {
+                commands.extend(self.run(action, snapshot, strings));
+            }
+        }
         commands
+    }
+
+    /// Whether the keymap changed since the last call, so it can be saved.
+    pub fn take_keymap_change(&mut self) -> bool {
+        std::mem::take(&mut self.keymap_changed)
+    }
+
+    /// The windows over the screen: environments, shortcuts and the
+    /// palette. Returns the commands they ask for.
+    fn windows(
+        &mut self,
+        ui: &egui::Ui,
+        snapshot: &Snapshot,
+        hints: &VariableHints,
+        strings: &Strings,
+    ) -> Vec<Command> {
+        let mut commands = Vec::new();
+        let ctx = ui.ctx().clone();
+        let context = snapshot.active_tab().map(|tab| tab.context.as_ref());
+        let files = &snapshot.environment_files;
+        if let Some(event) = self.environments.show(&ctx, files, context, hints, strings) {
+            commands.push(environment_command(event));
+        }
+        if self.shortcuts.show(&ctx, &mut self.keymap, strings) {
+            self.keymap_changed = true;
+        }
+        if self.palette.open.is_some() {
+            let items = palette_items(&ctx, snapshot, &self.keymap, strings);
+            match self.palette.show(&ctx, &items, strings) {
+                Some(PaletteItem::Action(action, ..)) => {
+                    commands.extend(self.run(action, snapshot, strings));
+                }
+                Some(PaletteItem::Request(path, ..)) => commands.push(Command::OpenRequest(path)),
+                Some(PaletteItem::Environment(name, _)) => {
+                    commands.push(Command::SelectEnvironment(name));
+                }
+                None => {}
+            }
+        }
+        commands
+    }
+
+    /// What `action` does now.
+    fn run(&mut self, action: Action, snapshot: &Snapshot, strings: &Strings) -> Vec<Command> {
+        let active = snapshot.active_tab();
+        let sending = active.is_some_and(|tab| tab.response == ResponseState::Sending);
+        let position = (snapshot.active.as_ref())
+            .and_then(|path| snapshot.tabs.iter().position(|tab| tab.path == *path));
+        let tab_at = |index: usize| {
+            (snapshot.tabs.get(index)).map(|tab| Command::ActivateTab(tab.path.clone()))
+        };
+        let count = snapshot.tabs.len();
+        let one = |command: Option<Command>| command.into_iter().collect();
+        match action {
+            Action::Send => one((active.is_some() && !sending).then_some(Command::Send)),
+            Action::Cancel => one(sending.then_some(Command::Cancel)),
+            Action::Save => one(active.map(|tab| Command::Save(tab.path.clone()))),
+            Action::SaveAll => vec![Command::SaveAll],
+            Action::Palette => {
+                self.palette.open(PaletteMode::All);
+                Vec::new()
+            }
+            Action::QuickOpen => {
+                self.palette.open(PaletteMode::Requests);
+                Vec::new()
+            }
+            Action::NewRequest => vec![Command::CreateRequest {
+                folder: String::new(),
+                name: strings.new_request_name.to_owned(),
+            }],
+            Action::CloseTab => match active.and_then(|tab| self.tabs.request_close(tab)) {
+                Some(event) => self.tab_commands(event),
+                None => Vec::new(),
+            },
+            Action::ReopenTab => {
+                let open = |path: &RequestPath| snapshot.tabs.iter().any(|t| t.path == *path);
+                while let Some(path) = self.closed.pop() {
+                    if !open(&path) {
+                        return vec![Command::OpenRequest(path)];
+                    }
+                }
+                Vec::new()
+            }
+            Action::NextTab => one(position.and_then(|i| tab_at((i + 1) % count))),
+            Action::PreviousTab => one(position.and_then(|i| tab_at((i + count - 1) % count))),
+            Action::GoToTab(n) => one(tab_at(usize::from(n).saturating_sub(1))),
+            Action::FocusUrl => {
+                self.focus_url = true;
+                Vec::new()
+            }
+            Action::Environments => {
+                self.environments.open = !self.environments.open;
+                Vec::new()
+            }
+            Action::ToggleSidebar => {
+                self.sidebar_hidden = !self.sidebar_hidden;
+                Vec::new()
+            }
+            Action::ShowHistory => {
+                self.sidebar_hidden = false;
+                self.sidebar = Sidebar::History;
+                Vec::new()
+            }
+            Action::FormatBody => {
+                self.request.tab = crate::organisms::RequestTab::Body;
+                self.request.format_now = true;
+                Vec::new()
+            }
+            Action::Shortcuts => {
+                self.shortcuts.open = true;
+                Vec::new()
+            }
+        }
+    }
+
+    /// The commands of a tab event; a closed tab is remembered to open
+    /// again.
+    fn tab_commands(&mut self, event: TabEvent) -> Vec<Command> {
+        let mut closed = |path: &RequestPath| {
+            self.closed.retain(|p| p != path);
+            self.closed.push(path.clone());
+            if self.closed.len() > CLOSED_TABS {
+                self.closed.remove(0);
+            }
+        };
+        match event {
+            TabEvent::Activate(path) => vec![Command::ActivateTab(path)],
+            TabEvent::Close(path) => {
+                closed(&path);
+                vec![Command::CloseTab(path)]
+            }
+            TabEvent::SaveAndClose(path) => {
+                closed(&path);
+                vec![Command::Save(path.clone()), Command::CloseTab(path)]
+            }
+        }
     }
 
     /// Keeps the editor on the active tab, and returns the hints for its
@@ -206,16 +362,6 @@ impl MainScreen {
             None => Arc::default(),
         }
     }
-
-    /// `Ctrl+W` closes the active tab, asking first if it has changes.
-    fn close_shortcut(&mut self, ui: &egui::Ui, active: Option<&Tab>) -> Option<TabEvent> {
-        let tab = active?;
-        if ui.input_mut(|i| i.consume_shortcut(&CLOSE_TAB)) {
-            self.tabs.request_close(tab)
-        } else {
-            None
-        }
-    }
 }
 
 /// The URL bar, the request panel and the response, one under the other.
@@ -225,9 +371,12 @@ fn editor_area(
     ui: &mut egui::Ui,
     tab: &Tab,
     request: &mut HttpRequest,
-    (panel, response): (&mut RequestPanel, &mut ResponseView),
-    hints: &VariableHints,
-    sending: bool,
+    ((panel, response), hints, sending, focus_url): (
+        (&mut RequestPanel, &mut ResponseView),
+        &VariableHints,
+        bool,
+        bool,
+    ),
     strings: &Strings,
 ) -> (Option<UrlBarEvent>, bool) {
     let event = UrlBar::new(
@@ -237,6 +386,7 @@ fn editor_area(
         sending,
         strings,
     )
+    .focus(focus_url)
     .show(ui);
     let mut edited = event == Some(UrlBarEvent::Edited);
     if edited {
@@ -291,29 +441,48 @@ fn tree_command(event: TreeEvent) -> Command {
     }
 }
 
-/// `Ctrl+Enter` sends and `Esc` cancels; `Ctrl+S` saves the active tab and
-/// `Ctrl+Shift+S` every tab.
-fn shortcuts(ui: &egui::Ui, active: Option<&Tab>, sending: bool) -> Vec<Command> {
-    let Some(tab) = active else {
-        return Vec::new();
-    };
-    ui.input_mut(|i| {
-        let mut commands = Vec::new();
-        // The longer shortcut first: `Ctrl+S` would also match it.
-        if i.consume_shortcut(&SAVE_ALL) {
-            commands.push(Command::SaveAll);
-        } else if i.consume_shortcut(&SAVE) {
-            commands.push(Command::Save(tab.path.clone()));
+/// What the palette offers: every action but the tab numbers, then every
+/// request, then every environment.
+fn palette_items(
+    ctx: &egui::Context,
+    snapshot: &Snapshot,
+    keymap: &Keymap,
+    strings: &Strings,
+) -> Vec<PaletteItem> {
+    let mut items: Vec<PaletteItem> = (ALL.iter().copied())
+        .filter(|action| !matches!(action, Action::GoToTab(_) | Action::Palette))
+        .map(|action| {
+            let shortcut = keymap.first(action).map(|s| ctx.format_shortcut(&s));
+            PaletteItem::Action(action, action.label(strings), shortcut)
+        })
+        .collect();
+    if let Some(collection) = &snapshot.collection {
+        requests(&collection.tree.items, &mut items);
+    }
+    items.push(PaletteItem::Environment(
+        None,
+        strings.no_environment.to_owned(),
+    ));
+    for name in &snapshot.environments {
+        items.push(PaletteItem::Environment(Some(name.clone()), name.clone()));
+    }
+    items
+}
+
+fn requests(tree: &[TreeItem], out: &mut Vec<PaletteItem>) {
+    for item in tree {
+        match item {
+            TreeItem::Folder { children, .. } => requests(children, out),
+            TreeItem::Request {
+                path, name, method, ..
+            } => out.push(PaletteItem::Request(
+                path.clone(),
+                name.clone(),
+                method.clone(),
+            )),
+            _ => {}
         }
-        if sending {
-            if i.consume_shortcut(&CANCEL) {
-                commands.push(Command::Cancel);
-            }
-        } else if i.consume_shortcut(&SEND) {
-            commands.push(Command::Send);
-        }
-        commands
-    })
+    }
 }
 
 /// Shown over a request whose file changed outside apifast while it had

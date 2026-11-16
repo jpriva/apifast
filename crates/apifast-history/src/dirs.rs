@@ -13,6 +13,22 @@ pub fn data_dir() -> PathBuf {
         .unwrap_or_else(|| std::env::temp_dir().join("apifast"))
 }
 
+/// apifast's configuration directory (settings and keymap):
+/// `APIFAST_CONFIG_DIR` if set, otherwise `apifast/` in the user's
+/// configuration directory as each platform defines it, or in the temporary
+/// directory as a last resort.
+pub fn config_dir() -> PathBuf {
+    std::env::var_os("APIFAST_CONFIG_DIR")
+        .map(PathBuf::from)
+        .or_else(|| user_config_dir().map(|d| d.join("apifast")))
+        .unwrap_or_else(|| std::env::temp_dir().join("apifast"))
+}
+
+/// The keymap file under `config_dir`.
+pub fn keymap_file_in(config_dir: &Path) -> PathBuf {
+    config_dir.join("keymap.yml")
+}
+
 /// Folder for the responses of the collection at `root`, under
 /// [`data_dir`]. The key is the collection id when it has one, or a hash of
 /// its path, so opening or sending never writes into the collection.
@@ -65,6 +81,22 @@ fn user_data_dir() -> Option<PathBuf> {
     } else {
         // XDG Base Directory specification.
         var("XDG_DATA_HOME").or_else(|| var("HOME").map(|home| home.join(".local/share")))
+    }
+}
+
+/// The user's configuration directory, as each platform defines it.
+fn user_config_dir() -> Option<PathBuf> {
+    let var = |name| {
+        std::env::var_os(name)
+            .map(PathBuf::from)
+            .filter(|p| p.is_absolute())
+    };
+    if cfg!(windows) {
+        var("APPDATA")
+    } else if cfg!(target_os = "macos") {
+        var("HOME").map(|home| home.join("Library/Application Support"))
+    } else {
+        var("XDG_CONFIG_HOME").or_else(|| var("HOME").map(|home| home.join(".config")))
     }
 }
 

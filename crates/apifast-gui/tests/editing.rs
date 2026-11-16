@@ -105,7 +105,10 @@ fn panel(tab: RequestTab, request: HttpRequest) -> Harness<'static, Panel> {
             },
             Panel {
                 request,
-                panel: RequestPanel { tab },
+                panel: RequestPanel {
+                    tab,
+                    ..RequestPanel::default()
+                },
             },
         );
     harness.run();
