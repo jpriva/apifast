@@ -182,7 +182,7 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
 
 **Objetivo:** ningún secreto en claro.
 
-**Estado:** en curso desde el 2026-11-16.
+**Estado:** completada el 2026-11-16.
 
 ### Tareas
 
@@ -227,6 +227,14 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
 - Buscar un secreto conocido en la colección, el directorio de datos y los logs no devuelve resultados.
 - Una clave incorrecta se detecta y un valor manipulado no se descifra.
 - Dos usuarios comparten una colección con secretos intercambiando solo la clave.
+
+**Resultado:** los tres se cumplen, cada uno con su prueba.
+
+- `apifast-cli/tests/vault.rs` guarda un secreto local y otro compartido, envía requests que los usan y busca sus bytes en todos los archivos de la colección y del directorio de datos y en la salida: no aparecen. Queda fuera, por diseño, el cuerpo de una respuesta que repita un secreto: se guarda tal cual llega ([bóveda](06-boveda-de-secretos.md)).
+- Las pruebas del sobre rechazan una clave incorrecta, un valor con un byte cambiado y un valor movido a otra variable, entorno o colección; la clave compartible detecta una errata antes de probarla.
+- `apifast-cli/tests/vault.rs` y `apifast-vault/tests/shared.rs` recorren dos máquinas sobre la misma colección: la segunda abre los secretos compartidos con solo la clave, sea pegada o en `APIFAST_COLLECTION_KEY`.
+
+El cifrado del tarro de cookies pasa a F5, donde llega el tarro.
 
 ---
 

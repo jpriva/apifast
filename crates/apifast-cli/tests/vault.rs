@@ -132,3 +132,77 @@ fn a_shared_secret_needs_the_key_on_another_machine_or_in_ci() {
     let send = on(&bob, &["send", "users/get.yml", "-e", "vault"], "", &[]);
     assert!(!send.status.success());
 }
+
+/// Every file under `dir` that contains `needle`.
+fn files_with(dir: &std::path::Path, needle: &[u8]) -> Vec<std::path::PathBuf> {
+    let mut found = Vec::new();
+    let mut pending = vec![dir.to_path_buf()];
+    while let Some(path) = pending.pop() {
+        if path.is_dir() {
+            pending.extend(std::fs::read_dir(&path).unwrap().map(|e| e.unwrap().path()));
+        } else if std::fs::read(&path)
+            .unwrap()
+            .windows(needle.len())
+            .any(|w| w == needle)
+        {
+            found.push(path);
+        }
+    }
+    found
+}
+
+/// The first exit criterion of F3: a known secret is nowhere in the
+/// collection, the data directory or the output, after being stored and
+/// used. (A server that echoes a secret back puts it in the response body,
+/// which is stored as it came: docs/06.)
+#[test]
+fn a_known_secret_is_nowhere_on_disk_or_in_the_output() {
+    let server = Server::start();
+    let dir = collection(server.port);
+    let data = tempfile::tempdir().unwrap();
+    let run = |args: &[&str], stdin: &str| apifast_with(dir.path(), data.path(), args, stdin, &[]);
+
+    let local = "l0cal-s3cret-value";
+    let shared = "sh4red-s3cret-value";
+    assert!(
+        run(&["vault", "set", "vault", "token"], local)
+            .status
+            .success()
+    );
+    let mut outputs = Vec::new();
+    let send = run(&["send", "users/get.yml", "-e", "vault", "-i"], "");
+    assert!(send.status.success(), "{}", text(&send.stderr));
+    assert_eq!(
+        authorization(&server),
+        format!("authorization: Bearer {local}")
+    );
+    outputs.push(send);
+    assert!(
+        run(&["vault", "set", "vault", "token", "--shared"], shared)
+            .status
+            .success()
+    );
+    let send = run(&["send", "users/get.yml", "-e", "vault"], "");
+    assert!(send.status.success(), "{}", text(&send.stderr));
+    assert_eq!(
+        authorization(&server),
+        format!("authorization: Bearer {shared}")
+    );
+    outputs.push(send);
+    outputs.push(run(&["vault", "status"], ""));
+
+    for secret in [local, shared] {
+        assert_eq!(
+            files_with(dir.path(), secret.as_bytes()),
+            Vec::<std::path::PathBuf>::new()
+        );
+        assert_eq!(
+            files_with(data.path(), secret.as_bytes()),
+            Vec::<std::path::PathBuf>::new()
+        );
+        for output in &outputs {
+            assert!(!text(&output.stdout).contains(secret));
+            assert!(!text(&output.stderr).contains(secret));
+        }
+    }
+}
