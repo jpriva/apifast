@@ -23,6 +23,8 @@ pub enum AuthScheme {
     ApiKey(ApiKeyAuth),
     /// HTTP Digest: the credentials answer the server's challenge.
     Digest(DigestAuth),
+    /// NTLM (version 2): a handshake on the connection, for Windows servers.
+    Ntlm(NtlmAuth),
     /// AWS Signature Version 4: the request is signed with an access key.
     AwsV4(Box<AwsV4Auth>),
     /// A scheme of the file format that apifast cannot send yet, such as
@@ -65,6 +67,17 @@ pub struct DigestAuth {
     pub username: String,
     /// Password (template).
     pub password: String,
+}
+
+/// NTLM credentials.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct NtlmAuth {
+    /// User name (template); `DOMAIN\user` also gives the domain.
+    pub username: String,
+    /// Password (template).
+    pub password: String,
+    /// Windows domain (template); may be empty.
+    pub domain: String,
 }
 
 /// AWS Signature Version 4 credentials and scope. Every field is a

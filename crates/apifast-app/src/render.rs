@@ -69,6 +69,15 @@ pub enum TransportAuth {
         /// Password.
         password: String,
     },
+    /// Authenticate the connection with NTLM.
+    Ntlm {
+        /// User name, without the domain.
+        username: String,
+        /// Password.
+        password: String,
+        /// Windows domain; may be empty.
+        domain: String,
+    },
 }
 
 /// Rendered AWS credentials and the scope of the signature.
@@ -101,6 +110,13 @@ impl fmt::Debug for TransportAuth {
             Self::Digest { username, .. } => f
                 .debug_struct("Digest")
                 .field("username", username)
+                .finish_non_exhaustive(),
+            Self::Ntlm {
+                username, domain, ..
+            } => f
+                .debug_struct("Ntlm")
+                .field("username", username)
+                .field("domain", domain)
                 .finish_non_exhaustive(),
         }
     }
@@ -345,6 +361,23 @@ fn apply_auth(
             auth = TransportAuth::Digest {
                 username: r.text(&digest.username)?,
                 password: r.text(&digest.password)?,
+            };
+        }
+        AuthScheme::Ntlm(ntlm) => {
+            let username = r.text(&ntlm.username)?;
+            let mut domain = r.text(&ntlm.domain)?;
+            // `DOMAIN\user` gives both, when the domain is not set apart.
+            let username = match username.split_once('\\') {
+                Some((d, user)) if domain.is_empty() => {
+                    d.clone_into(&mut domain);
+                    user.to_owned()
+                }
+                _ => username,
+            };
+            auth = TransportAuth::Ntlm {
+                username,
+                password: r.text(&ntlm.password)?,
+                domain,
             };
         }
         AuthScheme::Basic(basic) => {

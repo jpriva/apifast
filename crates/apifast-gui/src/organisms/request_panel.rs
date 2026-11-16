@@ -3,7 +3,7 @@
 
 use apifast_domain::{
     ApiKeyAuth, ApiKeyPlacement, AuthScheme, BasicAuth, BearerAuth, Body, DigestAuth, FormField,
-    Header, HttpRequest, Param, ParamKind, Resolved, Setting,
+    Header, HttpRequest, NtlmAuth, Param, ParamKind, Resolved, Setting,
 };
 use eframe::egui::{self, RichText};
 
@@ -429,18 +429,20 @@ enum AuthKind {
     Bearer,
     ApiKey,
     Digest,
+    Ntlm,
     AwsV4,
     Unsupported,
 }
 
 impl AuthKind {
-    const CHOICES: [Self; 7] = [
+    const CHOICES: [Self; 8] = [
         Self::Inherit,
         Self::None,
         Self::Basic,
         Self::Bearer,
         Self::ApiKey,
         Self::Digest,
+        Self::Ntlm,
         Self::AwsV4,
     ];
 
@@ -452,6 +454,7 @@ impl AuthKind {
             Setting::Set(AuthScheme::Bearer(_)) => Self::Bearer,
             Setting::Set(AuthScheme::ApiKey(_)) => Self::ApiKey,
             Setting::Set(AuthScheme::Digest(_)) => Self::Digest,
+            Setting::Set(AuthScheme::Ntlm(_)) => Self::Ntlm,
             Setting::Set(AuthScheme::AwsV4(_)) => Self::AwsV4,
             // `Unsupported`, and schemes added after this version.
             Setting::Set(_) => Self::Unsupported,
@@ -466,6 +469,7 @@ impl AuthKind {
             Self::Bearer => strings.auth_bearer,
             Self::ApiKey => strings.auth_api_key,
             Self::Digest => strings.auth_digest,
+            Self::Ntlm => strings.auth_ntlm,
             Self::AwsV4 => strings.auth_aws_v4,
             Self::Unsupported => strings.auth_unsupported,
         }
@@ -488,6 +492,7 @@ impl AuthKind {
                 placement: ApiKeyPlacement::Header,
             })),
             Self::Digest => Setting::Set(AuthScheme::Digest(DigestAuth::default())),
+            Self::Ntlm => Setting::Set(AuthScheme::Ntlm(NtlmAuth::default())),
             Self::AwsV4 => Setting::Set(AuthScheme::AwsV4(Box::default())),
         }
     }
@@ -497,13 +502,9 @@ fn scheme_label<'a>(scheme: &AuthScheme, strings: &'a Strings) -> &'a str {
     AuthKind::of(&Setting::Set(scheme.clone())).label(strings)
 }
 
-fn auth(
-    ui: &mut egui::Ui,
-    auth: &mut Setting<AuthScheme>,
-    context: &TabContext,
-    hints: &VariableHints,
-    strings: &Strings,
-) -> bool {
+/// The menu of auth types. Choosing another starts it empty; returns
+/// whether it did.
+fn auth_kind_menu(ui: &mut egui::Ui, auth: &mut Setting<AuthScheme>, strings: &Strings) -> bool {
     let current = AuthKind::of(auth);
     let mut chosen = None;
     egui::ComboBox::from_id_salt("auth-type")
@@ -520,11 +521,23 @@ fn auth(
         })
         .response
         .on_hover_text(strings.auth_type);
-    let mut changed = false;
-    if let Some(kind) = chosen.filter(|kind| *kind != current) {
-        *auth = kind.empty();
-        changed = true;
+    match chosen.filter(|kind| *kind != current) {
+        Some(kind) => {
+            *auth = kind.empty();
+            true
+        }
+        None => false,
     }
+}
+
+fn auth(
+    ui: &mut egui::Ui,
+    auth: &mut Setting<AuthScheme>,
+    context: &TabContext,
+    hints: &VariableHints,
+    strings: &Strings,
+) -> bool {
+    let mut changed = auth_kind_menu(ui, auth, strings);
     ui.add_space(theme::space::S);
     let texts = texts(strings);
     let field = |ui: &mut egui::Ui, label: &str, text: &mut String, hidden: bool| {
@@ -577,6 +590,11 @@ fn auth(
             Setting::Set(AuthScheme::Digest(digest)) => {
                 changed |= field(ui, strings.username, &mut digest.username, false);
                 changed |= field(ui, strings.password, &mut digest.password, true);
+            }
+            Setting::Set(AuthScheme::Ntlm(ntlm)) => {
+                changed |= field(ui, strings.username, &mut ntlm.username, false);
+                changed |= field(ui, strings.password, &mut ntlm.password, true);
+                changed |= field(ui, strings.ntlm_domain, &mut ntlm.domain, false);
             }
             Setting::Set(AuthScheme::AwsV4(aws)) => {
                 for (label, text, hidden) in [

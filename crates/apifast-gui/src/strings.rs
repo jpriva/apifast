@@ -368,6 +368,10 @@ pub struct Strings {
     pub filter_results: &'static str,
     /// Auth type: HTTP Digest.
     pub auth_digest: &'static str,
+    /// Auth type: NTLM.
+    pub auth_ntlm: &'static str,
+    /// NTLM auth field: the Windows domain.
+    pub ntlm_domain: &'static str,
     /// Auth type: AWS Signature Version 4.
     pub auth_aws_v4: &'static str,
     /// AWS auth field.
@@ -778,6 +782,8 @@ pub const EN: Strings = Strings {
     filter_xpath: "Filter with XPath: //item/@id",
     filter_results: "{count} selected",
     auth_digest: "Digest",
+    auth_ntlm: "NTLM",
+    ntlm_domain: "Domain (optional)",
     auth_aws_v4: "AWS Signature v4",
     aws_access_key_id: "Access key ID",
     aws_secret_access_key: "Secret access key",

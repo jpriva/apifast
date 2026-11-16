@@ -89,6 +89,13 @@ fn auth() -> impl Strategy<Value = Setting<AuthScheme>> {
         (text(), text()).prop_map(|(username, password)| Setting::Set(AuthScheme::Digest(
             apifast_domain::DigestAuth { username, password }
         ))),
+        (text(), text(), text()).prop_map(|(username, password, domain)| Setting::Set(
+            AuthScheme::Ntlm(apifast_domain::NtlmAuth {
+                username,
+                password,
+                domain
+            })
+        )),
         (text(), text(), any::<bool>()).prop_map(|(key, value, query)| Setting::Set(
             AuthScheme::ApiKey(ApiKeyAuth {
                 key,

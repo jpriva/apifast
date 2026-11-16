@@ -86,7 +86,7 @@ Implementada de forma nativa en Rust, con un enum tipado por esquema.
 | Digest | F5 (hecha) | Responde al reto del servidor, en el transporte |
 | OAuth 2.0 | F5 | Authorization code con PKCE, client credentials, password; refresco automático |
 | AWS SigV4 | F5 (hecha) | Firma del request canónico, en el transporte |
-| NTLM | F5 | Intercambio en tres pasos |
+| NTLM | F5 (hecha) | NTLMv2 en tres mensajes sobre una conexión |
 
 ### Autenticación en el transporte
 
@@ -109,6 +109,16 @@ Basic, Bearer y API key se resuelven al renderizar: son headers o parámetros. L
 - Algoritmos `MD5`, `MD5-sess`, `SHA-256` y `SHA-256-sess`, con `qop=auth` o sin `qop` (servidores RFC 2069). Un reto que solo ofrece `auth-int`, u otro algoritmo, es un error que lo dice.
 - Entre varios `WWW-Authenticate` se elige el `Digest`. Se reenvían `opaque` y `realm`; `cnonce` es nuevo en cada respuesta.
 - Comprobado con los ejemplos de RFC 2617 y RFC 7616 (MD5 y SHA-256) y contra un servidor local que valida la respuesta con su propio cálculo.
+
+**NTLM** (`apifast-http/src/ntlm.rs`, NTLMv2 según [MS-NLMP]):
+
+- La request sale con el mensaje Negotiate (`Authorization: NTLM …`). Si la respuesta es un 401 con `WWW-Authenticate: NTLM <reto>`, se lee entera y la request vuelve a salir con el mensaje Authenticate, que lleva la respuesta NTLMv2 (y la LMv2) calculada con la contraseña, el usuario y el dominio.
+- NTLM autentica la **conexión**, no la request: los dos mensajes deben ir por la misma. Cada envío con NTLM usa un cliente propio, solo HTTP/1.1, con una conexión en el pool; como la respuesta intermedia se lee entera, el pool devuelve esa misma conexión. Es lo que hace Bruno con `axios-ntlm` y un agente *keep-alive*.
+- El body se envía en cada mensaje, como hace Bruno; con un body grande, se envía dos veces.
+- `DOMAIN\usuario` en el usuario también da el dominio si el campo de dominio está vacío.
+- Con una contraseña equivocada el resultado es el 401 del servidor, sin repetir. Tras una redirección al mismo origen se negocia de nuevo; a otro origen no van credenciales.
+- Se usa la hora que manda el servidor en el reto (`MsvAvTimestamp`) si la manda; si no, la del sistema. No se calculan clave de sesión, firma ni MIC: no se piden para autenticar por HTTP.
+- Comprobada con el ejemplo de la especificación de Microsoft ([MS-NLMP] 4.2.4: hash NT, clave NTOWFv2, prueba NTLMv2 y respuesta LMv2) y contra un servidor local que acepta el mensaje Authenticate solo en la conexión que recibió el reto y valida la prueba con su propio cálculo.
 
 Para OAuth 2.0 con authorization code se abre el navegador del sistema y se levanta un servidor local temporal para recibir el *callback*. Los tokens se guardan cifrados con la clave maestra.
 

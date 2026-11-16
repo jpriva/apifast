@@ -5,7 +5,7 @@
 use apifast_domain::{
     ApiKeyAuth, ApiKeyPlacement, Assertion, Auth, AuthScheme, AwsV4Auth, BasicAuth, BearerAuth,
     Body, Capture, CaptureScope, Collection, DigestAuth, Environment, Folder, FormField, Header,
-    HttpRequest, Method, MultipartPart, MultipartValue, Operator, Param, ParamKind,
+    HttpRequest, Method, MultipartPart, MultipartValue, NtlmAuth, Operator, Param, ParamKind,
     RequestDefaults, Setting, Settings, ValueKind, Variable, VariableValue,
 };
 use oneyaml::Value;
@@ -159,6 +159,11 @@ pub(crate) fn auth(value: Option<&Value>) -> Auth {
         Some("digest") => AuthScheme::Digest(DigestAuth {
             username: field("username"),
             password: field("password"),
+        }),
+        Some("ntlm") => AuthScheme::Ntlm(NtlmAuth {
+            username: field("username"),
+            password: field("password"),
+            domain: field("domain"),
         }),
         Some("awsv4") => AuthScheme::AwsV4(Box::new(AwsV4Auth {
             access_key_id: field("accessKeyId"),

@@ -874,3 +874,181 @@ async fn a_wrong_digest_password_ends_in_the_401_without_looping() {
     assert_eq!(result.unwrap().status, 401);
     assert_eq!(server.received().len(), 2, "answered once, not again");
 }
+
+// --- NTLM -------------------------------------------------------------------
+
+/// What the NTLM server saw: for each request, its connection number and
+/// what it was.
+type NtlmLog = Arc<Mutex<Vec<(usize, &'static str)>>>;
+
+const NTLM_NONCE: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+
+/// An NTLM server written apart from the transport's code. It challenges a
+/// Negotiate, and accepts an Authenticate only on the connection that got
+/// the challenge, checking the NTLMv2 proof itself.
+async fn ntlm_server() -> (String, NtlmLog) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let log: NtlmLog = Arc::default();
+    let seen = log.clone();
+    tokio::spawn(async move {
+        let mut connection = 0;
+        loop {
+            let Ok((stream, _)) = listener.accept().await else {
+                return;
+            };
+            connection += 1;
+            tokio::spawn(ntlm_connection(stream, connection, seen.clone()));
+        }
+    });
+    (format!("http://{addr}"), log)
+}
+
+async fn ntlm_connection(mut stream: TcpStream, connection: usize, log: NtlmLog) {
+    use base64::Engine as _;
+    let b64 = base64::engine::general_purpose::STANDARD;
+    let mut challenged = false;
+    let mut buffer = Vec::new();
+    let mut chunk = [0u8; 4096];
+    loop {
+        // One request: its head, then as many body bytes as it says.
+        let head_end = loop {
+            if let Some(i) = find(&buffer, b"\r\n\r\n") {
+                break i;
+            }
+            match stream.read(&mut chunk).await {
+                Ok(0) | Err(_) => return,
+                Ok(n) => buffer.extend_from_slice(&chunk[..n]),
+            }
+        };
+        let head = String::from_utf8_lossy(&buffer[..head_end]).to_lowercase();
+        let length: usize = head
+            .lines()
+            .find_map(|l| l.strip_prefix("content-length:"))
+            .and_then(|v| v.trim().parse().ok())
+            .unwrap_or(0);
+        while buffer.len() < head_end + 4 + length {
+            match stream.read(&mut chunk).await {
+                Ok(0) | Err(_) => return,
+                Ok(n) => buffer.extend_from_slice(&chunk[..n]),
+            }
+        }
+        let raw = String::from_utf8_lossy(&buffer[..head_end]).into_owned();
+        buffer.drain(..head_end + 4 + length);
+        let token = raw
+            .lines()
+            .find_map(|l| {
+                l.strip_prefix("authorization: NTLM ")
+                    .or_else(|| l.strip_prefix("Authorization: NTLM "))
+            })
+            .and_then(|t| b64.decode(t.trim()).ok());
+        let reply = match token.as_deref().map(|m| (m.get(8).copied(), m)) {
+            Some((Some(1), _)) => {
+                log.lock().unwrap().push((connection, "negotiate"));
+                challenged = true;
+                let challenge = b64.encode(ntlm_challenge());
+                format!(
+                    "HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: NTLM {challenge}\r\nContent-Length: 0\r\n\r\n"
+                )
+            }
+            Some((Some(3), message)) if challenged && ntlm_proof_holds(message) => {
+                log.lock().unwrap().push((connection, "authenticated"));
+                "HTTP/1.1 200 OK\r\nContent-Length: 7\r\n\r\nwelcome".to_owned()
+            }
+            Some((Some(3), _)) => {
+                log.lock().unwrap().push((connection, "rejected"));
+                "HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: NTLM\r\nContent-Length: 0\r\n\r\n"
+                    .to_owned()
+            }
+            _ => {
+                log.lock().unwrap().push((connection, "anonymous"));
+                "HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: NTLM\r\nContent-Length: 0\r\n\r\n"
+                    .to_owned()
+            }
+        };
+        if stream.write_all(reply.as_bytes()).await.is_err() {
+            return;
+        }
+    }
+}
+
+/// A Challenge message with `NTLM_NONCE` and no target info.
+fn ntlm_challenge() -> Vec<u8> {
+    let mut message = b"NTLMSSP\0".to_vec();
+    message.extend_from_slice(&2u32.to_le_bytes());
+    message.extend_from_slice(&[0; 8]);
+    message.extend_from_slice(&0xa208_8207u32.to_le_bytes());
+    message.extend_from_slice(&NTLM_NONCE);
+    message.extend_from_slice(&[0; 16]);
+    message
+}
+
+/// Checks the NTLMv2 proof of an Authenticate message for user `ana`,
+/// password `s3cret`, domain `CORP`.
+fn ntlm_proof_holds(message: &[u8]) -> bool {
+    use hmac::{Hmac, KeyInit, Mac};
+    use md4::{Digest, Md4};
+    let field = |at: usize| {
+        let len = usize::from(u16::from_le_bytes([message[at], message[at + 1]]));
+        let offset = u32::from_le_bytes(message[at + 4..at + 8].try_into().unwrap()) as usize;
+        message
+            .get(offset..offset + len)
+            .unwrap_or_default()
+            .to_vec()
+    };
+    let utf16 = |t: &str| -> Vec<u8> { t.encode_utf16().flat_map(u16::to_le_bytes).collect() };
+    let hmac = |key: &[u8], parts: &[&[u8]]| {
+        let mut mac = Hmac::<md5::Md5>::new_from_slice(key).unwrap();
+        for part in parts {
+            mac.update(part);
+        }
+        mac.finalize().into_bytes().to_vec()
+    };
+    let nt = field(20);
+    if field(36) != utf16("ana") || field(28) != utf16("CORP") || nt.len() < 16 {
+        return false;
+    }
+    let nt_hash = Md4::digest(utf16("s3cret"));
+    let key = hmac(&nt_hash, &[&utf16("ANACORP")]);
+    hmac(&key, &[&NTLM_NONCE, &nt[16..]]) == nt[..16]
+}
+
+fn with_ntlm(url: String, username: &str, password: &str, domain: &str) -> HttpRequest {
+    use apifast_domain::{AuthScheme, NtlmAuth, Setting};
+    let mut request = HttpRequest::new("n", Method::Post, url);
+    request.body = Body::Json(r#"{"a":1}"#.into());
+    request.auth = Setting::Set(AuthScheme::Ntlm(NtlmAuth {
+        username: username.into(),
+        password: password.into(),
+        domain: domain.into(),
+    }));
+    request
+}
+
+#[tokio::test]
+async fn ntlm_authenticates_on_one_connection() {
+    let (base, log) = ntlm_server().await;
+    let (result, body) = send(&with_ntlm(format!("{base}/api"), "ana", "s3cret", "CORP")).await;
+    assert_eq!(result.unwrap().status, 200);
+    assert_eq!(body.body, b"welcome");
+    // Both messages on the first connection: the server would reject the
+    // answer on another.
+    assert_eq!(
+        *log.lock().unwrap(),
+        [(1, "negotiate"), (1, "authenticated")]
+    );
+
+    // `DOMAIN\user` gives the domain too.
+    let (base, log) = ntlm_server().await;
+    let (result, _) = send(&with_ntlm(format!("{base}/api"), "CORP\\ana", "s3cret", "")).await;
+    assert_eq!(result.unwrap().status, 200);
+    assert_eq!(log.lock().unwrap().last(), Some(&(1, "authenticated")));
+}
+
+#[tokio::test]
+async fn a_wrong_ntlm_password_ends_in_the_401() {
+    let (base, log) = ntlm_server().await;
+    let (result, _) = send(&with_ntlm(format!("{base}/api"), "ana", "wrong", "CORP")).await;
+    assert_eq!(result.unwrap().status, 401);
+    assert_eq!(*log.lock().unwrap(), [(1, "negotiate"), (1, "rejected")]);
+}

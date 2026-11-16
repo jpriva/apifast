@@ -5,9 +5,12 @@
 //! Must run inside a tokio runtime with the time driver enabled.
 
 mod digest;
+mod ntlm;
 mod sigv4;
 
 use std::error::Error as _;
+
+use base64::Engine as _;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -48,15 +51,7 @@ impl ReqwestTransport {
         // used everywhere (it needs no cmake on Windows). Installing fails only
         // when a provider is already installed, which is fine.
         let _ = rustls::crypto::ring::default_provider().install_default();
-        let client = reqwest::Client::builder()
-            .tls_backend_rustls()
-            // Redirects are followed by hand, to apply apifast's rules and
-            // count them.
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .map_err(|e| {
-                TransportError::Other(format!("cannot build the HTTP client: {}", chain(&e)))
-            })?;
+        let client = build_client(reqwest::Client::builder())?;
         Ok(Self {
             client,
             files_root: files_root.into(),
@@ -65,11 +60,13 @@ impl ReqwestTransport {
 
     async fn exchange<W: BodyWriter + Send>(
         &self,
+        client: &reqwest::Client,
         request: &RenderedRequest,
         writer: &mut W,
         started: Instant,
     ) -> Result<ResponseHead, TransportError> {
         let (mut url, mut method, mut headers) = first_request(request)?;
+        start_handshake(request, &mut headers);
         let mut send_body = true;
         let mut redirects = 0;
         let first_origin = origin(&url);
@@ -86,8 +83,7 @@ impl ReqwestTransport {
                 first_origin: &first_origin,
             };
             let sent_headers = signed_headers(request, &headers, &sent)?;
-            let mut builder = self
-                .client
+            let mut builder = client
                 .request(method.clone(), url.clone())
                 .headers(sent_headers);
             if send_body {
@@ -103,20 +99,23 @@ impl ReqwestTransport {
             let response = builder.send().await.map_err(|e| classify(&e, &url))?;
             let status = response.status().as_u16();
 
-            if status == 401
-                && answered.as_ref() != Some(&url)
-                && let Some(answer) = digest_answer(request, &response, &sent)?
-            {
-                // Sent again, body and all, with the answer. The 401 is
-                // dropped.
-                headers.insert(AUTHORIZATION, answer);
-                answered = Some(url.clone());
-                timeline.push(TimelineEvent {
-                    at_us: at(),
-                    kind: TimelineKind::Headers { status },
-                });
-                continue;
-            }
+            let response = if status == 401 && answered.as_ref() != Some(&url) {
+                match answer_challenge(request, response, &sent).await? {
+                    Challenged::Answer(answer) => {
+                        // Sent again, body and all, with the answer.
+                        headers.insert(AUTHORIZATION, answer);
+                        answered = Some(url.clone());
+                        timeline.push(TimelineEvent {
+                            at_us: at(),
+                            kind: TimelineKind::Headers { status },
+                        });
+                        continue;
+                    }
+                    Challenged::No(response) => response,
+                }
+            } else {
+                response
+            };
 
             if request.follow_redirects()
                 && matches!(status, 301 | 302 | 303 | 307 | 308)
@@ -125,27 +124,15 @@ impl ReqwestTransport {
                 if redirects >= request.max_redirects() {
                     return Err(TransportError::TooManyRedirects(redirects));
                 }
-                let location = location.to_str().map_err(|_| {
-                    TransportError::Protocol("the redirect location is not valid text".into())
-                })?;
-                let next = url.join(location).map_err(|e| {
-                    TransportError::Protocol(format!("invalid redirect location: {e}"))
-                })?;
+                let (next, location) = redirect_target(&url, location)?;
                 timeline.push(TimelineEvent {
                     at_us: at(),
-                    kind: TimelineKind::Redirect {
-                        status,
-                        location: location.to_owned(),
-                    },
+                    kind: TimelineKind::Redirect { status, location },
                 });
                 if matches!(status, 301..=303) {
                     // Browsers and Bruno turn these into a GET without body.
-                    if method != Method::HEAD {
-                        method = Method::GET;
-                    }
+                    as_get(&mut method, &mut headers);
                     send_body = false;
-                    headers.remove(CONTENT_TYPE);
-                    headers.remove(CONTENT_LENGTH);
                 }
                 if origin(&next) != origin(&url) {
                     // Credentials for one origin must not leak to another.
@@ -154,6 +141,9 @@ impl ReqwestTransport {
                 }
                 url = next;
                 redirects += 1;
+                if origin(&url) == first_origin {
+                    start_handshake(request, &mut headers);
+                }
                 continue;
             }
 
@@ -255,7 +245,14 @@ impl HttpTransport for ReqwestTransport {
         }
         let started = Instant::now();
         let timeout_ms = request.timeout_ms();
-        let exchange = self.exchange(request, body, started);
+        let own;
+        let client = if matches!(request.auth(), TransportAuth::Ntlm { .. }) {
+            own = ntlm_client()?;
+            &own
+        } else {
+            &self.client
+        };
+        let exchange = self.exchange(client, request, body, started);
         let limited = async {
             if timeout_ms == 0 {
                 exchange.await
@@ -270,6 +267,29 @@ impl HttpTransport for ReqwestTransport {
             () = cancelled(cancel) => Err(TransportError::Cancelled),
         }
     }
+}
+
+/// A client with apifast's settings on top of `builder`.
+fn build_client(builder: reqwest::ClientBuilder) -> Result<reqwest::Client, TransportError> {
+    builder
+        .tls_backend_rustls()
+        // Redirects are followed by hand, to apply apifast's rules and count
+        // them.
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|e| TransportError::Other(format!("cannot build the HTTP client: {}", chain(&e))))
+}
+
+/// A client of its own for an NTLM exchange: NTLM authenticates the
+/// connection, so its messages must go on one. HTTP/1.1 keeps one
+/// connection per request in turn, and with the responses read whole the
+/// pool hands the same connection back.
+fn ntlm_client() -> Result<reqwest::Client, TransportError> {
+    build_client(
+        reqwest::Client::builder()
+            .http1_only()
+            .pool_max_idle_per_host(1),
+    )
 }
 
 /// Completes once `token` is cancelled.
@@ -459,6 +479,120 @@ fn first_request(request: &RenderedRequest) -> Result<(Url, Method, HeaderMap), 
         headers.insert(USER_AGENT, HeaderValue::from_static(DEFAULT_USER_AGENT));
     }
     Ok((url, method, headers))
+}
+
+/// What a 401 led to.
+enum Challenged {
+    /// The `Authorization` that answers it: send again with it.
+    Answer(HeaderValue),
+    /// Nothing to answer: the response stands.
+    No(reqwest::Response),
+}
+
+/// Answers a 401's challenge when the auth is Digest or NTLM and the
+/// request goes to the origin the user wrote.
+///
+/// # Errors
+///
+/// If the challenge asks for something apifast does not support.
+async fn answer_challenge(
+    request: &RenderedRequest,
+    response: reqwest::Response,
+    out: &Outgoing<'_>,
+) -> Result<Challenged, TransportError> {
+    if origin(out.url) != *out.first_origin {
+        return Ok(Challenged::No(response));
+    }
+    if let Some(answer) = digest_answer(request, &response, out)? {
+        return Ok(Challenged::Answer(answer));
+    }
+    let TransportAuth::Ntlm {
+        username,
+        password,
+        domain,
+    } = request.auth()
+    else {
+        return Ok(Challenged::No(response));
+    };
+    let challenge = response
+        .headers()
+        .get_all(reqwest::header::WWW_AUTHENTICATE)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .find_map(|v| v.strip_prefix("NTLM "))
+        .and_then(|b64| {
+            base64::engine::general_purpose::STANDARD
+                .decode(b64.trim())
+                .ok()
+        })
+        .and_then(|bytes| ntlm::Challenge::parse(&bytes));
+    let Some(challenge) = challenge else {
+        return Ok(Challenged::No(response));
+    };
+    // Read whole, so the connection goes back to the pool for the answer.
+    let _ = response.bytes().await;
+    let mut client_challenge = [0u8; 8];
+    client_challenge.copy_from_slice(&cnonce().as_bytes()[..8]);
+    let message = ntlm::authenticate(
+        &challenge,
+        &ntlm::Credentials {
+            username,
+            password,
+            domain,
+            workstation: "",
+            client_challenge,
+            now: filetime_now(),
+        },
+    );
+    let header = format!(
+        "NTLM {}",
+        base64::engine::general_purpose::STANDARD.encode(message)
+    );
+    HeaderValue::from_str(&header)
+        .map(Challenged::Answer)
+        .map_err(|_| TransportError::InvalidRequest("invalid NTLM credentials".into()))
+}
+
+/// Starts the NTLM handshake: the Negotiate message, when the auth is NTLM.
+fn start_handshake(request: &RenderedRequest, headers: &mut HeaderMap) {
+    if let TransportAuth::Ntlm { .. } = request.auth() {
+        let negotiate = format!(
+            "NTLM {}",
+            base64::engine::general_purpose::STANDARD.encode(ntlm::negotiate())
+        );
+        if let Ok(value) = HeaderValue::from_str(&negotiate) {
+            headers.insert(AUTHORIZATION, value);
+        }
+    }
+}
+
+/// Now, in 100 ns intervals since 1601, as Windows counts time.
+fn filetime_now() -> u64 {
+    const UNIX_EPOCH_IN_FILETIME: u64 = 116_444_736_000_000_000;
+    let since_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| u64::try_from(d.as_nanos() / 100).unwrap_or(u64::MAX));
+    UNIX_EPOCH_IN_FILETIME.saturating_add(since_unix)
+}
+
+/// Where a redirect goes, and its `Location` as written.
+fn redirect_target(url: &Url, location: &HeaderValue) -> Result<(Url, String), TransportError> {
+    let location = location
+        .to_str()
+        .map_err(|_| TransportError::Protocol("the redirect location is not valid text".into()))?;
+    let next = url
+        .join(location)
+        .map_err(|e| TransportError::Protocol(format!("invalid redirect location: {e}")))?;
+    Ok((next, location.to_owned()))
+}
+
+/// Turns the request into a GET without body, as a 301 to 303 asks.
+fn as_get(method: &mut Method, headers: &mut HeaderMap) {
+    if *method != Method::HEAD {
+        *method = Method::GET;
+    }
+    headers.remove(CONTENT_TYPE);
+    headers.remove(CONTENT_LENGTH);
 }
 
 /// A form body as it is sent.

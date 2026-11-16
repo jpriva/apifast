@@ -541,6 +541,11 @@ fn update_auth(parent: &mut Value, key: &str, old: &Auth, new: &Auth, level: Aut
                 pairs.push(("username", a.username.clone(), b.username.clone()));
                 pairs.push(("password", a.password.clone(), b.password.clone()));
             }
+            (AuthScheme::Ntlm(a), AuthScheme::Ntlm(b)) => {
+                pairs.push(("username", a.username.clone(), b.username.clone()));
+                pairs.push(("password", a.password.clone(), b.password.clone()));
+                pairs.push(("domain", a.domain.clone(), b.domain.clone()));
+            }
             (AuthScheme::AwsV4(a), AuthScheme::AwsV4(b)) => {
                 for ((field, before), (_, after)) in aws_fields(a).into_iter().zip(aws_fields(b)) {
                     pairs.push((field, before, after));
@@ -605,6 +610,12 @@ fn auth_value(scheme: &AuthScheme) -> Option<Value> {
             ("type", s("digest")),
             ("username", s(&d.username)),
             ("password", s(&d.password)),
+        ]),
+        AuthScheme::Ntlm(n) => mapping([
+            ("type", s("ntlm")),
+            ("username", s(&n.username)),
+            ("password", s(&n.password)),
+            ("domain", s(&n.domain)),
         ]),
         AuthScheme::AwsV4(a) => {
             let fields = aws_fields(a);
