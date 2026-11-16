@@ -82,7 +82,7 @@ variables:
 
 ## Variables dinámicas
 
-Se generan en cada envío. Conjunto inicial:
+Se generan en cada envío, con los nombres de Postman y Bruno, así que las colecciones importadas funcionan sin cambios:
 
 | Variable | Valor |
 |---|---|
@@ -90,9 +90,18 @@ Se generan en cada envío. Conjunto inicial:
 | `{{$timestamp}}` | Segundos desde la época Unix |
 | `{{$isoTimestamp}}` | Fecha y hora en ISO 8601 |
 | `{{$randomInt}}` | Entero entre 0 y 1000 |
-| `{{$randomEmail}}`, `{{$randomFullName}}`, `{{$randomWord}}` | Datos de prueba |
+| `{{$randomFirstName}}`, `{{$randomLastName}}`, `{{$randomFullName}}` | Nombre, apellido o ambos (`Elena Silva`) |
+| `{{$randomUserName}}` | `elena.silva42` |
+| `{{$randomEmail}}` | `elena.silva318@example.com`: siempre en `example.com`, un dominio reservado para ejemplos, así que nada llega a una persona real |
+| `{{$randomWord}}`, `{{$randomWords}}` | Una palabra o tres separadas por espacios |
+| `{{$randomCity}}`, `{{$randomCountry}}` | Una ciudad o un país |
+| `{{$randomPhoneNumber}}` | `555-123-4567` |
+| `{{$randomBoolean}}` | `true` o `false` |
+| `{{$randomAlphaNumeric}}` | Un carácter, letra minúscula o dígito |
 
-El resto de las variables de Bruno se añade según demanda para facilitar la importación.
+- Salen de listas pequeñas y fijas (`apifast-template/src/fake.rs`): bastan para datos de prueba, sin depender de un generador grande.
+- Cada aparición genera un valor nuevo: `{{$randomFirstName}}` dos veces da dos nombres. Para el mismo valor en varios sitios, captúralo en una variable.
+- Una variable dinámica desconocida es un error al renderizar, como una variable que no existe. El resto de las de Postman y Bruno se añade según demanda.
 
 ## Funciones
 

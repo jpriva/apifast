@@ -2,7 +2,7 @@
 
 A desktop client for testing APIs, written in Rust with an egui interface. It takes the best ideas from [Bruno](https://github.com/usebruno/bruno) and [Yaak](https://github.com/mountain-loop/yaak) and combines them into a native, lightweight, file-based application.
 
-> **Status: phases F1 (headless core), F2 (desktop GUI) and F3 (secret vault) done.** `apifast-gui` edits and sends requests from Bruno-compatible YAML collections; `apifast send` does it from the command line.
+> **Status: phases F1 (headless core), F2 (desktop GUI), F3 (secret vault) and F4 (tests and runner) done.** `apifast-gui` edits, sends and tests requests from Bruno-compatible YAML collections; `apifast send` and `apifast run` do it from the command line.
 
 ## What it is
 

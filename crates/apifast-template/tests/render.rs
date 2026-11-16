@@ -385,3 +385,43 @@ fn a_path_inside_a_secret_is_a_secret() {
         Err(RenderError(Problem::SecretUnavailable("creds".into())))
     );
 }
+
+#[test]
+fn test_data_variables_have_the_expected_shapes() {
+    let mut host = FakeHost {
+        random: 1234,
+        ..FakeHost::default()
+    };
+    let mut one = |name: &str| {
+        render(
+            &format!("{{{{${name}}}}}"),
+            &vars(&[]),
+            &mut host,
+            Mode::Strict,
+        )
+        .unwrap_or_else(|e| panic!("{name}: {e:?}"))
+        .text
+        .to_string()
+    };
+    let email = one("randomEmail");
+    assert!(
+        email.ends_with("@example.com") && email.contains('.'),
+        "{email}"
+    );
+    let full = one("randomFullName");
+    assert_eq!(full.split(' ').count(), 2, "{full}");
+    assert_ne!(one("randomFirstName"), "");
+    assert_ne!(one("randomLastName"), "");
+    assert!(one("randomUserName").contains('.'));
+    assert!(one("randomWord").chars().all(|c| c.is_ascii_lowercase()));
+    assert_eq!(one("randomWords").split(' ').count(), 3);
+    assert!(["true", "false"].contains(&one("randomBoolean").as_str()));
+    assert_eq!(one("randomAlphaNumeric").len(), 1);
+    let phone = one("randomPhoneNumber");
+    assert_eq!(phone.len(), 12, "{phone}");
+    assert_eq!(phone.matches('-').count(), 2, "{phone}");
+    assert_ne!(one("randomCity"), "");
+    assert_ne!(one("randomCountry"), "");
+    // Still an error: a name that is not one of them.
+    assert!(render("{{$randomUnicorn}}", &vars(&[]), &mut host, Mode::Strict).is_err());
+}

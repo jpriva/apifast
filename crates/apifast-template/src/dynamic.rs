@@ -15,7 +15,7 @@ pub(crate) fn generate(name: &str, host: &mut dyn Host, out: &mut String) -> boo
         "timestamp" => push_display(out, host.unix_millis().div_euclid(1000)),
         "isoTimestamp" => iso_8601(host.unix_millis(), out),
         "randomInt" => push_display(out, host.random_u64() % 1001),
-        _ => return false,
+        _ => return crate::fake::generate(name, host, out),
     }
     true
 }

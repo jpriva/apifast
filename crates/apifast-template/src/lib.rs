@@ -17,6 +17,7 @@
 //! resolves the tags; everything impure comes from a [`Host`].
 
 mod dynamic;
+mod fake;
 mod parse;
 mod render;
 

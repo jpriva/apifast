@@ -42,7 +42,7 @@ impl Language {
         }
     }
 
-    /// Whether [`format`] can format it.
+    /// Whether [`format()`](fn@format) can format it.
     pub fn formats(self) -> bool {
         matches!(self, Self::Json | Self::Xml)
     }
