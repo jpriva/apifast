@@ -57,6 +57,27 @@ pub fn locate(file: &Path, collection: Option<&Path>) -> Result<Located> {
     })
 }
 
+/// The collection `dir` is in: `dir` itself or the nearest folder above it
+/// with an opencollection.yml.
+///
+/// # Errors
+///
+/// If `dir` cannot be opened or is not inside a collection.
+pub fn collection_root(dir: &Path) -> Result<PathBuf> {
+    let dir = dir
+        .canonicalize()
+        .with_context(|| format!("cannot open `{}`", dir.display()))?;
+    dir.ancestors()
+        .find(|d| d.join("opencollection.yml").is_file())
+        .map(Path::to_path_buf)
+        .with_context(|| {
+            format!(
+                "`{}` is not inside a collection: no opencollection.yml in it or above it",
+                dir.display()
+            )
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

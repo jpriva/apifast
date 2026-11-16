@@ -178,22 +178,35 @@ Las respuestas pueden contener datos sensibles (por ejemplo, un token recién em
 
 ## CLI y CI
 
-En un pipeline no hay keyring. La clave de la colección se pasa por variable de entorno:
+Los valores y las claves se leen de la entrada estándar, nunca de los argumentos, que quedarían en el historial de la shell y en la lista de procesos:
 
 ```
-APIFAST_COLLECTION_KEY=AFK-... apifast run ./mi-api --env produccion
+printf %s "$TOKEN" | apifast vault set produccion token            # solo en esta máquina
+printf %s "$TOKEN" | apifast vault set produccion token --shared   # para el equipo, por git
+apifast vault status                       # cada variable secreta y dónde está su valor
+apifast vault key show                     # la clave de la colección, para pasarla
+apifast vault key import < clave.txt       # la clave que dio el equipo
+apifast vault key rotate                   # una clave nueva; la imprime
 ```
 
-Los secretos solo locales se pasan con `--env-var nombre=valor` o por variables de entorno del proceso.
+`vault set` solo acepta variables marcadas `secret: true` en el entorno. Si la colección no tiene identificador, lo recibe, igual que en la interfaz.
+
+En un pipeline no hay keyring. La clave de la colección se pasa por variable de entorno; se usa solo en esa ejecución, comprobada contra el *challenge*, y no se guarda:
+
+```
+APIFAST_COLLECTION_KEY=AFK-... apifast send users/get.yml --env produccion
+```
+
+`APIFAST_NO_KEYRING=1` hace que la clave maestra vaya al archivo `0600` en lugar del keyring (también lo usan las pruebas, para no tocar el keyring de quien las ejecuta). Un secreto solo local se puede dar en CI con `--var nombre=valor`, que tiene prioridad sobre todos los ámbitos.
 
 ## Puertos y adaptador
 
-| Puerto | Operaciones |
-|---|---|
-| `KeyStore` | Obtener, crear y borrar la clave maestra |
-| `SecretVault` | Cifrar, descifrar, guardar y leer secretos locales, exportar e importar la clave de la colección, rotar |
-
-`apifast-vault` implementa ambos. `KeyStore` tiene tres implementaciones: keyring, archivo `0600` y memoria (tests).
+| Pieza | Dónde | Qué hace |
+|---|---|---|
+| `SecretStore` | Puerto en `apifast-app` | El envío pide el valor de un secreto |
+| `SharedSecretFiles` | Puerto en `apifast-app`, implementado por `FsCollection` | Los archivos de `.apifast/secrets/` y el *challenge* |
+| `VaultSecrets` | `apifast-vault` | Implementa `SecretStore`: secretos locales y compartidos, clave de la colección, huérfanas, rotación |
+| `KeyBackend` | `apifast-vault` | Dónde vive la clave maestra: `SystemKeyring` (que se puede apagar) o `KeyFile` (`0600`); las pruebas usan uno falso |
 
 ## Dependencias previstas
 

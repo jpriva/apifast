@@ -5,6 +5,7 @@
 
 mod locate;
 mod system;
+mod vault;
 
 use std::fmt::Write as _;
 use std::io::{IsTerminal, Write};
@@ -21,7 +22,7 @@ use apifast_domain::Variable;
 use apifast_history::FsResponseStore;
 use apifast_http::ReqwestTransport;
 use apifast_storage_fs::FsCollection;
-use apifast_vault::{SystemKeyring, VaultSecrets};
+use apifast_vault::{VaultSecrets, parse_shareable_key};
 use clap::{Parser, Subcommand};
 
 /// Exit code when `--fail` is set and the status is 400 or more.
@@ -43,6 +44,8 @@ enum Command {
     /// The body goes to stdout and a summary to stderr, so the output can be
     /// piped: `apifast send users/get.yml | jq`.
     Send(SendArgs),
+    /// Secrets and the collection's key.
+    Vault(vault::VaultArgs),
 }
 
 #[derive(clap::Args)]
@@ -90,6 +93,7 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     let result = match cli.command {
         Command::Send(args) => run_send(&args),
+        Command::Vault(args) => vault::run(&args).map(|()| ExitCode::SUCCESS),
     };
     match result {
         Ok(code) => code,
@@ -115,12 +119,23 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
     let transport = ReqwestTransport::new(&located.root)?;
     // Secrets need the collection's id: without one, none was ever stored.
     let secrets: Box<dyn SecretStore> = match &collection.id {
-        Some(id) => Box::new(VaultSecrets::for_collection(
-            &apifast_history::dirs::data_dir(),
-            id.as_str(),
-            repo.clone(),
-            SystemKeyring::default(),
-        )?),
+        Some(id) => {
+            let vault = VaultSecrets::for_collection(
+                &apifast_history::dirs::data_dir(),
+                id.as_str(),
+                repo.clone(),
+                vault::keyring(),
+            )?;
+            // CI passes the collection's key in the environment: used for
+            // this run only, never stored.
+            if let Ok(text) = std::env::var("APIFAST_COLLECTION_KEY") {
+                let key = parse_shareable_key(&text).context("APIFAST_COLLECTION_KEY")?;
+                vault
+                    .use_key_in_memory(key)
+                    .context("APIFAST_COLLECTION_KEY")?;
+            }
+            Box::new(vault)
+        }
         None => Box::new(NoSecrets),
     };
     let (clock, random) = (system::SystemClock, system::SystemRandom::new());
@@ -282,7 +297,9 @@ mod tests {
             "--fail",
         ])
         .unwrap();
-        let Command::Send(args) = cli.command;
+        let Command::Send(args) = cli.command else {
+            panic!("not send");
+        };
         assert_eq!(args.env.as_deref(), Some("prod"));
         assert_eq!(
             args.vars,
@@ -290,5 +307,12 @@ mod tests {
         );
         assert!(args.include && args.fail && !args.quiet && !args.allow_unresolved);
         assert!(Cli::try_parse_from(["apifast", "send"]).is_err());
+        // A secret's value is never an argument.
+        assert!(
+            Cli::try_parse_from(["apifast", "vault", "set", "prod", "token", "s3cret"]).is_err()
+        );
+        assert!(
+            Cli::try_parse_from(["apifast", "vault", "set", "prod", "token", "--shared"]).is_ok()
+        );
     }
 }

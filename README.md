@@ -2,7 +2,7 @@
 
 A desktop client for testing APIs, written in Rust with an egui interface. It takes the best ideas from [Bruno](https://github.com/usebruno/bruno) and [Yaak](https://github.com/mountain-loop/yaak) and combines them into a native, lightweight, file-based application.
 
-> **Status: phase F1 (headless core) done.** `apifast send` sends requests from Bruno-compatible YAML collections. The GUI comes in F2.
+> **Status: phases F1 (headless core) and F2 (desktop GUI) done; F3 (secret vault) almost done.** `apifast-gui` edits and sends requests from Bruno-compatible YAML collections; `apifast send` does it from the command line.
 
 ## What it is
 
@@ -48,6 +48,14 @@ Architecture decisions live in [docs/adr/](docs/adr/).
 
 ## Usage
 
+The desktop app opens a collection folder (or asks for one):
+
+```
+apifast-gui path/to/collection
+```
+
+From the command line:
+
 ```
 apifast send users/get.yml --env production
 apifast send users/get.yml -e production -i          # status line and headers too
@@ -58,6 +66,19 @@ apifast send users/get.yml -e production | jq .      # the body goes to stdout
 The collection is the nearest folder above the file with an `opencollection.yml` (or `--collection`). A summary and any warnings go to stderr. Responses are kept under the user's data directory (`APIFAST_DATA_DIR` overrides it); `send` never writes into the collection.
 
 Exit codes: 0 when a response arrived, 1 on errors, 2 on usage errors, 4 with `--fail` when the status is 400 or more.
+
+### Secrets
+
+A variable marked `secret: true` keeps only its name in the collection; its value lives in the vault, sealed with a master key kept in the system keyring. Values are read from standard input, never from arguments:
+
+```
+printf %s "$TOKEN" | apifast vault set production token           # only on this machine
+printf %s "$TOKEN" | apifast vault set production token --shared  # for the team, via git
+apifast vault status                                              # names and where each value is
+apifast vault key show | import | rotate                          # the collection's key
+```
+
+In CI, `APIFAST_COLLECTION_KEY=AFK-...` opens shared secrets for one run without storing the key, and `APIFAST_NO_KEYRING=1` keeps the master key in a file instead of a keyring.
 
 ## Development
 

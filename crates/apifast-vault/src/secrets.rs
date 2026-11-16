@@ -391,6 +391,23 @@ impl<K: KeyBackend, F: KeyBackend> VaultSecrets<K, F> {
             .map(|key| crate::shareable_key(&key)))
     }
 
+    /// Uses `key` as the collection's key for this run only, without
+    /// storing it: for CI, where the key comes from the environment and
+    /// there is no keyring. Checked against the challenge first.
+    ///
+    /// # Errors
+    ///
+    /// [`KeyStoreError::WrongCollectionKey`] if it does not open the
+    /// challenge, or the challenge cannot be read.
+    pub fn use_key_in_memory(&self, key: Key) -> Result<(), KeyStoreError> {
+        if let Some(challenge) = self.shared.vault_challenge().map_err(|e| files(&e))? {
+            check_challenge(&key, &self.collection, &challenge)
+                .map_err(|_| KeyStoreError::WrongCollectionKey)?;
+        }
+        *locked(&self.collection_key) = Some(key);
+        Ok(())
+    }
+
     /// Takes the collection's key pasted as people pass it: read, checked
     /// against the challenge, then stored.
     ///

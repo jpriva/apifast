@@ -219,8 +219,8 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
     - Una colección que comparte secretos sin la clave en esta máquina muestra un aviso con un campo oculto para pegarla.
     - La ventana "Collection key" (desde la paleta) muestra la clave con un botón para copiarla, y la rota tras confirmar lo que implica. Sin secretos compartidos, explica que la clave se crea al compartir el primero.
     - La barra superior avisa cuando la clave maestra está en el archivo de respaldo y no en el keyring.
-- [ ] CLI: `apifast vault` y `APIFAST_COLLECTION_KEY`.
-- [ ] Cifrado del tarro de cookies.
+- [x] CLI: `apifast vault` y `APIFAST_COLLECTION_KEY`. `vault set` (local o `--shared`), `status`, y `key show`, `import` y `rotate`; valores y claves solo por la entrada estándar. `APIFAST_COLLECTION_KEY` abre los secretos compartidos en una ejecución sin guardar la clave, y `APIFAST_NO_KEYRING=1` deja la clave maestra en su archivo.
+- [ ] ~~Cifrado del tarro de cookies.~~ Pasa a F5: apifast todavía no guarda cookies, y el tarro llega allí ("Tarro de cookies con editor"). Se cifrará con la clave maestra al crearlo.
 
 ### Criterio de salida
 
@@ -265,7 +265,7 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
 - [ ] OAuth 2.0: authorization code con PKCE, client credentials, password; caché cifrada y refresco.
 - [ ] Proxy: sistema y manual (HTTP, HTTPS, SOCKS5), exclusiones, por colección.
 - [ ] Autoridades certificadoras adicionales y certificados cliente por host.
-- [ ] Tarro de cookies con editor.
+- [ ] Tarro de cookies con editor, cifrado con la clave maestra (movido de F3).
 - [ ] Sobrescrituras de DNS.
 - [ ] Timeline completo con conector instrumentado (DNS, conexión, TLS, reutilización).
 - [ ] Descompresión manual, para registrar el tamaño comprimido y el descomprimido (en F1 la hace reqwest).
