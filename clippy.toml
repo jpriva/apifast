@@ -1,7 +1,7 @@
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 allow-print-in-tests = true
-doc-valid-idents = ["OpenCollection", ".."]
+doc-valid-idents = ["OpenCollection", "JSONPath", "XPath", ".."]
 disallowed-methods = [
     # `ui.set_visuals(..)` compiles through `Deref<Target = Context>` and changes the
     # whole app from the next frame. Use `*ui.visuals_mut() = ..` for a scope, or

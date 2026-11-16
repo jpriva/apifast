@@ -13,7 +13,7 @@ drivers      apifast-gui, apifast-cli          wire everything together
    │
 application  apifast-app                       use cases + ports (traits)
    │
-domain       apifast-domain, apifast-template  pure logic, no I/O
+domain       apifast-domain, apifast-template, apifast-query  pure logic, no I/O
    ▲
 adapters     apifast-storage-fs, apifast-http, ...   implement the ports
 ```
@@ -35,12 +35,13 @@ Crates live in `crates/`. Crates marked *planned* do not exist yet; the [roadmap
 |---|---|---|
 | `apifast-domain` | Domain | Entities (`Collection`, `Folder`, `HttpRequest`, `Environment`, `Variable`, `Auth`, `Body`), `Setting<T>`, inheritance resolution with `Origin` |
 | `apifast-template` | Domain | Template parser and renderer (`{{name}}`, dynamic variables) |
+| `apifast-query` | Domain | JSONPath (RFC 9535) and XPath 1.0 over response bodies, with a visit budget |
 | `apifast-app` | Application | Use cases (`SendRequest`, `SaveRequest`, ...) and ports (`CollectionRepository`, `HttpTransport`, ...) |
-| `apifast-storage-fs` | Adapter | OpenCollection YAML read/write with `oneyaml`, atomic writes, `.apifast/` folder, Bruno-compatible `workspace.yml` (in progress) |
+| `apifast-storage-fs` | Adapter | OpenCollection YAML read/write with `oneyaml`, atomic writes, `.apifast/` folder, Bruno-compatible `workspace.yml` |
 | `apifast-http` | Adapter | HTTP transport with reqwest and rustls |
 | `apifast-history` | Adapter | Response bodies and history on disk |
-| `apifast-vault` | Adapter | Encrypted secrets and keyring (*planned*, F3) |
-| `apifast-watch` | Adapter | File system watcher (*planned*, F2) |
+| `apifast-vault` | Adapter | Encrypted secrets and keyring |
+| `apifast-watch` | Adapter | File system watcher |
 | `apifast-import` | Adapter | Importers and exporters (*planned*, F6) |
 | `apifast-ws`, `apifast-grpc` | Adapter | WebSocket and gRPC (*planned*, F7–F8) |
 | `apifast-script-js` | Adapter | JavaScript engine (*planned*, F9) |
@@ -57,9 +58,9 @@ Other top-level folders:
 
 These rules are checked by CI or by the type system. Breaking one needs an ADR.
 
-- **The domain has no I/O.** `apifast-domain` and `apifast-template` depend on no other workspace crate (except template → domain) and on none of tokio, serde, reqwest, egui or oneyaml. Serialization DTOs live in the adapters.
+- **The domain has no I/O.** `apifast-domain`, `apifast-template` and `apifast-query` depend on no other workspace crate (except template and query → domain) and on none of tokio, serde, reqwest, egui or oneyaml. Serialization DTOs live in the adapters.
 - **Dependencies point inwards.** The application depends only on the domain; an adapter depends only on the domain and the application, never on another adapter. `apifast-arch-tests` enforces this from `cargo metadata`, and every new crate must be given a layer there.
-- **Each technology has one owner.** reqwest, hyper and rustls live only in `apifast-http`, oneyaml only in `apifast-storage-fs`, egui, eframe and wgpu only in `apifast-gui`, and so on (`EXCLUSIVE_OWNERS` in the architecture tests). Only drivers use `anyhow`.
+- **Each technology has one owner.** reqwest, hyper and rustls live only in `apifast-http`, oneyaml only in `apifast-storage-fs`, roxmltree only in `apifast-query`, egui, eframe and wgpu only in `apifast-gui`, and so on (`EXCLUSIVE_OWNERS` in the architecture tests). Only drivers use `anyhow`.
 - **Every crate inherits the workspace lints** (`[lints] workspace = true`) and has a README and the project license.
 - **Only resolved requests are sent.** `ResolvedRequest` has private fields and is built only by `resolve`, so sending a request without applying inheritance does not compile. A `compile_fail` doctest guards this.
 - **Files are the source of truth** ([ADR 0003](docs/adr/0003-archivos-como-fuente-de-verdad.md)). Collections are plain OpenCollection YAML that Bruno can open; unknown keys are preserved on save. apifast's own data goes in `.apifast/`, never inside OpenCollection files ([ADR 0002](docs/adr/0002-formato-yaml-opencollection.md)).

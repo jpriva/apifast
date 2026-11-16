@@ -33,7 +33,7 @@ runtime:
 | `res.statusText` | Texto de estado |
 | `res.headers.<nombre>` | Header de la respuesta (sin distinguir mayúsculas) |
 | `res.body` | Cuerpo completo |
-| `res.body.<ruta>` | Campo del cuerpo JSON; admite índices (`items[0].id`) |
+| `res.body.<ruta>` | Campo del cuerpo JSON; admite índices (`items[0].id`) y JSONPath (`items[*].id`, `..id`, `items[?@.ok]`) |
 | `res.responseTime` | Duración en milisegundos |
 | `res.size` | Tamaño del cuerpo en bytes |
 
@@ -82,6 +82,7 @@ Un operador desconocido se conserva en el archivo y la aserción falla diciendo 
 - Un header repetido se lee con sus valores unidos por `, `.
 - El cuerpo se lee como JSON una sola vez por respuesta, con un lector propio del dominio (`apifast-domain::Json`, sin `serde`) que conserva el texto de los números y rechaza anidamientos de más de 128 niveles. Si no es JSON, `res.body` es su texto y `res.body.<ruta>` falla con "the body is not JSON".
 - Las rutas usan puntos e índices (`items[0].id`); `["a.b"]` nombra una clave con puntos.
+- Una ruta que usa sintaxis de JSONPath (`*`, `..`, un filtro `[?…]`, un slice `[1:3]`, una unión `[0,2]` o un índice negativo) se lee como el JSONPath `$<ruta>`: `res.body.items[*].id` es `$.items[*].id`. Si selecciona un valor, es ese valor; si selecciona varios, un array con ellos; si no selecciona nada, es indefinido (`isUndefined` pasa). Ver [JSONPath y XPath](#jsonpath-y-xpath).
 - Un cuerpo demasiado grande para leerlo entero hace fallar las aserciones sobre `res.body`, con su motivo; las demás se evalúan igual.
 
 ## Capturas
@@ -119,6 +120,40 @@ Comportamiento actual:
 - En la interfaz, las variables de runtime duran mientras la colección está abierta; en la CLI, lo que dura `send` (y en `run`, toda la ejecución).
 - El cuerpo se lee para las comprobaciones solo si la request tiene alguna activa, y como mucho 16 MiB (`CHECK_LIMIT`).
 - Los valores real y esperado de los resultados llegan ya enmascarados con los secretos de la request y los capturados.
+
+## JSONPath y XPath
+
+El crate `apifast-query` evalúa las dos lenguas sobre el cuerpo de una respuesta. Lo usan `res.body.<ruta>` en aserciones y capturas, `response(path=…)` en plantillas ([docs/05](05-variables-y-plantillas.md)) y, más adelante, el filtro del visor de respuestas.
+
+**JSONPath** sigue el RFC 9535:
+
+| Sintaxis | Ejemplo |
+|---|---|
+| Nombre, comodín, índice (negativo desde el final) | `$.store.book[*].author`, `$.items[-1]` |
+| Nombre entre comillas, con escapes JSON | `$['a.b']`, `$["it's"]` |
+| Descendientes | `$..price` |
+| Slice con paso, unión | `$.items[1:5:2]`, `$.items[0,2]` |
+| Filtro con `==`, `!=`, `<`, `<=`, `>`, `>=`, `&&`, `\|\|`, `!` y paréntesis | `$.items[?@.price < 10 && !@.sold]` |
+| Funciones `length`, `count`, `match`, `search`, `value` | `$.items[?match(@.name, 'b.*')]` |
+
+- También acepta la forma `[?(…)]` de Jayway y Bruno, y un `-` dentro de un nombre tras el punto (`$.first-name`).
+- Los números se comparan por valor (`1 == 1.0`). Comparar con algo que no existe solo es cierto si el otro lado tampoco existe.
+- Una consulta de comparación que selecciona varios valores no compara (el RFC la rechaza; aquí no coincide).
+- Las expresiones regulares de `match` (entera) y `search` (parcial) tienen un límite de 1 MiB compiladas; una inválida es un error.
+
+**XPath** es la versión 1.0 completa salvo las variables (`$x`):
+
+- Rutas absolutas y relativas, `//`, `.`, `..`, `@`, todos los ejes (`ancestor::`, `following-sibling::`, `preceding::`…), los tests `*`, `text()`, `node()`, `comment()` y `processing-instruction()`, predicados de posición y de valor, uniones con `|`.
+- Las funciones de cadena, número y booleano de XPath 1.0 (`count`, `sum`, `contains`, `substring`, `normalize-space`, `translate`, `name`, `local-name`…), más `ends-with`.
+- Un nombre sin prefijo coincide por nombre local en cualquier espacio de nombres: `//Body/Token` encuentra `<s:Body><Token xmlns="urn:auth">` sin declarar nada. Con prefijo (`//s:Body`), el prefijo es el que declara el documento.
+- El resultado es el texto de cada nodo seleccionado, en orden del documento, o el número, la cadena o el booleano que da la expresión (`count(//item)` da `3`).
+- Se admite un DTD; `roxmltree` limita la expansión de entidades.
+
+**Comunes:**
+
+- Una expresión que empieza por `$` es JSONPath; cualquier otra, XPath. En `response(path=…)`, sobre un cuerpo JSON, una ruta sin `$` es la forma simple (`data.items[0]`).
+- Un error de sintaxis dice dónde: `` invalid JSONPath `$.a[`: expected a selector at character 5 ``.
+- Cada consulta tiene un presupuesto de 20 millones de visitas a valores o nodos y un anidamiento máximo de 64 niveles, así que una expresión costosa sobre un cuerpo grande se detiene con un error en vez de bloquear.
 
 ## Orden de evaluación en un envío
 

@@ -18,6 +18,7 @@ flowchart TB
     subgraph Dominio
         DOM[apifast-domain]
         TPL[apifast-template]
+        QRY[apifast-query]
     end
 
     subgraph Adaptadores
@@ -37,6 +38,8 @@ flowchart TB
     APP --> DOM
     APP --> TPL
     TPL --> DOM
+    APP --> QRY
+    QRY --> DOM
     FS -.implementa.-> APP
     HTTP -.implementa.-> APP
     VAULT -.implementa.-> APP
@@ -54,6 +57,7 @@ flowchart TB
 |---|---|---|---|
 | `apifast-domain` | Dominio | Entidades, value objects, reglas de herencia, aserciones | Solo `std` y utilidades puras |
 | `apifast-template` | Dominio | Parser y renderer de plantillas | `apifast-domain` |
+| `apifast-query` | Dominio | JSONPath (RFC 9535) y XPath 1.0 sobre cuerpos de respuesta | `apifast-domain`, roxmltree, regex |
 | `apifast-app` | Aplicación | Casos de uso y definición de puertos | Dominio, `async-trait`/futures |
 | `apifast-storage-fs` | Adaptador | Lectura y escritura YAML, escritura atómica | Aplicación, serde, oneyaml |
 | `apifast-http` | Adaptador | Transporte HTTP, TLS, proxy, cookies, autenticación | Aplicación, reqwest, rustls |
@@ -69,7 +73,7 @@ flowchart TB
 
 ### Reglas de dependencia
 
-1. `apifast-domain` no depende de ningún otro crate del workspace, ni de tokio, serde, reqwest o egui.
+1. `apifast-domain` no depende de ningún otro crate del workspace, ni de tokio, serde, reqwest o egui. `apifast-template` y `apifast-query` solo dependen de él, y siguen siendo puros: sin E/S.
 2. `apifast-app` solo depende del dominio. Nunca de un adaptador.
 3. Un adaptador nunca depende de otro adaptador.
 4. Solo los drivers (`apifast-gui`, `apifast-cli`) conocen los tipos concretos y los conectan (raíz de composición).
@@ -216,6 +220,7 @@ apifast/
 ├── crates/
 │   ├── apifast-domain/
 │   ├── apifast-template/
+│   ├── apifast-query/
 │   ├── apifast-app/
 │   ├── apifast-storage-fs/
 │   ├── apifast-http/

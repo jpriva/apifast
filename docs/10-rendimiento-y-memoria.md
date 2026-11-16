@@ -109,6 +109,7 @@ Medido el 2026-11-16 en la misma máquina y de la misma forma que F2, tras F3, l
 - Las colecciones plegadas no cuestan memoria medible: el workspace con 3000 requests listadas usa lo mismo que la ventana con una colección pequeña.
 - Una colección de 100 requests usa 2,9 MB más que en F2 (50 MB). Sigue dentro del presupuesto de 60 MB.
 - El binario release pasa de 22,7 MiB a 24,6 MiB: dentro del presupuesto de 25 MB, pero con poco margen. Han entrado la bóveda (cifrado y keyring, que trae el cliente D-Bus) y `regex`. Falta ver qué parte aporta cada uno antes de añadir más dependencias.
+- Con JSONPath y XPath (`apifast-query` y `roxmltree`) pasa a 24,8 MiB. Queda muy poco margen: el análisis por crate con `cargo bloat` es necesario antes de la próxima dependencia.
 
 ## Perfil de compilación
 

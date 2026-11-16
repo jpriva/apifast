@@ -18,7 +18,7 @@ enum Layer {
 /// Layer of each workspace crate. A new, unclassified crate fails the tests.
 fn layer(name: &str) -> Option<Layer> {
     match name {
-        "apifast-domain" | "apifast-template" => Some(Layer::Domain),
+        "apifast-domain" | "apifast-template" | "apifast-query" => Some(Layer::Domain),
         "apifast-app" => Some(Layer::Application),
         "apifast-storage-fs" | "apifast-http" | "apifast-vault" | "apifast-watch"
         | "apifast-history" | "apifast-import" | "apifast-ws" | "apifast-grpc"
@@ -51,6 +51,7 @@ const EXCLUSIVE_OWNERS: &[(&str, &[&str])] = &[
     ("tonic", &["apifast-grpc"]),
     ("prost-reflect", &["apifast-grpc"]),
     ("rquickjs", &["apifast-script-js"]),
+    ("roxmltree", &["apifast-query"]),
     ("egui", &["apifast-gui"]),
     ("eframe", &["apifast-gui"]),
     ("wgpu", &["apifast-gui"]),
@@ -101,8 +102,10 @@ fn workspace() -> Vec<Crate> {
 /// Whether `from` may depend on the workspace crate `to`.
 fn allowed(from: &str, a: Layer, to: &str, b: Layer) -> bool {
     match a {
-        // The domain depends on nothing, except template, which may use domain.
-        Layer::Domain => from == "apifast-template" && to == "apifast-domain",
+        // The domain depends on nothing; template and query may use it.
+        Layer::Domain => {
+            matches!(from, "apifast-template" | "apifast-query") && to == "apifast-domain"
+        }
         Layer::Application => b == Layer::Domain,
         Layer::Adapter => matches!(b, Layer::Domain | Layer::Application),
         Layer::Driver => b != Layer::Driver && b != Layer::Tooling,

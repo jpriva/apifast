@@ -20,6 +20,7 @@ apifast-http = { path = "crates/apifast-http" }
 apifast-history = { path = "crates/apifast-history" }
 apifast-watch = { path = "crates/apifast-watch" }
 apifast-vault = { path = "crates/apifast-vault" }
+apifast-query = { path = "crates/apifast-query" }
 
 # External
 base64 = "0.23.1"
@@ -30,6 +31,7 @@ zeroize = "1.9.1"
 notify = { version = "8.2.2", default-features = false, features = ["macos_fsevent"] }
 oneyaml = "1.2.0"
 regex = { version = "1.13.1", default-features = false, features = ["std", "unicode", "perf"] }
+roxmltree = "0.21.2"
 serde_json = "1.0.154"
 thiserror = "2.0.21"
 

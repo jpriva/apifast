@@ -10,6 +10,7 @@ publish.workspace = true
 [dependencies]
 apifast-domain.workspace = true
 apifast-template.workspace = true
+apifast-query.workspace = true
 regex.workspace = true
 thiserror.workspace = true
 

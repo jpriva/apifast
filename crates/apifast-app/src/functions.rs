@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use apifast_domain::Json;
+use apifast_query::{Language, QueryError};
 use apifast_template::FunctionArg;
 
 use crate::checks::CHECK_LIMIT;
@@ -55,25 +56,23 @@ impl Fetched {
         Ok(Self::new(at_ms, outcome.head.clone(), body.as_deref()))
     }
 
-    /// `response(path=…)`: the body, or the value at a JSON path in it.
+    /// `response(path=…)`: the body, or what a JSONPath or XPath selects
+    /// in it (see [`query_body`]).
     fn value(&self, request: &RequestPath, path: Option<&str>) -> Result<String, String> {
         let Some(text) = &self.body else {
             return Err(format!("the response of `{request}` is too large to read"));
         };
         let written = path.unwrap_or("").trim();
-        let path = written.strip_prefix('$').unwrap_or(written);
-        let path = path.strip_prefix('.').unwrap_or(path);
-        if path.is_empty() {
+        if written.is_empty() || written == "$" {
             return Ok(text.clone());
         }
-        let json = self
-            .json
-            .as_ref()
-            .ok_or_else(|| format!("the response of `{request}` is not JSON"))?;
-        json.at(path)
-            .map_err(|e| e.to_string())?
-            .map(Json::to_text)
-            .ok_or_else(|| format!("`{written}` is not in the response of `{request}`"))
+        let values = query_body(written, text, self.json.as_ref())
+            .map_err(|e| format!("{e}, in the response of `{request}`"))?;
+        match values.as_slice() {
+            [] => Err(format!("`{written}` is not in the response of `{request}`")),
+            [one] => Ok(one.to_text()),
+            many => Ok(Json::Array(many.to_vec()).to_string()),
+        }
     }
 
     /// `header(name=…)`: its values joined by `, `; names ignore case.
@@ -89,6 +88,30 @@ impl Fetched {
         }
         Ok(values.join(", "))
     }
+}
+
+/// What `expression` selects in a body. A JSONPath starts with `$`; on a
+/// JSON body, a path without it is the simple form (`data.items[0]`) read as
+/// JSONPath; on any other body, the expression is an XPath.
+///
+/// # Errors
+///
+/// If the expression is malformed, or not in the body's language.
+pub(crate) fn query_body(
+    expression: &str,
+    text: &str,
+    json: Option<&Json>,
+) -> Result<Vec<Json>, QueryError> {
+    let expression = expression.trim();
+    if json.is_some() && Language::of(expression) == Language::XPath {
+        let joined = if expression.starts_with('[') {
+            format!("${expression}")
+        } else {
+            format!("$.{expression}")
+        };
+        return apifast_query::select(&joined, text, json);
+    }
+    apifast_query::select(expression, text, json)
 }
 
 /// How many bytes of a body of `size` to read, or `None` if too large.
@@ -312,6 +335,20 @@ mod tests {
         );
         assert_eq!(fetched.value(&r, Some("$.data.token")), Ok("t".into()));
         assert_eq!(fetched.value(&r, Some("list[0]")), Ok("5".into()));
+        assert_eq!(fetched.value(&r, Some("$..token")), Ok("t".into()));
+        assert_eq!(
+            fetched.value(&r, Some("$.*")),
+            Ok(r#"[{"token":"t"},[5]]"#.into())
+        );
+        assert_eq!(fetched.value(&r, Some("$.list[?@ > 1]")), Ok("5".into()));
+        let xml = Fetched::new(
+            0,
+            head.clone(),
+            Some(b"<a><b id='1'>x</b><b id='2'>y</b></a>"),
+        );
+        assert_eq!(xml.value(&r, Some("/a/b[2]")), Ok("y".into()));
+        assert_eq!(xml.value(&r, Some("//b/@id")), Ok(r#"["1","2"]"#.into()));
+        assert_eq!(xml.value(&r, Some("count(//b)")), Ok("2".into()));
         assert_eq!(fetched.value(&r, None).unwrap().len(), 33);
         assert_eq!(
             fetched.value(&r, Some("$.nope")),
@@ -326,6 +363,7 @@ mod tests {
                 .unwrap_err()
                 .contains("not JSON")
         );
+        assert!(text.value(&r, Some("/a")).unwrap_err().contains("not XML"));
         let big = Fetched::new(0, head, None);
         assert!(big.value(&r, None).unwrap_err().contains("too large"));
     }

@@ -117,7 +117,7 @@ El resto de las variables de Bruno se añade según demanda para facilitar la im
 ```
 
 - `request` es la ruta relativa dentro de la colección, sin extensión.
-- `path` es una expresión JSONPath (o XPath si la respuesta es XML).
+- `path` es una expresión JSONPath (o XPath si la respuesta no es JSON); ver [JSONPath y XPath](08-tests-y-runner.md#jsonpath-y-xpath).
 - `refresh` controla cuándo se vuelve a ejecutar la request referenciada:
 
 | Valor | Comportamiento |
@@ -139,7 +139,8 @@ Se detectan ciclos entre requests encadenadas y se reportan como error.
 - La "respuesta guardada" es la última del historial cuyo cuerpo sigue guardado. La CLI no escribe historial, así que en `apifast send` toda dependencia `missing` o `ttl` se envía (una vez).
 - Las dependencias quedan en el historial y la interfaz las muestra. Sus capturas y aserciones se ejecutan pero no se informan.
 - Un ciclo se rechaza antes de enviar nada: `requests depend on each other: a.yml → b.yml → a.yml`. Si una dependencia falla, el error la nombra: `` `login.yml`, used by response(): ... ``.
-- `path` admite, por ahora, la forma simple de JSONPath (`$.data.token`, `$.items[0].id`); sin `path`, el resultado es el cuerpo entero. El JSONPath completo y XPath llegan con su tarea.
+- `path` admite JSONPath completo (`$.data.token`, `$..id`, `$.items[?@.active].id`) y, sobre un cuerpo JSON, también la forma simple sin `$` (`data.token`). Sobre un cuerpo que no es JSON, `path` es XPath (`/feed/entry[1]/id`, `count(//item)`). Sin `path`, o con `$`, el resultado es el cuerpo entero.
+- Si `path` selecciona un valor, el resultado es su texto; si selecciona varios, un array JSON con ellos (`["1","2"]`); si no selecciona nada, es un error que nombra la ruta y la request.
 - `header` une con `, ` los valores repetidos. En el historial los `Set-Cookie` se guardan ocultos, así que `header(name='set-cookie')` solo funciona con una respuesta enviada en el mismo envío.
 - Solo se lee para esto un cuerpo de hasta 16 MiB.
 

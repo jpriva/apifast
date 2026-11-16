@@ -8,6 +8,7 @@
 use std::cmp::Ordering;
 
 use apifast_domain::{Assertion, Json, Operator};
+use apifast_query::JsonPath;
 use regex::RegexBuilder;
 
 use crate::ResponseHead;
@@ -51,6 +52,9 @@ pub enum ExpressionError {
     /// A malformed path.
     #[error("invalid path `{0}`")]
     Path(String),
+    /// A JSONPath that cannot be used, with why.
+    #[error("{0}")]
+    Query(String),
 }
 
 impl ResponseFacts {
@@ -116,11 +120,14 @@ impl ResponseFacts {
                     json.clone().unwrap_or_else(|| Json::String(text.clone())),
                 ));
             }
+            let json = json.as_ref().ok_or(ExpressionError::NotJson)?;
+            if is_json_path(path) {
+                return json_path(json, path, expression);
+            }
             let path = path.strip_prefix('.').unwrap_or(path);
             if path.is_empty() {
                 return Err(ExpressionError::Path(expression.to_owned()));
             }
-            let json = json.as_ref().ok_or(ExpressionError::NotJson)?;
             return json
                 .at(path)
                 .map(Option::<&Json>::cloned)
@@ -139,6 +146,30 @@ impl ResponseFacts {
             .collect();
         (!values.is_empty()).then(|| values.join(", "))
     }
+}
+
+/// Whether a path after `res.body` needs JSONPath: wildcards, descendants,
+/// filters, slices, unions or negative indexes (`res.body.items[*].id`).
+/// Others keep the simple reading, which also takes `items.0`.
+fn is_json_path(path: &str) -> bool {
+    ["*", "..", "?", ":", ",", "[-"]
+        .iter()
+        .any(|token| path.contains(token))
+}
+
+/// `res.body<path>` read as the JSONPath `$<path>`: undefined when it selects
+/// nothing, the value when one, and an array of them when several.
+fn json_path(json: &Json, path: &str, expression: &str) -> Result<Option<Json>, ExpressionError> {
+    let query = JsonPath::parse(&format!("${path}"))
+        .map_err(|_| ExpressionError::Path(expression.to_owned()))?;
+    let mut values = query
+        .select(json)
+        .map_err(|e| ExpressionError::Query(e.to_string()))?;
+    Ok(match values.len() {
+        0 => None,
+        1 => values.pop().cloned(),
+        _ => Some(Json::Array(values.into_iter().cloned().collect())),
+    })
 }
 
 /// The outcome of an assertion.
@@ -557,7 +588,18 @@ mod tests {
             Err(ExpressionError::Unknown(_))
         ));
         assert!(matches!(
-            f.value_of("res.body..x"),
+            f.value_of("res.body.items[1"),
+            Err(ExpressionError::Path(_))
+        ));
+        // JSONPath when the path needs it.
+        assert_eq!(text("res.body..x"), None);
+        assert_eq!(text("res.body..role").as_deref(), Some("admin"));
+        assert_eq!(text("res.body.items[*]").as_deref(), Some("[1,2,3]"));
+        assert_eq!(text("res.body.items[-1]").as_deref(), Some("3"));
+        assert_eq!(text("res.body.items[?@ > 1]").as_deref(), Some("[2,3]"));
+        assert_eq!(text("res.body.items[0:1]").as_deref(), Some("1"));
+        assert!(matches!(
+            f.value_of("res.body.items[?@ >]"),
             Err(ExpressionError::Path(_))
         ));
 
