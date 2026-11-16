@@ -15,6 +15,7 @@ Los archivos de la colección son la única fuente de verdad. No hay base de dat
 - Al guardar, se escribe el archivo de forma atómica.
 - Un watcher detecta cambios externos y los aplica al modelo en memoria.
 - Los identificadores de request no se guardan en disco: se asignan en memoria por ruta y se trasladan al renombrar.
+- El workspace también es un archivo (`workspace.yml`, [ADR 0009](0009-workspaces-y-varias-colecciones.md)) y se vigila como la colección. El estado de la interfaz (pestañas, colecciones desplegadas) no es fuente de verdad: es estado local desechable ([ADR 0008](0008-estado-local.md)).
 
 ## Consecuencias
 

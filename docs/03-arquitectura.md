@@ -120,12 +120,16 @@ Definidos como traits en `apifast-app`:
 | `HistoryStore` | Registrar y consultar ejecuciones | `apifast-history` |
 | `CookieStore` | Persistir el tarro de cookies | `apifast-history` |
 | `SessionStore` | Guardar las pestañas abiertas y sus borradores sin guardar | `apifast-storage-fs` |
+| `WorkspaceRepository` | Leer y editar `workspace.yml`: nombre y colecciones del workspace | `apifast-storage-fs` |
+| `WorkspaceState` | Estado personal de un workspace (desplegadas, pestañas, activa) y la lista de workspaces conocidos | `apifast-storage-fs` |
 | `FsWatcher` | Notificar cambios externos en la colección, agrupados en lotes de rutas relativas. No implementa un puerto: el driver lo arranca al abrir la colección y reconcilia cada lote (`ApplyExternalChange`) | `apifast-watch` |
 | `ScriptEngine` | Ejecutar scripts de usuario | `apifast-script-js` |
 | `Clock` | Hora actual y medición de tiempos | Sistema, o falso en tests |
 | `Prompter` | Pedir un valor al usuario (`{{?Texto}}`) | GUI o terminal |
 
 Cada puerto tiene además una implementación en memoria para tests, en `apifast_app::memory`.
+
+La interfaz trabaja con un workspace activo y varias colecciones a la vez ([ADR 0009](adr/0009-workspaces-y-varias-colecciones.md)). El núcleo de la GUI guarda los puertos de cada colección cargada (repositorio, transporte, historial, sesión, bóveda y watcher) por su carpeta raíz, y las pestañas y los comandos indican a qué colección pertenecen. Los casos de uso no cambian: siempre trabajan sobre una colección.
 
 Los repositorios son síncronos: leen archivos pequeños y el driver los ejecuta fuera del hilo de la interfaz. `HttpTransport` es asíncrono, con `async fn` nativo en traits y futures `Send`, así que `apifast-app` no depende de tokio.
 

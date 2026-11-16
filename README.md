@@ -24,6 +24,7 @@ A desktop client for testing APIs, written in Rust with an egui interface. It ta
 | Tests | Declarative assertions first, JavaScript later | [ADR 0006](docs/adr/0006-scripting-diferido.md) |
 | Network | reqwest/hyper + rustls, a single TLS stack | [ADR 0007](docs/adr/0007-pila-http-tls.md) |
 | Local state | Plain files, no database | [ADR 0008](docs/adr/0008-estado-local.md) |
+| Workspaces | Bruno-compatible `workspace.yml`; several collections open at once, loaded on demand | [ADR 0009](docs/adr/0009-workspaces-y-varias-colecciones.md) |
 | Platforms | Linux first; macOS and Windows built in CI | [Vision](docs/01-vision-y-alcance.md) |
 | Language | Code in English; UI in English and Spanish | [Quality](docs/11-calidad-y-clean-code.md) |
 
@@ -53,6 +54,8 @@ The desktop app opens a collection folder (or asks for one):
 ```
 apifast-gui path/to/collection
 ```
+
+Workspaces with several collections open at once are in progress ([roadmap](docs/12-roadmap.md)).
 
 From the command line:
 

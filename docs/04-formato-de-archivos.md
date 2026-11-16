@@ -285,6 +285,46 @@ Reglas:
 - Al renombrar o borrar un entorno o una variable secreta, apifast actualiza el archivo correspondiente de `.apifast/secrets/`.
 - Una entrada huérfana (secreto cifrado cuya variable ya no existe, por ejemplo tras editar con Bruno) se señala en el editor de entornos y se puede limpiar.
 
+## Workspace (`workspace.yml`)
+
+Un workspace agrupa colecciones ([ADR 0009](adr/0009-workspaces-y-varias-colecciones.md)). Es una carpeta con un `workspace.yml`, el mismo formato que usa Bruno, que se puede versionar en git junto a sus colecciones:
+
+```
+mi-equipo/
+├── workspace.yml
+├── environments/          # entornos globales del workspace (Bruno); se conservan
+└── collections/
+    ├── shop/              # una colección: opencollection.yml, requests...
+    └── pagos/
+```
+
+```yaml
+opencollection: 1.0.0
+info:
+  name: "Mi equipo"
+  type: workspace
+collections:
+  - name: "Shop API"
+    path: "collections/shop"
+  - name: "Legacy"
+    path: "/home/ana/apis/legacy"
+specs:
+docs: ''
+```
+
+| Campo | Significado |
+|---|---|
+| `info.name` | Nombre del workspace |
+| `info.type` | Siempre `workspace` |
+| `collections[].path` | Carpeta de la colección: relativa a la del workspace si está dentro, absoluta si está fuera |
+| `collections[].name` | Nombre que Bruno muestra; apifast lo escribe al añadir y muestra el de la propia colección |
+| `specs`, `docs` | De Bruno; se conservan sin cambios |
+
+- Al añadir o quitar una colección se cambian solo sus líneas, como en el resto de archivos.
+- Una misma colección puede aparecer en varios workspaces.
+- Los entornos de `environments/` son los globales del workspace. Por ahora se conservan sin usarse; su uso como ámbito `Global` llega en una tarea posterior.
+- Lo personal (qué colecciones están desplegadas, las pestañas abiertas) no va en este archivo: ver "Estado local".
+
 ## Compatibilidad con Bruno
 
 | Dirección | Estado |
@@ -329,10 +369,15 @@ El historial, las respuestas, las cookies y la bóveda local viven en el directo
 ├── sessions/<collection-id>/         # pestañas abiertas de la colección
 │   ├── session.yml                   # rutas de las pestañas, la activa y el entorno
 │   └── drafts/<n>.yml                # cambios sin guardar de la pestaña n, como archivo de request
+├── workspaces/<hash-de-la-ruta>/
+│   └── state.yml                     # colecciones desplegadas, orden de pestañas y la activa
+├── default-workspace/                # "My workspace", creado en el primer arranque
+│   └── workspace.yml
 └── ui-state.yml                      # tamaños de paneles
 ~/.config/apifast/
 ├── settings.yml
-└── keymap.yml                        # atajos cambiados por el usuario, por acción
+├── keymap.yml                        # atajos cambiados por el usuario, por acción
+└── workspaces.yml                    # workspaces conocidos y el último activo
 ```
 
 En macOS y Windows se usan los directorios equivalentes de cada plataforma.

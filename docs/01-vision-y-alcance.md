@@ -54,6 +54,7 @@ Un cliente de API **nativo, rápido y basado en archivos**, donde la colección 
 
 - Protocolos: HTTP/REST, GraphQL, Server-Sent Events, WebSocket y gRPC.
 - Colecciones, carpetas, requests, entornos y variables con herencia.
+- Workspaces compatibles con Bruno: varias colecciones abiertas a la vez, agrupadas en un `workspace.yml` que se puede compartir por git.
 - Bóveda de secretos híbrida.
 - Autenticación: Basic, Bearer, API key, Digest, OAuth 2.0, AWS SigV4 y NTLM.
 - Aserciones declarativas, capturas de variables, encadenamiento de requests y runner de colección.

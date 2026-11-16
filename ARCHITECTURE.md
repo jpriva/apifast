@@ -36,7 +36,7 @@ Crates live in `crates/`. Crates marked *planned* do not exist yet; the [roadmap
 | `apifast-domain` | Domain | Entities (`Collection`, `Folder`, `HttpRequest`, `Environment`, `Variable`, `Auth`, `Body`), `Setting<T>`, inheritance resolution with `Origin` |
 | `apifast-template` | Domain | Template parser and renderer (`{{name}}`, dynamic variables) |
 | `apifast-app` | Application | Use cases (`SendRequest`, `SaveRequest`, ...) and ports (`CollectionRepository`, `HttpTransport`, ...) |
-| `apifast-storage-fs` | Adapter | OpenCollection YAML read/write with `oneyaml`, atomic writes, `.apifast/` folder |
+| `apifast-storage-fs` | Adapter | OpenCollection YAML read/write with `oneyaml`, atomic writes, `.apifast/` folder, Bruno-compatible `workspace.yml` (in progress) |
 | `apifast-http` | Adapter | HTTP transport with reqwest and rustls |
 | `apifast-history` | Adapter | Response bodies and history on disk |
 | `apifast-vault` | Adapter | Encrypted secrets and keyring (*planned*, F3) |

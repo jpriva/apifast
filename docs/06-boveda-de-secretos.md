@@ -160,6 +160,14 @@ Un secreto solo local se puede compartir y uno compartido se puede volver solo l
 - Copiar un secreto al portapapeles lo limpia después de un tiempo configurable.
 - La CLI nunca imprime secretos, ni siquiera en modo detallado.
 
+## Cuándo se pide la clave de la colección
+
+- **Nunca a quien la crea:** se genera al compartir el primer secreto y queda guardada en esta máquina, envuelta con la clave maestra.
+- **Una sola vez por máquina:** quien la pega (en la interfaz, o con `apifast vault key import`) la tiene guardada desde entonces; reiniciar la aplicación no la vuelve a pedir.
+- **Solo cuando hace falta:** el aviso para pegarla aparece al abrir una request de una colección que comparte secretos y cuya clave falta en esta máquina. Con varias colecciones abiertas, cada una tiene la suya.
+- **Si no se recuerda para pasarla al equipo:** "Collection key" (menú de la raíz de la colección en el árbol, o la paleta) la muestra y la copia; `apifast vault key show` la imprime.
+- **Cambiarla** es rotarla: se genera otra clave aleatoria, se vuelven a cifrar los secretos compartidos y hay que pasar la nueva al equipo.
+
 ## Identificador al guardar el primer secreto
 
 Los secretos se indexan por el identificador estable de la colección. Una colección sin él (por ejemplo, una de Bruno recién abierta) lo recibe al guardar su primer secreto o al pegar una clave. En ese momento, lo que apifast guardaba de ella bajo el hash de su ruta (sesión, historial y cuerpos de respuesta) pasa a guardarse bajo el identificador, para no perderlo.

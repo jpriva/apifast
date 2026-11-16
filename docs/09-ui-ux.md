@@ -14,23 +14,23 @@ La interfaz se construye con egui (eframe). El objetivo es que resulte familiar 
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ ☰  Mi API ▾                    [ Buscar / comandos  Ctrl+K ]    ● produccion ▾│
+│ Mi API                         [ Buscar / comandos  Ctrl+K ]    ● produccion ▾│
 ├───────────────────┬──────────────────────────────────────────────────────────┤
-│ COLECCIONES       │  login ×   crear usuario ●   listar ×          +         │
-│ ▾ Mi API          ├──────────────────────────────────────────────────────────┤
-│   ▾ auth          │ [POST ▾] {{host}}/v1/users/:orgId              [ Enviar ] │
-│      POST login   ├──────────────────────────────────────────────────────────┤
-│      POST refresh │ Params  Headers(2)  Body  Auth  Vars  Tests  Docs  Ajustes│
-│   ▾ usuarios      │ ┌──────────────────────────────────────────────────────┐ │
-│      GET  listar  │ │ {                                                    │ │
-│      POST crear   │ │   "name": "{{$randomFullName}}",                     │ │
-│                   │ │   "email": "{{user_email}}"                          │ │
-│ ENTORNOS          │ │ }                                                    │ │
-│   local           │ └──────────────────────────────────────────────────────┘ │
-│ ● produccion      ├──────────────────────────────────────────────────────────┤
+│ Mi equipo ▾       │  login ×   crear usuario ●   Pagos · listar ×      +     │
+│ [+ Colección] [⌂] ├──────────────────────────────────────────────────────────┤
+│ ▾ Mi API          │ [POST ▾] {{host}}/v1/users/:orgId              [ Enviar ] │
+│   ▾ auth          ├──────────────────────────────────────────────────────────┤
+│      POST login   │ Params  Headers(2)  Body  Auth  Vars  Tests  Docs  Ajustes│
+│      POST refresh │ ┌──────────────────────────────────────────────────────┐ │
+│   ▾ usuarios      │ │ {                                                    │ │
+│      GET  listar  │ │   "name": "{{$randomFullName}}",                     │ │
+│      POST crear   │ │   "email": "{{user_email}}"                          │ │
+│ ▸ Pagos           │ │ }                                                    │ │
+│ ▸ Legacy  ⚠       │ └──────────────────────────────────────────────────────┘ │
+│                   ├──────────────────────────────────────────────────────────┤
 │                   │ 201 Created    182 ms    1.2 kB        Tests 2/2 ✓       │
-│ HISTORIAL         │ Body  Headers(8)  Cookies  Timeline  Tests               │
-│                   │ ┌──────────────────────────────────────────────────────┐ │
+│                   │ Body  Headers(8)  Cookies  Timeline  Tests               │
+│ Colecciones │ Hist│ ┌──────────────────────────────────────────────────────┐ │
 │                   │ │ { "id": 981, "name": "Ana Ruiz" }                    │ │
 │                   │ └──────────────────────────────────────────────────────┘ │
 ├───────────────────┴──────────────────────────────────────────────────────────┤
@@ -40,9 +40,9 @@ La interfaz se construye con egui (eframe). El objetivo es que resulte familiar 
 
 | Zona | Contenido |
 |---|---|
-| Barra superior | Selector de colección, búsqueda y paleta de comandos, selector de entorno con su color |
-| Barra lateral | Árbol de la colección, entornos, historial. Se puede ocultar y redimensionar |
-| Pestañas | Una por request abierta; un punto indica cambios sin guardar |
+| Barra superior | Nombre de la colección de la pestaña activa, búsqueda y paleta de comandos, selector de entorno de esa colección con su color |
+| Barra lateral | Selector de workspace, árbol con una raíz por colección, historial de la colección activa. Se puede ocultar y redimensionar |
+| Pestañas | Una por request abierta, de cualquier colección; un punto indica cambios sin guardar. El nombre de la colección aparece en el tooltip, y delante del nombre cuando dos pestañas se llaman igual |
 | Barra de URL | Método, URL con resaltado de variables, botón de enviar o cancelar |
 | Panel de request | Pestañas de edición |
 | Panel de respuesta | Estado, tiempo, tamaño y pestañas de visualización |
@@ -50,10 +50,28 @@ La interfaz se construye con egui (eframe). El objetivo es que resulte familiar 
 
 Los paneles de request y respuesta se pueden disponer uno encima del otro o lado a lado (`Ctrl+J`).
 
+## Arranque y workspaces
+
+La aplicación entra siempre directamente al visor, sin pantalla de bienvenida ([ADR 0009](adr/0009-workspaces-y-varias-colecciones.md)):
+
+- Abre el último workspace usado, con sus colecciones desplegadas y sus pestañas como se dejaron.
+- La primera vez crea "My workspace" en el directorio de datos.
+- Sin colecciones, el visor muestra un estado vacío con "New collection…" y "Open collection…".
+- `apifast-gui <carpeta>`: si la carpeta tiene `workspace.yml`, abre ese workspace; si es una colección, la añade al workspace activo.
+
+La cabecera de la barra lateral tiene:
+
+- El **selector de workspace**, con New workspace…, Open workspace…, Rename y Forget (lo quita de la lista de esta máquina, sin borrar nada).
+- **New collection…**: nombre y carpeta padre (por defecto, la del workspace); crea `<padre>/<nombre>` con su `opencollection.yml` y la añade al workspace.
+- **Open collection…**: elige una carpeta. Si no tiene `opencollection.yml`, un aviso ofrece crear una ahí.
+
 ## Barra lateral
 
+- Una raíz por cada colección del workspace, en su orden. Una raíz plegada no está cargada; desplegarla la carga. Una colección cuya carpeta ya no existe, o que no se puede leer, se marca con su error.
+- Menú de la raíz: nueva request, nueva carpeta, entornos, clave de la colección, mostrar la carpeta, cerrar (la descarga y cierra sus pestañas, preguntando si hay cambios sin guardar) y quitar del workspace (no borra archivos).
 - Árbol con carpetas plegables. Solo se dibujan las filas visibles.
-- Arrastrar y soltar para reordenar (actualiza `seq`) y mover entre carpetas (mueve el archivo).
+- Arrastrar y soltar para reordenar (actualiza `seq`) y mover entre carpetas (mueve el archivo), dentro de la misma colección.
+- El historial lateral es el de la colección de la pestaña activa.
 - Menú contextual: nueva request, nueva carpeta, duplicar, renombrar, borrar, ejecutar carpeta, mostrar en el explorador de archivos, copiar como cURL.
 - Filtro rápido por nombre, método o tag (`Ctrl+F`).
 - Los archivos con error de parseo aparecen marcados y se pueden abrir como texto.
@@ -116,8 +134,9 @@ La edición con resaltado se limita a unos 200 KB: con más texto, egui tarda de
 
 ## Bóveda
 
-- Al abrir una colección con secretos compartidos y sin clave local, un aviso no bloqueante sobre la request ofrece pegar la clave.
-- La ventana "Collection key" (paleta) muestra la clave para pasarla al equipo, con botón de copiar, y la rota tras una confirmación que explica que el equipo necesitará la nueva y que los valores antiguos siguen en el historial de git.
+- La clave de la colección no se pide nunca a quien la creó (se genera con el primer secreto compartido) ni a una máquina que ya la tiene: queda guardada, envuelta con la clave maestra.
+- Al abrir una request de una colección con secretos compartidos y sin clave en esta máquina, un aviso no bloqueante sobre la request ofrece pegar la clave; su raíz en el árbol lleva una marca.
+- La ventana "Collection key" (menú de la raíz o paleta, para la colección activa) muestra la clave para pasarla al equipo cuando no se recuerda, con botón de copiar, y la rota tras una confirmación que explica que el equipo necesitará la nueva y que los valores antiguos siguen en el historial de git.
 - Diálogo "Compartir clave": muestra la clave legible, con botón de copiar y advertencia sobre cómo compartirla.
 - Los campos secretos tienen un botón de revelar que se vuelve a ocultar solo.
 - Indicador del estado de la bóveda en la barra superior (todavía no hay barra de estado): aparece cuando la clave maestra está en el archivo de respaldo en lugar del keyring, con la explicación al pasar el ratón.

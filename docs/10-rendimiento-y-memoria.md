@@ -35,6 +35,7 @@ Como referencia, las aplicaciones sobre Electron o webview suelen consumir vario
 
 ### Modelo en memoria
 
+- **Colecciones bajo demanda.** Un workspace puede listar muchas colecciones, pero solo las desplegadas o con pestañas abiertas se cargan: árbol, watcher e historial. Una plegada cuesta una fila en el árbol ([ADR 0009](adr/0009-workspaces-y-varias-colecciones.md)).
 - **Carga perezosa.** Al abrir una colección se leen solo los metadatos (`info`) de cada request. El contenido completo se carga al abrir la pestaña y se libera al cerrarla si no hay cambios.
 - **Cadenas compartidas.** `Arc<str>` para textos repetidos (nombres de headers, métodos) y cadenas compactas para valores cortos.
 - **Instantáneas inmutables.** El núcleo publica el estado como `Arc`; la interfaz lo lee sin copiar.

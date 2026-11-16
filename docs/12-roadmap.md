@@ -238,6 +238,33 @@ El cifrado del tarro de cookies pasa a F5, donde llega el tarro.
 
 ---
 
+## Workspaces y varias colecciones
+
+**Objetivo:** trabajar con varias colecciones a la vez, agrupadas en workspaces compatibles con Bruno, entrando directamente al visor ([ADR 0009](adr/0009-workspaces-y-varias-colecciones.md)).
+
+**Estado:** en curso desde el 2026-11-16. Se intercala en F4, después de las funciones `response` y `header` y antes de JSONPath; nace de probar la interfaz: sin colección solo había una bienvenida, no se podía crear una colección y abrir otra cerraba la anterior.
+
+### Tareas
+
+- [x] Diseño documentado: ADR 0009, formato de `workspace.yml` y estado local ([formato](04-formato-de-archivos.md)), interfaz ([UI](09-ui-ux.md)), clave de la colección ([bóveda](06-boveda-de-secretos.md)).
+- [ ] Arranque directo al visor, con estado vacío; crear y abrir colecciones desde dentro (diálogo "New collection", acciones y paleta). Sin pantalla de bienvenida.
+- [ ] `workspace.yml` en `apifast-storage-fs`: leer, añadir, quitar y renombrar conservando el resto del archivo; estado personal por workspace y lista de workspaces conocidos. Todo `workspace.yml` del corpus de Bruno se guarda byte a byte.
+- [ ] Núcleo de la GUI con un workspace activo y varias colecciones: pestañas y comandos por colección, carga perezosa, entorno activo por colección, cerrar y quitar colecciones, crear, abrir y cambiar de workspace, restaurar al reiniciar, `workspace.yml` vigilado sin recursión.
+- [ ] Interfaz: selector de workspace, una raíz por colección en el árbol con su menú, barra superior e historial de la colección activa, pestañas con su colección, paleta con todas las requests cargadas.
+- [ ] Clave de la colección por colección: nunca se pide a quien la creó ni dos veces en la misma máquina; verla, copiarla y rotarla desde el menú de la raíz. Fijado con pruebas.
+- [ ] Medición de memoria con un workspace de tres colecciones y una cargada.
+
+Siguiente, fuera de esta sección: los entornos globales del workspace (`environments/` de Bruno) como ámbito `Global`.
+
+### Criterio de salida
+
+- `apifast-gui` sin argumentos entra al visor; desde dentro se crean y abren colecciones y workspaces.
+- Dos colecciones abiertas a la vez, cada una con su entorno, y al reiniciar todo vuelve como estaba.
+- Un workspace creado en Bruno se abre en apifast con sus colecciones, y uno guardado por apifast se abre en Bruno.
+- La clave de una colección no se pide a quien la creó ni a una máquina que ya la importó.
+
+---
+
 ## F4 — Tests y runner
 
 **Objetivo:** usar una colección como suite de pruebas.
