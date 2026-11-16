@@ -1052,3 +1052,76 @@ async fn a_wrong_ntlm_password_ends_in_the_401() {
     assert_eq!(result.unwrap().status, 401);
     assert_eq!(*log.lock().unwrap(), [(1, "negotiate"), (1, "rejected")]);
 }
+
+// --- OAuth 2.0 loopback -------------------------------------------------------
+
+/// A port free right now.
+fn free_port() -> u16 {
+    std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port()
+}
+
+/// A browser that asks for a favicon, then follows the redirect to `to`.
+fn fake_browser(to: String) -> impl Fn(&str) -> std::io::Result<()> + Send + Sync {
+    move |_url: &str| {
+        let to = to.clone();
+        std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            let (host, path) = to.trim_start_matches("http://").split_once('/').unwrap();
+            for target in ["/favicon.ico".to_owned(), format!("/{path}")] {
+                let mut stream = std::net::TcpStream::connect(host).unwrap();
+                write!(stream, "GET {target} HTTP/1.1\r\nHost: {host}\r\n\r\n").unwrap();
+                let mut reply = String::new();
+                stream.read_to_string(&mut reply).ok();
+            }
+        });
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn the_loopback_catches_the_redirect_and_its_parameters() {
+    use apifast_app::Authorizer as _;
+    let port = free_port();
+    let callback = format!("http://localhost:{port}/callback");
+    let browser = fake_browser(format!("127.0.0.1:{port}/callback?code=c%201&state=s"));
+    let authorizer = apifast_http::LoopbackAuthorizer::new(Box::new(browser));
+    let answer = authorizer
+        .authorize("http://auth/authorize?x", &callback, &CancelToken::new())
+        .await
+        .unwrap();
+    assert_eq!(
+        answer,
+        [
+            ("code".to_owned(), "c 1".to_owned()),
+            ("state".to_owned(), "s".to_owned())
+        ]
+    );
+}
+
+#[tokio::test]
+async fn the_loopback_refuses_remote_callbacks_and_gives_up_in_time() {
+    use apifast_app::Authorizer as _;
+    let authorizer = apifast_http::LoopbackAuthorizer::new(Box::new(|_: &str| Ok(())))
+        .waiting(Duration::from_millis(100));
+    let error = authorizer
+        .authorize(
+            "http://auth/a",
+            "https://app.example.com/cb",
+            &CancelToken::new(),
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("must be http://localhost"), "{error}");
+    let callback = format!("http://127.0.0.1:{}/cb", free_port());
+    let error = authorizer
+        .authorize("http://auth/a", &callback, &CancelToken::new())
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("in time"), "{error}");
+}

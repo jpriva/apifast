@@ -500,6 +500,26 @@ pub trait Random: Send + Sync {
     fn next_u64(&self) -> u64;
 }
 
+/// Gets the user's authorization in a browser (OAuth 2.0 authorization
+/// code): opens `url` and waits for the authorization server to send the
+/// browser to `callback`. `Send + Sync` so use cases can run as tasks on
+/// any thread.
+pub trait Authorizer: Send + Sync {
+    /// The query parameters of the redirect to `callback`, such as `code`
+    /// and `state`, or `error`.
+    fn authorize<'a>(
+        &'a self,
+        url: &'a str,
+        callback: &'a str,
+        cancel: &'a CancelToken,
+    ) -> Authorization<'a>;
+}
+
+/// What [`Authorizer::authorize`] gives: the redirect's query parameters.
+pub type Authorization<'a> = std::pin::Pin<
+    Box<dyn Future<Output = Result<Vec<(String, String)>, crate::AppError>> + Send + 'a>,
+>;
+
 /// Waits between the requests of a run. `Send + Sync` so use cases can run
 /// as tasks on any thread.
 pub trait Pause: Send + Sync {

@@ -278,6 +278,7 @@ dependencies = [
  "apifast-query",
  "apifast-template",
  "regex",
+ "sha2",
  "thiserror 2.0.21",
 ]
 

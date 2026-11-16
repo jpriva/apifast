@@ -84,7 +84,7 @@ Implementada de forma nativa en Rust, con un enum tipado por esquema.
 | Basic, Bearer, API key | F1 | API key en header o en query |
 | Heredada (`inherit`) y ninguna (`none`) | F1 | Toma la del padre más cercano |
 | Digest | F5 (hecha) | Responde al reto del servidor, en el transporte |
-| OAuth 2.0 | F5 (en curso) | Authorization code con PKCE, client credentials, password; refresco automático. Hecho: se lee, se guarda y se edita; obtiene y refresca tokens con client credentials y password |
+| OAuth 2.0 | F5 (hecha) | Authorization code con PKCE, client credentials y password; refresco automático; tokens sellados en disco |
 | AWS SigV4 | F5 (hecha) | Firma del request canónico, en el transporte |
 | NTLM | F5 (hecha) | NTLMv2 en tres mensajes sobre una conexión |
 
@@ -129,7 +129,15 @@ Basic, Bearer y API key se resuelven al renderizar: son headers o parámetros. L
 - **La respuesta:** JSON de RFC 6749. `expires_in` da la caducidad; sin él, el token no caduca. Un error del servidor se muestra con su `error` y su `error_description`: `the token request failed (400): invalid_grant: bad password`. `tokenConfig.source: id_token` envía el `id_token` en vez del de acceso.
 - **Dónde se guarda:** en la interfaz, en disco, sellado con la clave maestra ([docs/06](06-boveda-de-secretos.md#qué-se-cifra-además-de-los-secretos)): sobrevive a un reinicio. En la CLI, en memoria, durante un `send` o una ejecución de `run` (un token sirve para toda la ejecución). La clave es el id del token (`tokenConfig.id`), la URL del token y el cliente, así que varias requests con la misma auth comparten token.
 
-Para OAuth 2.0 con authorization code se abre el navegador del sistema y se levanta un servidor local temporal para recibir el *callback*. Los tokens se guardan cifrados con la clave maestra.
+**Authorization code con PKCE** (RFC 6749 4.1, RFC 7636 y RFC 8252):
+
+- apifast arma la URL de autorización con `response_type=code`, `client_id`, `redirect_uri` (la callback URL), `state`, el `scope` y, con PKCE, `code_challenge` (S256) y `code_challenge_method`. Los parámetros adicionales de la autorización van en la query; los de header o body no tienen sentido en un navegador.
+- Abre la URL en el navegador del sistema (`xdg-open`, `open` o el manejador de URLs de Windows) y escucha en el puerto de la callback URL, que debe ser `http://localhost:<puerto>/…` o `http://127.0.0.1:<puerto>/…`: una callback a otro dominio no se puede atrapar y es un error que lo explica. Escucha antes de abrir el navegador, responde al navegador con una página que dice que ya se puede cerrar e ignora otras rutas (como `favicon.ico`).
+- Comprueba que la respuesta trae el mismo `state` (si no, la rechaza), y canjea el código por el token (`grant_type=authorization_code`, `code`, `redirect_uri` y, con PKCE, `code_verifier`).
+- Un `state` vacío en la auth se genera al azar en cada autorización. El verificador PKCE tiene 64 caracteres.
+- Si el usuario no autoriza en 5 minutos, o rechaza (`error=access_denied`), es un error con el motivo. Cancelar el envío cancela la espera.
+- La interfaz siempre puede abrir el navegador, al enviar o con "Get new token". La CLI solo si se ejecuta en una terminal; en CI este flujo falla enseguida con un error que lo dice, en vez de esperar.
+- Comprobado con el ejemplo de PKCE del RFC 7636, con un navegador simulado (la URL, el `state`, que el verificador corresponde al reto, el rechazo y un `state` falso) y con el servidor local de verdad, que atrapa la redirección.
 
 ## Proxy
 

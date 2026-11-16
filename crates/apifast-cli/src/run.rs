@@ -164,6 +164,7 @@ pub fn run(args: &RunArgs) -> Result<ExitCode> {
 
     // A token obtained once serves the whole run.
     let tokens = apifast_app::memory::MemoryTokens::default();
+    let authorizer = crate::terminal_authorizer();
     let (runtime, cancel) = runtime()?;
     let report = runtime.block_on(async {
         let ports = SendPorts {
@@ -185,6 +186,9 @@ pub fn run(args: &RunArgs) -> Result<ExitCode> {
             },
             history: None,
             tokens: Some(&tokens),
+            authorizer: authorizer
+                .as_ref()
+                .map(|a| a as &dyn apifast_app::Authorizer),
         };
         let on_event = |event: RunEvent<'_>| console.event(&event);
         run_collection(ports, &system::TokioPause, &options, &cancel, &on_event).await

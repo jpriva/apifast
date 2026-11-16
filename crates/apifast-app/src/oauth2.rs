@@ -88,6 +88,10 @@ pub trait TokenStore: Send + Sync {
 /// The fields of an OAuth 2.0 auth with their variables rendered.
 struct Rendered {
     flow: OAuth2Flow,
+    authorization_url: String,
+    callback_url: String,
+    state: String,
+    pkce: bool,
     token_url: String,
     refresh_url: String,
     client_id: String,
@@ -118,6 +122,10 @@ fn render_fields(
     let refresh_url = text(&oauth.refresh_token_url)?;
     Ok(Rendered {
         flow: oauth.flow,
+        authorization_url: text(&oauth.authorization_url)?,
+        callback_url: text(&oauth.callback_url)?,
+        state: text(&oauth.state)?,
+        pkce: oauth.pkce,
         refresh_url: if refresh_url.trim().is_empty() {
             token_url.clone()
         } else {
@@ -259,11 +267,11 @@ fn read_token(status: u16, body: &[u8], now_ms: i64) -> Result<OAuth2Token, AppE
 
 /// A fresh token from the token endpoint, as `rendered`'s grant asks.
 async fn fetch<T: HttpTransport + Sync>(
-    transport: &T,
+    ports: &TokenPorts<'_, T>,
     rendered: &Rendered,
-    now_ms: i64,
     cancel: &CancelToken,
 ) -> Result<OAuth2Token, AppError> {
+    let (transport, now_ms) = (ports.transport, ports.clock.unix_millis());
     let mut fields = Vec::new();
     match rendered.flow {
         OAuth2Flow::ClientCredentials => {
@@ -275,10 +283,7 @@ async fn fetch<T: HttpTransport + Sync>(
             fields.push(("password".into(), rendered.password.clone()));
         }
         OAuth2Flow::AuthorizationCode => {
-            return Err(AppError::Validation(
-                "the authorization code grant needs a browser, which apifast cannot open yet"
-                    .into(),
-            ));
+            fields = authorization_code(ports, rendered, cancel).await?;
         }
         OAuth2Flow::Implicit => {
             return Err(AppError::Validation(
@@ -298,6 +303,122 @@ async fn fetch<T: HttpTransport + Sync>(
         cancel,
     )
     .await
+}
+
+/// Random text of `len` characters from PKCE's alphabet (RFC 7636 4.1),
+/// also good for `state`.
+fn random_text(random: &dyn crate::Random, len: usize) -> String {
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+    (0..len)
+        .map(|_| {
+            // The alphabet has 66 characters; the bias of a modulo of a
+            // 64-bit number is negligible.
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "below the alphabet's length"
+            )]
+            let i = (random.next_u64() % ALPHABET.len() as u64) as usize;
+            char::from(ALPHABET[i])
+        })
+        .collect()
+}
+
+/// `BASE64URL(SHA256(verifier))`, without padding: PKCE's S256 challenge.
+fn pkce_challenge(verifier: &str) -> String {
+    use sha2::{Digest, Sha256};
+    base64(&Sha256::digest(verifier.as_bytes()))
+        .trim_end_matches('=')
+        .replace('+', "-")
+        .replace('/', "_")
+}
+
+/// The user authorizes in a browser (RFC 6749 4.1, with PKCE of RFC 7636):
+/// the fields of the token request that exchanges the code.
+async fn authorization_code<T>(
+    ports: &TokenPorts<'_, T>,
+    rendered: &Rendered,
+    cancel: &CancelToken,
+) -> Result<Vec<(String, String)>, AppError> {
+    let authorizer = ports.authorizer.ok_or_else(|| {
+        AppError::Validation(
+            "the authorization code grant needs a browser, which is not available here".into(),
+        )
+    })?;
+    for (name, value) in [
+        ("authorization URL", &rendered.authorization_url),
+        ("callback URL", &rendered.callback_url),
+    ] {
+        if value.trim().is_empty() {
+            return Err(AppError::Validation(format!("OAuth 2.0 needs the {name}")));
+        }
+    }
+    let state = if rendered.state.is_empty() {
+        random_text(ports.random, 32)
+    } else {
+        rendered.state.clone()
+    };
+    let verifier = random_text(ports.random, 64);
+    let mut url = rendered.authorization_url.clone();
+    let mut query = vec![
+        ("response_type", "code".to_owned()),
+        ("client_id", rendered.client_id.clone()),
+        ("redirect_uri", rendered.callback_url.clone()),
+        ("state", state.clone()),
+    ];
+    if !rendered.scope.is_empty() {
+        query.push(("scope", rendered.scope.clone()));
+    }
+    if rendered.pkce {
+        query.push(("code_challenge", pkce_challenge(&verifier)));
+        query.push(("code_challenge_method", "S256".into()));
+    }
+    let extra = rendered
+        .parameters
+        .iter()
+        .filter(|p| p.0 == OAuth2Request::Authorization);
+    for (name, value) in query
+        .iter()
+        .map(|(n, v)| ((*n).to_owned(), v.clone()))
+        .chain(extra.map(|p| (p.2.clone(), p.3.clone())))
+    {
+        url.push(if url.contains('?') { '&' } else { '?' });
+        let _ = write!(url, "{}={}", encode(&name), encode(&value));
+    }
+    let answer = authorizer
+        .authorize(&url, &rendered.callback_url, cancel)
+        .await?;
+    let get = |name: &str| {
+        answer
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, v)| v.clone())
+    };
+    if let Some(error) = get("error") {
+        let detail = get("error_description")
+            .map(|d| format!(": {d}"))
+            .unwrap_or_default();
+        return Err(AppError::Validation(format!(
+            "the authorization was refused: {error}{detail}"
+        )));
+    }
+    // The state ties the answer to this request: another one is an attack
+    // or a stale tab.
+    if get("state").as_deref() != Some(state.as_str()) {
+        return Err(AppError::Validation(
+            "the authorization answer has another state; try again".into(),
+        ));
+    }
+    let code = get("code")
+        .ok_or_else(|| AppError::Validation("the authorization answer has no code".into()))?;
+    let mut fields = vec![
+        ("grant_type".to_owned(), "authorization_code".to_owned()),
+        ("code".to_owned(), code),
+        ("redirect_uri".to_owned(), rendered.callback_url.clone()),
+    ];
+    if rendered.pkce {
+        fields.push(("code_verifier".to_owned(), verifier));
+    }
+    Ok(fields)
 }
 
 /// A refreshed token (RFC 6749 section 6). The server may not send a new
@@ -341,7 +462,22 @@ async fn refresh<T: HttpTransport + Sync>(
 pub(crate) struct TokenPorts<'a, T> {
     pub transport: &'a T,
     pub clock: &'a dyn Clock,
+    pub random: &'a dyn crate::Random,
     pub tokens: Option<&'a dyn TokenStore>,
+    pub authorizer: Option<&'a dyn crate::Authorizer>,
+}
+
+impl<'a, T> TokenPorts<'a, T> {
+    /// The ports of a send that the OAuth 2.0 step uses.
+    pub(crate) fn of<C, E, S>(ports: &crate::SendPorts<'a, C, E, T, S>) -> Self {
+        Self {
+            transport: ports.transport,
+            clock: ports.clock,
+            random: ports.random,
+            tokens: ports.tokens,
+            authorizer: ports.authorizer,
+        }
+    }
 }
 
 /// The token for `oauth`: a cached one that has not expired, a refreshed
@@ -390,7 +526,7 @@ async fn token<T: HttpTransport + Sync>(
             "there is no OAuth 2.0 token, and getting one automatically is off".into(),
         ));
     }
-    let token = fetch(ports.transport, rendered, now, cancel).await?;
+    let token = fetch(ports, rendered, cancel).await?;
     save(&token)?;
     Ok(token)
 }
@@ -448,6 +584,15 @@ pub(crate) async fn with_token<T: HttpTransport + Sync>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// RFC 7636, appendix B.
+    #[test]
+    fn pkce_challenges_match_the_rfc() {
+        assert_eq!(
+            pkce_challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"),
+            "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+        );
+    }
 
     #[test]
     fn token_answers_and_errors_are_read() {
@@ -597,13 +742,7 @@ where
     T: HttpTransport + Sync,
 {
     let (_, rendered) = target(&ports, path, options)?.ok_or_else(no_oauth2)?;
-    let token = fetch(
-        ports.transport,
-        &rendered,
-        ports.clock.unix_millis(),
-        cancel,
-    )
-    .await?;
+    let token = fetch(&TokenPorts::of(&ports), &rendered, cancel).await?;
     if let Some(store) = ports.tokens {
         store.save(&rendered.key(), &token)?;
     }

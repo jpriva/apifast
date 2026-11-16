@@ -113,6 +113,9 @@ pub struct SendPorts<'a, C, E, T, S> {
     /// Where OAuth 2.0 tokens are kept between sends. `None`: a token is
     /// obtained for every send that needs one.
     pub tokens: Option<&'a dyn crate::TokenStore>,
+    /// Opens a browser for the OAuth 2.0 authorization code grant. `None`
+    /// where there is no user, as in CI: that grant then fails.
+    pub authorizer: Option<&'a dyn crate::Authorizer>,
 }
 
 // Only references: copying them is free, whatever the port types are.
@@ -292,11 +295,7 @@ where
     };
     // An OAuth 2.0 token is obtained before rendering, and goes in as a
     // header or a query parameter.
-    let token_ports = crate::oauth2::TokenPorts {
-        transport: ports.transport,
-        clock: ports.clock,
-        tokens: ports.tokens,
-    };
+    let token_ports = crate::oauth2::TokenPorts::of(ports);
     let resolved =
         crate::oauth2::with_token(&token_ports, resolved, &mut variables, &mut host, cancel)
             .await?;

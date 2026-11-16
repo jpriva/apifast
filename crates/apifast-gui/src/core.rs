@@ -1217,6 +1217,7 @@ impl State {
 
         let messages = self.messages.clone();
         tokio::spawn(async move {
+            let authorizer = apifast_http::LoopbackAuthorizer::system();
             let (clock, random) = (SystemClock, SystemRandom::default());
             let ports = SendPorts {
                 collections: &*repo,
@@ -1230,6 +1231,7 @@ impl State {
                 report: &|_| {},
                 history: Some(&*history),
                 tokens: Some(tokens.as_ref()),
+                authorizer: Some(&authorizer),
             };
             let at_ms = clock.unix_millis();
             let result = send_request(ports, &key.path, &options, &cancel).await;

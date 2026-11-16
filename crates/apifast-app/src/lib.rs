@@ -41,11 +41,11 @@ pub use organize::{
     Placement, create_folder, create_request, delete_item, move_item, rename_item, slug,
 };
 pub use ports::{
-    BodyWriter, CancelToken, Clock, CollectionRepository, CollectionTree, EnvironmentRepository,
-    HttpTransport, ItemPath, LoadedRequest, NoPrompter, NoSecrets, Pause, Prompter, Random,
-    RequestPath, ResponseHead, ResponseId, ResponseStore, SecretStore, Session, SessionStore,
-    SessionTab, SharedSecretFiles, StoredBody, TimelineEvent, TimelineKind, TreeItem, Workspace,
-    WorkspaceEntry, WorkspaceRepository, sort_tree,
+    Authorization, Authorizer, BodyWriter, CancelToken, Clock, CollectionRepository,
+    CollectionTree, EnvironmentRepository, HttpTransport, ItemPath, LoadedRequest, NoPrompter,
+    NoSecrets, Pause, Prompter, Random, RequestPath, ResponseHead, ResponseId, ResponseStore,
+    SecretStore, Session, SessionStore, SessionTab, SharedSecretFiles, StoredBody, TimelineEvent,
+    TimelineKind, TreeItem, Workspace, WorkspaceEntry, WorkspaceRepository, sort_tree,
 };
 pub use render::{
     AwsV4Credentials, RenderOutcome, RenderedBody, RenderedPart, RenderedRequest, TransportAuth,

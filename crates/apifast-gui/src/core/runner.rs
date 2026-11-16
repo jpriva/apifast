@@ -309,6 +309,7 @@ fn spawn_run(
             secrets,
             tokens,
         } = ports;
+        let authorizer = apifast_http::LoopbackAuthorizer::system();
         let (clock, random) = (SystemClock, SystemRandom::default());
         let send = SendPorts {
             collections: &*repo,
@@ -322,6 +323,7 @@ fn spawn_run(
             report: &|_| {},
             history: Some(&*history),
             tokens: Some(tokens.as_ref()),
+            authorizer: Some(&authorizer),
         };
         let tell = |message: RunMessage| {
             if let Some(messages) = messages.upgrade() {

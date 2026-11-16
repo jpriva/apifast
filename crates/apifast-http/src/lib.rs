@@ -5,12 +5,15 @@
 //! Must run inside a tokio runtime with the time driver enabled.
 
 mod digest;
+mod loopback;
 mod ntlm;
 mod sigv4;
 
 use std::error::Error as _;
 
 use base64::Engine as _;
+
+pub use loopback::{LoopbackAuthorizer, open_in_browser};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 

@@ -1821,15 +1821,15 @@ fn oauth2_tokens_are_kept_sealed_got_on_demand_and_forgotten() {
     )
     .unwrap();
     let data = tempfile::tempdir().unwrap();
-    let start_core = || {
-        Core::start_with(data.path().to_path_buf(), SystemKeyring::off(), || {})
-    };
+    let start_core = || Core::start_with(data.path().to_path_buf(), SystemKeyring::off(), || {});
     let token_of = |s: &Snapshot| s.active_tab().map(|t| t.context.token.clone());
 
     let core = start_core();
     open(&core, dir.path());
     core.send(Command::OpenRequest(at(&core, "users/get.yml")));
-    wait(&core, "no token", |s| token_of(s) == Some(TokenState::Missing));
+    wait(&core, "no token", |s| {
+        token_of(s) == Some(TokenState::Missing)
+    });
 
     let key = at(&core, "users/get.yml");
     core.send(Command::GetToken(key.clone()));
@@ -1852,12 +1852,18 @@ fn oauth2_tokens_are_kept_sealed_got_on_demand_and_forgotten() {
     // A send uses it, without asking for another.
     core.send(Command::Send);
     let snapshot = wait(&core, "the response", |s| {
-        matches!(response(s), ResponseState::Received(_) | ResponseState::Failed(_))
+        matches!(
+            response(s),
+            ResponseState::Received(_) | ResponseState::Failed(_)
+        )
     });
     let ResponseState::Received(received) = response(&snapshot) else {
         panic!("{:?}", response(&snapshot));
     };
-    assert_eq!(received.body.read(0, 100).unwrap(), b"Bearer secret-token-1");
+    assert_eq!(
+        received.body.read(0, 100).unwrap(),
+        b"Bearer secret-token-1"
+    );
     assert_eq!(issued.load(Ordering::Relaxed), 1);
     drop(core);
 
@@ -1869,5 +1875,7 @@ fn oauth2_tokens_are_kept_sealed_got_on_demand_and_forgotten() {
         matches!(token_of(s), Some(TokenState::Stored(_)))
     });
     core.send(Command::ForgetToken(at(&core, "users/get.yml")));
-    wait(&core, "forgotten", |s| token_of(s) == Some(TokenState::Missing));
+    wait(&core, "forgotten", |s| {
+        token_of(s) == Some(TokenState::Missing)
+    });
 }

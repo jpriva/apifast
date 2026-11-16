@@ -181,6 +181,14 @@ fn wire(root: &std::path::Path) -> Result<Wired> {
     })
 }
 
+/// The browser for the OAuth 2.0 authorization code grant, only for a
+/// person at a terminal: in CI that grant fails at once instead of waiting.
+fn terminal_authorizer() -> Option<apifast_http::LoopbackAuthorizer> {
+    std::io::stdin()
+        .is_terminal()
+        .then(apifast_http::LoopbackAuthorizer::system)
+}
+
 /// A runtime for one command, and a token cancelled by Ctrl+C.
 fn runtime() -> Result<(tokio::runtime::Runtime, CancelToken)> {
     let runtime = tokio::runtime::Builder::new_current_thread()
@@ -219,6 +227,7 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
     };
 
     let tokens = apifast_app::memory::MemoryTokens::default();
+    let authorizer = terminal_authorizer();
     let (runtime, cancel) = runtime()?;
     let outcome = runtime.block_on(async {
         let ports = SendPorts {
@@ -234,6 +243,9 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
             report: &|problem| eprintln!("warning: {problem}"),
             history: None,
             tokens: Some(&tokens),
+            authorizer: authorizer
+                .as_ref()
+                .map(|a| a as &dyn apifast_app::Authorizer),
         };
         send_request(ports, &located.request, &options, &cancel).await
     })?;

@@ -108,6 +108,7 @@ impl World {
             report: &|_| {},
             history: None,
             tokens: None,
+            authorizer: None,
         };
         let on_event = |event: RunEvent<'_>| {
             let line = match event {

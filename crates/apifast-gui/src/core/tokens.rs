@@ -66,6 +66,7 @@ fn with_ports<R>(
         report: &|_| {},
         history: None,
         tokens: Some(open.tokens.as_ref()),
+        authorizer: None,
     })
 }
 
@@ -95,6 +96,7 @@ impl State {
         self.snapshot.getting_token = Some(key.clone());
         let messages = self.messages.clone();
         tokio::spawn(async move {
+            let authorizer = apifast_http::LoopbackAuthorizer::system();
             let (clock, random) = (SystemClock, SystemRandom::default());
             let ports = SendPorts {
                 collections: &*repo,
@@ -108,6 +110,7 @@ impl State {
                 report: &|_| {},
                 history: None,
                 tokens: Some(tokens.as_ref()),
+                authorizer: Some(&authorizer),
             };
             let result = get_new_token(ports, &key.path, &options, &CancelToken::new())
                 .await
