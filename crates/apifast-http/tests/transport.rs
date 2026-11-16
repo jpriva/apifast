@@ -710,3 +710,78 @@ async fn invalid_requests_fail_before_sending() {
     );
     assert!(server.received().is_empty());
 }
+
+#[tokio::test]
+async fn aws_signature_v4_signs_each_request_to_the_same_origin() {
+    use apifast_domain::{AuthScheme, AwsV4Auth, Setting};
+    let other = Server::start(|_| Reply::ok("")).await;
+    let target = other.url("/elsewhere");
+    let server = Server::start(
+        move |r| match r.path.split('?').next().unwrap_or_default() {
+            "/start" => Reply::redirect(307, "/signed"),
+            "/signed" => Reply::redirect(307, &target),
+            _ => Reply::ok(""),
+        },
+    )
+    .await;
+    let mut request = HttpRequest::new("s", Method::Post, server.url("/start?b=2&a=1"));
+    request.body = Body::Json(r#"{"a":1}"#.into());
+    request.auth = Setting::Set(AuthScheme::AwsV4(Box::new(AwsV4Auth {
+        access_key_id: "AKIDEXAMPLE".into(),
+        secret_access_key: "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY".into(),
+        session_token: "the-token".into(),
+        service: "execute-api".into(),
+        region: "eu-west-1".into(),
+        profile_name: String::new(),
+    })));
+    send(&request).await.0.unwrap();
+
+    let received = server.received();
+    for hop in &received {
+        let authorization = &hop.headers["authorization"];
+        assert!(
+            authorization.starts_with("AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/"),
+            "{authorization}"
+        );
+        assert!(authorization.contains("/eu-west-1/execute-api/aws4_request, "));
+        assert!(authorization.contains(
+            "SignedHeaders=content-type;host;x-amz-date;x-amz-security-token, Signature="
+        ));
+        let date = &hop.headers["x-amz-date"];
+        assert_eq!(date.len(), 16, "{date}");
+        assert!(date.ends_with('Z') && date.as_bytes()[8] == b'T', "{date}");
+        assert_eq!(hop.headers["x-amz-security-token"], "the-token");
+        // The secret key itself never travels.
+        assert!(!format!("{:?}", hop.headers).contains("EXAMPLEKEY"));
+    }
+    // The second hop has another path, so another signature.
+    assert_ne!(
+        received[0].headers["authorization"],
+        received[1].headers["authorization"]
+    );
+    // Another origin gets no signature.
+    let landed = &other.received()[0];
+    assert!(!landed.headers.contains_key("authorization"));
+    assert!(!landed.headers.contains_key("x-amz-security-token"));
+    assert!(!landed.headers.contains_key("x-amz-date"));
+}
+
+#[test]
+fn aws_credentials_never_show_in_debug_output() {
+    use apifast_domain::{AuthScheme, AwsV4Auth, Setting};
+    let mut request = get("http://h/".into());
+    request.auth = Setting::Set(AuthScheme::AwsV4(Box::new(AwsV4Auth {
+        access_key_id: "AKID".into(),
+        secret_access_key: "very-secret".into(),
+        session_token: "token-too".into(),
+        service: "s3".into(),
+        region: "us-east-1".into(),
+        profile_name: String::new(),
+    })));
+    let shown = format!("{:?}", rendered(&request));
+    assert!(shown.contains("AKID"), "{shown}");
+    assert!(
+        !shown.contains("very-secret") && !shown.contains("token-too"),
+        "{shown}"
+    );
+}

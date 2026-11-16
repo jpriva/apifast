@@ -45,7 +45,10 @@ pub use ports::{
     SessionTab, SharedSecretFiles, StoredBody, TimelineEvent, TimelineKind, TreeItem, Workspace,
     WorkspaceEntry, WorkspaceRepository, sort_tree,
 };
-pub use render::{RenderOutcome, RenderedBody, RenderedPart, RenderedRequest, render_request};
+pub use render::{
+    AwsV4Credentials, RenderOutcome, RenderedBody, RenderedPart, RenderedRequest, TransportAuth,
+    render_request,
+};
 pub use report::{
     ReportFormat, ReportMeta, assertion_text, duration, html_report, json_report, junit_report,
 };

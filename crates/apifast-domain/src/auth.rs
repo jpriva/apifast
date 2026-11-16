@@ -21,6 +21,8 @@ pub enum AuthScheme {
     Bearer(BearerAuth),
     /// Key sent in a header or in the query.
     ApiKey(ApiKeyAuth),
+    /// AWS Signature Version 4: the request is signed with an access key.
+    AwsV4(Box<AwsV4Auth>),
     /// A scheme of the file format that apifast cannot send yet, such as
     /// `digest` or `oauth2`, by its `type`. It is kept so that reading and
     /// saving a collection never loses it; sending a request with it fails.
@@ -52,6 +54,25 @@ pub struct ApiKeyAuth {
     pub value: String,
     /// Where it is sent.
     pub placement: ApiKeyPlacement,
+}
+
+/// AWS Signature Version 4 credentials and scope. Every field is a
+/// template.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AwsV4Auth {
+    /// Access key id (`AKIA…`).
+    pub access_key_id: String,
+    /// Secret access key.
+    pub secret_access_key: String,
+    /// Session token of temporary credentials; empty for none.
+    pub session_token: String,
+    /// Service name in the signature, such as `s3` or `execute-api`.
+    pub service: String,
+    /// Region, such as `us-east-1`.
+    pub region: String,
+    /// A profile of the AWS configuration files. Kept from Bruno's files;
+    /// apifast does not read those files.
+    pub profile_name: String,
 }
 
 /// Where an API key is sent.

@@ -4,13 +4,15 @@
 //!
 //! Must run inside a tokio runtime with the time driver enabled.
 
+mod sigv4;
+
 use std::error::Error as _;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use apifast_app::{
     BodyWriter, CancelToken, HttpTransport, RenderedBody, RenderedRequest, ResponseHead,
-    TimelineEvent, TimelineKind, TransportError,
+    TimelineEvent, TimelineKind, TransportAuth, TransportError,
 };
 use apifast_domain::MultipartValue;
 use reqwest::header::{
@@ -75,14 +77,22 @@ impl ReqwestTransport {
         }
         let mut send_body = true;
         let mut redirects = 0;
+        let first_origin = origin(&url);
         let mut timeline = Vec::new();
         let at = || u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
 
         loop {
+            let sent = Outgoing {
+                method: &method,
+                url: &url,
+                send_body,
+                first_origin: &first_origin,
+            };
+            let sent_headers = signed_headers(request, &headers, &sent)?;
             let mut builder = self
                 .client
                 .request(method.clone(), url.clone())
-                .headers(headers.clone());
+                .headers(sent_headers);
             if send_body {
                 builder = self.attach_body(builder, request.body()).await?;
             }
@@ -165,12 +175,7 @@ impl ReqwestTransport {
     ) -> Result<reqwest::RequestBuilder, TransportError> {
         Ok(match body {
             RenderedBody::Text(text) => builder.body(text.clone()),
-            RenderedBody::Form(fields) => {
-                let encoded = form_urlencoded::Serializer::new(String::new())
-                    .extend_pairs(fields.iter().map(|(n, v)| (n.as_str(), v.as_str())))
-                    .finish();
-                builder.body(encoded)
-            }
+            RenderedBody::Form(fields) => builder.body(form(fields)),
             RenderedBody::Multipart(parts) => {
                 let mut form = reqwest::multipart::Form::new();
                 for part in parts {
@@ -325,8 +330,81 @@ fn response_head(response: &reqwest::Response, redirects: u32) -> ResponseHead {
     }
 }
 
+/// Where a request of the exchange goes, to decide how to authenticate it.
+struct Outgoing<'a> {
+    method: &'a Method,
+    url: &'a Url,
+    send_body: bool,
+    /// The origin of the URL the user wrote.
+    first_origin: &'a Origin,
+}
+
+/// The headers of one request that goes out: `headers`, signed when the
+/// auth is a signature. Only requests to the origin the user wrote are
+/// signed, so a signature never leaks to another.
+fn signed_headers(
+    request: &RenderedRequest,
+    headers: &HeaderMap,
+    out: &Outgoing<'_>,
+) -> Result<HeaderMap, TransportError> {
+    let mut headers = headers.clone();
+    if let TransportAuth::AwsV4(credentials) = request.auth()
+        && origin(out.url) == *out.first_origin
+    {
+        let payload = if out.send_body {
+            payload_hash(request.body())
+        } else {
+            sigv4::sha256_hex(b"")
+        };
+        sigv4::sign(
+            out.method.as_str(),
+            out.url,
+            &mut headers,
+            &payload,
+            credentials,
+            &amz_date(),
+        )?;
+    }
+    Ok(headers)
+}
+
+/// A form body as it is sent.
+fn form(fields: &[(String, String)]) -> String {
+    form_urlencoded::Serializer::new(String::new())
+        .extend_pairs(fields.iter().map(|(n, v)| (n.as_str(), v.as_str())))
+        .finish()
+}
+
+/// The SHA-256 of the body as it is sent, for a signature; streamed bodies
+/// are not read twice and go unsigned.
+fn payload_hash(body: &RenderedBody) -> String {
+    match body {
+        RenderedBody::Text(text) => sigv4::sha256_hex(text.as_bytes()),
+        RenderedBody::Form(fields) => sigv4::sha256_hex(form(fields).as_bytes()),
+        RenderedBody::Multipart(_) | RenderedBody::File(_) => sigv4::UNSIGNED_PAYLOAD.into(),
+        _ => sigv4::sha256_hex(b""),
+    }
+}
+
+/// Now as SigV4 writes it: `20150830T123600Z`.
+fn amz_date() -> String {
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX));
+    // `2015-08-30T12:36:00.000Z` without separators and milliseconds.
+    let iso = apifast_template::iso_timestamp(millis);
+    let mut out: String = iso.chars().filter(|c| !matches!(c, '-' | ':')).collect();
+    if let Some(dot) = out.find('.') {
+        out.replace_range(dot.., "Z");
+    }
+    out
+}
+
+/// Scheme, host and port.
+type Origin = (String, Option<String>, Option<u16>);
+
 /// Scheme, host and port: what decides whether credentials may follow.
-fn origin(url: &Url) -> (String, Option<String>, Option<u16>) {
+fn origin(url: &Url) -> Origin {
     (
         url.scheme().to_owned(),
         url.host_str().map(str::to_owned),

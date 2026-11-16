@@ -9,9 +9,9 @@
 //! New files are built the same way, from a minimal document.
 
 use apifast_domain::{
-    ApiKeyPlacement, Assertion, Auth, AuthScheme, Body, Capture, Collection, Environment, Folder,
-    FormField, Header, HttpRequest, MultipartPart, MultipartValue, Param, ParamKind,
-    RequestDefaults, Setting, ValueKind, Variable, VariableValue,
+    ApiKeyPlacement, Assertion, Auth, AuthScheme, AwsV4Auth, Body, Capture, Collection,
+    Environment, Folder, FormField, Header, HttpRequest, MultipartPart, MultipartValue, Param,
+    ParamKind, RequestDefaults, Setting, ValueKind, Variable, VariableValue,
 };
 use oneyaml::Value;
 
@@ -537,6 +537,11 @@ fn update_auth(parent: &mut Value, key: &str, old: &Auth, new: &Auth, level: Aut
                     placement(b.placement).into(),
                 ));
             }
+            (AuthScheme::AwsV4(a), AuthScheme::AwsV4(b)) => {
+                for ((field, before), (_, after)) in aws_fields(a).into_iter().zip(aws_fields(b)) {
+                    pairs.push((field, before, after));
+                }
+            }
             _ => {}
         }
         if !pairs.is_empty() {
@@ -563,6 +568,19 @@ fn placement(placement: ApiKeyPlacement) -> &'static str {
     }
 }
 
+/// The fields of an AWS scheme with their names in the files, in Bruno's
+/// order. Empty optional fields are written as empty, as Bruno does.
+fn aws_fields(auth: &AwsV4Auth) -> [(&'static str, String); 6] {
+    [
+        ("accessKeyId", auth.access_key_id.clone()),
+        ("secretAccessKey", auth.secret_access_key.clone()),
+        ("sessionToken", auth.session_token.clone()),
+        ("service", auth.service.clone()),
+        ("region", auth.region.clone()),
+        ("profileName", auth.profile_name.clone()),
+    ]
+}
+
 /// The YAML for a scheme; `None` for no auth, which Bruno writes as no key.
 fn auth_value(scheme: &AuthScheme) -> Option<Value> {
     let s = |v: &str| Some(string(v));
@@ -579,6 +597,12 @@ fn auth_value(scheme: &AuthScheme) -> Option<Value> {
             ("value", s(&k.value)),
             ("placement", s(placement(k.placement))),
         ]),
+        AuthScheme::AwsV4(a) => {
+            let fields = aws_fields(a);
+            let mut pairs = vec![("type", s("awsv4"))];
+            pairs.extend(fields.iter().map(|(name, value)| (*name, s(value))));
+            mapping(pairs)
+        }
         AuthScheme::Unsupported(kind) => mapping([("type", s(kind))]),
         // `None`, and any scheme added later, writes no auth key.
         _ => return None,

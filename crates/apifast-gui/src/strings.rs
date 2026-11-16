@@ -366,6 +366,18 @@ pub struct Strings {
     pub filter_xpath: &'static str,
     /// Above the filtered values; `{count}` is replaced.
     pub filter_results: &'static str,
+    /// Auth type: AWS Signature Version 4.
+    pub auth_aws_v4: &'static str,
+    /// AWS auth field.
+    pub aws_access_key_id: &'static str,
+    /// AWS auth field.
+    pub aws_secret_access_key: &'static str,
+    /// AWS auth field, optional.
+    pub aws_session_token: &'static str,
+    /// AWS auth field: the service in the signature.
+    pub aws_service: &'static str,
+    /// AWS auth field.
+    pub aws_region: &'static str,
     /// Mark of an assertion that held.
     pub pass: &'static str,
     /// Mark of an assertion that did not.
@@ -763,6 +775,12 @@ pub const EN: Strings = Strings {
     filter_jsonpath: "Filter with JSONPath: $.items[*].id",
     filter_xpath: "Filter with XPath: //item/@id",
     filter_results: "{count} selected",
+    auth_aws_v4: "AWS Signature v4",
+    aws_access_key_id: "Access key ID",
+    aws_secret_access_key: "Secret access key",
+    aws_session_token: "Session token (optional)",
+    aws_service: "Service",
+    aws_region: "Region",
     pass: "PASS",
     fail: "FAIL",
     captures: "Captures",

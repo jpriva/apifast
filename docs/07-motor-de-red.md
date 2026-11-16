@@ -85,8 +85,22 @@ Implementada de forma nativa en Rust, con un enum tipado por esquema.
 | Heredada (`inherit`) y ninguna (`none`) | F1 | Toma la del padre más cercano |
 | Digest | F5 | Requiere un intercambio previo |
 | OAuth 2.0 | F5 | Authorization code con PKCE, client credentials, password; refresco automático |
-| AWS SigV4 | F5 | Firma del request canónico |
+| AWS SigV4 | F5 (hecha) | Firma del request canónico, en el transporte |
 | NTLM | F5 | Intercambio en tres pasos |
+
+### Autenticación en el transporte
+
+Basic, Bearer y API key se resuelven al renderizar: son headers o parámetros. Las que dependen de la request tal como sale (la URL codificada, el body final) o de la respuesta del servidor llegan al transporte como `TransportAuth`, con sus campos ya renderizados, y `apifast-http` las aplica a cada request que envía. Su forma de depuración nunca muestra la clave secreta ni el token, aunque se hayan escrito tal cual en el archivo.
+
+**AWS SigV4** (`apifast-http/src/sigv4.rs`):
+
+- Firma con `AWS4-HMAC-SHA256` sobre la request canónica: método, ruta (codificada una vez para `s3` y dos para los demás servicios, como pide AWS), query ordenada y codificada, headers firmados (`host`, `content-type` y todo `x-amz-*`) y hash del body.
+- Añade `X-Amz-Date`, `X-Amz-Security-Token` si hay token de sesión y, para `s3`, `X-Amz-Content-Sha256`.
+- El hash del body es el de los bytes que se envían (texto o formulario codificado). Los bodies que se transmiten en streaming (archivo y multipart) van como `UNSIGNED-PAYLOAD`: S3 lo acepta, otros servicios pueden rechazarlo.
+- Se firma cada request que sale, también tras una redirección (cambia la ruta, cambia la firma), pero solo hacia el origen que escribió el usuario: otro origen no recibe firma ni token.
+- Faltar la clave, el secreto, el servicio o la región es un error antes de enviar.
+- `profileName` se conserva del archivo de Bruno, pero apifast no lee los archivos de configuración de AWS.
+- Comprobada con el ejemplo de la documentación de AWS (IAM `ListUsers`, firma `5d672d79…`).
 
 Para OAuth 2.0 con authorization code se abre el navegador del sistema y se levanta un servidor local temporal para recibir el *callback*. Los tokens se guardan cifrados con la clave maestra.
 

@@ -428,16 +428,18 @@ enum AuthKind {
     Basic,
     Bearer,
     ApiKey,
+    AwsV4,
     Unsupported,
 }
 
 impl AuthKind {
-    const CHOICES: [Self; 5] = [
+    const CHOICES: [Self; 6] = [
         Self::Inherit,
         Self::None,
         Self::Basic,
         Self::Bearer,
         Self::ApiKey,
+        Self::AwsV4,
     ];
 
     fn of(auth: &Setting<AuthScheme>) -> Self {
@@ -447,6 +449,7 @@ impl AuthKind {
             Setting::Set(AuthScheme::Basic(_)) => Self::Basic,
             Setting::Set(AuthScheme::Bearer(_)) => Self::Bearer,
             Setting::Set(AuthScheme::ApiKey(_)) => Self::ApiKey,
+            Setting::Set(AuthScheme::AwsV4(_)) => Self::AwsV4,
             // `Unsupported`, and schemes added after this version.
             Setting::Set(_) => Self::Unsupported,
         }
@@ -459,6 +462,7 @@ impl AuthKind {
             Self::Basic => strings.auth_basic,
             Self::Bearer => strings.auth_bearer,
             Self::ApiKey => strings.auth_api_key,
+            Self::AwsV4 => strings.auth_aws_v4,
             Self::Unsupported => strings.auth_unsupported,
         }
     }
@@ -479,6 +483,7 @@ impl AuthKind {
                 value: String::new(),
                 placement: ApiKeyPlacement::Header,
             })),
+            Self::AwsV4 => Setting::Set(AuthScheme::AwsV4(Box::default())),
         }
     }
 }
@@ -563,6 +568,21 @@ fn auth(
                     }
                 });
                 ui.end_row();
+            }
+            Setting::Set(AuthScheme::AwsV4(aws)) => {
+                for (label, text, hidden) in [
+                    (strings.aws_access_key_id, &mut aws.access_key_id, false),
+                    (
+                        strings.aws_secret_access_key,
+                        &mut aws.secret_access_key,
+                        true,
+                    ),
+                    (strings.aws_session_token, &mut aws.session_token, true),
+                    (strings.aws_service, &mut aws.service, false),
+                    (strings.aws_region, &mut aws.region, false),
+                ] {
+                    changed |= field(ui, label, text, hidden);
+                }
             }
             Setting::Set(AuthScheme::None) => {}
             Setting::Set(_) => {

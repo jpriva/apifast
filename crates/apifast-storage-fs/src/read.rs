@@ -3,10 +3,10 @@
 //! instead of failing.
 
 use apifast_domain::{
-    ApiKeyAuth, ApiKeyPlacement, Assertion, Auth, AuthScheme, BasicAuth, BearerAuth, Body, Capture,
-    CaptureScope, Collection, Environment, Folder, FormField, Header, HttpRequest, Method,
-    MultipartPart, MultipartValue, Operator, Param, ParamKind, RequestDefaults, Setting, Settings,
-    ValueKind, Variable, VariableValue,
+    ApiKeyAuth, ApiKeyPlacement, Assertion, Auth, AuthScheme, AwsV4Auth, BasicAuth, BearerAuth,
+    Body, Capture, CaptureScope, Collection, Environment, Folder, FormField, Header, HttpRequest,
+    Method, MultipartPart, MultipartValue, Operator, Param, ParamKind, RequestDefaults, Setting,
+    Settings, ValueKind, Variable, VariableValue,
 };
 use oneyaml::Value;
 
@@ -156,6 +156,14 @@ pub(crate) fn auth(value: Option<&Value>) -> Auth {
                 _ => ApiKeyPlacement::Header,
             },
         }),
+        Some("awsv4") => AuthScheme::AwsV4(Box::new(AwsV4Auth {
+            access_key_id: field("accessKeyId"),
+            secret_access_key: field("secretAccessKey"),
+            session_token: field("sessionToken"),
+            service: field("service"),
+            region: field("region"),
+            profile_name: field("profileName"),
+        })),
         Some(other) => AuthScheme::Unsupported(other.to_owned()),
         None => AuthScheme::Unsupported("unknown".into()),
     })

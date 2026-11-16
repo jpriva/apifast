@@ -294,6 +294,23 @@ fn switching_auth_schemes() {
         "{text}"
     );
 
+    edit(&dir, &repo, "login.yml", |r| {
+        r.auth = Setting::Set(AuthScheme::AwsV4(Box::new(apifast_domain::AwsV4Auth {
+            access_key_id: "{{aws_key}}".into(),
+            secret_access_key: "{{aws_secret}}".into(),
+            service: "s3".into(),
+            region: "us-east-1".into(),
+            ..apifast_domain::AwsV4Auth::default()
+        })));
+    });
+    let text = read(&dir, "login.yml");
+    assert!(
+        text.contains("type: awsv4")
+            && text.contains("accessKeyId: \"{{aws_key}}\"")
+            && text.contains("region: \"us-east-1\""),
+        "{text}"
+    );
+
     edit(&dir, &repo, "login.yml", |r| r.auth = Setting::Inherit);
     assert!(read(&dir, "login.yml").contains("  auth: inherit\n"));
 

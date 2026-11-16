@@ -10,9 +10,9 @@ use std::fs;
 
 use apifast_app::{CollectionRepository, RequestPath};
 use apifast_domain::{
-    ApiKeyAuth, ApiKeyPlacement, Assertion, AuthScheme, BasicAuth, BearerAuth, Body, Capture,
-    CaptureScope, FormField, Header, HttpRequest, Method, Operator, Param, ParamKind, Setting,
-    Settings, ValueKind, Variable, VariableValue,
+    ApiKeyAuth, ApiKeyPlacement, Assertion, AuthScheme, AwsV4Auth, BasicAuth, BearerAuth, Body,
+    Capture, CaptureScope, FormField, Header, HttpRequest, Method, Operator, Param, ParamKind,
+    Setting, Settings, ValueKind, Variable, VariableValue,
 };
 use apifast_storage_fs::FsCollection;
 use proptest::prelude::*;
@@ -97,6 +97,18 @@ fn auth() -> impl Strategy<Value = Setting<AuthScheme>> {
                 },
             })
         )),
+        (text(), text(), text(), text(), text(), text()).prop_map(
+            |(access_key_id, secret_access_key, session_token, service, region, profile_name)| {
+                Setting::Set(AuthScheme::AwsV4(Box::new(AwsV4Auth {
+                    access_key_id,
+                    secret_access_key,
+                    session_token,
+                    service,
+                    region,
+                    profile_name,
+                })))
+            }
+        ),
     ]
 }
 

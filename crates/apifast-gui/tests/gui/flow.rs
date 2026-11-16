@@ -200,18 +200,25 @@ fn type_into_focus(harness: &mut Harness<'_, App>, text: &str) {
 
 /// Steps the interface until the tree shows a row labelled `label`.
 fn wait_for_row(harness: &mut Harness<'_, App>, label: &str) {
+    wait_for_row_to_be(harness, label, true);
+}
+
+/// Steps until the tree row `label` is there (`shown`) or gone.
+fn wait_for_row_to_be(harness: &mut Harness<'_, App>, label: &str, shown: bool) {
     let start = Instant::now();
     loop {
         harness.step();
         if harness
             .query_by_role_and_label(Role::TreeItem, label)
             .is_some()
+            == shown
         {
             return;
         }
         assert!(
             start.elapsed() < Duration::from_secs(10),
-            "timed out waiting for the row `{label}`"
+            "timed out waiting for the row `{label}` to be {}",
+            if shown { "shown" } else { "gone" }
         );
         std::thread::sleep(Duration::from_millis(5));
     }
@@ -282,12 +289,8 @@ fn the_sidebar_creates_renames_and_deletes_files() {
     harness.get_by_label("Delete").click();
     let gone = dir.path().join("ping-again.yml");
     wait_until(&mut harness, "the file to go", || !gone.exists());
-    harness.run_steps(2);
-    assert!(
-        harness
-            .query_by_role_and_label(Role::TreeItem, "Ping again")
-            .is_none()
-    );
+    // The core sees the deletion a moment later.
+    wait_for_row_to_be(&mut harness, "Ping again", false);
     // The deleted request was open: now nothing is.
     harness.get_by_label(apifast_gui::strings::EN.no_request);
 }

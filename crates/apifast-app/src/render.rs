@@ -46,8 +46,53 @@ pub struct RenderedRequest {
     follow_redirects: bool,
     max_redirects: u32,
     encode_url: bool,
+    auth: TransportAuth,
     contains_secret: bool,
     secrets: Vec<Secret>,
+}
+
+/// An auth scheme that only the transport can apply, because it depends on
+/// the request as it goes out (the encoded URL, the final body) or on the
+/// server's answer. Its fields are rendered.
+#[derive(Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum TransportAuth {
+    /// Nothing to do, or auth already in the headers.
+    #[default]
+    None,
+    /// Sign with AWS Signature Version 4.
+    AwsV4(AwsV4Credentials),
+}
+
+/// Rendered AWS credentials and the scope of the signature.
+#[derive(Clone, PartialEq, Eq)]
+pub struct AwsV4Credentials {
+    /// Access key id.
+    pub access_key_id: String,
+    /// Secret access key.
+    pub secret_access_key: String,
+    /// Session token; empty for none.
+    pub session_token: String,
+    /// Service, such as `s3`.
+    pub service: String,
+    /// Region, such as `us-east-1`.
+    pub region: String,
+}
+
+/// Never shows the secret key or the session token, even when they were
+/// typed in the file rather than taken from a secret variable.
+impl fmt::Debug for TransportAuth {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::None => f.write_str("None"),
+            Self::AwsV4(c) => f
+                .debug_struct("AwsV4")
+                .field("access_key_id", &c.access_key_id)
+                .field("service", &c.service)
+                .field("region", &c.region)
+                .finish_non_exhaustive(),
+        }
+    }
 }
 
 /// Printed with every secret value masked, so it never reaches a log.
@@ -64,6 +109,7 @@ impl fmt::Debug for RenderedRequest {
             follow_redirects: bool,
             max_redirects: u32,
             encode_url: bool,
+            auth: &'a TransportAuth,
             contains_secret: bool,
         }
         let shown = format!(
@@ -77,6 +123,7 @@ impl fmt::Debug for RenderedRequest {
                 follow_redirects: self.follow_redirects,
                 max_redirects: self.max_redirects,
                 encode_url: self.encode_url,
+                auth: &self.auth,
                 contains_secret: self.contains_secret,
             }
         );
@@ -123,6 +170,11 @@ impl RenderedRequest {
     /// Whether the URL is encoded before sending.
     pub fn encode_url(&self) -> bool {
         self.encode_url
+    }
+
+    /// An auth the transport applies as it sends.
+    pub fn auth(&self) -> &TransportAuth {
+        &self.auth
     }
 
     /// Whether any secret went into the request. If so, the timeline, history
@@ -225,25 +277,77 @@ pub fn render_request(
         headers.push(("Content-Type".into(), content_type));
     }
 
-    match &resolved.auth().value {
+    let auth = apply_auth(&mut r, &resolved.auth().value, &mut headers, &mut url)?;
+
+    let settings = resolved.settings();
+    Ok(RenderOutcome {
+        request: RenderedRequest {
+            method: resolved.method().clone(),
+            url,
+            headers,
+            body,
+            timeout_ms: settings.timeout_ms.value,
+            follow_redirects: settings.follow_redirects.value,
+            max_redirects: settings.max_redirects.value,
+            encode_url: settings.encode_url.value,
+            auth,
+            contains_secret: r.contains_secret,
+            secrets: r.secrets,
+        },
+        problems: r.problems,
+    })
+}
+
+/// Applies `scheme`: to the headers or the query when it can, or as a
+/// [`TransportAuth`] for the transport.
+fn apply_auth(
+    r: &mut Renderer<'_, '_>,
+    scheme: &AuthScheme,
+    headers: &mut Vec<(String, String)>,
+    url: &mut String,
+) -> Result<TransportAuth, AppError> {
+    let mut auth = TransportAuth::None;
+    match scheme {
+        AuthScheme::AwsV4(aws) => {
+            let credentials = AwsV4Credentials {
+                access_key_id: r.text(&aws.access_key_id)?,
+                secret_access_key: r.text(&aws.secret_access_key)?,
+                session_token: r.text(&aws.session_token)?,
+                service: r.text(&aws.service)?,
+                region: r.text(&aws.region)?,
+            };
+            for (name, value) in [
+                ("access key id", &credentials.access_key_id),
+                ("secret access key", &credentials.secret_access_key),
+                ("service", &credentials.service),
+                ("region", &credentials.region),
+            ] {
+                if value.trim().is_empty() {
+                    return Err(AppError::Validation(format!(
+                        "AWS Signature v4 needs the {name}"
+                    )));
+                }
+            }
+            auth = TransportAuth::AwsV4(credentials);
+        }
         AuthScheme::Basic(basic) => {
             let credentials = format!("{}:{}", r.text(&basic.username)?, r.text(&basic.password)?);
             set_header(
-                &mut headers,
+                headers,
                 "Authorization",
                 format!("Basic {}", base64(credentials.as_bytes())),
             );
         }
         AuthScheme::Bearer(bearer) => {
             let token = r.text(&bearer.token)?;
-            set_header(&mut headers, "Authorization", format!("Bearer {token}"));
+            set_header(headers, "Authorization", format!("Bearer {token}"));
         }
         AuthScheme::ApiKey(key) => {
             let name = r.text(&key.key)?;
             let value = r.text(&key.value)?;
             match key.placement {
-                ApiKeyPlacement::Header => set_header(&mut headers, &name, value),
-                ApiKeyPlacement::Query => append_query(&mut url, &name, &value),
+                ApiKeyPlacement::Header => set_header(headers, &name, value),
+                ApiKeyPlacement::Query => append_query(url, &name, &value),
             }
         }
         AuthScheme::None => {}
@@ -260,23 +364,7 @@ pub fn render_request(
             ));
         }
     }
-
-    let settings = resolved.settings();
-    Ok(RenderOutcome {
-        request: RenderedRequest {
-            method: resolved.method().clone(),
-            url,
-            headers,
-            body,
-            timeout_ms: settings.timeout_ms.value,
-            follow_redirects: settings.follow_redirects.value,
-            max_redirects: settings.max_redirects.value,
-            encode_url: settings.encode_url.value,
-            contains_secret: r.contains_secret,
-            secrets: r.secrets,
-        },
-        problems: r.problems,
-    })
+    Ok(auth)
 }
 
 struct Renderer<'v, 'h> {

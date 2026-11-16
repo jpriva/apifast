@@ -354,8 +354,10 @@ dependencies = [
  "flate2",
  "form_urlencoded",
  "futures-util",
+ "hmac",
  "reqwest",
  "rustls",
+ "sha2",
  "tempfile",
  "tokio",
 ]
