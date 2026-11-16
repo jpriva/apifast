@@ -14,6 +14,7 @@ mod collection;
 mod keys;
 mod local;
 mod secrets;
+mod shareable;
 
 pub use collection::{CollectionKeyStore, check_challenge, new_challenge};
 
@@ -23,6 +24,7 @@ pub use keys::{
 };
 pub use local::{LocalVault, SecretEntry};
 pub use secrets::{Orphan, SecretKind, VaultSecrets};
+pub use shareable::{ShareableKeyError, parse_shareable_key, shareable_key};
 
 use std::fmt;
 

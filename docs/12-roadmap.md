@@ -198,7 +198,7 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
     - Pasar un secreto de local a compartido o al revés lo quita del otro sitio.
     - Un secreto compartido sin la clave en esta máquina hace fallar el envío con ese motivo, en vez de enviarse sin él.
   - [x] Entradas huérfanas: secretos guardados cuya variable ya no existe o ya no es secreta. `VaultSecrets::orphans` las lista, locales y compartidas, y `forget` las borra; mostrarlas y limpiarlas desde el editor de entornos llega con la interfaz de la bóveda. Al renombrar un entorno, sus secretos se cifran de nuevo con el nombre nuevo (los datos asociados lo incluyen), cada uno en su sitio. Renombrar una variable secreta deja su valor huérfano hasta volver a escribirlo: desde un archivo no se distingue un renombrado de un borrado más un alta.
-- [ ] Clave compartible: exportar, importar y validar.
+- [x] Clave compartible: exportar, importar y validar. `AFK-` y 54 caracteres Crockford en 9 grupos de 6: 52 de la clave y 2 de control (10 bits de un CRC-16) que detectan una errata antes de probar la clave. La lectura ignora mayúsculas, guiones y espacios, y toma `I`/`L` por `1` y `O` por `0`. `export_collection_key` la muestra; `import_collection_key` la lee, la valida contra el *challenge* y la guarda.
 - [ ] Rotación de clave y conversión entre modelos.
 - [ ] Tipo `Secret` y enmascarado en timeline, historial, logs y CLI.
 - [ ] Interfaz: columna de clase de secreto, revelar, diálogos de clave, estado de la bóveda.

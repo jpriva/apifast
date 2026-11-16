@@ -86,10 +86,11 @@ Un test con un vector fijo (clave, nonce, texto y resultado conocidos) garantiza
 Para pasar la clave de la colección a otra persona se muestra en formato legible:
 
 ```
-AFK-CRRP2C-K46HH3-6RSRCM-VKJEB1-CRRK8D-9PC9JK-6D1Q71-GK8RSK
+AFK-CRRP2C-K46HH3-6RSRCM-VKJEB1-CRRK8D-9PC9JK-6D1Q71-GK8RSK-0TZ4WA
 ```
 
-- Prefijo `AFK`, luego la clave en base32 Crockford (sin caracteres ambiguos) en grupos de 6.
+- Prefijo `AFK`, luego 54 caracteres en base32 Crockford (sin `I`, `L`, `O` ni `U`) en 9 grupos de 6: 52 llevan los 32 bytes de la clave y los 2 últimos son de control (los 10 bits altos de un CRC-16/CCITT-FALSE de la clave). Una errata se detecta al pegarla, antes de probarla contra el *challenge*.
+- Al leerla no importan las mayúsculas, los guiones ni los espacios, y `I` o `L` cuentan como `1` y `O` como `0`.
 - Se comparte por un canal externo (gestor de contraseñas del equipo). apifast no la transmite.
 - Al pegarla, apifast la valida contra el *challenge* y la guarda envuelta con la clave maestra local.
 

@@ -327,6 +327,31 @@ impl<K: KeyBackend, F: KeyBackend> VaultSecrets<K, F> {
         Ok(())
     }
 
+    /// This machine's key of the collection as people pass it, to give it
+    /// to the team; `None` if this machine has none.
+    ///
+    /// # Errors
+    ///
+    /// If the keys cannot be read.
+    pub fn export_collection_key(&self) -> Result<Option<String>, KeyStoreError> {
+        Ok(self
+            .existing_collection_key()?
+            .map(|key| crate::shareable_key(&key)))
+    }
+
+    /// Takes the collection's key pasted as people pass it: read, checked
+    /// against the challenge, then stored.
+    ///
+    /// # Errors
+    ///
+    /// If it cannot be read ([`KeyStoreError::Shareable`]), is not this
+    /// collection's ([`KeyStoreError::WrongCollectionKey`]), or cannot be
+    /// stored.
+    pub fn import_collection_key(&self, text: &str) -> Result<(), KeyStoreError> {
+        let key = crate::parse_shareable_key(text)?;
+        self.use_collection_key(key)
+    }
+
     fn value(&self, environment: &str, name: &str) -> Result<Option<String>, KeyStoreError> {
         if let Some(master) = self.existing_master()?
             && let Some(value) = self.local.get(&master, environment, name)?

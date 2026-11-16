@@ -54,6 +54,9 @@ pub enum KeyStoreError {
     /// challenge.
     #[error("that is not this collection's key")]
     WrongCollectionKey,
+    /// A key pasted as people pass it cannot be read.
+    #[error(transparent)]
+    Shareable(#[from] crate::ShareableKeyError),
     /// A new key could not be made.
     #[error(transparent)]
     Vault(#[from] VaultError),

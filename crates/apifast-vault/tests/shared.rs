@@ -241,3 +241,33 @@ fn renaming_an_environment_seals_its_secrets_again_under_the_new_name() {
             .is_some()
     );
 }
+
+#[test]
+fn the_key_is_passed_as_text_and_a_typo_or_another_key_is_refused() {
+    let collection = Arc::new(MemorySharedSecrets::default());
+    let alice = machine(&collection);
+    let bob = machine(&collection);
+    assert_eq!(alice.secrets.export_collection_key().unwrap(), None);
+    alice.secrets.share("prod", "token", "t0k").unwrap();
+    let text = alice.secrets.export_collection_key().unwrap().unwrap();
+    assert!(text.starts_with("AFK-"));
+
+    let mut typo: Vec<char> = text.chars().collect();
+    typo[5] = if typo[5] == 'X' { 'Y' } else { 'X' };
+    let typo: String = typo.into_iter().collect();
+    assert!(matches!(
+        bob.secrets.import_collection_key(&typo),
+        Err(KeyStoreError::Shareable(_))
+    ));
+    let other = apifast_vault::shareable_key(&Key::generate().unwrap());
+    assert_eq!(
+        bob.secrets.import_collection_key(&other).unwrap_err(),
+        KeyStoreError::WrongCollectionKey
+    );
+
+    bob.secrets.import_collection_key(&text).unwrap();
+    assert_eq!(
+        bob.secrets.secret("prod", "token").unwrap().as_deref(),
+        Some("t0k")
+    );
+}
