@@ -10,7 +10,7 @@ use eframe::egui::{self, RichText};
 use crate::actions::{ALL, Action, Keymap};
 
 use crate::atoms::{ColorSwatch, HintsCache, VariableHint, VariableHints};
-use crate::core::{Command, ResponseState, Snapshot, Tab, TabContext};
+use crate::core::{Command, ResponseState, Snapshot, Tab, TabContext, VaultCommand};
 use crate::layout;
 use crate::molecules::EnvironmentSelector;
 use crate::organisms::{
@@ -278,10 +278,9 @@ impl MainScreen {
         let mut commands = Vec::new();
         let ctx = ui.ctx().clone();
         let context = snapshot.active_tab().map(|tab| tab.context.as_ref());
-        let files = &snapshot.environment_files;
-        if let Some(event) = self.environments.show(&ctx, files, context, hints, strings) {
-            commands.push(environment_command(event));
-        }
+        let files = (snapshot.environment_files.as_slice(), &snapshot.vault);
+        let events = self.environments.show(&ctx, files, context, hints, strings);
+        commands.extend(events.into_iter().map(environment_command));
         if self.shortcuts.show(&ctx, &mut self.keymap, strings) {
             self.unsaved.keymap = true;
         }
@@ -623,6 +622,22 @@ fn environment_command(event: EnvironmentEvent) -> Command {
         EnvironmentEvent::Rename { from, to } => Command::RenameEnvironment { from, to },
         EnvironmentEvent::Save(environment) => Command::SaveEnvironment(Box::new(environment)),
         EnvironmentEvent::Delete(name) => Command::DeleteEnvironment(name),
+        EnvironmentEvent::Secret {
+            environment,
+            name,
+            value,
+            shared,
+        } => Command::Vault(VaultCommand::Set {
+            environment,
+            name,
+            value,
+            shared,
+        }),
+        EnvironmentEvent::Reveal { environment, name } => {
+            Command::Vault(VaultCommand::Reveal { environment, name })
+        }
+        EnvironmentEvent::Hide => Command::Vault(VaultCommand::Hide),
+        EnvironmentEvent::Forget(orphan) => Command::Vault(VaultCommand::Forget(orphan)),
     }
 }
 

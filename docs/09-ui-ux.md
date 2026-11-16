@@ -109,7 +109,9 @@ La edición con resaltado se limita a unos 200 KB: con más texto, egui tarda de
 - Los cambios del editor de entornos se acumulan en una copia y se escriben con Save. Así una tabla a medio editar no cambia lo que usa un envío en curso.
 - Editor de entornos (`Ctrl+E`): lista de entornos a la izquierda y tabla de variables a la derecha.
 - Columnas de la tabla: habilitada, nombre, valor, tipo y clase de secreto (normal, solo local, compartido).
-- Marcar una variable como secreta la hace **solo local**. Compartirla con el equipo es una acción aparte, con una explicación breve de lo que implica.
+- Marcar una variable como secreta la hace **solo local**. Compartirla con el equipo es una acción aparte (la casilla Shared, con una explicación breve de lo que implica).
+- El valor de un secreto se escribe en un campo oculto. Su estado (guardado en esta máquina, compartido, bloqueado porque falta la clave de la colección, o sin valor) se ve en el campo vacío, al pasar el ratón y en su nombre accesible. Reveal lo muestra 15 segundos.
+- Los valores guardados que ya no usa ninguna variable secreta se listan bajo la tabla, con un botón para olvidarlos.
 - Vista "todas las variables": cada variable efectiva con su valor y el ámbito del que procede.
 
 ## Bóveda

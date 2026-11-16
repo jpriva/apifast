@@ -209,7 +209,12 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
   - Queda fuera: el valor existe en memoria como texto normal mientras se renderiza y se envía, y un cuerpo de respuesta que repita un secreto se guarda tal cual (ver `docs/06`).
 - [ ] Interfaz: columna de clase de secreto, revelar, diálogos de clave, estado de la bóveda.
   - [x] Núcleo: la instantánea lleva la vista de la bóveda (dónde está el valor de cada variable secreta, entradas huérfanas, si la colección comparte secretos y tiene clave, si la maestra está en archivo), calculada solo con nombres: no abre ningún valor ni pregunta al keyring. Comandos para guardar un valor (local o compartido), revelarlo, olvidar una entrada, y mostrar, pegar y rotar la clave; lo revelado y la clave mostrada se ocultan solos a los 15 s. Una colección sin identificador lo recibe al guardar su primer secreto, y su sesión, historial y respuestas pasan del hash de la ruta al identificador. `Core::start_with(.., SystemKeyring::off(), ..)` usa solo el archivo de la clave maestra: así las pruebas nunca tocan el keyring del usuario.
-  - [ ] Editor de entornos: marcar secreta (local o compartida), escribir el valor oculto, revelar, estado y huérfanas.
+  - [x] Editor de entornos: marcar secreta (local o compartida), escribir el valor oculto, revelar, estado y huérfanas.
+    - La casilla Secret ya funciona. Si la variable tenía valor, ese valor se guarda en la bóveda al pulsar Save y el archivo queda solo con el nombre.
+    - Cada secreto tiene un campo oculto para escribir un valor nuevo, la casilla Shared (marcada si el valor ya es compartido) y Reveal, activo si hay valor guardado.
+    - El estado (guardado aquí, compartido, bloqueado sin la clave o sin valor) aparece en el campo vacío, al pasar el ratón y en su nombre accesible.
+    - Save guarda el entorno y los valores escritos, cada uno en su sitio; Revert descarta ambos.
+    - Debajo, las entradas huérfanas con un botón Forget.
   - [ ] Diálogos de la clave de la colección e indicador de la bóveda.
 - [ ] CLI: `apifast vault` y `APIFAST_COLLECTION_KEY`.
 - [ ] Cifrado del tarro de cookies.

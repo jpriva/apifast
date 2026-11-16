@@ -6,11 +6,14 @@
 //! Edits go to a working copy, saved with one button; the files change only
 //! then.
 
-use apifast_domain::{Environment, ValueKind, Variable, VariableValue};
+use std::collections::BTreeMap;
+
+use apifast_domain::{Environment, Secret, ValueKind, Variable, VariableValue};
+use apifast_vault::{Orphan, SecretKind};
 use eframe::egui::{self, RichText};
 
 use crate::atoms::{CloseButton, ColorSwatch, TemplateField, TemplateFieldTexts, VariableHints};
-use crate::core::TabContext;
+use crate::core::{SecretStatus, TabContext, VaultView};
 use crate::strings::Strings;
 use crate::theme;
 
@@ -33,6 +36,35 @@ pub enum EnvironmentEvent {
     Save(Environment),
     /// Delete an environment.
     Delete(String),
+    /// Store the value of a secret.
+    Secret {
+        /// Its environment.
+        environment: String,
+        /// Its variable.
+        name: String,
+        /// The value.
+        value: Secret,
+        /// Shared with the team rather than kept on this machine.
+        shared: bool,
+    },
+    /// Show the value of a secret for a while.
+    Reveal {
+        /// Its environment.
+        environment: String,
+        /// Its variable.
+        name: String,
+    },
+    /// Hide a value shown.
+    Hide,
+    /// Forget a stored value no secret uses.
+    Forget(Orphan),
+}
+
+/// A value typed for a secret, stored when the environment is saved.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct Pending {
+    text: String,
+    shared: bool,
 }
 
 /// Which part of the editor is shown.
@@ -68,6 +100,8 @@ pub struct EnvironmentEditor {
     /// An environment asked for and not in the files yet: the selection
     /// waits for it.
     creating: Option<String>,
+    /// Values typed for secrets of the working copy, by variable.
+    secret_values: BTreeMap<String, Pending>,
 }
 
 impl EnvironmentEditor {
@@ -80,6 +114,7 @@ impl EnvironmentEditor {
     pub fn select(&mut self, name: &str) {
         self.selected = Some(name.to_owned());
         self.working = None;
+        self.secret_values.clear();
     }
 
     /// Chooses `name`, which the files will have soon: a new environment.
@@ -88,11 +123,13 @@ impl EnvironmentEditor {
         self.creating = Some(name.to_owned());
     }
 
-    /// Whether the working copy has changes that are not saved.
+    /// Whether the working copy has changes that are not saved, or values
+    /// typed for secrets.
     pub fn is_dirty(&self) -> bool {
         self.working
             .as_ref()
             .is_some_and(|(work, base)| work != base)
+            || self.secret_values.values().any(|p| !p.text.is_empty())
     }
 
     /// Draws the window, if open. `environments` are the files' contents;
@@ -100,21 +137,21 @@ impl EnvironmentEditor {
     pub fn show(
         &mut self,
         ctx: &egui::Context,
-        environments: &[Environment],
+        (environments, vault): (&[Environment], &VaultView),
         context: Option<&TabContext>,
         hints: &VariableHints,
         strings: &Strings,
-    ) -> Option<EnvironmentEvent> {
+    ) -> Vec<EnvironmentEvent> {
         if !self.open {
-            return None;
+            return Vec::new();
         }
         self.follow(environments);
         let mut open = self.open;
-        let mut event = None;
+        let mut events = Vec::new();
         egui::Window::new(strings.environments)
             .id(egui::Id::unique("environment-editor"))
             .open(&mut open)
-            .default_size([720.0, 420.0])
+            .default_size([920.0, 460.0])
             .resizable(true)
             .collapsible(false)
             .show(ctx, |ui| {
@@ -131,18 +168,16 @@ impl EnvironmentEditor {
                     );
                 });
                 ui.separator();
-                event = match self.view {
+                match self.view {
                     EnvironmentsView::Environments => {
-                        self.environments(ui, environments, hints, strings)
+                        events = self.environments(ui, (environments, vault), hints, strings);
                     }
-                    EnvironmentsView::Variables => {
-                        all_variables(ui, context, strings);
-                        None
-                    }
-                };
+                    EnvironmentsView::Variables => all_variables(ui, context, strings),
+                }
             });
         self.open = open;
-        event.or_else(|| self.confirm_delete(ctx, strings))
+        events.extend(self.confirm_delete(ctx, strings));
+        events
     }
 
     /// Keeps the selection and the working copy in step with the files: a
@@ -186,29 +221,30 @@ impl EnvironmentEditor {
         if stale {
             self.working = Some((current.clone(), current.clone()));
             self.name.clone_from(&current.name);
+            self.secret_values.clear();
         }
     }
 
     fn environments(
         &mut self,
         ui: &mut egui::Ui,
-        environments: &[Environment],
+        (environments, vault): (&[Environment], &VaultView),
         hints: &VariableHints,
         strings: &Strings,
-    ) -> Option<EnvironmentEvent> {
-        let mut event = None;
+    ) -> Vec<EnvironmentEvent> {
+        let mut events = Vec::new();
         ui.horizontal_top(|ui| {
             ui.vertical(|ui| {
                 ui.set_width(LIST_WIDTH);
-                event = self.list(ui, environments, strings);
+                events.extend(self.list(ui, environments, strings));
             });
             ui.separator();
             ui.vertical(|ui| {
-                let found = self.details(ui, environments, hints, strings);
-                event = event.take().or(found);
+                events.extend(self.details(ui, (environments, vault), hints, strings));
+                events.extend(orphans(ui, &vault.orphans, strings));
             });
         });
-        event
+        events
     }
 
     fn list(
@@ -255,12 +291,15 @@ impl EnvironmentEditor {
     fn details(
         &mut self,
         ui: &mut egui::Ui,
-        environments: &[Environment],
+        (environments, vault): (&[Environment], &VaultView),
         hints: &VariableHints,
         strings: &Strings,
-    ) -> Option<EnvironmentEvent> {
+    ) -> Vec<EnvironmentEvent> {
         let dirty = self.is_dirty();
-        let (work, base) = self.working.as_mut()?;
+        let Some((work, base)) = self.working.as_mut() else {
+            return Vec::new();
+        };
+        let mut events = Vec::new();
         let mut event = None;
         egui::Grid::new("environment-fields")
             .num_columns(2)
@@ -319,29 +358,22 @@ impl EnvironmentEditor {
                 ui.end_row();
             });
         ui.add_space(theme::space::S);
-        variables(ui, &mut work.variables, hints, strings);
+        let secrets = Secrets {
+            environment: &base.name,
+            vault,
+            values: &mut self.secret_values,
+        };
+        events.extend(variables(ui, &mut work.variables, secrets, hints, strings));
         ui.add_space(theme::space::S);
-        ui.horizontal(|ui| {
-            if ui
-                .add_enabled(dirty, egui::Button::new(strings.save))
-                .clicked()
-            {
-                event = Some(EnvironmentEvent::Save(work.clone()));
-                *base = work.clone();
-            }
-            if ui
-                .add_enabled(dirty, egui::Button::new(strings.revert))
-                .clicked()
-            {
-                *work = base.clone();
-            }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button(strings.delete).clicked() {
-                    self.deleting = Some(base.name.clone());
-                }
-            });
-        });
-        event
+        events.extend(buttons(
+            ui,
+            (work, base),
+            (&mut self.secret_values, &mut self.deleting),
+            dirty,
+            strings,
+        ));
+        events.extend(event);
+        events
     }
 
     fn confirm_delete(
@@ -420,15 +452,71 @@ fn cell<R>(ui: &mut egui::Ui, width: f32, content: impl FnOnce(&mut egui::Ui) ->
     .inner
 }
 
+/// Save, Revert and Delete. Save writes the environment if it changed, and
+/// the values typed for its secrets.
+fn buttons(
+    ui: &mut egui::Ui,
+    (work, base): (&mut Environment, &mut Environment),
+    (values, deleting): (&mut BTreeMap<String, Pending>, &mut Option<String>),
+    dirty: bool,
+    strings: &Strings,
+) -> Vec<EnvironmentEvent> {
+    let mut events = Vec::new();
+    ui.horizontal(|ui| {
+        if ui
+            .add_enabled(dirty, egui::Button::new(strings.save))
+            .clicked()
+        {
+            if work != base {
+                events.push(EnvironmentEvent::Save(work.clone()));
+                *base = work.clone();
+            }
+            // Values typed for secrets that are still secrets.
+            for (name, pending) in std::mem::take(values) {
+                let secret = work.variables.iter().any(|v| v.secret && v.name == name);
+                if secret && !pending.text.is_empty() {
+                    events.push(EnvironmentEvent::Secret {
+                        environment: base.name.clone(),
+                        name,
+                        value: Secret::new(pending.text),
+                        shared: pending.shared,
+                    });
+                }
+            }
+        }
+        if ui
+            .add_enabled(dirty, egui::Button::new(strings.revert))
+            .clicked()
+        {
+            *work = base.clone();
+            values.clear();
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.button(strings.delete).clicked() {
+                *deleting = Some(base.name.clone());
+            }
+        });
+    });
+    events
+}
+
+/// What the table needs to show and edit the secrets of one environment.
+struct Secrets<'a> {
+    environment: &'a str,
+    vault: &'a VaultView,
+    values: &'a mut BTreeMap<String, Pending>,
+}
+
 /// The table of an environment's variables, with an empty row to add one.
 /// Rows are laid out by hand, not with a grid: a field in a grid cell only
 /// gets the width its column measured before, so it never grows.
 fn variables(
     ui: &mut egui::Ui,
     variables: &mut Vec<Variable>,
+    mut secrets: Secrets<'_>,
     hints: &VariableHints,
     strings: &Strings,
-) {
+) -> Vec<EnvironmentEvent> {
     let texts = TemplateFieldTexts {
         placeholder: strings.value,
         missing: strings.variable_missing,
@@ -437,6 +525,7 @@ fn variables(
     let id = ui.make_persistent_id("environment-variables");
     let columns = Columns::new(ui);
     let mut remove = None;
+    let mut events = Vec::new();
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = theme::space::S;
         for (header, width) in [
@@ -457,7 +546,17 @@ fn variables(
             for (index, variable) in variables.iter_mut().enumerate() {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = theme::space::S;
-                    row(ui, variable, (id, index), &columns, (hints, texts), strings);
+                    let ids = (id, index);
+                    let found = row(
+                        ui,
+                        variable,
+                        ids,
+                        &columns,
+                        &mut secrets,
+                        (hints, texts),
+                        strings,
+                    );
+                    events.extend(found);
                     if ui.add(CloseButton::new(strings.remove_row)).clicked() {
                         remove = Some(index);
                     }
@@ -486,6 +585,16 @@ fn variables(
     if let Some(index) = remove {
         variables.remove(index);
     }
+    events
+}
+
+fn status_text(status: SecretStatus, strings: &Strings) -> &str {
+    match status {
+        SecretStatus::Local => strings.secret_local,
+        SecretStatus::Shared => strings.secret_shared,
+        SecretStatus::Locked => strings.secret_locked,
+        SecretStatus::Missing => strings.secret_missing,
+    }
 }
 
 fn row(
@@ -493,9 +602,10 @@ fn row(
     variable: &mut Variable,
     (id, index): (egui::Id, usize),
     columns: &Columns,
+    secrets: &mut Secrets<'_>,
     (hints, texts): (&VariableHints, TemplateFieldTexts<'_>),
     strings: &Strings,
-) {
+) -> Option<EnvironmentEvent> {
     cell(ui, columns.check, |ui| {
         ui.checkbox(&mut variable.enabled, "")
             .accessible_name(strings.enabled)
@@ -507,10 +617,16 @@ fn row(
             .desired_width(columns.name),
     )
     .accessible_name(strings.name);
+    let mut event = None;
     if variable.secret {
-        cell(ui, columns.value, |ui| {
-            ui.label(RichText::new(strings.secret_in_vault).color(theme::palette(ui).text_muted));
-        });
+        event = secret_value(
+            ui,
+            variable,
+            id.with((index, 1)),
+            columns.value,
+            secrets,
+            strings,
+        );
     } else {
         let value = variable
             .value
@@ -548,14 +664,135 @@ fn row(
             .response
             .on_hover_text(strings.kind);
     });
-    // Secrets live in the vault, which arrives later: marking one here
-    // would only drop its value from the file.
     cell(ui, columns.secret, |ui| {
         let mut secret = variable.secret;
-        ui.add_enabled(false, egui::Checkbox::without_text(&mut secret))
+        let changed = ui
+            .add(egui::Checkbox::without_text(&mut secret))
             .accessible_name(strings.secret)
-            .on_disabled_hover_text(strings.secret_later);
+            .on_hover_text(strings.secret_hint)
+            .changed();
+        if changed {
+            make_secret(variable, secret, secrets.values);
+        }
     });
+    event
+}
+
+/// Marks `variable` as secret or not. A value in the clear moves to the
+/// values to store on save; the file keeps only the name.
+fn make_secret(variable: &mut Variable, secret: bool, values: &mut BTreeMap<String, Pending>) {
+    variable.secret = secret;
+    if secret {
+        let text = variable.value.take().map(|v| v.data).unwrap_or_default();
+        if !text.is_empty() {
+            values.insert(
+                variable.name.clone(),
+                Pending {
+                    text,
+                    shared: false,
+                },
+            );
+        }
+    } else {
+        variable.value = Some(VariableValue::text(
+            values
+                .remove(&variable.name)
+                .map(|p| p.text)
+                .unwrap_or_default(),
+        ));
+    }
+}
+
+/// The value of a secret: a hidden field to type a new one, whether it is
+/// shared, and a button to show the stored one for a while.
+fn secret_value(
+    ui: &mut egui::Ui,
+    variable: &Variable,
+    id: egui::Id,
+    width: f32,
+    secrets: &mut Secrets<'_>,
+    strings: &Strings,
+) -> Option<EnvironmentEvent> {
+    let status = secrets.vault.status(secrets.environment, &variable.name);
+    let revealed = (secrets.vault.revealed.as_ref())
+        .filter(|r| r.environment == secrets.environment && r.name == variable.name);
+    let mut event = None;
+    cell(ui, width, |ui| {
+        let buttons = 150.0;
+        if let Some(revealed) = revealed {
+            ui.add_sized(
+                [width - buttons, ui.spacing().interact_size.y],
+                egui::Label::new(RichText::new(revealed.value.expose()).monospace()).truncate(),
+            );
+        } else {
+            // A new value goes where the stored one is, unless changed.
+            let shared = matches!(status, SecretStatus::Shared | SecretStatus::Locked);
+            let pending =
+                (secrets.values.entry(variable.name.clone())).or_insert_with(|| Pending {
+                    text: String::new(),
+                    shared,
+                });
+            ui.add(
+                egui::TextEdit::singleline(&mut pending.text)
+                    .id(id)
+                    .password(true)
+                    .hint_text(status_text(status, strings))
+                    .desired_width(width - buttons),
+            )
+            // The status in the name too, so screen readers say it.
+            .accessible_name(format!(
+                "{}: {}",
+                strings.secret_value,
+                status_text(status, strings)
+            ))
+            .on_hover_text(status_text(status, strings));
+            ui.checkbox(&mut pending.shared, strings.shared)
+                .on_hover_text(strings.shared_hint);
+        }
+        let stored = matches!(status, SecretStatus::Local | SecretStatus::Shared);
+        if revealed.is_some() {
+            if ui.button(strings.hide).clicked() {
+                event = Some(EnvironmentEvent::Hide);
+            }
+        } else if ui
+            .add_enabled(stored, egui::Button::new(strings.reveal))
+            .clicked()
+        {
+            event = Some(EnvironmentEvent::Reveal {
+                environment: secrets.environment.to_owned(),
+                name: variable.name.clone(),
+            });
+        }
+    });
+    event
+}
+
+/// Stored values no secret variable uses, each with a button to forget it.
+fn orphans(ui: &mut egui::Ui, orphans: &[Orphan], strings: &Strings) -> Option<EnvironmentEvent> {
+    if orphans.is_empty() {
+        return None;
+    }
+    let muted = theme::palette(ui).text_muted;
+    let mut event = None;
+    ui.add_space(theme::space::M);
+    ui.label(RichText::new(strings.orphans_title).strong());
+    ui.label(RichText::new(strings.orphans_hint).color(muted).small());
+    for orphan in orphans {
+        ui.horizontal(|ui| {
+            let kind = match orphan.kind {
+                SecretKind::Local => strings.secret_local,
+                SecretKind::Shared => strings.secret_shared,
+            };
+            ui.label(
+                RichText::new(format!("{} / {}", orphan.environment, orphan.name)).monospace(),
+            );
+            ui.label(RichText::new(kind).color(muted));
+            if ui.button(strings.forget).clicked() {
+                event = Some(EnvironmentEvent::Forget(orphan.clone()));
+            }
+        });
+    }
+    event
 }
 
 /// Every variable the active request sees: its value, where it comes from

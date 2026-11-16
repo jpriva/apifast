@@ -5,7 +5,7 @@
 
 use apifast_domain::{Environment, Origin, Variable, resolve_variables};
 use apifast_gui::atoms::VariableHints;
-use apifast_gui::core::TabContext;
+use apifast_gui::core::{Revealed, SecretState, SecretStatus, TabContext, VaultView};
 use apifast_gui::organisms::{EnvironmentEditor, EnvironmentEvent, EnvironmentsView};
 use apifast_gui::strings::EN;
 use eframe::egui::{self, accesskit::Role};
@@ -16,6 +16,7 @@ struct State {
     editor: EnvironmentEditor,
     environments: Vec<Environment>,
     context: Option<TabContext>,
+    vault: VaultView,
     events: Vec<EnvironmentEvent>,
 }
 
@@ -39,20 +40,20 @@ fn harness(context: Option<TabContext>) -> Harness<'static, State> {
         .with_size(egui::vec2(900.0, 600.0))
         .build_ui_state(
             move |ui, state: &mut State| {
-                if let Some(event) = state.editor.show(
+                let events = state.editor.show(
                     ui.ctx(),
-                    &state.environments,
+                    (&state.environments, &state.vault),
                     state.context.as_ref(),
                     &hints,
                     &EN,
-                ) {
-                    state.events.push(event);
-                }
+                );
+                state.events.extend(events);
             },
             State {
                 editor,
                 environments: environments(),
                 context,
+                vault: VaultView::default(),
                 events: Vec::new(),
             },
         )
@@ -74,8 +75,8 @@ fn the_first_environment_is_shown_with_its_variables() {
     harness.get_by(|node| {
         node.role() == Role::TextInput && node.value().as_deref() == Some("http://localhost")
     });
-    // A secret's value is never shown; marking secrets waits for the vault.
-    harness.get_by_label(EN.secret_in_vault);
+    // A secret's value is never in a field: its field is hidden.
+    harness.get_by_role(Role::PasswordInput);
 }
 
 #[test]
@@ -183,4 +184,127 @@ fn every_variable_shows_where_it_comes_from_and_what_it_overrides() {
     harness.get_by_label("http://localhost");
     harness.get_by_label("Environment local");
     harness.get_by_label("Collection");
+}
+
+fn status(name: &str, status: SecretStatus) -> SecretState {
+    SecretState {
+        environment: "local".into(),
+        name: name.into(),
+        status,
+    }
+}
+
+#[test]
+fn marking_a_variable_secret_moves_its_value_to_the_vault_on_save() {
+    let mut harness = harness(None);
+    // `host` is the first variable; its secret box is the first one.
+    harness
+        .get_all_by_role_and_label(Role::CheckBox, EN.secret)
+        .next()
+        .unwrap()
+        .click();
+    harness.run();
+    harness.get_by_label(EN.save).click();
+    harness.run();
+    let events = &harness.state().events;
+    let [
+        EnvironmentEvent::Save(saved),
+        EnvironmentEvent::Secret {
+            name,
+            value,
+            shared,
+            ..
+        },
+    ] = events.as_slice()
+    else {
+        panic!("{events:?}");
+    };
+    let host = saved.variables.iter().find(|v| v.name == "host").unwrap();
+    assert!(
+        host.secret && host.value.is_none(),
+        "the file keeps only the name"
+    );
+    assert_eq!(
+        (name.as_str(), value.expose(), *shared),
+        ("host", "http://localhost", false)
+    );
+}
+
+#[test]
+fn a_value_typed_for_a_secret_is_stored_shared_on_save() {
+    let mut harness = harness(None);
+    harness.get_by_role(Role::PasswordInput).focus();
+    harness.run();
+    type_text(&mut harness, "t0k");
+    harness.get_by_label(EN.shared).click();
+    harness.run();
+    assert!(harness.state().editor.is_dirty());
+    harness.get_by_label(EN.save).click();
+    harness.run();
+    let [
+        EnvironmentEvent::Secret {
+            environment,
+            name,
+            value,
+            shared,
+        },
+    ] = harness.state().events.as_slice()
+    else {
+        panic!("{:?}", harness.state().events);
+    };
+    assert_eq!(
+        (environment.as_str(), name.as_str(), value.expose(), *shared),
+        ("local", "token", "t0k", true)
+    );
+    assert!(!harness.state().editor.is_dirty());
+}
+
+#[test]
+fn a_stored_value_is_revealed_on_request_and_its_status_shown() {
+    let mut harness = harness(None);
+    harness.state_mut().vault.secrets = vec![status("token", SecretStatus::Local)];
+    harness.run();
+    harness.get_by_label(&format!("{}: {}", EN.secret_value, EN.secret_local));
+    harness.get_by_label(EN.reveal).click();
+    harness.run();
+    assert_eq!(
+        harness.state().events,
+        [EnvironmentEvent::Reveal {
+            environment: "local".into(),
+            name: "token".into()
+        }]
+    );
+    harness.state_mut().vault.revealed = Some(Revealed {
+        environment: "local".into(),
+        name: "token".into(),
+        value: apifast_domain::Secret::new("t0k-shown"),
+    });
+    harness.run();
+    harness.get_by_label("t0k-shown");
+    harness.get_by_label(EN.hide).click();
+    harness.run();
+    assert_eq!(harness.state().events.last(), Some(&EnvironmentEvent::Hide));
+}
+
+#[test]
+fn nothing_to_reveal_without_a_stored_value_and_orphans_can_be_forgotten() {
+    let mut harness = harness(None);
+    harness.get_by_label(&format!("{}: {}", EN.secret_value, EN.secret_missing));
+    // Disabled: clicking it asks for nothing.
+    harness.get_by_label(EN.reveal).click();
+    harness.run();
+    assert_eq!(harness.state().events, []);
+
+    let orphan = apifast_vault::Orphan {
+        environment: "old".into(),
+        name: "key".into(),
+        kind: apifast_vault::SecretKind::Shared,
+    };
+    harness.state_mut().vault.orphans = vec![orphan.clone()];
+    harness.run();
+    harness.get_by_label(EN.orphans_title);
+    harness.get_by_label("old / key");
+    harness.get_by_label(EN.forget).click();
+    harness.run();
+    assert_eq!(harness.state().events, [EnvironmentEvent::Forget(orphan)]);
 }

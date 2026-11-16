@@ -76,10 +76,6 @@ pub struct Strings {
     pub kind_object: &'static str,
     /// Column telling whether a variable is secret.
     pub secret: &'static str,
-    /// Shown instead of a secret's value in the editor.
-    pub secret_in_vault: &'static str,
-    /// Why secrets cannot be marked yet.
-    pub secret_later: &'static str,
     /// Field that adds a variable.
     pub new_variable: &'static str,
     /// Column of where a variable comes from.
@@ -204,6 +200,32 @@ pub struct Strings {
     pub browse: &'static str,
     /// Title of the folder picker.
     pub pick_collection: &'static str,
+    /// Hover of the secret column.
+    pub secret_hint: &'static str,
+    /// Accessible name of a secret's value field.
+    pub secret_value: &'static str,
+    /// A secret's value is on this machine.
+    pub secret_local: &'static str,
+    /// A secret's value is shared.
+    pub secret_shared: &'static str,
+    /// A shared value this machine cannot open.
+    pub secret_locked: &'static str,
+    /// A secret without value.
+    pub secret_missing: &'static str,
+    /// Checkbox that shares a secret's value.
+    pub shared: &'static str,
+    /// Hover of the shared checkbox.
+    pub shared_hint: &'static str,
+    /// Button that shows a secret's value for a while.
+    pub reveal: &'static str,
+    /// Button that hides a revealed value.
+    pub hide: &'static str,
+    /// Heading of stored values no secret uses.
+    pub orphans_title: &'static str,
+    /// Explains orphan values.
+    pub orphans_hint: &'static str,
+    /// Button that removes an orphan value.
+    pub forget: &'static str,
     /// Sidebar tab with the collection's tree.
     pub sidebar_collection: &'static str,
     /// Sidebar tab with the history of sends.
@@ -455,8 +477,6 @@ pub const EN: Strings = Strings {
     kind_bool: "Boolean",
     kind_object: "Object",
     secret: "Secret",
-    secret_in_vault: "in the vault",
-    secret_later: "Marking secrets comes with the vault",
     new_variable: "New variable",
     from: "From",
     overrides: "Overrides",
@@ -519,6 +539,19 @@ pub const EN: Strings = Strings {
     days: "days",
     browse: "Browse...",
     pick_collection: "Open a collection folder",
+    secret_hint: "Secret: the file keeps only its name; the value goes to the vault",
+    secret_value: "Secret value",
+    secret_local: "Stored on this machine",
+    secret_shared: "Shared with the team",
+    secret_locked: "Locked: this machine lacks the collection key",
+    secret_missing: "No value yet: type one",
+    shared: "Shared",
+    shared_hint: "Share with the team: sealed with the collection key in .apifast/secrets, which goes to git",
+    reveal: "Reveal",
+    hide: "Hide",
+    orphans_title: "Values no secret uses",
+    orphans_hint: "Their variable is gone or no longer secret, as after editing with Bruno.",
+    forget: "Forget",
     sidebar_collection: "Collection",
     sidebar_history: "History",
     filter: "Filter",

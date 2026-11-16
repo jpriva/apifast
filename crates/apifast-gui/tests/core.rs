@@ -976,7 +976,7 @@ fn the_history_limits_come_from_the_settings() {
 }
 
 /// The `local` environment with `token` as a secret.
-fn with_secret_token(snapshot: &Snapshot) -> Box<apifast_domain::Environment> {
+fn with_secret_token(snapshot: &Snapshot) -> apifast_domain::Environment {
     let mut local = snapshot
         .environment_files
         .iter()
@@ -986,7 +986,7 @@ fn with_secret_token(snapshot: &Snapshot) -> Box<apifast_domain::Environment> {
     local
         .variables
         .push(apifast_domain::Variable::secret("token"));
-    Box::new(local)
+    local
 }
 
 #[test]
@@ -1014,7 +1014,9 @@ fn a_first_secret_gives_the_collection_an_id_and_its_value_reaches_the_send() {
     );
     core.send(Command::SelectEnvironment(Some("local".into())));
     core.send(Command::OpenRequest(RequestPath::new("secret.yml")));
-    core.send(Command::SaveEnvironment(with_secret_token(&snapshot)));
+    core.send(Command::SaveEnvironment(Box::new(with_secret_token(
+        &snapshot,
+    ))));
     let snapshot = wait(&core, "the secret variable", |s| {
         !s.vault.secrets.is_empty()
     });
@@ -1077,7 +1079,9 @@ fn values_are_revealed_on_request_and_keys_shown_and_rotated() {
     let dir = collection(server(Duration::ZERO));
     let (core, _, _data) = start();
     let snapshot = open(&core, dir.path());
-    core.send(Command::SaveEnvironment(with_secret_token(&snapshot)));
+    core.send(Command::SaveEnvironment(Box::new(with_secret_token(
+        &snapshot,
+    ))));
     wait(&core, "the secret variable", |s| {
         !s.vault.secrets.is_empty()
     });
@@ -1125,7 +1129,9 @@ fn a_value_no_secret_uses_is_an_orphan_and_can_be_forgotten() {
     let dir = collection(server(Duration::ZERO));
     let (core, _, _data) = start();
     let snapshot = open(&core, dir.path());
-    core.send(Command::SaveEnvironment(with_secret_token(&snapshot)));
+    core.send(Command::SaveEnvironment(Box::new(with_secret_token(
+        &snapshot,
+    ))));
     wait(&core, "the secret variable", |s| {
         !s.vault.secrets.is_empty()
     });
@@ -1141,7 +1147,7 @@ fn a_value_no_secret_uses_is_an_orphan_and_can_be_forgotten() {
     // The variable stops being secret, as Bruno might leave it.
     let mut local = with_secret_token(&snapshot);
     local.variables.retain(|v| v.name != "token");
-    core.send(Command::SaveEnvironment(local));
+    core.send(Command::SaveEnvironment(Box::new(local)));
     let snapshot = wait(&core, "the orphan", |s| !s.vault.orphans.is_empty());
     let orphan = snapshot.vault.orphans[0].clone();
     assert_eq!(
