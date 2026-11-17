@@ -1125,3 +1125,173 @@ async fn the_loopback_refuses_remote_callbacks_and_gives_up_in_time() {
         .to_string();
     assert!(error.contains("in time"), "{error}");
 }
+
+// --- Proxies ------------------------------------------------------------------
+
+/// An HTTP proxy that answers every request itself, recording its request
+/// line and `Proxy-Authorization`.
+async fn http_proxy() -> (u16, Arc<Mutex<Vec<String>>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let log: Arc<Mutex<Vec<String>>> = Arc::default();
+    let seen = log.clone();
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut stream, _)) = listener.accept().await else {
+                return;
+            };
+            let seen = seen.clone();
+            tokio::spawn(async move {
+                let mut head = Vec::new();
+                let mut chunk = [0u8; 4096];
+                while find(&head, b"\r\n\r\n").is_none() {
+                    match stream.read(&mut chunk).await {
+                        Ok(0) | Err(_) => return,
+                        Ok(n) => head.extend_from_slice(&chunk[..n]),
+                    }
+                }
+                let text = String::from_utf8_lossy(&head).into_owned();
+                let line = text.lines().next().unwrap_or_default().to_owned();
+                let auth = text
+                    .lines()
+                    .find(|l| l.to_ascii_lowercase().starts_with("proxy-authorization:"))
+                    .and_then(|l| l.split_once(':'))
+                    .map(|(_, v)| v.trim().to_owned())
+                    .unwrap_or_default();
+                seen.lock().unwrap().push(format!("{line} | {auth}"));
+                let _ = stream
+                    .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\nConnection: close\r\n\r\nvia proxy")
+                    .await;
+            });
+        }
+    });
+    (port, log)
+}
+
+fn through(proxy: apifast_domain::ProxyConfig) -> ReqwestTransport {
+    ReqwestTransport::with_proxy(
+        std::env::temp_dir(),
+        apifast_domain::ProxyChoice::Manual(proxy),
+    )
+    .unwrap()
+}
+
+#[tokio::test]
+async fn requests_go_through_a_manual_proxy_with_its_credentials() {
+    let (port, log) = http_proxy().await;
+    let transport = through(apifast_domain::ProxyConfig {
+        hostname: "127.0.0.1".into(),
+        port: port.to_string(),
+        auth: true,
+        username: "ana".into(),
+        password: "s3cret".into(),
+        ..apifast_domain::ProxyConfig::default()
+    });
+    let (result, body) = send_with(
+        &transport,
+        &get("http://api.example.invalid/orders?x=1".into()),
+        &CancelToken::new(),
+    )
+    .await;
+    assert_eq!(result.unwrap().status, 200);
+    assert_eq!(body.body, b"via proxy");
+    assert_eq!(
+        *log.lock().unwrap(),
+        // ana:s3cret in Basic.
+        ["GET http://api.example.invalid/orders?x=1 HTTP/1.1 | Basic YW5hOnMzY3JldA=="]
+    );
+}
+
+#[tokio::test]
+async fn excluded_hosts_go_direct() {
+    let (port, log) = http_proxy().await;
+    let server = Server::start(|_| Reply::ok("direct")).await;
+    let transport = through(apifast_domain::ProxyConfig {
+        hostname: "127.0.0.1".into(),
+        port: port.to_string(),
+        bypass: "localhost, 127.0.0.1".into(),
+        ..apifast_domain::ProxyConfig::default()
+    });
+    let (result, body) = send_with(&transport, &get(server.url("/x")), &CancelToken::new()).await;
+    assert_eq!(result.unwrap().status, 200);
+    assert_eq!(body.body, b"direct");
+    assert_eq!(*log.lock().unwrap(), Vec::<String>::new());
+}
+
+/// A SOCKS5 proxy without authentication that connects to whatever it is
+/// asked and relays. Counts the connections it made.
+async fn socks5_proxy() -> (u16, Arc<Mutex<Vec<String>>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let log: Arc<Mutex<Vec<String>>> = Arc::default();
+    let seen = log.clone();
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut client, _)) = listener.accept().await else {
+                return;
+            };
+            let seen = seen.clone();
+            tokio::spawn(async move {
+                let mut greeting = [0u8; 2];
+                client.read_exact(&mut greeting).await.unwrap();
+                let mut methods = vec![0u8; usize::from(greeting[1])];
+                client.read_exact(&mut methods).await.unwrap();
+                client.write_all(&[5, 0]).await.unwrap();
+                let mut request = [0u8; 4];
+                client.read_exact(&mut request).await.unwrap();
+                let host = match request[3] {
+                    1 => {
+                        let mut ip = [0u8; 4];
+                        client.read_exact(&mut ip).await.unwrap();
+                        std::net::Ipv4Addr::from(ip).to_string()
+                    }
+                    3 => {
+                        let mut len = [0u8; 1];
+                        client.read_exact(&mut len).await.unwrap();
+                        let mut name = vec![0u8; usize::from(len[0])];
+                        client.read_exact(&mut name).await.unwrap();
+                        String::from_utf8(name).unwrap()
+                    }
+                    _ => return,
+                };
+                let mut port = [0u8; 2];
+                client.read_exact(&mut port).await.unwrap();
+                let port = u16::from_be_bytes(port);
+                seen.lock().unwrap().push(format!("{host}:{port}"));
+                let mut upstream = TcpStream::connect((host.as_str(), port)).await.unwrap();
+                client
+                    .write_all(&[5, 0, 0, 1, 0, 0, 0, 0, 0, 0])
+                    .await
+                    .unwrap();
+                let _ = tokio::io::copy_bidirectional(&mut client, &mut upstream).await;
+            });
+        }
+    });
+    (port, log)
+}
+
+#[tokio::test]
+async fn socks5_proxies_relay_the_connection() {
+    let (port, log) = socks5_proxy().await;
+    let server = Server::start(|_| Reply::ok("over socks")).await;
+    let transport = through(apifast_domain::ProxyConfig {
+        protocol: apifast_domain::ProxyProtocol::Socks5,
+        hostname: "127.0.0.1".into(),
+        port: port.to_string(),
+        ..apifast_domain::ProxyConfig::default()
+    });
+    let (result, body) = send_with(&transport, &get(server.url("/x")), &CancelToken::new()).await;
+    assert_eq!(result.unwrap().status, 200);
+    assert_eq!(body.body, b"over socks");
+    assert_eq!(log.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn a_proxy_without_host_is_refused() {
+    let error = ReqwestTransport::with_proxy(
+        std::env::temp_dir(),
+        apifast_domain::ProxyChoice::Manual(apifast_domain::ProxyConfig::default()),
+    )
+    .unwrap_err();
+    assert_eq!(error.to_string(), "invalid request: the proxy has no host");
+}

@@ -259,7 +259,7 @@ impl State {
         let repo = Arc::new(FsCollection::open(root).map_err(|e| e.to_string())?);
         let tree = open_collection(&*repo).map_err(|e| e.to_string())?;
         let environment_files = repo.environments().map_err(|e| e.to_string())?;
-        let transport = ReqwestTransport::new(root).map_err(|e| e.to_string())?;
+        let transport = self.transport_for(root, &tree.collection)?;
         let id = tree
             .collection
             .id

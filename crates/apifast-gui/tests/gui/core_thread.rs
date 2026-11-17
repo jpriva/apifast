@@ -1002,6 +1002,7 @@ fn the_history_limits_come_from_the_settings() {
             max_age: None,
         },
         responses: Limits::default(),
+        proxy: apifast_domain::ProxyChoice::System,
     });
     open(&core, dir.path());
     let snapshot = wait(&core, "the history", |s| !s.history.is_empty());
@@ -1878,4 +1879,92 @@ fn oauth2_tokens_are_kept_sealed_got_on_demand_and_forgotten() {
     wait(&core, "forgotten", |s| {
         token_of(s) == Some(TokenState::Missing)
     });
+}
+
+/// An HTTP proxy that answers every request itself with `via proxy`.
+fn http_proxy() -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut line = String::new();
+            while reader.read_line(&mut line).is_ok_and(|n| n > 2) {
+                line.clear();
+            }
+            let mut stream = stream;
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: 9\r\nConnection: close\r\n\r\nvia proxy"
+            );
+        }
+    });
+    port
+}
+
+#[test]
+fn a_collection_proxy_is_saved_and_used_by_the_next_send() {
+    use apifast_domain::{CollectionProxy, ProxyConfig, ProxyMode};
+    let dir = collection(server(Duration::ZERO));
+    let proxy_port = http_proxy();
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
+    wait(&core, "the request", |s| s.active_tab().is_some());
+    let body_of = |core: &Core| {
+        let sent = core.snapshot().history.len();
+        core.send(Command::Send);
+        // A new entry in the history: the tab may still show the last one.
+        let snapshot = wait(core, "the response", |s| {
+            s.history.len() > sent
+                && matches!(
+                    response(s),
+                    ResponseState::Received(_) | ResponseState::Failed(_)
+                )
+        });
+        let ResponseState::Received(received) = response(&snapshot) else {
+            panic!("{:?}", response(&snapshot));
+        };
+        String::from_utf8(received.body.read(0, 100).unwrap()).unwrap()
+    };
+    assert_eq!(body_of(&core), "GET /health HTTP/1.1");
+
+    let proxy = CollectionProxy {
+        mode: ProxyMode::Custom,
+        config: ProxyConfig {
+            hostname: "127.0.0.1".into(),
+            port: proxy_port.to_string(),
+            ..ProxyConfig::default()
+        },
+    };
+    core.send(Command::SaveCollectionProxy {
+        root: root(&core),
+        proxy: proxy.clone(),
+    });
+    wait(&core, "the proxy saved", |s| {
+        s.collection
+            .as_ref()
+            .is_some_and(|c| c.tree.collection.proxy == proxy)
+    });
+    assert!(
+        std::fs::read_to_string(dir.path().join("opencollection.yml"))
+            .unwrap()
+            .contains("inherit: false")
+    );
+    assert_eq!(body_of(&core), "via proxy");
+
+    core.send(Command::SaveCollectionProxy {
+        root: root(&core),
+        proxy: CollectionProxy {
+            mode: ProxyMode::Off,
+            ..proxy
+        },
+    });
+    wait(&core, "no proxy", |s| {
+        s.collection
+            .as_ref()
+            .is_some_and(|c| c.tree.collection.proxy.mode == ProxyMode::Off)
+    });
+    assert_eq!(body_of(&core), "GET /health HTTP/1.1");
 }

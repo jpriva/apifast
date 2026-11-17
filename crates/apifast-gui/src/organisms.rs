@@ -3,11 +3,13 @@
 
 mod body_viewer;
 mod collection_dialogs;
+mod collection_settings;
 mod environments;
 mod history;
 mod kv_table;
 mod oauth2_editor;
 mod palette;
+mod proxy_editor;
 mod request_panel;
 mod response;
 mod runner_window;
@@ -21,11 +23,13 @@ mod vault_window;
 
 pub use body_viewer::BodyViewer;
 pub use collection_dialogs::{CollectionDialogs, CollectionRequest, folder_name};
+pub use collection_settings::CollectionSettingsWindow;
 pub use environments::{EnvironmentEditor, EnvironmentEvent, EnvironmentsView};
 pub use history::{HistoryView, ago, matches};
 pub use kv_table::{BulkRow, KvRow, KvTable, from_bulk, to_bulk};
 pub use oauth2_editor::oauth2_fields;
 pub use palette::{CommandPalette, PaletteItem, PaletteMode, fuzzy};
+pub use proxy_editor::proxy_fields;
 pub use request_panel::{RequestChange, RequestPanel, RequestTab, TokenAction};
 pub use response::{
     BodyMode, COPY_LIMIT, PRETTY_LIMIT, ResponseTab, ResponseView, describe, millis,

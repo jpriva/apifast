@@ -3,6 +3,8 @@
 
 use eframe::egui::{self, RichText};
 
+use crate::organisms::proxy_fields;
+use crate::settings::ProxyModeSetting;
 use crate::settings::{
     DAYS_RANGE, HISTORY_ENTRIES_RANGE, PRETTY_MB_RANGE, RESPONSES_MB_RANGE, SCALE_RANGE, Settings,
 };
@@ -14,6 +16,13 @@ use crate::theme::{self, ThemeChoice};
 pub struct SettingsWindow {
     /// Whether it is open.
     pub open: bool,
+    /// Whether a password is kept for the proxy; the screen tells.
+    pub password_saved: bool,
+    /// The proxy password being typed; never kept here once saved.
+    password: String,
+    /// The password to keep (`Some`) or forget (`None`), once, since the
+    /// last time it was taken.
+    pub password_change: Option<Option<apifast_domain::Secret>>,
 }
 
 fn theme_label(theme: ThemeChoice, strings: &Strings) -> &str {
@@ -60,6 +69,7 @@ impl SettingsWindow {
                 });
 
                 changed |= storage(ui, settings, strings);
+                changed |= self.proxy(ui, settings, strings);
                 ui.add_space(theme::space::M);
                 if ui.button(strings.settings_reset).clicked() {
                     *settings = Settings::default();
@@ -67,6 +77,64 @@ impl SettingsWindow {
                 }
             });
         self.open = open;
+        changed
+    }
+}
+
+impl SettingsWindow {
+    /// The application's proxy: for the collections that inherit theirs.
+    fn proxy(&mut self, ui: &mut egui::Ui, settings: &mut Settings, strings: &Strings) -> bool {
+        let mut changed = false;
+        section(ui, strings.proxy);
+        ui.horizontal(|ui| {
+            for (mode, label) in [
+                (ProxyModeSetting::System, strings.proxy_system),
+                (ProxyModeSetting::Off, strings.proxy_off),
+                (ProxyModeSetting::Manual, strings.proxy_manual),
+            ] {
+                changed |= ui
+                    .radio_value(&mut settings.proxy_mode, mode, label)
+                    .changed();
+            }
+        });
+        if settings.proxy_mode == ProxyModeSetting::Manual {
+            egui::Grid::new("settings-proxy")
+                .num_columns(2)
+                .spacing([theme::space::L, theme::space::S])
+                .show(ui, |ui| {
+                    changed |=
+                        proxy_fields(ui, "settings-proxy", &mut settings.proxy, None, strings);
+                    if settings.proxy.auth {
+                        ui.label(strings.password);
+                        ui.horizontal(|ui| {
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.password)
+                                    .password(true)
+                                    .hint_text(if self.password_saved {
+                                        strings.proxy_password_saved
+                                    } else {
+                                        ""
+                                    })
+                                    .desired_width(160.0),
+                            )
+                            .accessible_name(strings.password);
+                            if ui.button(strings.proxy_save_password).clicked() {
+                                let password = std::mem::take(&mut self.password);
+                                self.password_change =
+                                    Some(Some(apifast_domain::Secret::new(password)));
+                            }
+                            if self.password_saved
+                                && ui.button(strings.proxy_forget_password).clicked()
+                            {
+                                self.password_change = Some(None);
+                            }
+                        });
+                        ui.end_row();
+                    }
+                });
+        }
+        let muted = theme::palette(ui).text_muted;
+        ui.label(RichText::new(strings.proxy_hint).color(muted).small());
         changed
     }
 }

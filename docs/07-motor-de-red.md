@@ -141,10 +141,14 @@ Basic, Bearer y API key se resuelven al renderizar: son headers o parámetros. L
 
 ## Proxy
 
-- Modos: desactivado, sistema, manual.
-- Manual: HTTP, HTTPS y SOCKS5, con credenciales y lista de exclusiones.
-- Configurable de forma global y por colección.
-- La decisión tomada (qué proxy y por qué) se registra en el timeline.
+- **Dos niveles.** La aplicación tiene un proxy (en los ajustes): el del sistema, ninguno o uno manual. Cada colección hereda ese, va sin proxy o tiene el suyo (`config.proxy` de `opencollection.yml`, [docs/04](04-formato-de-archivos.md#proxy-de-la-colección)).
+- **Sistema:** las variables `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` y `NO_PROXY`, como las lee reqwest. La configuración de proxy del escritorio (GNOME, macOS, Windows) no se lee todavía.
+- **Manual:** HTTP, HTTPS, SOCKS4 y SOCKS5, para todos los esquemas, con usuario y contraseña (Basic al proxy; en SOCKS5, su autenticación) y una lista de hosts que van directos (`localhost, .internal, 10.0.0.0/8`). Sin host es un error al crear el transporte.
+- **Dónde se aplica:** cada colección cargada tiene su transporte con el proxy que le toca; al cambiar el proxy de la aplicación o el de la colección se reconstruye. El cliente propio de NTLM usa el mismo proxy.
+- **La CLI** usa el proxy de la colección y, si la colección hereda, el del sistema: no tiene ajustes propios.
+- **La contraseña** del proxy de la aplicación se guarda sellada con la clave maestra ([docs/06](06-boveda-de-secretos.md#qué-se-cifra-además-de-los-secretos)); la del proxy de una colección va en su archivo, como en Bruno.
+- Pendiente: registrar en el timeline qué proxy se usó y por qué, y `{{variables}}` en los campos del proxy.
+- Probado con un proxy HTTP local (línea de la request con la URL completa y `Proxy-Authorization`), las exclusiones, un proxy SOCKS5 local que reenvía la conexión, y en la interfaz guardando el proxy de una colección y enviando a través de él.
 
 ## TLS y certificados
 

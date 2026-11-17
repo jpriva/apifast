@@ -452,6 +452,42 @@ pub struct Strings {
     pub token_get: &'static str,
     /// OAuth 2.0: forget the stored token.
     pub token_forget: &'static str,
+    /// Settings section and collection setting: the proxy.
+    pub proxy: &'static str,
+    /// Proxy mode.
+    pub proxy_system: &'static str,
+    /// Proxy mode.
+    pub proxy_off: &'static str,
+    /// Proxy mode.
+    pub proxy_manual: &'static str,
+    /// Collection proxy mode: the application's.
+    pub proxy_inherit: &'static str,
+    /// Collection proxy mode: its own.
+    pub proxy_custom: &'static str,
+    /// Proxy field.
+    pub proxy_protocol: &'static str,
+    /// Proxy field.
+    pub proxy_host: &'static str,
+    /// Proxy field.
+    pub proxy_port: &'static str,
+    /// Proxy field: send credentials.
+    pub proxy_auth: &'static str,
+    /// Proxy field: hosts that go direct.
+    pub proxy_bypass: &'static str,
+    /// Placeholder when a password is kept.
+    pub proxy_password_saved: &'static str,
+    /// Keeps the proxy password, sealed.
+    pub proxy_save_password: &'static str,
+    /// Forgets the proxy password.
+    pub proxy_forget_password: &'static str,
+    /// Under the application proxy.
+    pub proxy_hint: &'static str,
+    /// Title of a collection's settings.
+    pub collection_settings: &'static str,
+    /// Root menu: a collection's settings.
+    pub collection_settings_menu: &'static str,
+    /// Under a collection's own proxy.
+    pub collection_proxy_hint: &'static str,
     /// Mark of an assertion that held.
     pub pass: &'static str,
     /// Mark of an assertion that did not.
@@ -892,6 +928,24 @@ pub const EN: Strings = Strings {
     token_no_expiry: "valid, no expiry given",
     token_get: "Get new token",
     token_forget: "Forget token",
+    proxy: "Proxy",
+    proxy_system: "System",
+    proxy_off: "None",
+    proxy_manual: "Manual",
+    proxy_inherit: "The application's",
+    proxy_custom: "Its own",
+    proxy_protocol: "Protocol",
+    proxy_host: "Host",
+    proxy_port: "Port",
+    proxy_auth: "Credentials",
+    proxy_bypass: "Direct for",
+    proxy_password_saved: "saved, sealed",
+    proxy_save_password: "Save password",
+    proxy_forget_password: "Forget",
+    proxy_hint: "For collections that use the application's proxy. System reads HTTP_PROXY, HTTPS_PROXY, ALL_PROXY and NO_PROXY. The password is kept sealed with the master key, never in settings.yml.",
+    collection_settings: "Collection settings",
+    collection_settings_menu: "Collection settings…",
+    collection_proxy_hint: "Saved in opencollection.yml, password included, as Bruno does: use a proxy without credentials, or the application's, for collections in git.",
     pass: "PASS",
     fail: "FAIL",
     captures: "Captures",

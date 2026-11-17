@@ -189,6 +189,28 @@ auth:
   profileName: ""
 ```
 
+### Proxy de la colección
+
+En `opencollection.yml`, como lo escribe Bruno:
+
+```yaml
+config:
+  proxy:
+    inherit: false        # true: el proxy de la aplicación
+    disabled: true        # opcional: sin proxy, gane lo que gane `inherit`
+    config:
+      protocol: socks5    # http, https, socks4 o socks5
+      hostname: proxy.corp
+      port: "1080"
+      auth:
+        username: ana
+        password: ""      # en claro, como en Bruno
+        disabled: true    # opcional: no enviar las credenciales
+      bypassProxy: localhost, .internal
+```
+
+Sin bloque, o con uno que no se entiende, la colección hereda el de la aplicación. Una colección sin bloque solo lo gana al cambiar su proxy. Los valores no admiten `{{variables}}` todavía.
+
 `oauth2` es un bloque anidado, como lo escribe Bruno:
 
 ```yaml
@@ -417,6 +439,7 @@ El historial, las respuestas, las cookies y la bóveda local viven en el directo
 ├── vault/<collection-id>.vault       # secretos solo locales, cifrados (JSON, 0600)
 ├── cookies/<collection-id>.jar       # cookies, cifradas
 ├── oauth2/<collection-id>.tokens     # tokens OAuth 2.0, cada uno sellado (JSON, 0600)
+├── settings.sealed                   # valores de los ajustes sellados, como la contraseña del proxy (0600)
 ├── history/<collection-id>.jsonl     # índice de ejecuciones
 ├── responses/<collection-id>/        # cuerpos de respuesta
 ├── sessions/<collection-id>/         # pestañas abiertas de la colección
@@ -444,7 +467,16 @@ pretty_limit_mb: 2      # bodies formateados y coloreados hasta este tamaño
 history_entries: 1000   # envíos que se conservan en el historial
 keep_days: 30           # días que se conservan el historial y los cuerpos
 responses_mb: 512       # espacio máximo para cuerpos de respuesta
+proxy: system           # system, off o manual: el proxy de la aplicación
+proxy_protocol: http    # http, https, socks4 o socks5
+proxy_host: ""
+proxy_port: ""
+proxy_auth: false
+proxy_username: ""
+proxy_bypass: ""        # hosts que van directos, separados por comas
 ```
+
+La contraseña del proxy de la aplicación no está en `settings.yml`: se guarda sellada con la clave maestra en `settings.sealed`, en el directorio de datos.
 
 `APIFAST_CONFIG_DIR` sustituye a `~/.config/apifast/`, como `APIFAST_DATA_DIR` al directorio de datos.
 

@@ -5,6 +5,7 @@
 use std::time::Duration;
 
 use apifast_app::HistoryLimits;
+use apifast_domain::{ProxyChoice, ProxyConfig, ProxyProtocol};
 use apifast_history::Limits;
 
 use crate::theme::ThemeChoice;
@@ -37,6 +38,22 @@ pub struct Settings {
     pub keep_days: u32,
     /// Megabytes of response bodies kept.
     pub responses_mb: u32,
+    /// Which proxy the collections that inherit theirs use.
+    pub proxy_mode: ProxyModeSetting,
+    /// The manual proxy, without its password (kept sealed apart).
+    pub proxy: ProxyConfig,
+}
+
+/// The application's proxy mode.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ProxyModeSetting {
+    /// The system's: the `HTTP_PROXY` family of variables.
+    #[default]
+    System,
+    /// No proxy.
+    Off,
+    /// The one set here.
+    Manual,
 }
 
 impl Default for Settings {
@@ -48,6 +65,8 @@ impl Default for Settings {
             history_entries: 1000,
             keep_days: 30,
             responses_mb: 512,
+            proxy_mode: ProxyModeSetting::System,
+            proxy: ProxyConfig::default(),
         }
     }
 }
@@ -83,6 +102,35 @@ impl Settings {
                 "responses_mb" => {
                     number(value, RESPONSES_MB_RANGE).map(|n| settings.responses_mb = n)
                 }
+                "proxy" => match value.as_str() {
+                    "system" => Some(ProxyModeSetting::System),
+                    "off" => Some(ProxyModeSetting::Off),
+                    "manual" => Some(ProxyModeSetting::Manual),
+                    _ => None,
+                }
+                .map(|mode| settings.proxy_mode = mode),
+                "proxy_protocol" => {
+                    settings.proxy.protocol = ProxyProtocol::parse(value);
+                    Some(())
+                }
+                "proxy_host" => {
+                    value.clone_into(&mut settings.proxy.hostname);
+                    Some(())
+                }
+                "proxy_port" => value
+                    .parse::<u16>()
+                    .ok()
+                    .or(value.is_empty().then_some(0))
+                    .map(|_| value.clone_into(&mut settings.proxy.port)),
+                "proxy_auth" => value.parse::<bool>().ok().map(|b| settings.proxy.auth = b),
+                "proxy_username" => {
+                    value.clone_into(&mut settings.proxy.username);
+                    Some(())
+                }
+                "proxy_bypass" => {
+                    value.clone_into(&mut settings.proxy.bypass);
+                    Some(())
+                }
                 _ => None,
             };
             if ok.is_none() {
@@ -107,7 +155,34 @@ impl Settings {
             ("history_entries".into(), self.history_entries.to_string()),
             ("keep_days".into(), self.keep_days.to_string()),
             ("responses_mb".into(), self.responses_mb.to_string()),
+            (
+                "proxy".into(),
+                match self.proxy_mode {
+                    ProxyModeSetting::System => "system",
+                    ProxyModeSetting::Off => "off",
+                    ProxyModeSetting::Manual => "manual",
+                }
+                .into(),
+            ),
+            ("proxy_protocol".into(), self.proxy.protocol.as_str().into()),
+            ("proxy_host".into(), self.proxy.hostname.clone()),
+            ("proxy_port".into(), self.proxy.port.clone()),
+            ("proxy_auth".into(), self.proxy.auth.to_string()),
+            ("proxy_username".into(), self.proxy.username.clone()),
+            ("proxy_bypass".into(), self.proxy.bypass.clone()),
         ]
+    }
+
+    /// The application's proxy, without its password.
+    pub fn proxy_choice(&self) -> ProxyChoice {
+        match self.proxy_mode {
+            ProxyModeSetting::System => ProxyChoice::System,
+            ProxyModeSetting::Off => ProxyChoice::Off,
+            ProxyModeSetting::Manual => ProxyChoice::Manual(ProxyConfig {
+                password: String::new(),
+                ..self.proxy.clone()
+            }),
+        }
     }
 
     /// The largest body shown pretty, in bytes.
@@ -156,6 +231,16 @@ mod tests {
             history_entries: 500,
             keep_days: 7,
             responses_mb: 256,
+            proxy_mode: ProxyModeSetting::Manual,
+            proxy: ProxyConfig {
+                protocol: ProxyProtocol::Socks5,
+                hostname: "proxy.corp".into(),
+                port: "1080".into(),
+                auth: true,
+                username: "ana".into(),
+                password: String::new(),
+                bypass: "localhost, .internal".into(),
+            },
         };
         let (read, problems) = Settings::from_entries(&settings.entries());
         assert_eq!(read, settings);

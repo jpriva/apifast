@@ -83,10 +83,23 @@ pub struct MainScreen {
     pub vault_window: VaultWindow,
     /// The collection runner.
     pub runner: RunnerWindow,
+    /// A collection's settings.
+    pub collection_settings: crate::organisms::CollectionSettingsWindow,
+    /// The collections and their proxies at the last frame, for the
+    /// settings window to start from.
+    last_collections: Vec<CollectionProxyEntry>,
     /// The collection key being pasted in the banner.
     key_paste: String,
     /// Creating and opening collections.
     collections: CollectionDialogs,
+}
+
+/// A collection's name and proxy, as the tree last showed them.
+#[derive(Debug, Clone)]
+struct CollectionProxyEntry {
+    root: PathBuf,
+    name: String,
+    proxy: apifast_domain::CollectionProxy,
 }
 
 /// What changed and is not saved yet.
@@ -122,6 +135,15 @@ impl MainScreen {
         strings: &Strings,
     ) -> Vec<Command> {
         let collection = snapshot.collection.as_ref();
+        self.last_collections = (snapshot.collections.iter())
+            .filter_map(|c| {
+                Some(CollectionProxyEntry {
+                    root: c.root.clone(),
+                    name: c.name.clone(),
+                    proxy: c.tree.as_ref()?.collection.proxy.clone(),
+                })
+            })
+            .collect();
         let active = snapshot.active_tab();
         let hints = self.follow(active, strings);
         let sending = active.is_some_and(|tab| tab.response == ResponseState::Sending);
@@ -292,6 +314,16 @@ impl MainScreen {
             }
             TreeEvent::Close => vec![Command::CloseCollection(root)],
             TreeEvent::Remove => vec![Command::RemoveCollection(root)],
+            TreeEvent::Settings => {
+                if let Some(entry) = self.last_collections.iter().find(|c| c.root == root) {
+                    self.collection_settings.open_for(
+                        root.clone(),
+                        entry.name.clone(),
+                        entry.proxy.clone(),
+                    );
+                }
+                vec![focus]
+            }
             TreeEvent::Run { folder, label } => {
                 self.runner.open_for(root.clone(), folder, label);
                 vec![focus]
@@ -393,6 +425,9 @@ impl MainScreen {
         commands.extend(events.into_iter().map(environment_command));
         let vault = self.vault_window.show(&ctx, &snapshot.vault, strings);
         commands.extend(vault.into_iter().map(Command::Vault));
+        if let Some((root, proxy)) = self.collection_settings.show(&ctx, strings) {
+            commands.push(Command::SaveCollectionProxy { root, proxy });
+        }
         commands.extend(
             self.runner
                 .show(&ctx, snapshot.run.as_ref(), strings)
@@ -406,8 +441,12 @@ impl MainScreen {
         if self.shortcuts.show(&ctx, &mut self.keymap, strings) {
             self.unsaved.keymap = true;
         }
+        self.settings_window.password_saved = snapshot.proxy_password_saved;
         if self.settings_window.show(&ctx, &mut self.settings, strings) {
             self.unsaved.settings = true;
+        }
+        if let Some(password) = self.settings_window.password_change.take() {
+            commands.push(Command::SetProxyPassword(password));
         }
         if self.palette.open.is_some() {
             let items = palette_items(&ctx, snapshot, &self.keymap, strings);

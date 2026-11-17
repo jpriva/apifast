@@ -34,6 +34,8 @@ pub enum TreeEvent {
     Close,
     /// Remove the collection from the workspace.
     Remove,
+    /// Edit the collection's settings, such as its proxy.
+    Settings,
     /// Open the runner on the collection, or on one of its folders.
     Run {
         /// The folder; `None` for the whole collection.
@@ -647,6 +649,11 @@ fn collection_menu(
     }
     let events = [
         (strings.environments, TreeEvent::Environments, true),
+        (
+            strings.collection_settings_menu,
+            TreeEvent::Settings,
+            loaded,
+        ),
         (strings.collection_key, TreeEvent::CollectionKey, true),
         (strings.close_collection, TreeEvent::Close, loaded),
         (strings.remove_collection, TreeEvent::Remove, true),

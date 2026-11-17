@@ -13,6 +13,7 @@
 mod collection;
 mod keys;
 mod local;
+mod sealed;
 mod secrets;
 mod shareable;
 mod tokens;
@@ -24,6 +25,7 @@ pub use keys::{
     SystemKeyring, existing_master_key, master_key,
 };
 pub use local::{LocalVault, SecretEntry};
+pub use sealed::{SealedError, SealedValues};
 pub use secrets::{Orphan, SecretKind, VaultSecrets};
 pub use shareable::{ShareableKeyError, parse_shareable_key, shareable_key};
 pub use tokens::FsTokenStore;

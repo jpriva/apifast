@@ -21,7 +21,7 @@ use apifast_app::{
     BodyWriter, CancelToken, HttpTransport, RenderedBody, RenderedRequest, ResponseHead,
     TimelineEvent, TimelineKind, TransportAuth, TransportError,
 };
-use apifast_domain::MultipartValue;
+use apifast_domain::{MultipartValue, ProxyChoice, ProxyConfig};
 use reqwest::header::{
     AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE, COOKIE, HeaderMap, HeaderName, HeaderValue,
     LOCATION, USER_AGENT,
@@ -39,6 +39,7 @@ const CANCEL_POLL: Duration = Duration::from_millis(20);
 pub struct ReqwestTransport {
     client: reqwest::Client,
     files_root: PathBuf,
+    proxy: ProxyChoice,
 }
 
 impl ReqwestTransport {
@@ -50,14 +51,27 @@ impl ReqwestTransport {
     /// If the TLS configuration cannot be built (for example, the platform's
     /// certificate store is unavailable).
     pub fn new(files_root: impl Into<PathBuf>) -> Result<Self, TransportError> {
+        Self::with_proxy(files_root, ProxyChoice::System)
+    }
+
+    /// As [`ReqwestTransport::new`], through `proxy`.
+    ///
+    /// # Errors
+    ///
+    /// If the TLS configuration cannot be built, or the proxy is not valid.
+    pub fn with_proxy(
+        files_root: impl Into<PathBuf>,
+        proxy: ProxyChoice,
+    ) -> Result<Self, TransportError> {
         // reqwest is built without a default crypto provider so that ring is
         // used everywhere (it needs no cmake on Windows). Installing fails only
         // when a provider is already installed, which is fine.
         let _ = rustls::crypto::ring::default_provider().install_default();
-        let client = build_client(reqwest::Client::builder())?;
+        let client = build_client(reqwest::Client::builder(), &proxy)?;
         Ok(Self {
             client,
             files_root: files_root.into(),
+            proxy,
         })
     }
 
@@ -250,7 +264,7 @@ impl HttpTransport for ReqwestTransport {
         let timeout_ms = request.timeout_ms();
         let own;
         let client = if matches!(request.auth(), TransportAuth::Ntlm { .. }) {
-            own = ntlm_client()?;
+            own = ntlm_client(&self.proxy)?;
             &own
         } else {
             &self.client
@@ -272,8 +286,17 @@ impl HttpTransport for ReqwestTransport {
     }
 }
 
-/// A client with apifast's settings on top of `builder`.
-fn build_client(builder: reqwest::ClientBuilder) -> Result<reqwest::Client, TransportError> {
+/// A client with apifast's settings on top of `builder`, through `proxy`.
+fn build_client(
+    builder: reqwest::ClientBuilder,
+    proxy: &ProxyChoice,
+) -> Result<reqwest::Client, TransportError> {
+    let builder = match proxy {
+        // reqwest reads the HTTP_PROXY family of variables by default.
+        ProxyChoice::System => builder,
+        ProxyChoice::Off => builder.no_proxy(),
+        ProxyChoice::Manual(config) => builder.proxy(manual_proxy(config)?),
+    };
     builder
         .tls_backend_rustls()
         // Redirects are followed by hand, to apply apifast's rules and count
@@ -287,12 +310,26 @@ fn build_client(builder: reqwest::ClientBuilder) -> Result<reqwest::Client, Tran
 /// connection, so its messages must go on one. HTTP/1.1 keeps one
 /// connection per request in turn, and with the responses read whole the
 /// pool hands the same connection back.
-fn ntlm_client() -> Result<reqwest::Client, TransportError> {
+fn ntlm_client(proxy: &ProxyChoice) -> Result<reqwest::Client, TransportError> {
     build_client(
         reqwest::Client::builder()
             .http1_only()
             .pool_max_idle_per_host(1),
+        proxy,
     )
+}
+
+/// A proxy for every scheme, with its credentials and exclusions.
+fn manual_proxy(config: &ProxyConfig) -> Result<reqwest::Proxy, TransportError> {
+    let url = config
+        .url()
+        .ok_or_else(|| TransportError::InvalidRequest("the proxy has no host".into()))?;
+    let mut proxy = reqwest::Proxy::all(&url)
+        .map_err(|e| TransportError::InvalidRequest(format!("invalid proxy `{url}`: {e}")))?;
+    if config.auth && !config.username.is_empty() {
+        proxy = proxy.basic_auth(&config.username, &config.password);
+    }
+    Ok(proxy.no_proxy(reqwest::NoProxy::from_string(&config.bypass)))
 }
 
 /// Completes once `token` is cancelled.

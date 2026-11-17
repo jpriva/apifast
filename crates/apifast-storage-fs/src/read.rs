@@ -392,6 +392,37 @@ pub(crate) fn collection(doc: &Value) -> Collection {
         id: None,
         name: text(get_in(doc, &["info", "name"])).unwrap_or_else(|| "Untitled Collection".into()),
         defaults: request_defaults(get(doc, "request"), collection_auth),
+        proxy: proxy(get_in(doc, &["config", "proxy"])),
+    }
+}
+
+/// `config.proxy`, as Bruno reads it: `disabled: true` turns it off,
+/// otherwise `inherit` says whether the application's is used. What is
+/// missing or odd means inherit.
+fn proxy(value: Option<&Value>) -> apifast_domain::CollectionProxy {
+    use apifast_domain::{CollectionProxy, ProxyConfig, ProxyMode, ProxyProtocol};
+    let Some(value) = value.filter(|v| v.as_mapping().is_some()) else {
+        return CollectionProxy::default();
+    };
+    let field = |path: &[&str]| text_or_empty(get_in(value, path));
+    let mode = if boolean(get(value, "disabled")) == Some(true) {
+        ProxyMode::Off
+    } else if boolean(get(value, "inherit")) == Some(false) {
+        ProxyMode::Custom
+    } else {
+        ProxyMode::Inherit
+    };
+    CollectionProxy {
+        mode,
+        config: ProxyConfig {
+            protocol: ProxyProtocol::parse(&field(&["config", "protocol"])),
+            hostname: field(&["config", "hostname"]),
+            port: field(&["config", "port"]),
+            auth: boolean(get_in(value, &["config", "auth", "disabled"])) != Some(true),
+            username: field(&["config", "auth", "username"]),
+            password: field(&["config", "auth", "password"]),
+            bypass: field(&["config", "bypassProxy"]),
+        },
     }
 }
 

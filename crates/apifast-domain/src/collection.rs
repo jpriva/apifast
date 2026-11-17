@@ -41,6 +41,8 @@ pub struct Collection {
     pub name: String,
     /// Values inherited by every request.
     pub defaults: RequestDefaults,
+    /// Its proxy.
+    pub proxy: crate::CollectionProxy,
 }
 
 impl Collection {
@@ -50,6 +52,7 @@ impl Collection {
             id: None,
             name: name.into(),
             defaults: RequestDefaults::default(),
+            proxy: crate::CollectionProxy::default(),
         }
     }
 }

@@ -11,6 +11,7 @@
 
 mod captures;
 mod collections;
+mod proxy;
 mod runner;
 mod tokens;
 mod vault;
@@ -323,7 +324,11 @@ pub enum Command {
         history: HistoryLimits,
         /// Of the response bodies.
         responses: Limits,
+        /// The application's proxy, without its password.
+        proxy: apifast_domain::ProxyChoice,
     },
+    /// Keeps the application proxy's password, sealed; `None` forgets it.
+    SetProxyPassword(Option<apifast_domain::Secret>),
     /// Creates an empty environment in the focused collection.
     CreateEnvironment(String),
     /// Renames an environment, and the `extends` that name it.
@@ -358,6 +363,14 @@ pub enum Command {
     GetToken(TabKey),
     /// Forgets the OAuth 2.0 token stored for the request of the tab.
     ForgetToken(TabKey),
+    /// Saves the proxy of the collection at `root` into its file, and sends
+    /// through it from then on.
+    SaveCollectionProxy {
+        /// The collection.
+        root: PathBuf,
+        /// Its proxy.
+        proxy: apifast_domain::CollectionProxy,
+    },
     /// Stops the run that is going.
     StopRun,
     /// Forgets a run that ended.
@@ -424,6 +437,8 @@ pub struct Snapshot {
     pub run: Option<RunView>,
     /// The tab whose OAuth 2.0 token is being obtained.
     pub getting_token: Option<TabKey>,
+    /// Whether a password is kept for the application's proxy.
+    pub proxy_password_saved: bool,
 }
 
 impl Snapshot {
@@ -716,6 +731,14 @@ impl Core {
                     .enable_all()
                     .build()
                     .expect("cannot start the async runtime");
+                let sealed = apifast_vault::SealedValues::new(
+                    data_dir.join("settings.sealed"),
+                    "settings",
+                    &data_dir,
+                    keyring,
+                );
+                let mut first = first;
+                first.proxy_password_saved = matches!(sealed.get("proxy_password"), Ok(Some(_)));
                 let state = State {
                     data_dir,
                     snapshot: first,
@@ -731,6 +754,8 @@ impl Core {
                     session_pending: false,
                     messages: own_sender,
                     limits: (HISTORY_LIMITS, RESPONSE_LIMITS),
+                    proxy: apifast_domain::ProxyChoice::System,
+                    sealed,
                     shown: 0,
                     keyring,
                 };
@@ -800,6 +825,12 @@ struct State {
     /// How much history and how many response bodies are kept; applied
     /// when a collection opens.
     limits: (HistoryLimits, Limits),
+    /// The application's proxy, as the settings say; its password is kept
+    /// apart, in `sealed`.
+    proxy: apifast_domain::ProxyChoice,
+    /// Values of the settings kept sealed with the master key, such as the
+    /// proxy's password.
+    sealed: apifast_vault::SealedValues,
     /// Numbers what the vault shows, so hiding it later does not hide
     /// something shown since.
     shown: u64,
@@ -925,7 +956,9 @@ impl State {
             | Command::Delete { .. }
             | Command::Move { .. } => self.handle_tree(command),
             Command::OpenHistory(index) => self.open_history(index),
-            Command::Configure { history, responses } => self.limits = (history, responses),
+            Command::Configure { .. }
+            | Command::SetProxyPassword(_)
+            | Command::SaveCollectionProxy { .. } => self.handle_settings(command),
             Command::Vault(command) => self.vault_command(command),
             Command::ResolveConflict {
                 tab: key,
@@ -952,6 +985,28 @@ impl State {
             Command::ForgetToken(key) => self.forget_token(&key),
             Command::CloseRun => self.close_run(),
             Command::OpenRunStep(index) => self.open_run_step(index),
+        }
+    }
+
+    /// Commands about settings: limits and proxies.
+    fn handle_settings(&mut self, command: Command) {
+        match command {
+            Command::Configure {
+                history,
+                responses,
+                proxy,
+            } => {
+                self.limits = (history, responses);
+                if proxy != self.proxy {
+                    self.proxy = proxy;
+                    self.rebuild_transports();
+                }
+            }
+            Command::SetProxyPassword(password) => self.set_proxy_password(password.as_ref()),
+            Command::SaveCollectionProxy { root, proxy } => {
+                self.save_collection_proxy(&root, proxy);
+            }
+            _ => {}
         }
     }
 

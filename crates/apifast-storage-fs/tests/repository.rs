@@ -929,3 +929,54 @@ fn a_new_oauth2_auth_reads_back_the_same() {
         "PKCE is only for the code flow: {text}"
     );
 }
+
+#[test]
+fn a_collection_proxy_is_read_and_saved_like_bruno() {
+    use apifast_domain::{ProxyMode, ProxyProtocol};
+    let (dir, repo) = setup(&[]);
+    let bruno = "opencollection: 1.0.0\ninfo:\n  name: Shop\nconfig:\n  proxy:\n    inherit: true\n    config:\n      protocol: http\n      hostname: ''\n      port: ''\n      auth:\n        username: ''\n        password: ''\n      bypassProxy: ''\n";
+    fs::write(dir.path().join("opencollection.yml"), bruno).unwrap();
+    let mut collection = repo.collection().unwrap();
+    assert_eq!(collection.proxy.mode, ProxyMode::Inherit);
+
+    collection.proxy.mode = ProxyMode::Custom;
+    collection.proxy.config.protocol = ProxyProtocol::Socks5;
+    collection.proxy.config.hostname = "proxy.corp".into();
+    collection.proxy.config.port = "1080".into();
+    repo.save_collection(&collection).unwrap();
+    let after = read(&dir, "opencollection.yml");
+    assert_eq!(
+        changed_lines(bruno, &after),
+        // The quotes follow the file's style.
+        [
+            "-    inherit: true",
+            "+    inherit: false",
+            "-      protocol: http",
+            "-      hostname: ''",
+            "-      port: ''",
+            "+      protocol: socks5",
+            "+      hostname: 'proxy.corp'",
+            "+      port: \"1080\"",
+        ]
+    );
+    assert_eq!(repo.collection().unwrap().proxy, collection.proxy);
+
+    collection.proxy.mode = ProxyMode::Off;
+    repo.save_collection(&collection).unwrap();
+    let text = read(&dir, "opencollection.yml");
+    assert!(text.contains("    disabled: true\n"), "{text}");
+    assert_eq!(repo.collection().unwrap().proxy.mode, ProxyMode::Off);
+}
+
+#[test]
+fn a_collection_without_a_proxy_block_gets_one_only_when_it_changes() {
+    use apifast_domain::ProxyMode;
+    let (dir, repo) = setup(&[]);
+    let mut collection = repo.collection().unwrap();
+    collection.name = "Renamed".into();
+    repo.save_collection(&collection).unwrap();
+    assert!(!read(&dir, "opencollection.yml").contains("proxy"));
+    collection.proxy.mode = ProxyMode::Off;
+    repo.save_collection(&collection).unwrap();
+    assert_eq!(repo.collection().unwrap().proxy.mode, ProxyMode::Off);
+}

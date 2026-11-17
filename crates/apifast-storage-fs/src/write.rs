@@ -637,6 +637,39 @@ fn merge(existing: &mut Value, old: &Value, new: &Value) {
     }
 }
 
+/// The YAML of a collection's `config.proxy`, as Bruno writes it.
+fn proxy_value(proxy: &apifast_domain::CollectionProxy) -> Value {
+    use apifast_domain::ProxyMode;
+    let c = &proxy.config;
+    mapping([
+        (
+            "inherit",
+            Some(Value::Bool(proxy.mode == ProxyMode::Inherit)),
+        ),
+        (
+            "disabled",
+            (proxy.mode == ProxyMode::Off).then_some(Value::Bool(true)),
+        ),
+        (
+            "config",
+            Some(mapping([
+                ("protocol", Some(string(c.protocol.as_str()))),
+                ("hostname", Some(string(&c.hostname))),
+                ("port", Some(string(&c.port))),
+                (
+                    "auth",
+                    Some(mapping([
+                        ("username", Some(string(&c.username))),
+                        ("password", Some(string(&c.password))),
+                        ("disabled", (!c.auth).then_some(Value::Bool(true))),
+                    ])),
+                ),
+                ("bypassProxy", Some(string(&c.bypass))),
+            ])),
+        ),
+    ])
+}
+
 /// The YAML of an `oauth2` auth, in Bruno's key order; empty texts are left
 /// out, as Bruno does.
 fn oauth2_value(auth: &OAuth2Auth) -> Value {
@@ -999,6 +1032,14 @@ pub(crate) fn new_collection(collection: &Collection) -> Value {
 pub(crate) fn update_collection(doc: &mut Value, old: &Collection, new: &Collection) {
     if old.name != new.name {
         set(child_mut(doc, "info"), "name", string(&new.name));
+    }
+    if old.proxy != new.proxy {
+        let config = child_mut(doc, "config");
+        let (before, after) = (proxy_value(&old.proxy), proxy_value(&new.proxy));
+        match get(config, "proxy") {
+            Some(Value::Mapping(_)) => merge(child_mut(config, "proxy"), &before, &after),
+            _ => set(config, "proxy", after),
+        }
     }
     update_defaults(doc, &old.defaults, &new.defaults, AuthLevel::Collection);
 }

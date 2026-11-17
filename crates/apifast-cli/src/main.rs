@@ -150,7 +150,12 @@ fn wire(root: &std::path::Path) -> Result<Wired> {
             .as_ref()
             .map(apifast_domain::CollectionId::as_str),
     ));
-    let transport = ReqwestTransport::new(root)?;
+    // The collection's proxy, or the system's when it inherits: the CLI has
+    // no proxy of its own, and reads the HTTP_PROXY family of variables.
+    let proxy = collection
+        .proxy
+        .choose(&apifast_domain::ProxyChoice::System);
+    let transport = ReqwestTransport::with_proxy(root, proxy)?;
     // Secrets need the collection's id: without one, none was ever stored.
     let secrets: Box<dyn SecretStore> = match &collection.id {
         Some(id) => {

@@ -137,6 +137,7 @@ impl App {
         self.core.send(Command::Configure {
             history: settings.history_limits(),
             responses: settings.response_limits(),
+            proxy: settings.proxy_choice(),
         });
     }
 

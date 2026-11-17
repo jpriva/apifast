@@ -184,6 +184,8 @@ Los secretos se indexan por el identificador estable de la colección. Una colec
 
 **Tokens OAuth 2.0** (`apifast-vault/src/tokens.rs`): un archivo por colección, `oauth2/<collection-id>.tokens` (o con el hash de la ruta si la colección no tiene id; se mueve con lo demás cuando lo recibe), en modo `0600` y escrito de forma atómica. Cada token (acceso, refresco, `id_token`, caducidad y scope) va en su propio sobre sellado con la clave maestra, con la clave de la caché como datos asociados: copiado a otra entrada, no abre. Un token que no abre (por ejemplo, tras cambiar la clave maestra) cuenta como ausente y se pide otro. Los tokens no necesitan id de colección, así que funcionan en cualquier colección. La CLI no los guarda en disco: un `send` o un `run` obtiene los suyos en memoria, como Bruno.
 
+**Valores de los ajustes** (`apifast-vault/src/sealed.rs`, `SealedValues`): la contraseña del proxy de la aplicación va en `settings.sealed`, en el directorio de datos, con el mismo formato de un sobre por valor atado a su nombre. Los tokens OAuth 2.0 usan el mismo mecanismo.
+
 Las respuestas pueden contener datos sensibles (por ejemplo, un token recién emitido). Una request se puede marcar como "no guardar respuesta", y el historial tiene límites de tamaño y antigüedad.
 
 ## CLI y CI

@@ -146,6 +146,12 @@ La edición con resaltado se limita a unos 200 KB: con más texto, egui tarda de
 - Los valores guardados que ya no usa ninguna variable secreta se listan bajo la tabla, con un botón para olvidarlos.
 - Vista "todas las variables": cada variable efectiva con su valor y el ámbito del que procede.
 
+## Ajustes de la colección
+
+"Collection settings…" en el menú de la raíz de una colección cargada abre sus ajustes. Por ahora, el proxy: el de la aplicación, ninguno o el suyo (protocolo, host, puerto, credenciales y hosts directos). Se guarda en `opencollection.yml` al pulsar "Save", y los envíos siguientes ya van por él. Un aviso recuerda que la contraseña queda en el archivo, como en Bruno.
+
+En los ajustes de la aplicación, la sección Proxy elige el del sistema, ninguno o uno manual, para las colecciones que heredan el suyo. Su contraseña se guarda aparte con "Save password", sellada; el campo muestra "saved, sealed" cuando hay una.
+
 ## Runner
 
 "Run…" en el menú de la raíz de una colección o de una carpeta abre la ventana del runner sobre ella.
