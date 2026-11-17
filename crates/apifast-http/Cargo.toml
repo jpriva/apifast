@@ -33,4 +33,6 @@ hmac.workspace = true
 md-5.workspace = true
 md4.workspace = true
 tempfile.workspace = true
+rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "ring", "pem"] }
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "tls12"] }
 tokio = { version = "1.54.1", features = ["rt", "macros", "net", "io-util", "time"] }

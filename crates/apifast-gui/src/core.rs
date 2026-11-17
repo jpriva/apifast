@@ -326,6 +326,8 @@ pub enum Command {
         responses: Limits,
         /// The application's proxy, without its password.
         proxy: apifast_domain::ProxyChoice,
+        /// How servers are trusted.
+        trust: apifast_domain::TlsTrust,
     },
     /// Keeps the application proxy's password, sealed; `None` forgets it.
     SetProxyPassword(Option<apifast_domain::Secret>),
@@ -363,13 +365,15 @@ pub enum Command {
     GetToken(TabKey),
     /// Forgets the OAuth 2.0 token stored for the request of the tab.
     ForgetToken(TabKey),
-    /// Saves the proxy of the collection at `root` into its file, and sends
-    /// through it from then on.
-    SaveCollectionProxy {
+    /// Saves the proxy and the client certificates of the collection at
+    /// `root` into its file, and sends with them from then on.
+    SaveCollectionSettings {
         /// The collection.
         root: PathBuf,
         /// Its proxy.
         proxy: apifast_domain::CollectionProxy,
+        /// Its client certificates.
+        client_certificates: Vec<apifast_domain::ClientCertificate>,
     },
     /// Stops the run that is going.
     StopRun,
@@ -755,6 +759,7 @@ impl Core {
                     messages: own_sender,
                     limits: (HISTORY_LIMITS, RESPONSE_LIMITS),
                     proxy: apifast_domain::ProxyChoice::System,
+                    trust: apifast_domain::TlsTrust::default(),
                     sealed,
                     shown: 0,
                     keyring,
@@ -828,6 +833,8 @@ struct State {
     /// The application's proxy, as the settings say; its password is kept
     /// apart, in `sealed`.
     proxy: apifast_domain::ProxyChoice,
+    /// How servers are trusted, as the settings say.
+    trust: apifast_domain::TlsTrust,
     /// Values of the settings kept sealed with the master key, such as the
     /// proxy's password.
     sealed: apifast_vault::SealedValues,
@@ -958,7 +965,7 @@ impl State {
             Command::OpenHistory(index) => self.open_history(index),
             Command::Configure { .. }
             | Command::SetProxyPassword(_)
-            | Command::SaveCollectionProxy { .. } => self.handle_settings(command),
+            | Command::SaveCollectionSettings { .. } => self.handle_settings(command),
             Command::Vault(command) => self.vault_command(command),
             Command::ResolveConflict {
                 tab: key,
@@ -995,17 +1002,21 @@ impl State {
                 history,
                 responses,
                 proxy,
+                trust,
             } => {
                 self.limits = (history, responses);
-                if proxy != self.proxy {
+                if proxy != self.proxy || trust != self.trust {
                     self.proxy = proxy;
+                    self.trust = trust;
                     self.rebuild_transports();
                 }
             }
             Command::SetProxyPassword(password) => self.set_proxy_password(password.as_ref()),
-            Command::SaveCollectionProxy { root, proxy } => {
-                self.save_collection_proxy(&root, proxy);
-            }
+            Command::SaveCollectionSettings {
+                root,
+                proxy,
+                client_certificates,
+            } => self.save_collection_settings(&root, proxy, client_certificates),
             _ => {}
         }
     }

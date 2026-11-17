@@ -99,7 +99,24 @@ pub struct MainScreen {
 struct CollectionProxyEntry {
     root: PathBuf,
     name: String,
-    proxy: apifast_domain::CollectionProxy,
+    settings: crate::organisms::CollectionSettings,
+}
+
+/// The settings of each loaded collection, for the settings window.
+fn collection_settings_of(snapshot: &Snapshot) -> Vec<CollectionProxyEntry> {
+    (snapshot.collections.iter())
+        .filter_map(|c| {
+            let collection = &c.tree.as_ref()?.collection;
+            Some(CollectionProxyEntry {
+                root: c.root.clone(),
+                name: c.name.clone(),
+                settings: crate::organisms::CollectionSettings {
+                    proxy: collection.proxy.clone(),
+                    client_certificates: collection.client_certificates.clone(),
+                },
+            })
+        })
+        .collect()
 }
 
 /// What changed and is not saved yet.
@@ -135,15 +152,7 @@ impl MainScreen {
         strings: &Strings,
     ) -> Vec<Command> {
         let collection = snapshot.collection.as_ref();
-        self.last_collections = (snapshot.collections.iter())
-            .filter_map(|c| {
-                Some(CollectionProxyEntry {
-                    root: c.root.clone(),
-                    name: c.name.clone(),
-                    proxy: c.tree.as_ref()?.collection.proxy.clone(),
-                })
-            })
-            .collect();
+        self.last_collections = collection_settings_of(snapshot);
         let active = snapshot.active_tab();
         let hints = self.follow(active, strings);
         let sending = active.is_some_and(|tab| tab.response == ResponseState::Sending);
@@ -319,7 +328,7 @@ impl MainScreen {
                     self.collection_settings.open_for(
                         root.clone(),
                         entry.name.clone(),
-                        entry.proxy.clone(),
+                        entry.settings.clone(),
                     );
                 }
                 vec![focus]
@@ -425,8 +434,12 @@ impl MainScreen {
         commands.extend(events.into_iter().map(environment_command));
         let vault = self.vault_window.show(&ctx, &snapshot.vault, strings);
         commands.extend(vault.into_iter().map(Command::Vault));
-        if let Some((root, proxy)) = self.collection_settings.show(&ctx, strings) {
-            commands.push(Command::SaveCollectionProxy { root, proxy });
+        if let Some((root, settings)) = self.collection_settings.show(&ctx, strings) {
+            commands.push(Command::SaveCollectionSettings {
+                root,
+                proxy: settings.proxy,
+                client_certificates: settings.client_certificates,
+            });
         }
         commands.extend(
             self.runner

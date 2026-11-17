@@ -637,6 +637,34 @@ fn merge(existing: &mut Value, old: &Value, new: &Value) {
     }
 }
 
+/// A client certificate as Bruno writes it.
+fn certificate_value(certificate: &apifast_domain::ClientCertificate) -> Value {
+    use apifast_domain::ClientCertificateKind;
+    let s = |v: &str| Some(string(v));
+    let text = |v: &str| (!v.is_empty()).then(|| string(v));
+    let mut pairs = vec![("domain", s(&certificate.domain))];
+    match &certificate.kind {
+        ClientCertificateKind::Pem {
+            certificate,
+            private_key,
+        } => {
+            pairs.push(("type", s("pem")));
+            pairs.push(("certificateFilePath", s(certificate)));
+            pairs.push(("privateKeyFilePath", s(private_key)));
+        }
+        ClientCertificateKind::Pkcs12 { file } => {
+            pairs.push(("type", s("pkcs12")));
+            pairs.push(("pkcs12FilePath", s(file)));
+        }
+    }
+    pairs.push(("passphrase", text(&certificate.passphrase)));
+    pairs.push((
+        "disabled",
+        (!certificate.enabled).then_some(Value::Bool(true)),
+    ));
+    mapping(pairs)
+}
+
 /// The YAML of a collection's `config.proxy`, as Bruno writes it.
 fn proxy_value(proxy: &apifast_domain::CollectionProxy) -> Value {
     use apifast_domain::ProxyMode;
@@ -1032,6 +1060,20 @@ pub(crate) fn new_collection(collection: &Collection) -> Value {
 pub(crate) fn update_collection(doc: &mut Value, old: &Collection, new: &Collection) {
     if old.name != new.name {
         set(child_mut(doc, "info"), "name", string(&new.name));
+    }
+    if old.client_certificates != new.client_certificates {
+        let list: Vec<Value> = new
+            .client_certificates
+            .iter()
+            .map(certificate_value)
+            .collect();
+        let config = child_mut(doc, "config");
+        set_or_remove(
+            config,
+            "clientCertificates",
+            (!list.is_empty()).then(|| Value::from(list)),
+        );
+        prune_empty(doc, "config");
     }
     if old.proxy != new.proxy {
         let config = child_mut(doc, "config");

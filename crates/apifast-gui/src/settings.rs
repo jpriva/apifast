@@ -42,6 +42,11 @@ pub struct Settings {
     pub proxy_mode: ProxyModeSetting,
     /// The manual proxy, without its password (kept sealed apart).
     pub proxy: ProxyConfig,
+    /// A PEM file of certificate authorities trusted besides the system's;
+    /// empty for none.
+    pub ca_file: String,
+    /// Do not check server certificates.
+    pub tls_insecure: bool,
 }
 
 /// The application's proxy mode.
@@ -67,6 +72,8 @@ impl Default for Settings {
             responses_mb: 512,
             proxy_mode: ProxyModeSetting::System,
             proxy: ProxyConfig::default(),
+            ca_file: String::new(),
+            tls_insecure: false,
         }
     }
 }
@@ -131,6 +138,14 @@ impl Settings {
                     value.clone_into(&mut settings.proxy.bypass);
                     Some(())
                 }
+                "ca_file" => {
+                    value.clone_into(&mut settings.ca_file);
+                    Some(())
+                }
+                "tls_insecure" => value
+                    .parse::<bool>()
+                    .ok()
+                    .map(|b| settings.tls_insecure = b),
                 _ => None,
             };
             if ok.is_none() {
@@ -170,6 +185,8 @@ impl Settings {
             ("proxy_auth".into(), self.proxy.auth.to_string()),
             ("proxy_username".into(), self.proxy.username.clone()),
             ("proxy_bypass".into(), self.proxy.bypass.clone()),
+            ("ca_file".into(), self.ca_file.clone()),
+            ("tls_insecure".into(), self.tls_insecure.to_string()),
         ]
     }
 
@@ -182,6 +199,17 @@ impl Settings {
                 password: String::new(),
                 ..self.proxy.clone()
             }),
+        }
+    }
+
+    /// How servers are trusted.
+    pub fn trust(&self) -> apifast_domain::TlsTrust {
+        apifast_domain::TlsTrust {
+            extra_ca: (!self.ca_file.trim().is_empty())
+                .then(|| std::path::PathBuf::from(self.ca_file.trim()))
+                .into_iter()
+                .collect(),
+            insecure: self.tls_insecure,
         }
     }
 
@@ -241,6 +269,8 @@ mod tests {
                 password: String::new(),
                 bypass: "localhost, .internal".into(),
             },
+            ca_file: "/etc/ssl/corp.pem".into(),
+            tls_insecure: true,
         };
         let (read, problems) = Settings::from_entries(&settings.entries());
         assert_eq!(read, settings);

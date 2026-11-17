@@ -980,3 +980,42 @@ fn a_collection_without_a_proxy_block_gets_one_only_when_it_changes() {
     repo.save_collection(&collection).unwrap();
     assert_eq!(repo.collection().unwrap().proxy.mode, ProxyMode::Off);
 }
+
+#[test]
+fn client_certificates_are_read_and_saved_like_bruno() {
+    use apifast_domain::{ClientCertificate, ClientCertificateKind};
+    let (dir, repo) = setup(&[]);
+    let bruno = "opencollection: 1.0.0\ninfo:\n  name: Shop\nconfig:\n  clientCertificates:\n    - domain: localhost\n      type: pem\n      certificateFilePath: certs/client.pem\n      privateKeyFilePath: certs/client-key.pem\n    - domain: \"*.corp\"\n      type: pkcs12\n      pkcs12FilePath: certs/client.pfx\n      passphrase: \"{{pfx_pass}}\"\n      disabled: true\n";
+    fs::write(dir.path().join("opencollection.yml"), bruno).unwrap();
+    let mut collection = repo.collection().unwrap();
+    assert_eq!(
+        collection.client_certificates,
+        [
+            ClientCertificate {
+                domain: "localhost".into(),
+                kind: ClientCertificateKind::Pem {
+                    certificate: "certs/client.pem".into(),
+                    private_key: "certs/client-key.pem".into(),
+                },
+                passphrase: String::new(),
+                enabled: true,
+            },
+            ClientCertificate {
+                domain: "*.corp".into(),
+                kind: ClientCertificateKind::Pkcs12 {
+                    file: "certs/client.pfx".into(),
+                },
+                passphrase: "{{pfx_pass}}".into(),
+                enabled: false,
+            },
+        ]
+    );
+    collection.client_certificates[1].enabled = true;
+    collection.client_certificates.remove(0);
+    repo.save_collection(&collection).unwrap();
+    assert_eq!(repo.collection().unwrap().client_certificates, collection.client_certificates);
+    collection.client_certificates.clear();
+    repo.save_collection(&collection).unwrap();
+    let text = read(&dir, "opencollection.yml");
+    assert!(!text.contains("clientCertificates") && !text.contains("config:"), "{text}");
+}

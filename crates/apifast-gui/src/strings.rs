@@ -488,6 +488,28 @@ pub struct Strings {
     pub collection_settings_menu: &'static str,
     /// Under a collection's own proxy.
     pub collection_proxy_hint: &'static str,
+    /// Settings section: trust in servers.
+    pub tls: &'static str,
+    /// Settings: extra certificate authorities.
+    pub tls_ca_file: &'static str,
+    /// Settings: do not check server certificates.
+    pub tls_insecure: &'static str,
+    /// Under the setting, when on.
+    pub tls_insecure_warning: &'static str,
+    /// Opens a file picker.
+    pub choose: &'static str,
+    /// Collection settings: client certificates.
+    pub client_certificates: &'static str,
+    /// Client certificate field.
+    pub client_certificate_domain: &'static str,
+    /// Client certificate field.
+    pub client_certificate_file: &'static str,
+    /// Client certificate field.
+    pub client_certificate_key: &'static str,
+    /// Adds a client certificate.
+    pub client_certificate_add: &'static str,
+    /// Under the client certificates.
+    pub client_certificates_hint: &'static str,
     /// Mark of an assertion that held.
     pub pass: &'static str,
     /// Mark of an assertion that did not.
@@ -946,6 +968,17 @@ pub const EN: Strings = Strings {
     collection_settings: "Collection settings",
     collection_settings_menu: "Collection settings…",
     collection_proxy_hint: "Saved in opencollection.yml, password included, as Bruno does: use a proxy without credentials, or the application's, for collections in git.",
+    tls: "TLS",
+    tls_ca_file: "Extra CA file (PEM)",
+    tls_insecure: "Do not check certificates",
+    tls_insecure_warning: "Server certificates are not checked: anyone on the way can read and change the traffic. Turn it off when you are done.",
+    choose: "Choose…",
+    client_certificates: "Client certificates",
+    client_certificate_domain: "Host",
+    client_certificate_file: "Certificate (PEM)",
+    client_certificate_key: "Private key (PEM)",
+    client_certificate_add: "Add certificate",
+    client_certificates_hint: "Paths are relative to the collection. Host takes a port and * wildcards: localhost:8443, *.example.com. PKCS#12 files and encrypted keys are kept but not presented yet.",
     pass: "PASS",
     fail: "FAIL",
     captures: "Captures",

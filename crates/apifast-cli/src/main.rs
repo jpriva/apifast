@@ -64,6 +64,8 @@ enum Command {
 struct SendArgs {
     /// The request file, inside a collection.
     file: PathBuf,
+    #[command(flatten)]
+    tls: TlsArgs,
     /// Active environment, by name.
     #[arg(short, long)]
     env: Option<String>,
@@ -86,6 +88,28 @@ struct SendArgs {
     /// Print no summary to stderr.
     #[arg(short, long)]
     quiet: bool,
+}
+
+/// How servers are trusted, for `send` and `run`.
+#[derive(clap::Args, Debug, Clone, Default)]
+pub struct TlsArgs {
+    /// A PEM file of certificate authorities to trust besides the system's.
+    /// Repeatable.
+    #[arg(long = "cacert", value_name = "FILE")]
+    cacert: Vec<PathBuf>,
+    /// Do not check the server's certificate. Dangerous: anyone on the way
+    /// can read and change the traffic.
+    #[arg(long)]
+    insecure: bool,
+}
+
+impl TlsArgs {
+    fn trust(&self) -> apifast_domain::TlsTrust {
+        apifast_domain::TlsTrust {
+            extra_ca: self.cacert.clone(),
+            insecure: self.insecure,
+        }
+    }
 }
 
 fn parse_var(raw: &str) -> Result<(String, String), String> {
@@ -140,7 +164,7 @@ struct Wired {
     secrets: Box<dyn SecretStore>,
 }
 
-fn wire(root: &std::path::Path) -> Result<Wired> {
+fn wire(root: &std::path::Path, tls: &TlsArgs) -> Result<Wired> {
     let repo = Arc::new(FsCollection::open(root)?);
     let collection = repo.collection()?;
     let responses = FsResponseStore::new(apifast_history::dirs::responses_dir(
@@ -155,7 +179,11 @@ fn wire(root: &std::path::Path) -> Result<Wired> {
     let proxy = collection
         .proxy
         .choose(&apifast_domain::ProxyChoice::System);
-    let transport = ReqwestTransport::with_proxy(root, proxy)?;
+    if tls.insecure {
+        eprintln!("warning: --insecure: server certificates are not checked");
+    }
+    let transport =
+        ReqwestTransport::configured(root, proxy, &tls.trust(), &collection.client_certificates)?;
     // Secrets need the collection's id: without one, none was ever stored.
     let secrets: Box<dyn SecretStore> = match &collection.id {
         Some(id) => {
@@ -218,7 +246,7 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
         transport,
         secrets,
         ..
-    } = wire(&located.root)?;
+    } = wire(&located.root, &args.tls)?;
     let (clock, random) = (system::SystemClock, system::SystemRandom::new());
     let options = SendOptions {
         environment: args.env.clone(),

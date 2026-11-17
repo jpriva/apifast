@@ -189,6 +189,26 @@ auth:
   profileName: ""
 ```
 
+### Certificados de cliente
+
+En `opencollection.yml`, como Bruno:
+
+```yaml
+config:
+  clientCertificates:
+    - domain: api.example.com     # con puerto (`localhost:8443`) y comodines (`*.example.com`)
+      type: pem
+      certificateFilePath: certs/client.pem
+      privateKeyFilePath: certs/client-key.pem
+    - domain: "*.corp"
+      type: pkcs12
+      pkcs12FilePath: certs/client.pfx
+      passphrase: "{{pfx_pass}}"
+      disabled: true
+```
+
+Las rutas son relativas a la colección. La lista se reescribe entera al cambiar, y sin certificados la clave se quita.
+
 ### Proxy de la colección
 
 En `opencollection.yml`, como lo escribe Bruno:
@@ -474,6 +494,8 @@ proxy_port: ""
 proxy_auth: false
 proxy_username: ""
 proxy_bypass: ""        # hosts que van directos, separados por comas
+ca_file: ""             # PEM con autoridades que se confían además de las del sistema
+tls_insecure: false     # no comprobar los certificados de los servidores
 ```
 
 La contraseña del proxy de la aplicación no está en `settings.yml`: se guarda sellada con la clave maestra en `settings.sealed`, en el directorio de datos.

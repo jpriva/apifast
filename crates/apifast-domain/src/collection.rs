@@ -43,6 +43,8 @@ pub struct Collection {
     pub defaults: RequestDefaults,
     /// Its proxy.
     pub proxy: crate::CollectionProxy,
+    /// The client certificates it presents, by host.
+    pub client_certificates: Vec<crate::ClientCertificate>,
 }
 
 impl Collection {
@@ -53,6 +55,7 @@ impl Collection {
             name: name.into(),
             defaults: RequestDefaults::default(),
             proxy: crate::CollectionProxy::default(),
+            client_certificates: Vec::new(),
         }
     }
 }

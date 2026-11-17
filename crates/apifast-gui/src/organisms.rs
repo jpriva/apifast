@@ -23,7 +23,7 @@ mod vault_window;
 
 pub use body_viewer::BodyViewer;
 pub use collection_dialogs::{CollectionDialogs, CollectionRequest, folder_name};
-pub use collection_settings::CollectionSettingsWindow;
+pub use collection_settings::{CollectionSettings, CollectionSettingsWindow};
 pub use environments::{EnvironmentEditor, EnvironmentEvent, EnvironmentsView};
 pub use history::{HistoryView, ago, matches};
 pub use kv_table::{BulkRow, KvRow, KvTable, from_bulk, to_bulk};

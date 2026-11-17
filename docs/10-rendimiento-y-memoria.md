@@ -110,6 +110,7 @@ Medido el 2026-11-16 en la misma máquina y de la misma forma que F2, tras F3, l
 - Una colección de 100 requests usa 2,9 MB más que en F2 (50 MB). Sigue dentro del presupuesto de 60 MB.
 - El binario release pasa de 22,7 MiB a 24,6 MiB: dentro del presupuesto de 25 MB, pero con poco margen. Han entrado la bóveda (cifrado y keyring, que trae el cliente D-Bus) y `regex`. Falta ver qué parte aporta cada uno antes de añadir más dependencias.
 - Con JSONPath y XPath (`apifast-query` y `roxmltree`) pasa a 24,8 MiB. Queda muy poco margen: el análisis por crate con `cargo bloat` es necesario antes de la próxima dependencia.
+- Con F5 hasta los certificados (Digest, NTLM, AWS SigV4, OAuth 2.0 con su servidor de *callback*, proxy con SOCKS, certificados de cliente y las pantallas de ajustes) llega a **25,6 MiB: por encima del presupuesto de 25 MB**. La CLI está en 11,2 MiB. Las dependencias nuevas son pequeñas (`md-5`, `md4`, `hmac` y `sha2` ya estaban en el árbol, y SOCKS va dentro de reqwest), así que el crecimiento viene sobre todo del código propio y de su monomorfización. Antes de seguir añadiendo funciones hay que medir con `cargo bloat` y recortar: candidatos son las funciones genéricas de envío (`send_request` se instancia por cada combinación de puertos) y los `Debug` y formatos que solo usan las pruebas.
 
 ## Perfil de compilación
 

@@ -8,6 +8,7 @@ mod digest;
 mod loopback;
 mod ntlm;
 mod sigv4;
+mod tls;
 
 use std::error::Error as _;
 
@@ -21,7 +22,7 @@ use apifast_app::{
     BodyWriter, CancelToken, HttpTransport, RenderedBody, RenderedRequest, ResponseHead,
     TimelineEvent, TimelineKind, TransportAuth, TransportError,
 };
-use apifast_domain::{MultipartValue, ProxyChoice, ProxyConfig};
+use apifast_domain::{ClientCertificate, MultipartValue, ProxyChoice, ProxyConfig, TlsTrust};
 use reqwest::header::{
     AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE, COOKIE, HeaderMap, HeaderName, HeaderValue,
     LOCATION, USER_AGENT,
@@ -39,7 +40,16 @@ const CANCEL_POLL: Duration = Duration::from_millis(20);
 pub struct ReqwestTransport {
     client: reqwest::Client,
     files_root: PathBuf,
-    proxy: ProxyChoice,
+    settings: tls::ClientSettings,
+    /// A client per client certificate, or why it could not be made.
+    certified: Vec<Certified>,
+}
+
+/// A client certificate and the client that presents it.
+#[derive(Debug, Clone)]
+struct Certified {
+    certificate: ClientCertificate,
+    client: Result<(reqwest::Client, reqwest::Identity), String>,
 }
 
 impl ReqwestTransport {
@@ -63,21 +73,81 @@ impl ReqwestTransport {
         files_root: impl Into<PathBuf>,
         proxy: ProxyChoice,
     ) -> Result<Self, TransportError> {
+        Self::configured(files_root, proxy, &TlsTrust::default(), &[])
+    }
+
+    /// As [`ReqwestTransport::with_proxy`], trusting as `trust` says and
+    /// presenting `certificates` to their hosts. A certificate whose files
+    /// are wrong does not stop the others: sending to its host fails with
+    /// why.
+    ///
+    /// # Errors
+    ///
+    /// If the TLS configuration cannot be built, a CA file is wrong, or the
+    /// proxy is not valid.
+    pub fn configured(
+        files_root: impl Into<PathBuf>,
+        proxy: ProxyChoice,
+        trust: &TlsTrust,
+        certificates: &[ClientCertificate],
+    ) -> Result<Self, TransportError> {
         // reqwest is built without a default crypto provider so that ring is
         // used everywhere (it needs no cmake on Windows). Installing fails only
         // when a provider is already installed, which is fine.
         let _ = rustls::crypto::ring::default_provider().install_default();
-        let client = build_client(reqwest::Client::builder(), &proxy)?;
+        let files_root = files_root.into();
+        let settings = tls::ClientSettings::new(proxy, trust)?;
+        let client = build_client(reqwest::Client::builder(), &settings, None)?;
+        let certified = (certificates.iter())
+            .filter(|c| c.enabled)
+            .map(|certificate| Certified {
+                certificate: certificate.clone(),
+                client: tls::identity(&files_root, certificate).and_then(|identity| {
+                    build_client(
+                        reqwest::Client::builder(),
+                        &settings,
+                        Some(identity.clone()),
+                    )
+                    .map(|client| (client, identity))
+                    .map_err(|e| e.to_string())
+                }),
+            })
+            .collect();
         Ok(Self {
             client,
-            files_root: files_root.into(),
-            proxy,
+            files_root,
+            settings,
+            certified,
         })
+    }
+
+    /// The client certificate for `url`'s host, if one is for it.
+    fn certified_for(&self, url: &Url) -> Option<&Certified> {
+        let host = url.host_str()?;
+        let port = url.port_or_known_default()?;
+        (self.certified.iter()).find(|c| c.certificate.matches(host, port))
+    }
+
+    /// The client for `url`: the one with its host's certificate, or the
+    /// default.
+    ///
+    /// # Errors
+    ///
+    /// If its host's certificate could not be loaded.
+    fn client_for(&self, url: &Url) -> Result<&reqwest::Client, TransportError> {
+        match self.certified_for(url) {
+            Some(Certified {
+                client: Ok((client, _)),
+                ..
+            }) => Ok(client),
+            Some(Certified { client: Err(e), .. }) => Err(TransportError::Tls(e.clone())),
+            None => Ok(&self.client),
+        }
     }
 
     async fn exchange<W: BodyWriter + Send>(
         &self,
-        client: &reqwest::Client,
+        ntlm: Option<&reqwest::Client>,
         request: &RenderedRequest,
         writer: &mut W,
         started: Instant,
@@ -100,6 +170,10 @@ impl ReqwestTransport {
                 first_origin: &first_origin,
             };
             let sent_headers = signed_headers(request, &headers, &sent)?;
+            let client = match ntlm {
+                Some(client) => client,
+                None => self.client_for(&url)?,
+            };
             let mut builder = client
                 .request(method.clone(), url.clone())
                 .headers(sent_headers);
@@ -263,13 +337,24 @@ impl HttpTransport for ReqwestTransport {
         let started = Instant::now();
         let timeout_ms = request.timeout_ms();
         let own;
-        let client = if matches!(request.auth(), TransportAuth::Ntlm { .. }) {
-            own = ntlm_client(&self.proxy)?;
-            &own
+        let ntlm = if matches!(request.auth(), TransportAuth::Ntlm { .. }) {
+            let url = parse_url(request.url())?;
+            let identity = match self.certified_for(&url) {
+                Some(Certified {
+                    client: Ok((_, identity)),
+                    ..
+                }) => Some(identity.clone()),
+                Some(Certified { client: Err(e), .. }) => {
+                    return Err(TransportError::Tls(e.clone()));
+                }
+                None => None,
+            };
+            own = ntlm_client(&self.settings, identity)?;
+            Some(&own)
         } else {
-            &self.client
+            None
         };
-        let exchange = self.exchange(client, request, body, started);
+        let exchange = self.exchange(ntlm, request, body, started);
         let limited = async {
             if timeout_ms == 0 {
                 exchange.await
@@ -289,9 +374,16 @@ impl HttpTransport for ReqwestTransport {
 /// A client with apifast's settings on top of `builder`, through `proxy`.
 fn build_client(
     builder: reqwest::ClientBuilder,
-    proxy: &ProxyChoice,
+    settings: &tls::ClientSettings,
+    identity: Option<reqwest::Identity>,
 ) -> Result<reqwest::Client, TransportError> {
-    let builder = match proxy {
+    let mut builder = builder
+        .tls_certs_merge(settings.extra_ca.iter().cloned())
+        .tls_danger_accept_invalid_certs(settings.insecure);
+    if let Some(identity) = identity {
+        builder = builder.identity(identity);
+    }
+    let builder = match &settings.proxy {
         // reqwest reads the HTTP_PROXY family of variables by default.
         ProxyChoice::System => builder,
         ProxyChoice::Off => builder.no_proxy(),
@@ -310,12 +402,16 @@ fn build_client(
 /// connection, so its messages must go on one. HTTP/1.1 keeps one
 /// connection per request in turn, and with the responses read whole the
 /// pool hands the same connection back.
-fn ntlm_client(proxy: &ProxyChoice) -> Result<reqwest::Client, TransportError> {
+fn ntlm_client(
+    settings: &tls::ClientSettings,
+    identity: Option<reqwest::Identity>,
+) -> Result<reqwest::Client, TransportError> {
     build_client(
         reqwest::Client::builder()
             .http1_only()
             .pool_max_idle_per_host(1),
-        proxy,
+        settings,
+        identity,
     )
 }
 

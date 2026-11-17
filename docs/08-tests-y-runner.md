@@ -250,10 +250,12 @@ La carpeta es la colección o una de sus carpetas; por defecto, la actual. La co
 | `--iterations <n>` | Repeticiones (al menos 1; no se combina con `--data`) |
 | `--data <archivo>` | CSV o JSON para iterar |
 | `--reporter <tipo>=<ruta>` | `json`, `junit` o `html` (repetible); crea las carpetas que falten |
+| `--cacert <archivo>` | PEM con autoridades que se confían además de las del sistema (repetible) |
+| `--insecure` | No comprueba el certificado del servidor; avisa en stderr |
 | `--allow-unresolved` | Las variables sin resolver son advertencia |
 | `--no-color`, `-q`/`--quiet`, `-v`/`--verbose` | Salida |
 
-Pendientes: `--env-file` (un `.env` adicional) y `--insecure`/`--cacert`, que llegan con la configuración de red de F5; hoy los certificados salen de la configuración de la colección.
+Pendiente: `--env-file` (un `.env` adicional). `--cacert` e `--insecure` también valen para `apifast send`; los certificados de cliente salen de la colección.
 
 #### Salida en consola
 

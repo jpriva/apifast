@@ -148,9 +148,9 @@ La edición con resaltado se limita a unos 200 KB: con más texto, egui tarda de
 
 ## Ajustes de la colección
 
-"Collection settings…" en el menú de la raíz de una colección cargada abre sus ajustes. Por ahora, el proxy: el de la aplicación, ninguno o el suyo (protocolo, host, puerto, credenciales y hosts directos). Se guarda en `opencollection.yml` al pulsar "Save", y los envíos siguientes ya van por él. Un aviso recuerda que la contraseña queda en el archivo, como en Bruno.
+"Collection settings…" en el menú de la raíz de una colección cargada abre sus ajustes: el proxy (el de la aplicación, ninguno o el suyo: protocolo, host, puerto, credenciales y hosts directos) y los certificados de cliente (una fila por certificado: activo, host, certificado y clave PEM; "Add certificate" añade uno). Se guarda en `opencollection.yml` al pulsar "Save", y los envíos siguientes ya van por él. Un aviso recuerda que la contraseña queda en el archivo, como en Bruno.
 
-En los ajustes de la aplicación, la sección Proxy elige el del sistema, ninguno o uno manual, para las colecciones que heredan el suyo. Su contraseña se guarda aparte con "Save password", sellada; el campo muestra "saved, sealed" cuando hay una.
+En los ajustes de la aplicación, la sección TLS tiene un archivo de CA adicional (con "Choose…") y "Do not check certificates", que muestra un aviso en rojo mientras está activa. La sección Proxy elige el del sistema, ninguno o uno manual, para las colecciones que heredan el suyo. Su contraseña se guarda aparte con "Save password", sellada; el campo muestra "saved, sealed" cuando hay una.
 
 ## Runner
 

@@ -1,5 +1,6 @@
-//! The proxy of the collections: the application's, from the settings, with
-//! its password kept sealed apart, or each collection's own.
+//! The transports of the collections: the proxy (the application's, with
+//! its password kept sealed apart, or each collection's own), the trust in
+//! servers, and the collection's client certificates.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -28,13 +29,22 @@ impl State {
     }
 
     /// A transport for the collection at `root`, through its proxy.
+    /// A wrong CA file does not keep collections from opening: the
+    /// transport goes without it, and the error shows.
     pub(super) fn transport_for(
-        &self,
+        &mut self,
         root: &Path,
         collection: &Collection,
     ) -> Result<ReqwestTransport, String> {
         let proxy = collection.proxy.choose(&self.application_proxy());
-        ReqwestTransport::with_proxy(root, proxy).map_err(|e| e.to_string())
+        let certificates = &collection.client_certificates;
+        match ReqwestTransport::configured(root, proxy.clone(), &self.trust, certificates) {
+            Ok(transport) => Ok(transport),
+            Err(e) => {
+                self.snapshot.error = Some(e.to_string());
+                ReqwestTransport::with_proxy(root, proxy).map_err(|e| e.to_string())
+            }
+        }
     }
 
     /// New transports for the loaded collections, after the proxy changed.
@@ -56,17 +66,20 @@ impl State {
         }
     }
 
-    /// Saves the collection's proxy into its file, then sends through it.
-    pub(super) fn save_collection_proxy(
+    /// Saves the collection's proxy and client certificates into its
+    /// file, then sends with them.
+    pub(super) fn save_collection_settings(
         &mut self,
         root: &Path,
         proxy: apifast_domain::CollectionProxy,
+        client_certificates: Vec<apifast_domain::ClientCertificate>,
     ) {
         let Some(repo) = self.open.get(root).map(|open| open.repo.clone()) else {
             return;
         };
         let saved = apifast_app::CollectionRepository::collection(&*repo).and_then(|mut c| {
             c.proxy = proxy;
+            c.client_certificates = client_certificates;
             apifast_app::CollectionRepository::save_collection(&*repo, &c)?;
             Ok(c)
         });

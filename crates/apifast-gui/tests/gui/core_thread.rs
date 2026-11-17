@@ -1003,6 +1003,7 @@ fn the_history_limits_come_from_the_settings() {
         },
         responses: Limits::default(),
         proxy: apifast_domain::ProxyChoice::System,
+        trust: apifast_domain::TlsTrust::default(),
     });
     open(&core, dir.path());
     let snapshot = wait(&core, "the history", |s| !s.history.is_empty());
@@ -1938,8 +1939,9 @@ fn a_collection_proxy_is_saved_and_used_by_the_next_send() {
             ..ProxyConfig::default()
         },
     };
-    core.send(Command::SaveCollectionProxy {
+    core.send(Command::SaveCollectionSettings {
         root: root(&core),
+        client_certificates: Vec::new(),
         proxy: proxy.clone(),
     });
     wait(&core, "the proxy saved", |s| {
@@ -1954,8 +1956,9 @@ fn a_collection_proxy_is_saved_and_used_by_the_next_send() {
     );
     assert_eq!(body_of(&core), "via proxy");
 
-    core.send(Command::SaveCollectionProxy {
+    core.send(Command::SaveCollectionSettings {
         root: root(&core),
+        client_certificates: Vec::new(),
         proxy: CollectionProxy {
             mode: ProxyMode::Off,
             ..proxy

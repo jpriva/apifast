@@ -25,6 +25,8 @@ pub const EXIT_RUN_ERROR: u8 = 2;
 pub struct RunArgs {
     /// The collection or folder to run; the current folder by default.
     path: Option<PathBuf>,
+    #[command(flatten)]
+    tls: crate::TlsArgs,
     /// Active environment, by name.
     #[arg(short, long)]
     env: Option<String>,
@@ -119,7 +121,7 @@ pub fn run(args: &RunArgs) -> Result<ExitCode> {
         responses,
         transport,
         secrets,
-    } = wire(&root)?;
+    } = wire(&root, &args.tls)?;
     let (clock, random) = (system::SystemClock, system::SystemRandom::new());
     let options = RunOptions {
         folder,

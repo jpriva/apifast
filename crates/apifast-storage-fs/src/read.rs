@@ -393,7 +393,36 @@ pub(crate) fn collection(doc: &Value) -> Collection {
         name: text(get_in(doc, &["info", "name"])).unwrap_or_else(|| "Untitled Collection".into()),
         defaults: request_defaults(get(doc, "request"), collection_auth),
         proxy: proxy(get_in(doc, &["config", "proxy"])),
+        client_certificates: client_certificates(get_in(doc, &["config", "clientCertificates"])),
     }
+}
+
+/// `config.clientCertificates`, as Bruno reads it: `pem` and `pkcs12`
+/// entries; others are skipped.
+fn client_certificates(value: Option<&Value>) -> Vec<apifast_domain::ClientCertificate> {
+    use apifast_domain::{ClientCertificate, ClientCertificateKind};
+    items(value)
+        .iter()
+        .filter_map(|item| {
+            let field = |key: &str| text_or_empty(get(item, key));
+            let kind = match field("type").as_str() {
+                "pem" => ClientCertificateKind::Pem {
+                    certificate: field("certificateFilePath"),
+                    private_key: field("privateKeyFilePath"),
+                },
+                "pkcs12" => ClientCertificateKind::Pkcs12 {
+                    file: field("pkcs12FilePath"),
+                },
+                _ => return None,
+            };
+            Some(ClientCertificate {
+                domain: field("domain"),
+                kind,
+                passphrase: field("passphrase"),
+                enabled: !is_disabled(item),
+            })
+        })
+        .collect()
 }
 
 /// `config.proxy`, as Bruno reads it: `disabled: true` turns it off,

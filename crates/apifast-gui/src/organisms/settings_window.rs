@@ -23,6 +23,8 @@ pub struct SettingsWindow {
     /// The password to keep (`Some`) or forget (`None`), once, since the
     /// last time it was taken.
     pub password_change: Option<Option<apifast_domain::Secret>>,
+    /// The system's file picker for the CA file, while it is open.
+    picking: Option<std::sync::mpsc::Receiver<Option<std::path::PathBuf>>>,
 }
 
 fn theme_label(theme: ThemeChoice, strings: &Strings) -> &str {
@@ -70,6 +72,7 @@ impl SettingsWindow {
 
                 changed |= storage(ui, settings, strings);
                 changed |= self.proxy(ui, settings, strings);
+                changed |= self.tls(ui, settings, strings);
                 ui.add_space(theme::space::M);
                 if ui.button(strings.settings_reset).clicked() {
                     *settings = Settings::default();
@@ -82,6 +85,65 @@ impl SettingsWindow {
 }
 
 impl SettingsWindow {
+    /// Trust in servers: an extra CA file, or no checks at all.
+    fn tls(&mut self, ui: &mut egui::Ui, settings: &mut Settings, strings: &Strings) -> bool {
+        let mut changed = false;
+        if let Some(receiver) = &self.picking
+            && let Ok(file) = receiver.try_recv()
+        {
+            self.picking = None;
+            if let Some(file) = file {
+                settings.ca_file = file.display().to_string();
+                changed = true;
+            }
+        }
+        section(ui, strings.tls);
+        egui::Grid::new("settings-tls")
+            .num_columns(2)
+            .spacing([theme::space::L, theme::space::S])
+            .show(ui, |ui| {
+                ui.label(strings.tls_ca_file);
+                ui.horizontal(|ui| {
+                    changed |= ui
+                        .add(
+                            egui::TextEdit::singleline(&mut settings.ca_file)
+                                .hint_text("/etc/ssl/certs/corp-ca.pem")
+                                .desired_width(220.0),
+                        )
+                        .accessible_name(strings.tls_ca_file)
+                        .changed();
+                    let picking = self.picking.is_some();
+                    if ui
+                        .add_enabled(!picking, egui::Button::new(strings.choose))
+                        .clicked()
+                    {
+                        let (sender, receiver) = std::sync::mpsc::channel();
+                        let ctx = ui.ctx().clone();
+                        std::thread::spawn(move || {
+                            let file = rfd::FileDialog::new()
+                                .add_filter("PEM", &["pem", "crt", "cer"])
+                                .pick_file();
+                            let _ = sender.send(file);
+                            ctx.request_repaint();
+                        });
+                        self.picking = Some(receiver);
+                    }
+                });
+                ui.end_row();
+                ui.label(strings.tls_insecure);
+                changed |= ui
+                    .checkbox(&mut settings.tls_insecure, "")
+                    .accessible_name(strings.tls_insecure)
+                    .changed();
+                ui.end_row();
+            });
+        let palette = theme::palette(ui);
+        if settings.tls_insecure {
+            ui.label(RichText::new(strings.tls_insecure_warning).color(palette.danger));
+        }
+        changed
+    }
+
     /// The application's proxy: for the collections that inherit theirs.
     fn proxy(&mut self, ui: &mut egui::Ui, settings: &mut Settings, strings: &Strings) -> bool {
         let mut changed = false;

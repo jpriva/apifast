@@ -152,10 +152,12 @@ Basic, Bearer y API key se resuelven al renderizar: son headers o parámetros. L
 
 ## TLS y certificados
 
-- Autoridades certificadoras adicionales (archivo PEM), global o por colección.
-- Certificados cliente por host y puerto, con comodines: PEM (certificado + clave) o PKCS#12 con contraseña.
-- Las contraseñas de certificados se guardan como secretos.
-- Opción de desactivar la validación, por request o por colección, siempre visible en la interfaz como advertencia.
+- **Autoridades certificadoras adicionales:** archivos PEM que se confían además de las del sistema (el verificador de la plataforma conserva sus raíces). En la interfaz, un archivo en los ajustes; en la CLI, `--cacert <archivo>`, repetible. Un archivo que no se puede leer o sin certificados es un error que lo nombra; en la interfaz, las colecciones se abren igual, sin él, y el error se muestra.
+- **Sin validación:** "Do not check certificates" en los ajustes, con un aviso en rojo mientras está activa, o `--insecure` en la CLI, que avisa en stderr. Afecta a todos los envíos.
+- **Certificados de cliente por host:** en `config.clientCertificates` de la colección, como Bruno ([docs/04](04-formato-de-archivos.md#certificados-de-cliente)), y en "Collection settings…". El dominio admite puerto (`localhost:8443`, que solo vale para ese puerto) y comodines `*` (`*.example.com`). Las rutas son relativas a la colección. El transporte tiene un cliente por certificado activo y elige en cada salto el del host al que va, así que una redirección a otro host no presenta el certificado del primero; NTLM usa el del host de la request.
+- **PEM:** certificado (con su cadena) y clave sin cifrar, en PKCS#8, RSA o EC.
+- **Pendiente:** PKCS#12 (`.pfx`, `.p12`) y claves PEM cifradas. Se leen y se guardan sin perder nada, pero enviar a su host falla con un error que dice cómo convertirlos (`openssl pkcs12 -in c.pfx -out c.pem -nodes`, `openssl pkey -in key.pem -out plain.pem`). Leerlos con rustls necesita un lector de PKCS#12 (como `p12-keystore`, con unas cien dependencias), que se deja para cuando se revise el tamaño del binario.
+- Probado contra un servidor TLS local que exige certificado de cliente, con una CA, un certificado de servidor y uno de cliente generados en la prueba (`rcgen`): conecta con la CA y el certificado (también con puerto y comodín), falla sin la CA, con el certificado para otro host o desactivado, y conecta sin validar con `insecure`.
 
 ## DNS
 

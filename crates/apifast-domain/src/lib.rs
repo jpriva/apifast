@@ -15,6 +15,7 @@
 mod assertion;
 mod auth;
 mod body;
+mod certificates;
 mod collection;
 mod environment;
 mod json;
@@ -36,6 +37,7 @@ pub use auth::{
     OAuth2Request, ParameterPlacement, TokenPlacement,
 };
 pub use body::{Body, FormField, MultipartPart, MultipartValue};
+pub use certificates::{ClientCertificate, ClientCertificateKind, TlsTrust};
 pub use collection::{Collection, CollectionId, Folder, RequestDefaults};
 pub use environment::{Environment, EnvironmentError, environment_chain};
 pub use json::{Json, JsonError, MAX_DEPTH as MAX_JSON_DEPTH, PathError};
