@@ -153,9 +153,10 @@ fn a_missing_variable_fails_unless_allowed() {
         stderr.starts_with("warning: variable `user_id` is not defined\nwarning: variable `token` is not defined\n200 OK"),
         "{stderr}"
     );
-    // An empty path parameter is left as written, as Bruno does.
+    // An empty path parameter is left as written, then encoded with the
+    // rest of the path, as Bruno does.
     assert!(
-        server.seen()[0].starts_with("GET /users/:id "),
+        server.seen()[0].starts_with("GET /users/%3Aid "),
         "{}",
         server.seen()[0]
     );

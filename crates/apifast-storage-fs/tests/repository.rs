@@ -1013,9 +1013,15 @@ fn client_certificates_are_read_and_saved_like_bruno() {
     collection.client_certificates[1].enabled = true;
     collection.client_certificates.remove(0);
     repo.save_collection(&collection).unwrap();
-    assert_eq!(repo.collection().unwrap().client_certificates, collection.client_certificates);
+    assert_eq!(
+        repo.collection().unwrap().client_certificates,
+        collection.client_certificates
+    );
     collection.client_certificates.clear();
     repo.save_collection(&collection).unwrap();
     let text = read(&dir, "opencollection.yml");
-    assert!(!text.contains("clientCertificates") && !text.contains("config:"), "{text}");
+    assert!(
+        !text.contains("clientCertificates") && !text.contains("config:"),
+        "{text}"
+    );
 }

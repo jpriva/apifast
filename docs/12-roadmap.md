@@ -312,7 +312,7 @@ Siguiente, fuera de esta sección: los entornos globales del workspace (`environ
 - [ ] Sobrescrituras de DNS.
 - [ ] Timeline completo con conector instrumentado (DNS, conexión, TLS, reutilización).
 - [ ] Descompresión manual, para registrar el tamaño comprimido y el descomprimido (en F1 la hace reqwest).
-- [ ] Respetar `encodeUrl: false` (en F1 la URL siempre se normaliza al enviarla).
+- [x] `encodeUrl` como en Bruno. La tarea decía "respetar `encodeUrl: false`", pero al revisar Bruno resultó al revés: desactivado, Bruno (axios) solo normaliza la URL con WHATWG, como ya hacía apifast; activado (el valor por defecto), además aplica `encodeURIComponent` a cada segmento de la ruta y a cada nombre y valor de la query. Ahora apifast hace lo mismo al renderizar ([docs/07](07-motor-de-red.md#codificación-de-la-url-encodeurl)), y el enmascarado de secretos reconoce cualquier mezcla de bytes tal cual y `%XX`.
 - [ ] Multipart y cuerpos de archivo en streaming.
 - [ ] Ejemplos de respuesta guardados.
 

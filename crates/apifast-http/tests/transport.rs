@@ -19,8 +19,8 @@ use apifast_app::{
     StoreError, StoredBody, TimelineKind, TransportError, render_request,
 };
 use apifast_domain::{
-    Body, Chain, Collection, FormField, Header, HttpRequest, Method, MultipartPart, MultipartValue,
-    ResolvedVariables, Setting, resolve,
+    ApiKeyAuth, ApiKeyPlacement, AuthScheme, Body, Chain, Collection, FormField, Header,
+    HttpRequest, Method, MultipartPart, MultipartValue, ResolvedVariables, Setting, resolve,
 };
 use apifast_http::ReqwestTransport;
 use apifast_template::Mode;
@@ -640,6 +640,32 @@ async fn urls_without_a_scheme_use_http() {
         .0
         .unwrap();
     assert_eq!(head.url, server.url("/plain"));
+}
+
+#[tokio::test]
+async fn encode_url_encodes_as_bruno_and_off_sends_the_url_as_written() {
+    let server = Server::start(|_| Reply::ok("")).await;
+    let url = server.url("/a b/c%20d?q=a,b&r=%2F");
+
+    let mut on = get(url.clone());
+    on.auth = Setting::Set(AuthScheme::ApiKey(ApiKeyAuth {
+        key: "api key".into(),
+        value: "k/1".into(),
+        placement: ApiKeyPlacement::Query,
+    }));
+    send(&on).await.0.unwrap();
+    let mut off = get(url);
+    off.settings.encode_url = Setting::Set(false);
+    send(&off).await.0.unwrap();
+
+    let received = server.received();
+    // The API key is added after the URL is encoded: encoded once.
+    assert_eq!(
+        received[0].path,
+        "/a%20b/c%20d?q=a%2Cb&r=%252F&api%20key=k%2F1"
+    );
+    // Only the URL parser's normalisation, as axios in Bruno.
+    assert_eq!(received[1].path, "/a%20b/c%20d?q=a,b&r=%2F");
 }
 
 #[tokio::test]

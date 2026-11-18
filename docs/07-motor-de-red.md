@@ -63,9 +63,23 @@ Todos son heredables (colección → carpeta → request) y el timeline indica d
 - **Bodies de archivo y partes multipart** leídos del disco en streaming, relativos a la carpeta de la colección.
 - **Errores clasificados** como en la tabla de abajo. Los mensajes nunca incluyen la URL, que puede llevar secretos en la query, ni el valor de un header.
 
-Pendiente para F5: proxy, certificados, cookies, timeline instrumentado, descompresión manual y `encodeUrl: false`.
+Pendiente para F5: proxy, certificados, cookies, timeline instrumentado y descompresión manual. `encodeUrl` llegó en F5 (ver abajo).
 
 Se prueba contra un servidor HTTP local escrito en los propios tests, sin red externa.
+
+## Codificación de la URL (`encodeUrl`)
+
+apifast codifica la URL como Bruno, para que el mismo archivo envíe los mismos bytes en las dos herramientas (`encodeUrl` de `@usebruno/common`). Se hace en `render_request` (`apifast-app/src/url_encoding.rs`), después de sustituir los path params y antes de que la auth añada su parámetro a la query, que ya va codificado y no se codifica dos veces.
+
+- **Activado** (por defecto, también si el archivo no lo indica, como en Bruno):
+  - El esquema y la autoridad (usuario, host y puerto) quedan como están. Una URL sin esquema empieza por la autoridad, así que `localhost:6000` conserva su puerto.
+  - Cada segmento de la ruta se decodifica y se vuelve a codificar con `encodeURIComponent`: un segmento ya codificado no se codifica dos veces (`a%20b` sigue igual, `a b` pasa a `a%20b`). Un `%XX` mal formado, o que no da UTF-8, se codifica (`100%` pasa a `100%25`).
+  - Cada nombre y valor de la query se codifica tal como está, **sin decodificar antes**: `?r=%2F` sale como `?r=%252F`. Bruno lo hace a propósito, para valores que el servidor decodifica otra vez (una URL de redirección). Los pares sin nombre se descartan.
+  - `#` es un dato, no un fragmento: pasa a `%23`.
+  - Un path param sin valor queda como `:id` y se codifica con la ruta: `%3Aid`.
+- **Desactivado:** la URL sale como está escrita, y solo el parser de URL (WHATWG, el mismo que usa axios en Bruno) la normaliza: codifica espacios y caracteres no ASCII, resuelve `.` y `..`, y descarta el fragmento.
+
+En los dos casos el transporte la vuelve a analizar con el crate `url`. Las requests propias de apifast (las del token de OAuth 2.0) arman su URL ya codificada.
 
 ## Redirecciones
 

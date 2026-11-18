@@ -91,7 +91,8 @@ fn a_failing_assertion_exits_with_1_and_reports_are_written() {
         server
             .seen()
             .iter()
-            .any(|r| r.starts_with("GET /missing?from=/login ")),
+            // Encoded as Bruno does with `encodeUrl` on, the default.
+            .any(|r| r.starts_with("GET /missing?from=%2Flogin ")),
         "{:?}",
         server.seen()
     );

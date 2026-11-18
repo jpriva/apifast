@@ -149,6 +149,7 @@ archivo → ResolvedRequest → RenderedRequest → HttpTransport
 Cada tipo solo se construye a partir del anterior (`resolve` en el dominio, `render_request` en la aplicación), con campos privados y un doctest `compile_fail` que lo comprueba. Al renderizar:
 
 - La query sale de la URL, como en Bruno: la lista `params` de tipo query solo la refleja para la interfaz. Los path params sustituyen los segmentos `:nombre` de la ruta.
+- Con `encodeUrl` activado, la URL se codifica como en Bruno ([motor de red](07-motor-de-red.md#codificación-de-la-url-encodeurl)), antes de que la auth añada su parámetro a la query.
 - Se añade un `Content-Type` según el body si ningún header lo define.
 - La auth se convierte en headers o en un parámetro de query y sustituye el `Authorization` (o el header de la API key) de la request.
 - Un esquema de auth o un tipo de body todavía no implementado es un error, nunca un envío sin él.

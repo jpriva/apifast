@@ -10,6 +10,7 @@ use apifast_domain::{
 use apifast_template::{Host, Mode, Problem, render};
 
 use crate::AppError;
+use crate::url_encoding::encode_url;
 
 /// A request ready to send: inheritance applied, templates rendered, auth
 /// turned into headers or query parameters.
@@ -32,7 +33,6 @@ use crate::AppError;
 ///     timeout_ms: 0,
 ///     follow_redirects: true,
 ///     max_redirects: 0,
-///     encode_url: true,
 ///     contains_secret: false,
 /// };
 /// ```
@@ -45,7 +45,6 @@ pub struct RenderedRequest {
     timeout_ms: u64,
     follow_redirects: bool,
     max_redirects: u32,
-    encode_url: bool,
     auth: TransportAuth,
     contains_secret: bool,
     secrets: Vec<Secret>,
@@ -135,7 +134,6 @@ impl fmt::Debug for RenderedRequest {
             timeout_ms: u64,
             follow_redirects: bool,
             max_redirects: u32,
-            encode_url: bool,
             auth: &'a TransportAuth,
             contains_secret: bool,
         }
@@ -149,7 +147,6 @@ impl fmt::Debug for RenderedRequest {
                 timeout_ms: self.timeout_ms,
                 follow_redirects: self.follow_redirects,
                 max_redirects: self.max_redirects,
-                encode_url: self.encode_url,
                 auth: &self.auth,
                 contains_secret: self.contains_secret,
             }
@@ -176,7 +173,6 @@ impl RenderedRequest {
             timeout_ms: 30_000,
             follow_redirects: true,
             max_redirects: 5,
-            encode_url: true,
             auth: TransportAuth::None,
             contains_secret: !secrets.is_empty(),
             secrets,
@@ -216,11 +212,6 @@ impl RenderedRequest {
     /// Maximum number of redirects followed.
     pub fn max_redirects(&self) -> u32 {
         self.max_redirects
-    }
-
-    /// Whether the URL is encoded before sending.
-    pub fn encode_url(&self) -> bool {
-        self.encode_url
     }
 
     /// An auth the transport applies as it sends.
@@ -315,6 +306,10 @@ pub fn render_request(
         path_params.push((param.name.clone(), r.text(&param.value)?));
     }
     let mut url = substitute_path_params(&url, &path_params);
+    // Before auth adds its query parameter, already encoded, as in Bruno.
+    if resolved.settings().encode_url.value {
+        url = encode_url(&url);
+    }
 
     let mut headers = Vec::with_capacity(resolved.headers().len() + 1);
     for header in resolved.headers() {
@@ -340,7 +335,6 @@ pub fn render_request(
             timeout_ms: settings.timeout_ms.value,
             follow_redirects: settings.follow_redirects.value,
             max_redirects: settings.max_redirects.value,
-            encode_url: settings.encode_url.value,
             auth,
             contains_secret: r.contains_secret,
             secrets: r.secrets,

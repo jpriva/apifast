@@ -23,6 +23,7 @@ mod ports;
 mod render;
 mod report;
 mod runner;
+mod url_encoding;
 mod use_cases;
 
 pub use assertions::{ExpressionError, ResponseFacts, Verdict, check, reason_phrase};
