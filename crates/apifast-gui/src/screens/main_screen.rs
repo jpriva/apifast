@@ -115,6 +115,7 @@ fn collection_settings_of(snapshot: &Snapshot) -> Vec<CollectionProxyEntry> {
                 settings: crate::organisms::CollectionSettings {
                     proxy: collection.proxy.clone(),
                     client_certificates: collection.client_certificates.clone(),
+                    dns_overrides: collection.dns_overrides.clone(),
                 },
             })
         })
@@ -450,6 +451,7 @@ impl MainScreen {
                 root,
                 proxy: settings.proxy,
                 client_certificates: settings.client_certificates,
+                dns_overrides: settings.dns_overrides,
             });
         }
         commands.extend(

@@ -262,6 +262,18 @@ pub struct Strings {
     pub collection_key: &'static str,
     /// Action: open the collection key window.
     pub action_collection_key: &'static str,
+    /// Heading of a collection's DNS overrides.
+    pub dns_overrides: &'static str,
+    /// Field: the host a DNS override is for.
+    pub dns_host: &'static str,
+    /// Field: the address a DNS override gives.
+    pub dns_address: &'static str,
+    /// Next to an address that is not an IP.
+    pub dns_not_ip: &'static str,
+    /// Button: add a DNS override.
+    pub dns_add: &'static str,
+    /// Under the DNS overrides.
+    pub dns_hint: &'static str,
     /// Button: add a part to a multipart body.
     pub add_part: &'static str,
     /// Selector: whether a part is text or files.
@@ -629,6 +641,8 @@ pub struct Strings {
     pub captured_as: &'static str,
     /// Timeline event: a redirect was followed.
     pub event_redirect: &'static str,
+    /// Timeline: the addresses came from the collection's DNS overrides.
+    pub event_dns_override: &'static str,
     /// Timeline: the body came compressed, with its size on the wire.
     pub event_decompressed: &'static str,
     /// Timeline: a name was resolved.
@@ -957,6 +971,12 @@ pub const EN: Strings = Strings {
     forget: "Forget",
     collection_key: "Collection key",
     action_collection_key: "Collection key",
+    dns_overrides: "DNS overrides",
+    dns_host: "Host",
+    dns_address: "IP address",
+    dns_not_ip: "not an IP address",
+    dns_add: "Add override",
+    dns_hint: "Like /etc/hosts, for this collection only: * matches any run of characters (*.example.com). Saved in .apifast/collection.yml, which goes to git.",
     add_part: "Add part",
     part_kind: "Part type",
     part_text: "Text",
@@ -1140,6 +1160,7 @@ pub const EN: Strings = Strings {
     tests_none: "No assertions or captures ran. Responses from the history do not keep their results.",
     captured_as: "=",
     event_redirect: "Redirect",
+    event_dns_override: "DNS override",
     event_decompressed: "Decompressed",
     event_dns: "DNS",
     event_connected: "Connected to",

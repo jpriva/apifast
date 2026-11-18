@@ -6,7 +6,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use apifast_app::Cookies;
-use apifast_domain::{Collection, ProxyChoice, Secret};
+use apifast_domain::{Collection, ProxyChoice, Secret, TlsTrust};
 use apifast_http::ReqwestTransport;
 
 use super::State;
@@ -40,14 +40,23 @@ impl State {
     ) -> Result<ReqwestTransport, String> {
         let proxy = collection.proxy.choose(&self.application_proxy());
         let certificates = &collection.client_certificates;
-        let transport =
-            match ReqwestTransport::configured(root, proxy.clone(), &self.trust, certificates) {
-                Ok(transport) => transport,
-                Err(e) => {
-                    self.snapshot.error = Some(e.to_string());
-                    ReqwestTransport::with_proxy(root, proxy).map_err(|e| e.to_string())?
-                }
-            };
+        let transport = match ReqwestTransport::configured(
+            root,
+            proxy.clone(),
+            &self.trust,
+            certificates,
+            &collection.dns_overrides,
+        ) {
+            Ok(transport) => transport,
+            Err(e) => {
+                self.snapshot.error = Some(e.to_string());
+                // Without the trust and the certificates, but with the
+                // collection's DNS overrides.
+                let dns = &collection.dns_overrides;
+                ReqwestTransport::configured(root, proxy, &TlsTrust::default(), &[], dns)
+                    .map_err(|e| e.to_string())?
+            }
+        };
         Ok(transport.with_cookies(cookies))
     }
 
@@ -77,8 +86,11 @@ impl State {
     pub(super) fn save_collection_settings(
         &mut self,
         root: &Path,
-        proxy: apifast_domain::CollectionProxy,
-        client_certificates: Vec<apifast_domain::ClientCertificate>,
+        (proxy, client_certificates, dns_overrides): (
+            apifast_domain::CollectionProxy,
+            Vec<apifast_domain::ClientCertificate>,
+            Vec<apifast_domain::DnsOverride>,
+        ),
     ) {
         let Some(repo) = self.open.get(root).map(|open| open.repo.clone()) else {
             return;
@@ -86,6 +98,7 @@ impl State {
         let saved = apifast_app::CollectionRepository::collection(&*repo).and_then(|mut c| {
             c.proxy = proxy;
             c.client_certificates = client_certificates;
+            c.dns_overrides = dns_overrides;
             apifast_app::CollectionRepository::save_collection(&*repo, &c)?;
             Ok(c)
         });

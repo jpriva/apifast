@@ -28,7 +28,7 @@ use apifast_app::{
     CollectionRepository, CollectionTree, EnvironmentRepository, LoadedRequest, Random,
     RepositoryError, RequestPath, SharedSecretFiles, TreeItem,
 };
-use apifast_domain::{Collection, CollectionId, Environment, Folder, HttpRequest};
+use apifast_domain::{Collection, CollectionId, DnsOverride, Environment, Folder, HttpRequest};
 use oneyaml::Value;
 
 pub use keymap::FsKeymapStore;
@@ -303,6 +303,22 @@ impl FsCollection {
         Ok(out)
     }
 
+    /// Writes the DNS overrides into `.apifast/collection.yml`, keeping the
+    /// rest of it; creates the file for a first override.
+    fn save_dns_overrides(&self, overrides: &[DnsOverride]) -> Result<(), RepositoryError> {
+        let exists = self.read_value(APIFAST_COLLECTION_FILE)?.is_some();
+        if !exists && overrides.is_empty() {
+            return Ok(());
+        }
+        self.save_document(
+            APIFAST_COLLECTION_FILE,
+            &overrides.to_vec(),
+            |doc| Ok(read::dns_overrides(doc)),
+            |doc, _, new| yaml::set_or_remove(doc, "dns", write::dns_value(new)),
+            |new| write::apifast_with_dns(new),
+        )
+    }
+
     fn save_apifast_id(&self, id: &CollectionId) -> Result<(), RepositoryError> {
         let read_id = |doc: &Value| Ok(yaml::text(yaml::get(doc, "id")).map(CollectionId::new));
         self.save_document(
@@ -332,11 +348,15 @@ impl CollectionRepository for FsCollection {
             .read_value(COLLECTION_FILE)?
             .ok_or_else(|| RepositoryError::NotFound(COLLECTION_FILE.into()))?;
         let mut collection = read::collection(&doc);
-        collection.id = self
-            .read_value(APIFAST_COLLECTION_FILE)?
-            .and_then(|doc| yaml::text(yaml::get(&doc, "id")))
+        let apifast = self.read_value(APIFAST_COLLECTION_FILE)?;
+        collection.id = (apifast.as_ref())
+            .and_then(|doc| yaml::text(yaml::get(doc, "id")))
             .filter(|id| !id.is_empty())
             .map(CollectionId::new);
+        collection.dns_overrides = apifast
+            .as_ref()
+            .map(read::dns_overrides)
+            .unwrap_or_default();
         Ok(collection)
     }
 
@@ -397,10 +417,14 @@ impl CollectionRepository for FsCollection {
             self.save_apifast_id(id)?;
         }
 
-        // The identifier lives in `.apifast/`, not in `opencollection.yml`.
+        self.save_dns_overrides(&collection.dns_overrides)?;
+
+        // The identifier and the DNS overrides live in `.apifast/`, not in
+        // `opencollection.yml`.
         let mut without_id = collection.clone();
         without_id.id = None;
-        let add_ignore = collection.id.is_some();
+        without_id.dns_overrides = Vec::new();
+        let add_ignore = collection.id.is_some() || !collection.dns_overrides.is_empty();
         self.save_document(
             COLLECTION_FILE,
             &without_id,

@@ -50,7 +50,7 @@ impl ClientCertificate {
 
 /// Whether `text` matches `pattern`, where `*` stands for any run of
 /// characters.
-fn wildcard(pattern: &str, text: &str) -> bool {
+pub(crate) fn wildcard(pattern: &str, text: &str) -> bool {
     let parts: Vec<&str> = pattern.split('*').collect();
     if parts.len() == 1 {
         return pattern == text;

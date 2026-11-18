@@ -1943,6 +1943,7 @@ fn a_collection_proxy_is_saved_and_used_by_the_next_send() {
     core.send(Command::SaveCollectionSettings {
         root: root(&core),
         client_certificates: Vec::new(),
+        dns_overrides: Vec::new(),
         proxy: proxy.clone(),
     });
     wait(&core, "the proxy saved", |s| {
@@ -1960,6 +1961,7 @@ fn a_collection_proxy_is_saved_and_used_by_the_next_send() {
     core.send(Command::SaveCollectionSettings {
         root: root(&core),
         client_certificates: Vec::new(),
+        dns_overrides: Vec::new(),
         proxy: CollectionProxy {
             mode: ProxyMode::Off,
             ..proxy
@@ -1971,4 +1973,56 @@ fn a_collection_proxy_is_saved_and_used_by_the_next_send() {
             .is_some_and(|c| c.tree.collection.proxy.mode == ProxyMode::Off)
     });
     assert_eq!(body_of(&core), "GET /health HTTP/1.1");
+}
+
+#[test]
+fn dns_overrides_are_saved_apart_and_used_by_the_next_send() {
+    let port = server(Duration::ZERO);
+    let dir = collection(port);
+    std::fs::write(
+        dir.path().join("environments/named.yml"),
+        format!("name: named\nvariables:\n  - name: host\n    value: http://shop.internal.invalid:{port}\n"),
+    )
+    .unwrap();
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::SelectEnvironment(Some("named".into())));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
+    wait(&core, "the request", |s| s.active_tab().is_some());
+    core.send(Command::Send);
+    let snapshot = wait(&core, "the DNS error", |s| {
+        matches!(response(s), ResponseState::Failed(_))
+    });
+    let ResponseState::Failed(message) = response(&snapshot) else {
+        unreachable!()
+    };
+    assert!(message.contains("shop.internal.invalid"), "{message}");
+
+    let dns = vec![apifast_domain::DnsOverride {
+        host: "*.internal.invalid".into(),
+        address: "127.0.0.1".into(),
+        enabled: true,
+    }];
+    core.send(Command::SaveCollectionSettings {
+        root: root(&core),
+        proxy: apifast_domain::CollectionProxy::default(),
+        client_certificates: Vec::new(),
+        dns_overrides: dns.clone(),
+    });
+    wait(&core, "the overrides saved", |s| {
+        s.collection
+            .as_ref()
+            .is_some_and(|c| c.tree.collection.dns_overrides == dns)
+    });
+    let apifast = std::fs::read_to_string(dir.path().join(".apifast/collection.yml")).unwrap();
+    assert!(apifast.contains("*.internal.invalid"), "{apifast}");
+    let sent = core.snapshot().history.len();
+    core.send(Command::Send);
+    let snapshot = wait(&core, "the response", |s| {
+        s.history.len() > sent && matches!(response(s), ResponseState::Received(_))
+    });
+    let ResponseState::Received(received) = response(&snapshot) else {
+        unreachable!()
+    };
+    assert_eq!(received.body.read(0, 100).unwrap(), b"GET /health HTTP/1.1");
 }

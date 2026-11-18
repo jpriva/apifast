@@ -941,6 +941,65 @@ async fn the_timeline_shows_dns_and_the_connection_then_its_reuse() {
 }
 
 #[tokio::test]
+async fn dns_overrides_send_a_host_to_their_address() {
+    let server = Server::start(|_| Reply::ok("")).await;
+    let port = server.addr.port();
+    let entry = |host: &str, address: &str| apifast_domain::DnsOverride {
+        host: host.into(),
+        address: address.into(),
+        enabled: true,
+    };
+    let dns = [
+        entry("*.example.test", "127.0.0.1"),
+        entry("bad.test", "nope"),
+    ];
+    let transport = ReqwestTransport::configured(
+        std::env::temp_dir(),
+        apifast_domain::ProxyChoice::Off,
+        &apifast_domain::TlsTrust::default(),
+        &[],
+        &dns,
+    )
+    .unwrap();
+    let cancel = CancelToken::new();
+    let url = format!("http://api.example.test:{port}/x");
+    let (result, _) = send_with(&transport, &get(url), &cancel).await;
+    let head = result.unwrap();
+    // The request keeps its host name.
+    assert_eq!(
+        server.received()[0].headers["host"],
+        format!("api.example.test:{port}")
+    );
+    let dns_event = head.timeline.iter().find_map(|e| match &e.kind {
+        TimelineKind::Dns {
+            host,
+            addresses,
+            overridden,
+            ..
+        } => Some((host.clone(), addresses.clone(), *overridden)),
+        _ => None,
+    });
+    assert_eq!(
+        dns_event,
+        Some(("api.example.test".into(), vec!["127.0.0.1".into()], true))
+    );
+
+    // An override with no IP address says so, as a DNS error.
+    let (result, _) = send_with(
+        &transport,
+        &get(format!("http://bad.test:{port}/")),
+        &cancel,
+    )
+    .await;
+    let error = result.unwrap_err();
+    assert!(matches!(error, TransportError::Dns(_)), "{error:?}");
+    assert!(
+        error.to_string().contains("DNS override of `bad.test`"),
+        "{error}"
+    );
+}
+
+#[tokio::test]
 async fn a_refused_connection_is_classified_and_hides_the_query() {
     // Bind and drop, so nothing listens on the port.
     let port = std::net::TcpListener::bind("127.0.0.1:0")

@@ -33,6 +33,7 @@ fn received(at_ms: i64) -> HistoryEntry {
                     host: "api.test".into(),
                     addresses: vec!["10.0.0.1".into(), "::1".into()],
                     duration_us: 2,
+                    overridden: true,
                 },
             },
             TimelineEvent {

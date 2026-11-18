@@ -1025,3 +1025,55 @@ fn client_certificates_are_read_and_saved_like_bruno() {
         "{text}"
     );
 }
+
+#[test]
+fn dns_overrides_live_in_the_apifast_folder_and_keep_the_id() {
+    use apifast_domain::DnsOverride;
+    let (dir, repo) = setup(&[]);
+    let entry = |host: &str, address: &str, enabled| DnsOverride {
+        host: host.into(),
+        address: address.into(),
+        enabled,
+    };
+    // A first override makes `.apifast/`, and Bruno is told to ignore it.
+    let mut collection = repo.collection().unwrap();
+    assert_eq!(collection.dns_overrides, []);
+    collection.dns_overrides = vec![
+        entry("api.test", "127.0.0.1", true),
+        entry("*.corp", "::1", false),
+    ];
+    repo.save_collection(&collection).unwrap();
+    assert_eq!(
+        repo.collection().unwrap().dns_overrides,
+        collection.dns_overrides
+    );
+    let apifast = read(&dir, ".apifast/collection.yml");
+    assert!(
+        apifast.contains("host: api.test") && apifast.contains("enabled: false"),
+        "{apifast}"
+    );
+    assert!(read(&dir, "opencollection.yml").contains(".apifast"));
+    assert!(!read(&dir, "opencollection.yml").contains("api.test"));
+
+    // The id comes later and keeps them; removing them keeps the id.
+    let id = repo
+        .ensure_id(&apifast_app::memory::CountingRandom::new(1))
+        .unwrap();
+    let mut collection = repo.collection().unwrap();
+    assert_eq!(collection.id, Some(id.clone()));
+    assert_eq!(collection.dns_overrides.len(), 2);
+    collection.dns_overrides.clear();
+    repo.save_collection(&collection).unwrap();
+    let collection = repo.collection().unwrap();
+    assert_eq!(
+        (collection.id, collection.dns_overrides),
+        (Some(id), Vec::new())
+    );
+    assert!(!read(&dir, ".apifast/collection.yml").contains("dns"));
+
+    // A collection without overrides never makes the folder.
+    let (plain, plain_repo) = setup(&[]);
+    let collection = plain_repo.collection().unwrap();
+    plain_repo.save_collection(&collection).unwrap();
+    assert!(!plain.path().join(".apifast").exists());
+}

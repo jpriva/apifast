@@ -384,12 +384,19 @@ pub fn describe(event: &TimelineEvent, strings: &Strings) -> String {
             host,
             addresses,
             duration_us,
-        } => format!(
-            "{} {host} → {} ({})",
-            strings.event_dns,
-            addresses.join(", "),
-            millis(*duration_us)
-        ),
+            overridden,
+        } => {
+            let how = if *overridden {
+                strings.event_dns_override.to_owned()
+            } else {
+                millis(*duration_us)
+            };
+            format!(
+                "{} {host} → {} ({how})",
+                strings.event_dns,
+                addresses.join(", ")
+            )
+        }
         TimelineKind::Connected {
             address,
             duration_us,

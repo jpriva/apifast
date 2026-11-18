@@ -173,6 +173,7 @@ fn times_and_events_read_well() {
             host: "api.test".into(),
             addresses: vec!["10.0.0.1".into(), "::1".into()],
             duration_us: 1_500,
+            overridden: false,
         }),
         "DNS api.test → 10.0.0.1, ::1 (1.5 ms)"
     );

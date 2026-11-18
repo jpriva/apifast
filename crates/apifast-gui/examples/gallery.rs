@@ -358,6 +358,7 @@ fn sample_responses() -> Vec<ResponseState> {
                             host: "localhost".into(),
                             addresses: vec!["127.0.0.1".into()],
                             duration_us: 1_150,
+                            overridden: false,
                         },
                     },
                     TimelineEvent {

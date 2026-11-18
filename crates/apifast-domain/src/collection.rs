@@ -45,6 +45,8 @@ pub struct Collection {
     pub proxy: crate::CollectionProxy,
     /// The client certificates it presents, by host.
     pub client_certificates: Vec<crate::ClientCertificate>,
+    /// Hosts sent to fixed addresses, from `.apifast/collection.yml`.
+    pub dns_overrides: Vec<crate::DnsOverride>,
 }
 
 impl Collection {
@@ -56,6 +58,7 @@ impl Collection {
             defaults: RequestDefaults::default(),
             proxy: crate::CollectionProxy::default(),
             client_certificates: Vec::new(),
+            dns_overrides: Vec::new(),
         }
     }
 }

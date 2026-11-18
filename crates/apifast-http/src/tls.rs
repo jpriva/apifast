@@ -26,6 +26,8 @@ pub(crate) struct ClientSettings {
     pub proxy: ProxyChoice,
     pub extra_ca: Vec<CertificateDer<'static>>,
     pub insecure: bool,
+    /// Resolves names, with the collection's DNS overrides.
+    pub resolver: crate::probe::TimedResolver,
 }
 
 /// A client certificate with its chain, and its key.
@@ -72,6 +74,7 @@ impl ClientSettings {
             proxy,
             extra_ca,
             insecure: trust.insecure,
+            resolver: crate::probe::TimedResolver::default(),
         })
     }
 

@@ -156,8 +156,13 @@ fn encode_event(event: &TimelineEvent) -> Value {
             host,
             addresses,
             duration_us,
+            overridden,
         } => {
-            json!({"type": "dns", "host": host, "addresses": addresses, "duration_us": duration_us})
+            let mut dns = json!({"type": "dns", "host": host, "addresses": addresses, "duration_us": duration_us});
+            if *overridden {
+                dns["overridden"] = json!(true);
+            }
+            dns
         }
         TimelineKind::Connected {
             address,
@@ -258,6 +263,7 @@ fn decode_event(event: &Value) -> Option<TimelineEvent> {
                 .filter_map(|a| a.as_str().map(str::to_owned))
                 .collect(),
             duration_us: number(map, "duration_us")?,
+            overridden: map.get("overridden").and_then(Value::as_bool) == Some(true),
         },
         "connected" => TimelineKind::Connected {
             address: text(map, "address"),

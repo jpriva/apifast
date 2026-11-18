@@ -26,7 +26,9 @@ use apifast_app::{
     BodyWriter, CancelToken, Cookies, HttpTransport, RenderedBody, RenderedRequest, ResponseHead,
     StoreError, TimelineEvent, TimelineKind, TransportAuth, TransportError,
 };
-use apifast_domain::{ClientCertificate, MultipartValue, ProxyChoice, ProxyConfig, TlsTrust};
+use apifast_domain::{
+    ClientCertificate, DnsOverride, MultipartValue, ProxyChoice, ProxyConfig, TlsTrust,
+};
 use reqwest::header::{
     ACCEPT_ENCODING, AUTHORIZATION, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, COOKIE,
     HeaderMap, HeaderName, HeaderValue, LOCATION, RANGE, USER_AGENT,
@@ -79,13 +81,13 @@ impl ReqwestTransport {
         files_root: impl Into<PathBuf>,
         proxy: ProxyChoice,
     ) -> Result<Self, TransportError> {
-        Self::configured(files_root, proxy, &TlsTrust::default(), &[])
+        Self::configured(files_root, proxy, &TlsTrust::default(), &[], &[])
     }
 
-    /// As [`ReqwestTransport::with_proxy`], trusting as `trust` says and
-    /// presenting `certificates` to their hosts. A certificate whose files
-    /// are wrong does not stop the others: sending to its host fails with
-    /// why.
+    /// As [`ReqwestTransport::with_proxy`], trusting as `trust` says,
+    /// presenting `certificates` to their hosts and sending the hosts of
+    /// `dns` to their addresses. A certificate whose files are wrong does
+    /// not stop the others: sending to its host fails with why.
     ///
     /// # Errors
     ///
@@ -96,13 +98,15 @@ impl ReqwestTransport {
         proxy: ProxyChoice,
         trust: &TlsTrust,
         certificates: &[ClientCertificate],
+        dns: &[DnsOverride],
     ) -> Result<Self, TransportError> {
         // reqwest is built without a default crypto provider so that ring is
         // used everywhere (it needs no cmake on Windows). Installing fails only
         // when a provider is already installed, which is fine.
         let _ = rustls::crypto::ring::default_provider().install_default();
         let files_root = files_root.into();
-        let settings = tls::ClientSettings::new(proxy, trust)?;
+        let mut settings = tls::ClientSettings::new(proxy, trust)?;
+        settings.resolver = probe::TimedResolver::new(dns);
         let client = build_client(reqwest::Client::builder(), &settings, None, false)?;
         let certified = (certificates.iter())
             .filter(|c| c.enabled)
@@ -444,7 +448,7 @@ fn build_client(
         .no_deflate()
         .tls_backend_preconfigured(settings.rustls_config(identity, http1_only)?)
         .tls_info(true)
-        .dns_resolver(probe::TimedResolver)
+        .dns_resolver(settings.resolver.clone())
         .connector_layer(probe::ProbeLayer);
     let builder = match &settings.proxy {
         // reqwest reads the HTTP_PROXY family of variables by default.
@@ -494,15 +498,18 @@ fn connection_events(
     let address = response.remote_addr().map(|a| a.to_string());
     let connection = probe::Connection::of(notes);
     let mut events = Vec::new();
-    for (host, addresses, start, end) in &connection.dns {
-        let mut ips: Vec<String> = addresses.iter().map(|a| a.ip().to_string()).collect();
+    for lookup in &connection.dns {
+        let mut ips: Vec<String> = (lookup.addresses.iter())
+            .map(|a| a.ip().to_string())
+            .collect();
         ips.dedup();
         events.push((
-            *end,
+            lookup.end,
             TimelineKind::Dns {
-                host: host.clone(),
+                host: lookup.host.clone(),
                 addresses: ips,
-                duration_us: span(*start, *end),
+                duration_us: span(lookup.start, lookup.end),
+                overridden: lookup.overridden,
             },
         ));
     }

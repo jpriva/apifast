@@ -354,6 +354,12 @@ format: 1
 id: col_7Hq2mXv9Rk
 vault:
   challenge: "enc:v1:Zm9vYmFyYmF6cXV4Zm9vYmFyYmF6cXV4Zm9vYmFyYmF6cXV4"
+dns:
+  - host: api.staging.example.com
+    address: 10.0.4.12
+  - host: "*.internal"
+    address: 127.0.0.1
+    enabled: false
 ```
 
 | Campo | Descripción |
@@ -361,6 +367,7 @@ vault:
 | `format` | Versión del formato de `.apifast/` |
 | `id` | Identificador estable de la colección. No cambia al mover la carpeta. Lo usa la bóveda |
 | `vault.challenge` | Texto cifrado con la clave de la colección; permite detectar una clave incorrecta |
+| `dns` | Sobrescrituras de DNS de la colección ([docs/07](07-motor-de-red.md#dns)): `host` (con `*` como comodín), `address` (una IP) y `enabled` (por defecto `true`; solo se escribe `false`). Sin entradas, la clave no aparece |
 
 `.apifast/secrets/produccion.yml`:
 
@@ -373,7 +380,7 @@ secrets:
 
 Reglas:
 
-- La carpeta se crea la primera vez que hace falta (al asignar el identificador). Una colección de Bruno sin `.apifast/` se abre con normalidad.
+- La carpeta se crea la primera vez que hace falta (al asignar el identificador o al guardar la primera sobrescritura de DNS, que no necesita identificador). Una colección de Bruno sin `.apifast/` se abre con normalidad.
 - Al crearla, apifast añade `.apifast` a `extensions.bruno.ignore` en `opencollection.yml`. Bruno no ignora las carpetas ocultas por sí solo y, sin esa entrada, la mostraría como una carpeta de requests.
 - Al renombrar o borrar un entorno o una variable secreta, apifast actualiza el archivo correspondiente de `.apifast/secrets/`.
 - Una entrada huérfana (secreto cifrado cuya variable ya no existe, por ejemplo tras editar con Bruno) se señala en el editor de entornos y se puede limpiar.

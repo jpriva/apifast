@@ -17,6 +17,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Context, Poll};
 use std::time::Instant;
 
+use apifast_domain::{DnsOverride, overridden_addresses};
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use rustls::client::{
     ClientSessionMemoryCache, ClientSessionStore, Tls12ClientSessionValue, Tls13ClientSessionValue,
@@ -36,6 +37,7 @@ pub(crate) enum Note {
         addresses: Vec<SocketAddr>,
         start: Instant,
         end: Instant,
+        overridden: bool,
     },
     /// The connector started a new connection.
     ConnectStart(Instant),
@@ -71,11 +73,22 @@ fn note(note: Note) {
     let _ = PROBE.try_with(|probe| probe.lock().push(note));
 }
 
+/// A name resolved for a connection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Lookup {
+    pub host: String,
+    pub addresses: Vec<SocketAddr>,
+    pub start: Instant,
+    pub end: Instant,
+    /// The addresses came from the collection's DNS overrides.
+    pub overridden: bool,
+}
+
 /// What the notes of a send say about its connection.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct Connection {
-    /// The lookups, in order: name, addresses, start and end.
-    pub dns: Vec<(String, Vec<SocketAddr>, Instant, Instant)>,
+    /// The lookups, in order.
+    pub dns: Vec<Lookup>,
     /// When the new connection's TCP part ended and how long it took
     /// (without DNS), if a connection was opened.
     pub connected: Option<(Instant, Instant)>,
@@ -98,10 +111,15 @@ impl Connection {
                     addresses,
                     start,
                     end,
+                    overridden,
                 } => {
-                    connection
-                        .dns
-                        .push((host.clone(), addresses.clone(), *start, *end));
+                    connection.dns.push(Lookup {
+                        host: host.clone(),
+                        addresses: addresses.clone(),
+                        start: *start,
+                        end: *end,
+                        overridden: *overridden,
+                    });
                     dns_end = Some(*end);
                 }
                 Note::ConnectStart(at) => started = Some(*at),
@@ -120,24 +138,43 @@ impl Connection {
     }
 }
 
-/// Resolves names with the system, as reqwest does by default, and notes
-/// each lookup.
-#[derive(Debug, Default, Clone, Copy)]
-pub(crate) struct TimedResolver;
+/// Resolves names with the collection's DNS overrides, or else with the
+/// system as reqwest does by default, and notes each lookup.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct TimedResolver {
+    overrides: Arc<[DnsOverride]>,
+}
+
+impl TimedResolver {
+    /// A resolver that sends the hosts of `overrides` to their addresses.
+    pub(crate) fn new(overrides: &[DnsOverride]) -> Self {
+        Self {
+            overrides: overrides.iter().filter(|o| o.enabled).cloned().collect(),
+        }
+    }
+}
 
 impl Resolve for TimedResolver {
     fn resolve(&self, name: Name) -> Resolving {
         let host = name.as_str().to_owned();
+        let overridden = overridden_addresses(&self.overrides, &host);
         Box::pin(async move {
             let start = Instant::now();
-            // The port is set later by the connector.
-            let found = tokio::net::lookup_host((host.as_str(), 0)).await?;
-            let addresses: Vec<SocketAddr> = found.collect();
+            let addresses: Vec<SocketAddr> = match &overridden {
+                Some(ips) if ips.is_empty() => {
+                    let why = format!("the DNS override of `{host}` has no valid IP address");
+                    return Err(why.into());
+                }
+                // The port is set later by the connector.
+                Some(ips) => ips.iter().map(|ip| SocketAddr::new(*ip, 0)).collect(),
+                None => tokio::net::lookup_host((host.as_str(), 0)).await?.collect(),
+            };
             note(Note::Dns {
                 host,
                 addresses: addresses.clone(),
                 start,
                 end: Instant::now(),
+                overridden: overridden.is_some(),
             });
             let addrs: Addrs = Box::new(addresses.into_iter());
             Ok(addrs)
@@ -264,6 +301,7 @@ mod tests {
                 addresses: vec![addr],
                 start: t0,
                 end: t1,
+                overridden: false,
             },
             Note::TlsStart(t2),
             Note::ConnectEnd(t3),

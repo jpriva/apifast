@@ -184,9 +184,14 @@ fn wire(root: &std::path::Path, tls: &TlsArgs) -> Result<Wired> {
     }
     // One jar for the whole command, in memory, as in Bruno's CLI: what a
     // request sets goes with the next ones of the run.
-    let transport =
-        ReqwestTransport::configured(root, proxy, &tls.trust(), &collection.client_certificates)?
-            .with_cookies(Arc::new(apifast_app::Cookies::new()));
+    let transport = ReqwestTransport::configured(
+        root,
+        proxy,
+        &tls.trust(),
+        &collection.client_certificates,
+        &collection.dns_overrides,
+    )?
+    .with_cookies(Arc::new(apifast_app::Cookies::new()));
     // Secrets need the collection's id: without one, none was ever stored.
     let secrets: Box<dyn SecretStore> = match &collection.id {
         Some(id) => {

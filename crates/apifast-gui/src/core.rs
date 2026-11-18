@@ -378,8 +378,9 @@ pub enum Command {
     GetToken(TabKey),
     /// Forgets the OAuth 2.0 token stored for the request of the tab.
     ForgetToken(TabKey),
-    /// Saves the proxy and the client certificates of the collection at
-    /// `root` into its file, and sends with them from then on.
+    /// Saves the proxy, the client certificates and the DNS overrides of
+    /// the collection at `root` into its files, and sends with them from
+    /// then on.
     SaveCollectionSettings {
         /// The collection.
         root: PathBuf,
@@ -387,6 +388,8 @@ pub enum Command {
         proxy: apifast_domain::CollectionProxy,
         /// Its client certificates.
         client_certificates: Vec<apifast_domain::ClientCertificate>,
+        /// Its DNS overrides.
+        dns_overrides: Vec<apifast_domain::DnsOverride>,
     },
     /// Stops the run that is going.
     StopRun,
@@ -1048,7 +1051,11 @@ impl State {
                 root,
                 proxy,
                 client_certificates,
-            } => self.save_collection_settings(&root, proxy, client_certificates),
+                dns_overrides,
+            } => {
+                let settings = (proxy, client_certificates, dns_overrides);
+                self.save_collection_settings(&root, settings);
+            }
             _ => {}
         }
     }

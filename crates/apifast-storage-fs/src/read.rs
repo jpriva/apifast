@@ -394,6 +394,8 @@ pub(crate) fn collection(doc: &Value) -> Collection {
         defaults: request_defaults(get(doc, "request"), collection_auth),
         proxy: proxy(get_in(doc, &["config", "proxy"])),
         client_certificates: client_certificates(get_in(doc, &["config", "clientCertificates"])),
+        // From `.apifast/`, read apart.
+        dns_overrides: Vec::new(),
     }
 }
 
@@ -495,6 +497,19 @@ pub(crate) fn ignore_patterns(doc: &Value) -> Vec<String> {
     items(get_in(doc, &["extensions", "bruno", "ignore"]))
         .iter()
         .filter_map(|p| text(Some(p)))
+        .collect()
+}
+
+/// The `dns` list of `.apifast/collection.yml`: hosts sent to fixed
+/// addresses. An entry is enabled unless it says `enabled: false`.
+pub(crate) fn dns_overrides(doc: &Value) -> Vec<apifast_domain::DnsOverride> {
+    items(get(doc, "dns"))
+        .iter()
+        .map(|item| apifast_domain::DnsOverride {
+            host: text_or_empty(get(item, "host")),
+            address: text_or_empty(get(item, "address")),
+            enabled: boolean(get(item, "enabled")).unwrap_or(true),
+        })
         .collect()
 }
 

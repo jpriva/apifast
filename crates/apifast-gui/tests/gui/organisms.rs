@@ -224,3 +224,45 @@ fn the_response_view_shows_each_state() {
         }
     }
 }
+
+#[test]
+fn collection_settings_mark_an_override_that_is_not_an_ip_and_save_them() {
+    use apifast_domain::DnsOverride;
+    use apifast_gui::organisms::{CollectionSettings, CollectionSettingsWindow};
+    struct State {
+        window: CollectionSettingsWindow,
+        saved: Option<(std::path::PathBuf, CollectionSettings)>,
+    }
+    let mut window = CollectionSettingsWindow::default();
+    let settings = CollectionSettings {
+        dns_overrides: vec![DnsOverride {
+            host: "api.test".into(),
+            address: "localhost".into(),
+            enabled: true,
+        }],
+        ..CollectionSettings::default()
+    };
+    window.open_for("/shop".into(), "Shop".into(), settings.clone());
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(800.0, 700.0))
+        .build_ui_state(
+            |ui, state: &mut State| {
+                let ctx = ui.ctx().clone();
+                if let Some(saved) = state.window.show(&ctx, &EN) {
+                    state.saved = Some(saved);
+                }
+            },
+            State {
+                window,
+                saved: None,
+            },
+        );
+    harness.run();
+    assert!(harness.query_by_label(EN.dns_overrides).is_some());
+    assert!(harness.query_by_label(EN.dns_not_ip).is_some());
+    harness.get_by_label(EN.save).click();
+    harness.run();
+    let (root, saved) = harness.state().saved.clone().unwrap();
+    assert_eq!(root, std::path::Path::new("/shop"));
+    assert_eq!(saved.dns_overrides, settings.dns_overrides);
+}

@@ -416,6 +416,8 @@ pub enum TimelineKind {
         addresses: Vec<String>,
         /// How long it took, in microseconds.
         duration_us: u64,
+        /// Whether the addresses came from the collection's DNS overrides.
+        overridden: bool,
     },
     /// A new connection was opened (to the proxy, when there is one).
     Connected {

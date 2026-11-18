@@ -175,7 +175,16 @@ Basic, Bearer y API key se resuelven al renderizar: son headers o parámetros. L
 
 ## DNS
 
-Sobrescrituras por nombre de host (equivalente a `/etc/hosts` por colección) y registro del resultado en el timeline.
+Sobrescrituras por nombre de host, como `/etc/hosts` pero solo para las requests de la colección. OpenCollection no tiene dónde guardarlas, así que van en `.apifast/collection.yml` ([docs/04](04-formato-de-archivos.md#carpeta-apifast)), que se versiona: el equipo las comparte (el host de staging, un servicio interno). Bruno no las ve.
+
+- Cada entrada tiene un host, una IP y si está activa. El host no distingue mayúsculas y admite `*` como comodín (`*.example.com` vale para `a.b.example.com`, no para `example.com`), como los certificados de cliente.
+- Varias entradas para el mismo host dan varias direcciones, en orden; se prueban como las del DNS.
+- Se aplican en el resolutor del transporte (`TimedResolver`): sin consultar el DNS, y solo cambia la dirección. La request conserva su host en `Host`, en SNI y en la comprobación del certificado, así que funciona con HTTPS.
+- El timeline lo dice: `DNS api.test → 10.0.0.1 (DNS override)`.
+- Un host con entradas activas y ninguna IP válida es un error de DNS que lo explica (`the DNS override of `api.test` has no valid IP address`), no una búsqueda normal. La interfaz marca la dirección que no es IP mientras se escribe.
+- Las usan la interfaz y la CLI. Con un proxy HTTP, el que resuelve el destino es el proxy: la sobrescritura solo afecta al nombre del proxy.
+- Pendiente: `{{variables}}` en sus campos.
+- Probado en el dominio (comodines, mayúsculas, IPv6), en el guardado (crear `.apifast/` y conservar el id), contra un servidor local (host conservado, evento marcado, error claro) y en la interfaz (guardar y enviar a un host que no existe).
 
 ## Cookies
 

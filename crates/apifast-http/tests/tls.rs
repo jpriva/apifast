@@ -145,7 +145,7 @@ async fn get(
     trust: &TlsTrust,
     certificates: &[ClientCertificate],
 ) -> Result<Vec<u8>, String> {
-    let transport = ReqwestTransport::configured(root, ProxyChoice::Off, trust, certificates)
+    let transport = ReqwestTransport::configured(root, ProxyChoice::Off, trust, certificates, &[])
         .map_err(|e| e.to_string())?;
     let request = apifast_app::render_request(
         &apifast_domain::resolve(apifast_domain::Chain::new(

@@ -18,6 +18,7 @@ mod body;
 mod certificates;
 mod collection;
 mod cookie;
+mod dns;
 mod environment;
 mod json;
 mod origin;
@@ -44,6 +45,7 @@ pub use cookie::{
     Cookie, CookieJar, CookieTarget, SameSite, format_expiry, merge_cookie_header, parse_expiry,
     parse_set_cookie,
 };
+pub use dns::{DnsOverride, overridden_addresses};
 pub use environment::{Environment, EnvironmentError, environment_chain};
 pub use json::{Json, JsonError, MAX_DEPTH as MAX_JSON_DEPTH, PathError};
 pub use origin::Origin;

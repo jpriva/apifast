@@ -1,9 +1,12 @@
-//! A collection's settings: its proxy and its client certificates. Saved
-//! into `opencollection.yml`, as Bruno keeps them.
+//! A collection's settings: its proxy and its client certificates, saved
+//! into `opencollection.yml` as Bruno keeps them, and its DNS overrides,
+//! saved into `.apifast/collection.yml`.
 
 use std::path::PathBuf;
 
-use apifast_domain::{ClientCertificate, ClientCertificateKind, CollectionProxy, ProxyMode};
+use apifast_domain::{
+    ClientCertificate, ClientCertificateKind, CollectionProxy, DnsOverride, ProxyMode,
+};
 use eframe::egui::{self, RichText};
 
 use crate::organisms::proxy_fields;
@@ -17,6 +20,8 @@ pub struct CollectionSettings {
     pub proxy: CollectionProxy,
     /// Its client certificates.
     pub client_certificates: Vec<ClientCertificate>,
+    /// Its DNS overrides.
+    pub dns_overrides: Vec<DnsOverride>,
 }
 
 /// The window and the settings being edited.
@@ -90,6 +95,8 @@ impl CollectionSettingsWindow {
                 }
                 ui.add_space(theme::space::M);
                 certificates(ui, &mut settings.client_certificates, strings);
+                ui.add_space(theme::space::M);
+                dns_overrides(ui, &mut settings.dns_overrides, strings);
                 ui.add_space(theme::space::M);
                 if ui.button(RichText::new(strings.save).strong()).clicked() {
                     saved = Some((root.clone(), settings.clone()));
@@ -166,4 +173,51 @@ fn certificates(ui: &mut egui::Ui, list: &mut Vec<ClientCertificate>, strings: &
             .color(muted)
             .small(),
     );
+}
+
+/// The DNS overrides: a row each (on, host, address), and a button to add
+/// one. An address that is not an IP is marked.
+fn dns_overrides(ui: &mut egui::Ui, list: &mut Vec<DnsOverride>, strings: &Strings) {
+    ui.label(RichText::new(strings.dns_overrides).strong());
+    let danger = theme::palette(ui).danger;
+    let mut remove = None;
+    for (i, entry) in list.iter_mut().enumerate() {
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut entry.enabled, "")
+                .accessible_name(strings.enabled);
+            ui.add(
+                egui::TextEdit::singleline(&mut entry.host)
+                    .hint_text("api.example.com")
+                    .desired_width(180.0),
+            )
+            .accessible_name(strings.dns_host);
+            ui.add(
+                egui::TextEdit::singleline(&mut entry.address)
+                    .hint_text("127.0.0.1")
+                    .desired_width(140.0),
+            )
+            .accessible_name(strings.dns_address);
+            if !entry.address.trim().is_empty() && entry.ip().is_none() {
+                ui.label(RichText::new(strings.dns_not_ip).color(danger).small());
+            }
+            if ui
+                .add(crate::atoms::CloseButton::new(strings.remove_row))
+                .clicked()
+            {
+                remove = Some(i);
+            }
+        });
+    }
+    if let Some(i) = remove {
+        list.remove(i);
+    }
+    if ui.button(strings.dns_add).clicked() {
+        list.push(DnsOverride {
+            host: String::new(),
+            address: String::new(),
+            enabled: true,
+        });
+    }
+    let muted = theme::palette(ui).text_muted;
+    ui.label(RichText::new(strings.dns_hint).color(muted).small());
 }

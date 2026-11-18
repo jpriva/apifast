@@ -1201,3 +1201,29 @@ fn merge_env_variable(item: &mut Value, old: &Variable, new: &Variable) {
 pub(crate) fn apifast_collection(id: &str) -> Value {
     mapping([("format", Some(number(1u32))), ("id", Some(string(id)))])
 }
+
+/// The `dns` list of `.apifast/collection.yml`, or `None` for no entries.
+pub(crate) fn dns_value(overrides: &[apifast_domain::DnsOverride]) -> Option<Value> {
+    (!overrides.is_empty()).then(|| {
+        Value::Sequence(
+            overrides
+                .iter()
+                .map(|o| {
+                    mapping([
+                        ("host", Some(string(o.host.as_str()))),
+                        ("address", Some(string(o.address.as_str()))),
+                        ("enabled", (!o.enabled).then_some(Value::Bool(false))),
+                    ])
+                })
+                .collect(),
+        )
+    })
+}
+
+/// A new `.apifast/collection.yml` with `overrides` and no id yet.
+pub(crate) fn apifast_with_dns(overrides: &[apifast_domain::DnsOverride]) -> Value {
+    mapping([
+        ("format", Some(number(1u32))),
+        ("dns", dns_value(overrides)),
+    ])
+}
