@@ -1,6 +1,7 @@
 //! Organisms: components with their own logic that return events instead of
 //! changing the model. Screens turn the events into core commands.
 
+mod body_parts;
 mod body_viewer;
 mod collection_dialogs;
 mod collection_settings;
@@ -23,6 +24,7 @@ mod tree;
 mod url_bar;
 mod vault_window;
 
+pub use body_parts::{BodyFiles, written_path};
 pub use body_viewer::BodyViewer;
 pub use collection_dialogs::{CollectionDialogs, CollectionRequest, folder_name};
 pub use collection_settings::{CollectionSettings, CollectionSettingsWindow};

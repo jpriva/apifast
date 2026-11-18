@@ -201,8 +201,10 @@ Un tarro por colección, compartido por todas sus requests, como el de Bruno (to
 |---|---|
 | JSON, texto, XML | En memoria, tras el render |
 | Form URL-encoded | Pares codificados |
-| Multipart | Partes en streaming; los archivos se leen del disco al enviar |
-| Archivo | Streaming desde el disco, sin cargarlo en memoria |
+| Multipart | Partes en streaming; los archivos se leen del disco al enviar, con su nombre como `filename` y el `Content-Type` de la parte o el que deduce reqwest de la extensión |
+| Archivo | Streaming desde el disco, sin cargarlo en memoria, con `Content-Length`. Sin `contentType`, `application/octet-stream`, como Bruno |
+
+Las rutas relativas se resuelven contra la carpeta de la colección y las absolutas se usan tal cual, como en Bruno. Un archivo que no se puede leer es un error antes de enviar, con su ruta. Probado con un archivo de 8 MB que llega byte a byte y con una parte fuera de la colección.
 | GraphQL | JSON con `query` y `variables` |
 
 ## Respuesta

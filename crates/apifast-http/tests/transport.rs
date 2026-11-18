@@ -417,6 +417,55 @@ async fn streams_file_bodies_and_multipart_files_from_disk() {
 }
 
 #[tokio::test]
+async fn a_large_file_body_arrives_whole_and_a_part_may_live_outside_the_collection() {
+    let dir = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    let big: Vec<u8> = (0..8 * 1024 * 1024_u32)
+        .map(|i| u8::try_from(i % 251).unwrap())
+        .collect();
+    std::fs::write(dir.path().join("big.bin"), &big).unwrap();
+    let elsewhere = outside.path().join("note.txt");
+    std::fs::write(&elsewhere, b"from elsewhere").unwrap();
+    let transport = ReqwestTransport::new(dir.path()).unwrap();
+    let server = Server::start(|_| Reply::ok("")).await;
+
+    let mut file = HttpRequest::new("f", Method::Put, server.url("/file"));
+    file.body = Body::File {
+        path: "big.bin".into(),
+        content_type: None,
+    };
+    send_with(&transport, &file, &CancelToken::new())
+        .await
+        .0
+        .unwrap();
+    let mut multipart = HttpRequest::new("m", Method::Post, server.url("/multi"));
+    multipart.body = Body::Multipart(vec![MultipartPart {
+        name: "doc".into(),
+        value: MultipartValue::Files(vec![elsewhere.display().to_string()]),
+        content_type: None,
+        enabled: true,
+    }]);
+    send_with(&transport, &multipart, &CancelToken::new())
+        .await
+        .0
+        .unwrap();
+
+    let received = server.received();
+    assert_eq!(received[0].body.len(), big.len());
+    assert!(received[0].body == big, "the bytes arrive as they are");
+    // No type given: Bruno's default.
+    assert_eq!(
+        received[0].headers["content-type"],
+        "application/octet-stream"
+    );
+    let body = String::from_utf8_lossy(&received[1].body);
+    assert!(
+        body.contains("filename=\"note.txt\"") && body.contains("from elsewhere"),
+        "{body}"
+    );
+}
+
+#[tokio::test]
 async fn a_missing_upload_file_is_an_invalid_request() {
     let server = Server::start(|_| Reply::ok("")).await;
     let mut request = HttpRequest::new("f", Method::Put, server.url("/"));

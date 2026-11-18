@@ -3,7 +3,8 @@
 
 use apifast_domain::{
     ApiKeyAuth, ApiKeyPlacement, AuthScheme, BasicAuth, BearerAuth, Body, DigestAuth, FormField,
-    Header, HttpRequest, NtlmAuth, Param, ParamKind, Resolved, Setting,
+    Header, HttpRequest, MultipartPart, MultipartValue, NtlmAuth, Param, ParamKind, Resolved,
+    Setting,
 };
 use eframe::egui::{self, RichText};
 
@@ -61,6 +62,9 @@ pub struct RequestPanel {
     /// What the user asked of the OAuth 2.0 token, once, since the last
     /// time it was taken.
     pub token_action: Option<TokenAction>,
+    /// The collection's folder and the file dialog of multipart and file
+    /// bodies.
+    pub files: super::body_parts::BodyFiles,
 }
 
 /// What the user can ask of a request's OAuth 2.0 token.
@@ -112,8 +116,16 @@ impl RequestPanel {
                     let shortcuts = (self.format_shortcuts.clone())
                         .unwrap_or_else(|| Action::FormatBody.defaults());
                     let now = std::mem::take(&mut self.format_now);
-                    body(ui, &mut request.body, (&shortcuts, now), hints, strings)
-                        .then_some(RequestChange::Other)
+                    let files = &mut self.files;
+                    body(
+                        ui,
+                        &mut request.body,
+                        (&shortcuts, now),
+                        files,
+                        hints,
+                        strings,
+                    )
+                    .then_some(RequestChange::Other)
                 }
                 RequestTab::Auth => {
                     let changed = auth(ui, &mut request.auth, context, hints, strings);
@@ -315,9 +327,16 @@ enum BodyKind {
 }
 
 impl BodyKind {
-    /// Kinds that can be picked; multipart and file bodies are shown but
-    /// cannot be made here yet.
-    const EDITABLE: [Self; 5] = [Self::None, Self::Json, Self::Text, Self::Xml, Self::Form];
+    /// Kinds that can be picked. SPARQL is shown when a file has it.
+    const EDITABLE: [Self; 7] = [
+        Self::None,
+        Self::Json,
+        Self::Text,
+        Self::Xml,
+        Self::Form,
+        Self::Multipart,
+        Self::File,
+    ];
 
     fn of(body: &Body) -> Self {
         match body {
@@ -346,19 +365,50 @@ impl BodyKind {
         }
     }
 
-    /// `body` as this kind, keeping its text when both are text.
+    /// `body` as this kind, keeping its text when both are text, and its
+    /// fields between a form and a multipart body (text parts only).
     fn convert(self, body: &mut Body) {
-        let text = match std::mem::take(body) {
+        let old = std::mem::take(body);
+        let fields: Vec<FormField> = match &old {
+            Body::FormUrlEncoded(fields) => fields.clone(),
+            Body::Multipart(parts) => (parts.iter())
+                .filter_map(|p| match &p.value {
+                    MultipartValue::Text(value) => Some(FormField {
+                        name: p.name.clone(),
+                        value: value.clone(),
+                        enabled: p.enabled,
+                    }),
+                    MultipartValue::Files(_) => None,
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        let text = match old {
             Body::Json(t) | Body::Text(t) | Body::Xml(t) | Body::Sparql(t) => t,
             _ => String::new(),
         };
         *body = match self {
-            Self::None | Self::Multipart | Self::File => Body::None,
+            Self::None => Body::None,
             Self::Json => Body::Json(text),
             Self::Text => Body::Text(text),
             Self::Xml => Body::Xml(text),
             Self::Sparql => Body::Sparql(text),
-            Self::Form => Body::FormUrlEncoded(Vec::new()),
+            Self::Form => Body::FormUrlEncoded(fields),
+            Self::Multipart => Body::Multipart(
+                fields
+                    .into_iter()
+                    .map(|f| MultipartPart {
+                        name: f.name,
+                        value: MultipartValue::Text(f.value),
+                        content_type: None,
+                        enabled: f.enabled,
+                    })
+                    .collect(),
+            ),
+            Self::File => Body::File {
+                path: String::new(),
+                content_type: None,
+            },
         };
     }
 }
@@ -367,6 +417,7 @@ fn body(
     ui: &mut egui::Ui,
     body: &mut Body,
     (shortcuts, now): (&[egui::KeyboardShortcut], bool),
+    files: &mut super::body_parts::BodyFiles,
     hints: &VariableHints,
     strings: &Strings,
 ) -> bool {
@@ -440,6 +491,12 @@ fn body(
                 strings,
             )
             .show(ui);
+        }
+        Body::Multipart(parts) => {
+            changed |= super::body_parts::multipart(ui, parts, files, hints, strings);
+        }
+        Body::File { path, content_type } => {
+            changed |= super::body_parts::file(ui, (path, content_type), files, strings);
         }
         _ => {
             ui.label(muted(ui, strings.body_not_editable));

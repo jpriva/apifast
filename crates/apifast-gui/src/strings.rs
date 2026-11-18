@@ -262,6 +262,28 @@ pub struct Strings {
     pub collection_key: &'static str,
     /// Action: open the collection key window.
     pub action_collection_key: &'static str,
+    /// Button: add a part to a multipart body.
+    pub add_part: &'static str,
+    /// Selector: whether a part is text or files.
+    pub part_kind: &'static str,
+    /// A part with text.
+    pub part_text: &'static str,
+    /// A part with files.
+    pub part_files: &'static str,
+    /// Field: the Content-Type of a part or file.
+    pub part_content_type: &'static str,
+    /// Placeholder of a content type left to apifast.
+    pub part_content_type_hint: &'static str,
+    /// Button: pick files for a part.
+    pub choose_files: &'static str,
+    /// Button: take a file out of a part.
+    pub remove_file: &'static str,
+    /// A file part with no files yet.
+    pub no_files: &'static str,
+    /// Field: the file a file body sends.
+    pub body_file_path: &'static str,
+    /// Under the file of a file body.
+    pub body_file_hint: &'static str,
     /// Tab of the response, and heading of the cookie settings.
     pub cookies: &'static str,
     /// Title of the cookie editor.
@@ -925,6 +947,17 @@ pub const EN: Strings = Strings {
     forget: "Forget",
     collection_key: "Collection key",
     action_collection_key: "Collection key",
+    add_part: "Add part",
+    part_kind: "Part type",
+    part_text: "Text",
+    part_files: "Files",
+    part_content_type: "Content type",
+    part_content_type_hint: "auto",
+    choose_files: "Choose files…",
+    remove_file: "Remove file",
+    no_files: "No files yet.",
+    body_file_path: "File",
+    body_file_hint: "Read from disk as it is sent. A path inside the collection is kept relative to it; without a content type, application/octet-stream goes.",
     cookies: "Cookies",
     cookies_title: "Cookies",
     cookies_menu: "Cookies…",

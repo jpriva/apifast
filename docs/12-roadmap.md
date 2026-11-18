@@ -168,7 +168,6 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
 |---|---|
 | Buscar y reemplazar en el editor | No bloquea el uso diario |
 | Duplicar, renombrar con `F2`, filtro `Ctrl+F` y disposición lado a lado (`Ctrl+J`) | Funciones de la barra lateral y del diseño aún sin hacer; sus atajos se añaden con ellas |
-| Bodies multipart y de archivo editables | Se muestran y se envían tal cual |
 | Autocompletado de variables en el editor de varias líneas | Enter y las flechas chocan con la edición |
 | Entorno "de cuidado" que tiñe la barra | OpenCollection no tiene esa marca; falta decidir dónde guardarla |
 | Marcar variables como secretas | Llega con la bóveda (F3) |
@@ -313,7 +312,7 @@ Siguiente, fuera de esta sección: los entornos globales del workspace (`environ
 - [ ] Timeline completo con conector instrumentado (DNS, conexión, TLS, reutilización).
 - [ ] Descompresión manual, para registrar el tamaño comprimido y el descomprimido (en F1 la hace reqwest).
 - [x] `encodeUrl` como en Bruno. La tarea decía "respetar `encodeUrl: false`", pero al revisar Bruno resultó al revés: desactivado, Bruno (axios) solo normaliza la URL con WHATWG, como ya hacía apifast; activado (el valor por defecto), además aplica `encodeURIComponent` a cada segmento de la ruta y a cada nombre y valor de la query. Ahora apifast hace lo mismo al renderizar ([docs/07](07-motor-de-red.md#codificación-de-la-url-encodeurl)), y el enmascarado de secretos reconoce cualquier mezcla de bytes tal cual y `%XX`.
-- [ ] Multipart y cuerpos de archivo en streaming.
+- [x] Multipart y cuerpos de archivo en streaming. El envío en streaming ya estaba desde F1 (reqwest lee las partes y el archivo del disco por trozos); faltaba editarlos, que F2 había dejado fuera: la interfaz edita partes de texto y de archivos, y el archivo de un body, con el diálogo del sistema y rutas relativas a la colección ([docs/09](09-ui-ux.md#bodies-multipart-y-de-archivo)). Un body de archivo sin tipo va como `application/octet-stream`, como en Bruno.
 - [ ] Ejemplos de respuesta guardados.
 
 ### Criterio de salida

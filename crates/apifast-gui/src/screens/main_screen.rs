@@ -162,6 +162,7 @@ impl MainScreen {
         self.request.format_shortcuts = Some(self.keymap.shortcuts(Action::FormatBody));
         self.request.token_busy =
             snapshot.getting_token.is_some() && snapshot.getting_token == snapshot.active;
+        self.request.files.root = selected.map(|key| key.root.clone());
         self.response.pretty_limit = Some(self.settings.pretty_limit());
         let focus_url = std::mem::take(&mut self.focus_url);
         let notice = self.notice.as_deref();

@@ -506,7 +506,11 @@ impl Renderer<'_, '_> {
                 (RenderedBody::Multipart(out), None)
             }
             Body::File { path, content_type } => {
-                (RenderedBody::File(self.text(path)?), content_type.clone())
+                // Bruno's default for a file without its type.
+                let content_type = (content_type.clone())
+                    .filter(|t| !t.trim().is_empty())
+                    .unwrap_or_else(|| "application/octet-stream".into());
+                (RenderedBody::File(self.text(path)?), Some(content_type))
             }
             _ => {
                 return Err(AppError::Validation(

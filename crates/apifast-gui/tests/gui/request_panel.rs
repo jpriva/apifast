@@ -5,7 +5,8 @@
 #![allow(clippy::unwrap_used, reason = "test: a failure fails the test")]
 
 use apifast_domain::{
-    AuthScheme, BearerAuth, Body, Header, HttpRequest, Method, Origin, ParamKind, Resolved, Setting,
+    AuthScheme, BearerAuth, Body, Header, HttpRequest, Method, MultipartValue, Origin, ParamKind,
+    Resolved, Setting,
 };
 use apifast_gui::atoms::VariableHints;
 use apifast_gui::core::TabContext;
@@ -288,4 +289,110 @@ fn oauth2_shows_the_fields_of_its_grant() {
     };
     assert_eq!(oauth.flow, OAuth2Flow::Password);
     assert_eq!(oauth.scope, "read");
+}
+
+fn pick_body(harness: &mut Harness<'_, State>, label: &str) {
+    harness.get_by_label(EN.body_type).click();
+    harness.run();
+    harness.get_by_label(label).click();
+    harness.run();
+}
+
+#[test]
+fn a_form_becomes_multipart_with_its_fields_and_parts_can_hold_files() {
+    let mut form = request();
+    form.body = Body::FormUrlEncoded(vec![apifast_domain::FormField {
+        name: "user".into(),
+        value: "{{name}}".into(),
+        enabled: false,
+    }]);
+    let mut harness = harness(RequestTab::Body, form);
+    pick_body(&mut harness, EN.body_multipart);
+    let Body::Multipart(parts) = &harness.state().request.body else {
+        panic!("{:?}", harness.state().request.body);
+    };
+    assert_eq!(parts.len(), 1);
+    assert_eq!(parts[0].name, "user");
+    assert_eq!(parts[0].value, MultipartValue::Text("{{name}}".into()));
+    assert!(!parts[0].enabled);
+
+    harness.get_by_label(EN.add_part).click();
+    harness.run();
+    harness
+        .get_all_by_role_and_label(Role::TextInput, EN.name)
+        .nth(1)
+        .unwrap()
+        .focus();
+    harness.run();
+    type_slowly(&mut harness, "doc");
+    // The second part's kind selector, then Files.
+    harness
+        .get_all_by_label(EN.part_kind)
+        .nth(1)
+        .unwrap()
+        .click();
+    harness.run();
+    harness.get_by_label(EN.part_files).click();
+    harness.run();
+    assert!(harness.query_by_label(EN.no_files).is_some());
+    assert!(harness.query_by_label(EN.choose_files).is_some());
+    let Body::Multipart(parts) = &harness.state().request.body else {
+        unreachable!()
+    };
+    assert_eq!(parts[1].name, "doc");
+    assert_eq!(parts[1].value, MultipartValue::Files(Vec::new()));
+    assert!(parts[1].enabled && parts[1].content_type.is_none());
+
+    // And back to a form: the text parts stay, the files go.
+    pick_body(&mut harness, EN.body_form);
+    let Body::FormUrlEncoded(fields) = &harness.state().request.body else {
+        unreachable!()
+    };
+    assert_eq!(fields.len(), 1);
+}
+
+#[test]
+fn a_file_body_takes_its_path_and_content_type() {
+    let mut harness = harness(RequestTab::Body, request());
+    pick_body(&mut harness, EN.body_file);
+    assert_eq!(
+        harness.state().request.body,
+        Body::File {
+            path: String::new(),
+            content_type: None
+        }
+    );
+    harness
+        .get_by_role_and_label(Role::TextInput, EN.body_file_path)
+        .focus();
+    harness.run();
+    type_slowly(&mut harness, "a.bin");
+    harness
+        .get_by_role_and_label(Role::TextInput, EN.part_content_type)
+        .focus();
+    harness.run();
+    type_slowly(&mut harness, "image/png");
+    assert_eq!(
+        harness.state().request.body,
+        Body::File {
+            path: "a.bin".into(),
+            content_type: Some("image/png".into())
+        }
+    );
+}
+
+#[test]
+fn picked_files_are_kept_relative_inside_the_collection() {
+    use apifast_gui::organisms::written_path;
+    use std::path::Path;
+    let root = Path::new("/work/shop");
+    assert_eq!(
+        written_path(Path::new("/work/shop/files/a.png"), Some(root)),
+        "files/a.png"
+    );
+    assert_eq!(
+        written_path(Path::new("/tmp/b.png"), Some(root)),
+        "/tmp/b.png"
+    );
+    assert_eq!(written_path(Path::new("/tmp/b.png"), None), "/tmp/b.png");
 }

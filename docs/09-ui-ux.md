@@ -85,12 +85,20 @@ La cabecera de la barra lateral tiene:
 |---|---|
 | Params | Tabla de parámetros de query y de ruta, sincronizada con la URL |
 | Headers | Tabla clave/valor; los heredados aparecen atenuados con su origen |
-| Body | Selector de tipo y editor: código, tabla de formulario o selector de archivo |
+| Body | Selector de tipo y editor: código, tabla de formulario, partes multipart o archivo (ver abajo) |
 | Auth | Selector de tipo y sus campos; "heredada" muestra de quién. Con OAuth 2.0 (propia o heredada), el estado del token guardado ("valid for 52 min", "expired", ninguno) y los botones "Get new token" y "Forget token" |
 | Vars | Variables de la request y capturas |
 | Tests | Aserciones (expresión, operador, valor esperado) y capturas (expresión, variable, ámbito) |
 | Docs | Markdown con vista previa |
 | Ajustes | Timeout, redirecciones, TLS; cada uno con "heredar" |
+
+### Bodies multipart y de archivo
+
+- **Multipart:** una fila por parte con casilla, nombre, tipo ("Text" o "Files"), `Content-Type` (vacío: lo elige apifast) y botón para quitarla. Una parte de texto tiene su valor con las variables resaltadas; una de archivos, su lista (nombre, y la ruta al pasar el cursor) con "Choose files…", que abre el diálogo del sistema y admite varios. "Add part" añade una parte. Cambiar de formulario a multipart conserva los campos como partes de texto, y al revés se conservan las partes de texto.
+- **Archivo:** la ruta (editable a mano o con "Choose…") y su `Content-Type`.
+- Un archivo dentro de la colección se guarda con su ruta relativa y con `/`, así la colección sigue funcionando en otra máquina; uno de fuera, con la ruta absoluta. Como Bruno.
+- El diálogo se abre en otro hilo: la interfaz no se bloquea mientras está abierto.
+- Un body de archivo de Bruno con varias variantes muestra la seleccionada; al guardar, solo cambia esa y las demás se conservan.
 
 ### Tablas clave/valor
 
