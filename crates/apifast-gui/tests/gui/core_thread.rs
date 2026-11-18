@@ -1004,6 +1004,7 @@ fn the_history_limits_come_from_the_settings() {
         responses: Limits::default(),
         proxy: apifast_domain::ProxyChoice::System,
         trust: apifast_domain::TlsTrust::default(),
+        cookies: (true, true),
     });
     open(&core, dir.path());
     let snapshot = wait(&core, "the history", |s| !s.history.is_empty());

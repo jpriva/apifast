@@ -123,7 +123,7 @@ La edición con resaltado se limita a unos 200 KB: con más texto, egui tarda de
 |---|---|
 | Body | Vista formateada, cruda o previsualización (imagen, HTML). Filtro JSONPath o XPath |
 | Headers | Tabla de headers recibidos |
-| Cookies | Cookies fijadas por la respuesta |
+| Cookies | Cookies que fija la respuesta (`Cookies (2)`), leídas como las lee el tarro: nombre, valor, dominio, ruta, caducidad y atributos. Las respuestas abiertas desde el historial no tienen: los `Set-Cookie` se guardan ocultos |
 | Timeline | Eventos del envío con sus tiempos |
 | Tests | Aserciones (primero las que fallan, con su motivo) y capturas con su valor; la pestaña dice `Tests 2/3` en verde o en rojo |
 
@@ -151,6 +151,17 @@ La edición con resaltado se limita a unos 200 KB: con más texto, egui tarda de
 "Collection settings…" en el menú de la raíz de una colección cargada abre sus ajustes: el proxy (el de la aplicación, ninguno o el suyo: protocolo, host, puerto, credenciales y hosts directos) y los certificados de cliente (una fila por certificado: activo, host, certificado y clave PEM; "Add certificate" añade uno). Se guarda en `opencollection.yml` al pulsar "Save", y los envíos siguientes ya van por él. Un aviso recuerda que la contraseña queda en el archivo, como en Bruno.
 
 En los ajustes de la aplicación, la sección TLS tiene un archivo de CA adicional (con "Choose…") y "Do not check certificates", que muestra un aviso en rojo mientras está activa. La sección Proxy elige el del sistema, ninguno o uno manual, para las colecciones que heredan el suyo. Su contraseña se guarda aparte con "Save password", sellada; el campo muestra "saved, sealed" cuando hay una.
+
+## Cookies
+
+"Cookies…" en el menú de la raíz de una colección cargada, o la acción "Cookies" de la paleta, abre el tarro de la colección enfocada:
+
+- Las cookies por dominio, con nombre, valor (cortado; entero al pasar el cursor), ruta, caducidad en UTC ("Session" si no tiene, "Expired" en rojo si ya caducó) y atributos (`subdomains`, `Secure`, `HttpOnly`, `SameSite`).
+- "Edit" y "Delete" en cada cookie, "Delete domain" en cada dominio, "Add cookie" y "Delete all" (con confirmación).
+- El formulario edita nombre, valor, dominio, ruta, caducidad (`2030-01-31 12:00:00`, vacía para una de sesión), `SameSite` y las casillas "Only this host", "Secure" y "HttpOnly". Dice qué campo está mal y no guarda hasta que todo es válido. Cambiar el nombre, el dominio o la ruta sustituye a la cookie editada.
+- Cada cambio se guarda enseguida, sellado.
+
+Los ajustes de la aplicación tienen una sección Cookies con "Send cookies" y "Store cookies".
 
 ## Runner
 

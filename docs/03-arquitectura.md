@@ -122,7 +122,7 @@ Definidos como traits en `apifast-app`:
 | `HttpTransport` | Ejecutar una `ResolvedRequest` y emitir eventos | `apifast-http` |
 | `ResponseStore` | Escribir y leer cuerpos de respuesta por ventanas | `apifast-history` |
 | `HistoryStore` | Registrar y consultar ejecuciones | `apifast-history` |
-| `CookieStore` | Persistir el tarro de cookies | `apifast-history` |
+| `CookieStore` | Persistir el tarro de cookies de una colección, que comparten el transporte (`Cookies`) y el editor | `apifast-vault` (sellado con la clave maestra, como los tokens) |
 | `SessionStore` | Guardar las pestañas abiertas y sus borradores sin guardar | `apifast-storage-fs` |
 | `WorkspaceRepository` | Leer y editar `workspace.yml`: nombre y colecciones del workspace | `apifast-storage-fs` |
 | `FsWatcher` | Notificar cambios externos en la colección, agrupados en lotes de rutas relativas. No implementa un puerto: el driver lo arranca al abrir la colección y reconcilia cada lote (`ApplyExternalChange`) | `apifast-watch` |

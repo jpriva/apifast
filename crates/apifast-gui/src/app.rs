@@ -139,6 +139,7 @@ impl App {
             responses: settings.response_limits(),
             proxy: settings.proxy_choice(),
             trust: settings.trust(),
+            cookies: (settings.send_cookies, settings.store_cookies),
         });
     }
 

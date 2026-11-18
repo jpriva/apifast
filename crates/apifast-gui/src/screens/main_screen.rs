@@ -15,10 +15,10 @@ use crate::core::{Command, ResponseState, Snapshot, Tab, TabContext, TabKey, Vau
 use crate::layout;
 use crate::molecules::EnvironmentSelector;
 use crate::organisms::{
-    CollectionDialogs, CollectionRequest, CommandPalette, EnvironmentEditor, EnvironmentEvent,
-    HistoryView, PaletteItem, PaletteMode, RequestChange, RequestPanel, ResponseView, RunnerEvent,
-    RunnerWindow, SettingsWindow, ShortcutEditor, TabBar, TabEvent, TreeEvent, TreeView, UrlBar,
-    UrlBarEvent, VaultWindow, paste_key,
+    CollectionDialogs, CollectionRequest, CommandPalette, CookiesWindow, EnvironmentEditor,
+    EnvironmentEvent, HistoryView, PaletteItem, PaletteMode, RequestChange, RequestPanel,
+    ResponseView, RunnerEvent, RunnerWindow, SettingsWindow, ShortcutEditor, TabBar, TabEvent,
+    TreeEvent, TreeView, UrlBar, UrlBarEvent, VaultWindow, paste_key,
 };
 use crate::settings::Settings;
 use crate::strings::Strings;
@@ -81,6 +81,8 @@ pub struct MainScreen {
     applied: Option<(ThemeChoice, f32)>,
     /// The collection key window.
     pub vault_window: VaultWindow,
+    /// The cookie editor.
+    pub cookies_window: CookiesWindow,
     /// The collection runner.
     pub runner: RunnerWindow,
     /// A collection's settings.
@@ -321,6 +323,10 @@ impl MainScreen {
                 self.vault_window.open = true;
                 vec![focus]
             }
+            TreeEvent::Cookies => {
+                self.cookies_window.open = true;
+                vec![focus]
+            }
             TreeEvent::Close => vec![Command::CloseCollection(root)],
             TreeEvent::Remove => vec![Command::RemoveCollection(root)],
             TreeEvent::Settings => {
@@ -434,6 +440,10 @@ impl MainScreen {
         commands.extend(events.into_iter().map(environment_command));
         let vault = self.vault_window.show(&ctx, &snapshot.vault, strings);
         commands.extend(vault.into_iter().map(Command::Vault));
+        let collection = (snapshot.collection.as_ref()).map(|c| c.tree.collection.name.as_str());
+        let cookies =
+            (self.cookies_window).show(&ctx, collection, &snapshot.cookies, now_ms(), strings);
+        commands.extend(cookies.into_iter().map(Command::Cookies));
         if let Some((root, settings)) = self.collection_settings.show(&ctx, strings) {
             commands.push(Command::SaveCollectionSettings {
                 root,
@@ -546,6 +556,10 @@ impl MainScreen {
             }
             Action::CollectionKey => {
                 self.vault_window.open = true;
+                Vec::new()
+            }
+            Action::Cookies => {
+                self.cookies_window.open = true;
                 Vec::new()
             }
             Action::Settings => {

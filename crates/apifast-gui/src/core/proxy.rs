@@ -5,6 +5,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use apifast_app::Cookies;
 use apifast_domain::{Collection, ProxyChoice, Secret};
 use apifast_http::ReqwestTransport;
 
@@ -28,23 +29,26 @@ impl State {
         }
     }
 
-    /// A transport for the collection at `root`, through its proxy.
-    /// A wrong CA file does not keep collections from opening: the
-    /// transport goes without it, and the error shows.
+    /// A transport for the collection at `root`, through its proxy and
+    /// with its cookie jar. A wrong CA file does not keep collections from
+    /// opening: the transport goes without it, and the error shows.
     pub(super) fn transport_for(
         &mut self,
         root: &Path,
         collection: &Collection,
+        cookies: Arc<Cookies>,
     ) -> Result<ReqwestTransport, String> {
         let proxy = collection.proxy.choose(&self.application_proxy());
         let certificates = &collection.client_certificates;
-        match ReqwestTransport::configured(root, proxy.clone(), &self.trust, certificates) {
-            Ok(transport) => Ok(transport),
-            Err(e) => {
-                self.snapshot.error = Some(e.to_string());
-                ReqwestTransport::with_proxy(root, proxy).map_err(|e| e.to_string())
-            }
-        }
+        let transport =
+            match ReqwestTransport::configured(root, proxy.clone(), &self.trust, certificates) {
+                Ok(transport) => transport,
+                Err(e) => {
+                    self.snapshot.error = Some(e.to_string());
+                    ReqwestTransport::with_proxy(root, proxy).map_err(|e| e.to_string())?
+                }
+            };
+        Ok(transport.with_cookies(cookies))
     }
 
     /// New transports for the loaded collections, after the proxy changed.
@@ -52,10 +56,12 @@ impl State {
     pub(super) fn rebuild_transports(&mut self) {
         let roots: Vec<_> = self.open.keys().cloned().collect();
         for root in roots {
-            let Some(collection) = self.open.get(&root).map(|o| o.tree.collection.clone()) else {
+            let Some((collection, cookies)) =
+                (self.open.get(&root)).map(|o| (o.tree.collection.clone(), o.cookies.clone()))
+            else {
                 continue;
             };
-            match self.transport_for(&root, &collection) {
+            match self.transport_for(&root, &collection, cookies) {
                 Ok(transport) => {
                     if let Some(open) = self.open.get_mut(&root) {
                         open.transport = Arc::new(transport);

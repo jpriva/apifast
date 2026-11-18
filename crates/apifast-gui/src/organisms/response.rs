@@ -13,7 +13,7 @@ use crate::atoms::StatusBadge;
 use crate::body::BodyHandle;
 use crate::code::{self, Language};
 use crate::core::{Received, ResponseState};
-use crate::organisms::BodyViewer;
+use crate::organisms::{BodyViewer, response_cookies};
 use crate::strings::Strings;
 use crate::theme;
 
@@ -32,6 +32,8 @@ pub enum ResponseTab {
     Body,
     /// The headers.
     Headers,
+    /// The cookies the response set.
+    Cookies,
     /// What happened while sending, with times.
     Timeline,
     /// The assertions and captures that ran.
@@ -126,6 +128,11 @@ impl ResponseView {
             ui.selectable_value(&mut self.tab, ResponseTab::Body, strings.body);
             let headers = format!("{} ({})", strings.headers, received.head.headers.len());
             ui.selectable_value(&mut self.tab, ResponseTab::Headers, headers);
+            let cookies = match response_cookies::count(&received.head.headers) {
+                0 => strings.cookies.to_owned(),
+                n => format!("{} ({n})", strings.cookies),
+            };
+            ui.selectable_value(&mut self.tab, ResponseTab::Cookies, cookies);
             ui.selectable_value(&mut self.tab, ResponseTab::Timeline, strings.timeline);
             ui.selectable_value(
                 &mut self.tab,
@@ -137,6 +144,12 @@ impl ResponseView {
         match self.tab {
             ResponseTab::Body => self.body(ui, received, strings),
             ResponseTab::Headers => headers(ui, &received.head.headers),
+            ResponseTab::Cookies => {
+                let head = &received.head;
+                let now = apifast_app::Clock::unix_millis(&crate::system::SystemClock);
+                let cookies = response_cookies::set_by(&head.headers, &head.url, now);
+                response_cookies::show(ui, &cookies, strings);
+            }
             ResponseTab::Timeline => timeline(ui, received, strings),
             ResponseTab::Tests => tests(ui, received, strings),
         }

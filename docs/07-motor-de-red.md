@@ -47,7 +47,7 @@ Todos son heredables (colección → carpeta → request) y el timeline indica d
 | `encodeUrl` | Sí |
 | Validar certificados | Sí |
 | Versión de HTTP | Automática |
-| Enviar y guardar cookies | Sí |
+| Enviar y guardar cookies | Sí (ajuste de la aplicación, no por request: ver [Cookies](#cookies)) |
 | Guardar respuesta en el historial | Sí |
 
 ## Implementación en F1
@@ -63,7 +63,7 @@ Todos son heredables (colección → carpeta → request) y el timeline indica d
 - **Bodies de archivo y partes multipart** leídos del disco en streaming, relativos a la carpeta de la colección.
 - **Errores clasificados** como en la tabla de abajo. Los mensajes nunca incluyen la URL, que puede llevar secretos en la query, ni el valor de un header.
 
-Pendiente para F5: proxy, certificados, cookies, timeline instrumentado y descompresión manual. `encodeUrl` llegó en F5 (ver abajo).
+Pendiente para F5: proxy, certificados, cookies, timeline instrumentado y descompresión manual. `encodeUrl` y las cookies llegaron en F5 (ver abajo).
 
 Se prueba contra un servidor HTTP local escrito en los propios tests, sin red externa.
 
@@ -179,9 +179,21 @@ Sobrescrituras por nombre de host (equivalente a `/etc/hosts` por colección) y 
 
 ## Cookies
 
-- Un tarro de cookies por colección, compartido entre sus requests.
-- Persistido cifrado en el directorio de datos.
-- Editor de cookies en la interfaz: ver, modificar y borrar.
+Un tarro por colección, compartido por todas sus requests, como el de Bruno (tough-cookie), pero por colección en vez de uno global.
+
+- **El tarro** (`apifast-domain/src/cookie.rs`) sigue RFC 6265:
+  - `Set-Cookie` con `Expires` (el algoritmo tolerante de fechas de 5.1.1), `Max-Age` (gana sobre `Expires`; 0 o menos la borra), `Domain`, `Path`, `Secure`, `HttpOnly` y `SameSite`. Un valor sin `=` o sin nombre se ignora.
+  - `Domain` debe cubrir el host que la fija, y uno sin punto (`com`) solo vale si es el propio host (`localhost`). **No hay lista de sufijos públicos**: `a.example.co.uk` puede fijar una cookie para `co.uk`. Sin `Domain`, la cookie es solo para ese host.
+  - Sin `Path` (o con uno que no empieza por `/`), la ruta de la request hasta su último `/`.
+  - `__Secure-` exige `Secure`; `__Host-` además exige que no haya `Domain` y que la ruta sea `/`.
+  - Una cookie sustituye a la que tiene su mismo nombre, dominio y ruta, y conserva la hora de creación de esa.
+- **Qué se envía:** las cookies del dominio (o, si no son solo del host, de sus subdominios), de la ruta (la de la request o una por debajo, cortando en `/`) y sin caducar. Las `Secure` solo por `https` o a la propia máquina (`localhost`, `*.localhost`, `127.0.0.1`, `::1`), como tough-cookie. Primero las de ruta más larga y, con la misma, las más antiguas. `HttpOnly` y `SameSite` se guardan y se muestran, pero no cambian lo que se envía.
+- **En el transporte** (`apifast-http/src/cookies.rs`), en cada salto, también en las redirecciones y en la segunda request de Digest y NTLM: los `Set-Cookie` de cada respuesta entran en el tarro, y cada request lleva las cookies que le tocan. Si la request ya tiene un header `Cookie`, se fusionan por nombre y **gana la del tarro**, como en Bruno. Una redirección a otro origen pierde el `Cookie` escrito en la request, pero lleva las del tarro de su host.
+- **Ajustes** "Send cookies" y "Store cookies", de la aplicación (como las preferencias de Bruno), activados por defecto. No son por request: OpenCollection no tiene ese ajuste.
+- **Dónde se guarda:** en la interfaz, sellado con la clave maestra ([docs/06](06-boveda-de-secretos.md#qué-se-cifra-además-de-los-secretos)), y se escribe tras cada envío, ejecución u obtención de token que lo cambió, y tras cada edición. Al abrir la colección se leen sin las caducadas. Las de sesión (sin caducidad) también se guardan: sobreviven a un reinicio, como en Bruno. La CLI lleva un tarro en memoria durante un `send` o un `run`: lo que fija una request va con las siguientes de la ejecución.
+- **Editor** en la interfaz ([docs/09](09-ui-ux.md#cookies)) y pestaña Cookies en la respuesta.
+- El `Debug` del tarro solo dice cuántas cookies tiene: un valor puede ser una sesión.
+- Probado con el tarro puro (fechas, atributos, dominios, rutas, prefijos, orden), contra un servidor local (una cookie fijada en una redirección llega al salto siguiente, no pasa a otro host, se fusiona con el header escrito y se respetan los ajustes), de extremo a extremo con `apifast run`, y en la interfaz (guardada sellada, enviada, editada y leída tras un reinicio).
 
 ## Cuerpo de la request
 

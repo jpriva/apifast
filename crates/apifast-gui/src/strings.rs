@@ -262,6 +262,76 @@ pub struct Strings {
     pub collection_key: &'static str,
     /// Action: open the collection key window.
     pub action_collection_key: &'static str,
+    /// Tab of the response, and heading of the cookie settings.
+    pub cookies: &'static str,
+    /// Title of the cookie editor.
+    pub cookies_title: &'static str,
+    /// Root menu and palette: open the cookie editor.
+    pub cookies_menu: &'static str,
+    /// Action: open the cookie editor.
+    pub action_cookies: &'static str,
+    /// Cookie editor without a collection.
+    pub cookies_no_collection: &'static str,
+    /// Cookie editor with an empty jar.
+    pub cookies_empty: &'static str,
+    /// Button: add a cookie.
+    pub cookies_add: &'static str,
+    /// Button: delete every cookie.
+    pub cookies_clear: &'static str,
+    /// Asks before deleting every cookie.
+    pub cookies_clear_confirm: &'static str,
+    /// Button: delete the cookies of a domain.
+    pub cookies_delete_domain: &'static str,
+    /// Button: change a cookie.
+    pub cookies_edit: &'static str,
+    /// Button: delete a cookie.
+    pub cookies_delete: &'static str,
+    /// Heading of the form of a new cookie.
+    pub cookies_add_title: &'static str,
+    /// Heading of the form of a cookie being changed.
+    pub cookies_edit_title: &'static str,
+    /// Column and field: the cookie's name.
+    pub cookies_name: &'static str,
+    /// Column and field: the cookie's value.
+    pub cookies_value: &'static str,
+    /// Column and field: the cookie's domain.
+    pub cookies_domain: &'static str,
+    /// Column and field: the cookie's path.
+    pub cookies_path: &'static str,
+    /// Column and field: when the cookie expires.
+    pub cookies_expires: &'static str,
+    /// Placeholder of the expiry: empty for a session cookie.
+    pub cookies_expires_hint: &'static str,
+    /// Column: `Secure`, `HttpOnly`, `SameSite`.
+    pub cookies_flags: &'static str,
+    /// A cookie with no expiry.
+    pub cookies_session: &'static str,
+    /// A cookie that has expired.
+    pub cookies_expired: &'static str,
+    /// Flag: the cookie also goes to subdomains.
+    pub cookies_subdomains: &'static str,
+    /// Field: `SameSite`.
+    pub cookies_same_site: &'static str,
+    /// Checkbox: only this host.
+    pub cookies_host_only: &'static str,
+    /// Checkbox: `Secure`.
+    pub cookies_secure: &'static str,
+    /// Checkbox: `HttpOnly`.
+    pub cookies_http_only: &'static str,
+    /// A cookie name that cannot be.
+    pub cookies_bad_name: &'static str,
+    /// A cookie with no domain.
+    pub cookies_bad_domain: &'static str,
+    /// A path that does not start with /.
+    pub cookies_bad_path: &'static str,
+    /// An expiry that is not a date.
+    pub cookies_bad_expires: &'static str,
+    /// Cookies tab of a response that set none.
+    pub response_no_cookies: &'static str,
+    /// Settings: send the cookies of the jar.
+    pub send_cookies: &'static str,
+    /// Settings: keep the cookies responses set.
+    pub store_cookies: &'static str,
     /// Button that takes a pasted key.
     pub use_key: &'static str,
     /// Shown when the collection shares no secret.
@@ -855,6 +925,41 @@ pub const EN: Strings = Strings {
     forget: "Forget",
     collection_key: "Collection key",
     action_collection_key: "Collection key",
+    cookies: "Cookies",
+    cookies_title: "Cookies",
+    cookies_menu: "Cookies…",
+    action_cookies: "Cookies",
+    cookies_no_collection: "Open a collection to see its cookies.",
+    cookies_empty: "No cookies yet. They appear here when a response sets them.",
+    cookies_add: "Add cookie",
+    cookies_clear: "Delete all",
+    cookies_clear_confirm: "Delete every cookie of this collection? Servers will set them again on the next requests.",
+    cookies_delete_domain: "Delete domain",
+    cookies_edit: "Edit",
+    cookies_delete: "Delete",
+    cookies_add_title: "New cookie",
+    cookies_edit_title: "Edit cookie",
+    cookies_name: "Name",
+    cookies_value: "Value",
+    cookies_domain: "Domain",
+    cookies_path: "Path",
+    cookies_expires: "Expires (UTC)",
+    cookies_expires_hint: "Session · 2030-01-31 12:00:00",
+    cookies_flags: "Flags",
+    cookies_session: "Session",
+    cookies_expired: "Expired",
+    cookies_subdomains: "subdomains",
+    cookies_same_site: "SameSite",
+    cookies_host_only: "Only this host, not its subdomains",
+    cookies_secure: "Secure: only over HTTPS (or to this machine)",
+    cookies_http_only: "HttpOnly: not for scripts",
+    cookies_bad_name: "The name cannot be empty or have =, ; or spaces.",
+    cookies_bad_domain: "The domain cannot be empty.",
+    cookies_bad_path: "The path must start with /.",
+    cookies_bad_expires: "Write the expiry as 2030-01-31 12:00:00, or leave it empty for a session cookie.",
+    response_no_cookies: "This response set no cookies. Responses opened from the history do not keep them.",
+    send_cookies: "Send cookies",
+    store_cookies: "Store cookies",
     use_key: "Use key",
     no_collection_key: "This collection shares no secrets yet. Sharing the first one makes its key.",
     key_needed: "This collection shares secrets, and this machine does not have its key. Paste the key your team gave you:",

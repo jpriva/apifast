@@ -40,6 +40,12 @@ pub(super) struct Open {
     pub(super) runtime: Vec<Variable>,
     /// OAuth 2.0 tokens, kept while the collection is loaded.
     pub(super) tokens: Arc<dyn apifast_app::TokenStore>,
+    /// Its cookie jar, shared with its transport.
+    pub(super) cookies: Arc<apifast_app::Cookies>,
+    /// Where its jar is kept.
+    pub(super) cookie_store: Arc<dyn apifast_app::CookieStore>,
+    /// What the interface sees of its jar, as of the last change.
+    pub(super) cookie_view: Arc<Vec<apifast_domain::Cookie>>,
     /// Values captured for the active environment, waiting for the user.
     pub(super) captured: Option<super::captures::Captured>,
     /// Its folders and requests.
@@ -129,6 +135,7 @@ impl State {
             snapshot.environment.clone_from(&open.environment);
             snapshot.history = open.entries.clone();
             snapshot.vault = open.vault_view.clone();
+            snapshot.cookies = open.cookie_view.clone();
             snapshot.captured = open.captured.as_ref().map(super::captures::Captured::view);
         } else {
             snapshot.captured = None;
@@ -137,6 +144,7 @@ impl State {
             snapshot.environment_files = Arc::default();
             snapshot.environment = None;
             snapshot.history = Arc::default();
+            snapshot.cookies = Arc::default();
             snapshot.vault = VaultView {
                 master_in_file: snapshot.vault.master_in_file,
                 ..VaultView::default()
@@ -259,7 +267,6 @@ impl State {
         let repo = Arc::new(FsCollection::open(root).map_err(|e| e.to_string())?);
         let tree = open_collection(&*repo).map_err(|e| e.to_string())?;
         let environment_files = repo.environments().map_err(|e| e.to_string())?;
-        let transport = self.transport_for(root, &tree.collection)?;
         let id = tree
             .collection
             .id
@@ -272,10 +279,15 @@ impl State {
             history,
             vault,
             tokens,
+            cookies: cookie_store,
         } = stores(&self.data_dir, root, id, (shared, self.keyring))?;
+        let (cookies, cookie_error) = super::cookies::load_jar(&*cookie_store);
+        cookies.set_policy(self.cookie_policy.0, self.cookie_policy.1);
+        let cookies = Arc::new(cookies);
+        let transport = self.transport_for(root, &tree.collection, cookies.clone())?;
 
         let (session, error) = match sessions.load() {
-            Ok(session) => (session, None),
+            Ok(session) => (session, cookie_error),
             Err(e) => (Session::default(), Some(e.to_string())),
         };
         let parked: HashMap<RequestPath, HttpRequest> = (session.tabs.into_iter())
@@ -309,6 +321,9 @@ impl State {
                 vault,
                 runtime: Vec::new(),
                 tokens,
+                cookie_view: Arc::new(cookies.jar().cookies().to_vec()),
+                cookies,
+                cookie_store,
                 captured: None,
                 tree: Arc::new(tree),
                 environment_files: Arc::new(environment_files),

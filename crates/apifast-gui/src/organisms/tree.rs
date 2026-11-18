@@ -30,6 +30,8 @@ pub enum TreeEvent {
     Environments,
     /// Show the collection's key.
     CollectionKey,
+    /// See and edit the collection's cookies.
+    Cookies,
     /// Unload the collection and close its tabs.
     Close,
     /// Remove the collection from the workspace.
@@ -655,6 +657,7 @@ fn collection_menu(
             loaded,
         ),
         (strings.collection_key, TreeEvent::CollectionKey, true),
+        (strings.cookies_menu, TreeEvent::Cookies, loaded),
         (strings.close_collection, TreeEvent::Close, loaded),
         (strings.remove_collection, TreeEvent::Remove, true),
     ];

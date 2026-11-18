@@ -5,6 +5,7 @@ mod atoms;
 mod body_viewer;
 mod code_editor;
 mod conflict;
+mod cookies;
 mod core_thread;
 mod editing;
 mod environments;

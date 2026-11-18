@@ -4,6 +4,7 @@
 //!
 //! Must run inside a tokio runtime with the time driver enabled.
 
+mod cookies;
 mod digest;
 mod loopback;
 mod ntlm;
@@ -11,6 +12,7 @@ mod sigv4;
 mod tls;
 
 use std::error::Error as _;
+use std::sync::Arc;
 
 use base64::Engine as _;
 
@@ -19,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use apifast_app::{
-    BodyWriter, CancelToken, HttpTransport, RenderedBody, RenderedRequest, ResponseHead,
+    BodyWriter, CancelToken, Cookies, HttpTransport, RenderedBody, RenderedRequest, ResponseHead,
     TimelineEvent, TimelineKind, TransportAuth, TransportError,
 };
 use apifast_domain::{ClientCertificate, MultipartValue, ProxyChoice, ProxyConfig, TlsTrust};
@@ -43,6 +45,8 @@ pub struct ReqwestTransport {
     settings: tls::ClientSettings,
     /// A client per client certificate, or why it could not be made.
     certified: Vec<Certified>,
+    /// The collection's cookie jar, if it sends and keeps cookies.
+    cookies: Option<Arc<Cookies>>,
 }
 
 /// A client certificate and the client that presents it.
@@ -118,7 +122,16 @@ impl ReqwestTransport {
             files_root,
             settings,
             certified,
+            cookies: None,
         })
+    }
+
+    /// The same transport, sending cookies from `cookies` and keeping in it
+    /// those that responses set.
+    #[must_use]
+    pub fn with_cookies(mut self, cookies: Arc<Cookies>) -> Self {
+        self.cookies = Some(cookies);
+        self
     }
 
     /// The client certificate for `url`'s host, if one is for it.
@@ -169,7 +182,10 @@ impl ReqwestTransport {
                 send_body,
                 first_origin: &first_origin,
             };
-            let sent_headers = signed_headers(request, &headers, &sent)?;
+            let mut sent_headers = signed_headers(request, &headers, &sent)?;
+            if let Some(jar) = &self.cookies {
+                cookies::add_from_jar(jar, &url, &mut sent_headers);
+            }
             let client = match ntlm {
                 Some(client) => client,
                 None => self.client_for(&url)?,
@@ -189,6 +205,9 @@ impl ReqwestTransport {
             });
             let response = builder.send().await.map_err(|e| classify(&e, &url))?;
             let status = response.status().as_u16();
+            if let Some(jar) = &self.cookies {
+                cookies::keep(jar, &url, response.headers());
+            }
 
             let response = if status == 401 && answered.as_ref() != Some(&url) {
                 match answer_challenge(request, response, &sent).await? {

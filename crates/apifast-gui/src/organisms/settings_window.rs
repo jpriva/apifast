@@ -73,6 +73,7 @@ impl SettingsWindow {
                 changed |= storage(ui, settings, strings);
                 changed |= self.proxy(ui, settings, strings);
                 changed |= self.tls(ui, settings, strings);
+                changed |= cookies(ui, settings, strings);
                 ui.add_space(theme::space::M);
                 if ui.button(strings.settings_reset).clicked() {
                     *settings = Settings::default();
@@ -283,6 +284,26 @@ fn storage(ui: &mut egui::Ui, settings: &mut Settings, strings: &Strings) -> boo
             .color(muted)
             .small(),
     );
+    changed
+}
+
+/// Whether cookies from the jars are sent, and those responses set kept.
+fn cookies(ui: &mut egui::Ui, settings: &mut Settings, strings: &Strings) -> bool {
+    let mut changed = false;
+    section(ui, strings.cookies);
+    egui::Grid::new("settings-cookies")
+        .num_columns(2)
+        .spacing([theme::space::L, theme::space::S])
+        .show(ui, |ui| {
+            for (label, value) in [
+                (strings.send_cookies, &mut settings.send_cookies),
+                (strings.store_cookies, &mut settings.store_cookies),
+            ] {
+                ui.label(label);
+                changed |= ui.checkbox(value, "").accessible_name(label).changed();
+                ui.end_row();
+            }
+        });
     changed
 }
 

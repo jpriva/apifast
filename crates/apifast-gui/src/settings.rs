@@ -47,6 +47,10 @@ pub struct Settings {
     pub ca_file: String,
     /// Do not check server certificates.
     pub tls_insecure: bool,
+    /// Send the cookies of the collection's jar.
+    pub send_cookies: bool,
+    /// Keep in the jar the cookies that responses set.
+    pub store_cookies: bool,
 }
 
 /// The application's proxy mode.
@@ -74,6 +78,8 @@ impl Default for Settings {
             proxy: ProxyConfig::default(),
             ca_file: String::new(),
             tls_insecure: false,
+            send_cookies: true,
+            store_cookies: true,
         }
     }
 }
@@ -146,6 +152,14 @@ impl Settings {
                     .parse::<bool>()
                     .ok()
                     .map(|b| settings.tls_insecure = b),
+                "send_cookies" => value
+                    .parse::<bool>()
+                    .ok()
+                    .map(|b| settings.send_cookies = b),
+                "store_cookies" => value
+                    .parse::<bool>()
+                    .ok()
+                    .map(|b| settings.store_cookies = b),
                 _ => None,
             };
             if ok.is_none() {
@@ -187,6 +201,8 @@ impl Settings {
             ("proxy_bypass".into(), self.proxy.bypass.clone()),
             ("ca_file".into(), self.ca_file.clone()),
             ("tls_insecure".into(), self.tls_insecure.to_string()),
+            ("send_cookies".into(), self.send_cookies.to_string()),
+            ("store_cookies".into(), self.store_cookies.to_string()),
         ]
     }
 
@@ -271,6 +287,8 @@ mod tests {
             },
             ca_file: "/etc/ssl/corp.pem".into(),
             tls_insecure: true,
+            send_cookies: false,
+            store_cookies: false,
         };
         let (read, problems) = Settings::from_entries(&settings.entries());
         assert_eq!(read, settings);

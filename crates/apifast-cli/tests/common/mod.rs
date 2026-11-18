@@ -70,10 +70,16 @@ fn answer(stream: TcpStream, log: &Mutex<Vec<String>>) {
         "/big" => ("200 OK", "x".repeat(300_000)),
         _ => ("200 OK", format!("{{\"path\": \"{path}\"}}")),
     };
+    // A login sets a session cookie, for the tests of the cookie jar.
+    let cookie = if path == "/login" {
+        "Set-Cookie: sid=from-login; Path=/\r\n"
+    } else {
+        ""
+    };
     let mut stream = stream;
     let _ = write!(
         stream,
-        "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nX-Served-By: test\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nX-Served-By: test\r\n{cookie}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
     );
 }

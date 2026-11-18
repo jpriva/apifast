@@ -96,6 +96,15 @@ fn a_failing_assertion_exits_with_1_and_reports_are_written() {
         "{:?}",
         server.seen()
     );
+    // The cookie login set went with the next requests of the run.
+    let seen = server.seen();
+    assert!(!seen[0].contains("cookie:"), "{}", seen[0]);
+    assert!(
+        seen[1..]
+            .iter()
+            .all(|r| r.contains("cookie: sid=from-login\r\n")),
+        "{seen:?}"
+    );
 
     let junit = std::fs::read_to_string(dir.path().join("out/report.xml")).unwrap();
     assert!(

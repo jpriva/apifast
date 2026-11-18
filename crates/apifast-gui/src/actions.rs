@@ -59,6 +59,8 @@ pub enum Action {
     Settings,
     /// Open the collection key window.
     CollectionKey,
+    /// Open the cookie editor.
+    Cookies,
     /// Open a collection folder.
     OpenCollection,
     /// Create a collection.
@@ -98,6 +100,7 @@ pub const ALL: &[Action] = &[
     Action::ThemeDark,
     Action::Settings,
     Action::CollectionKey,
+    Action::Cookies,
     Action::OpenCollection,
     Action::NewCollection,
 ];
@@ -136,6 +139,7 @@ impl Action {
             Self::ThemeDark => "theme_dark".into(),
             Self::Settings => "settings".into(),
             Self::CollectionKey => "collection_key".into(),
+            Self::Cookies => "cookies".into(),
             Self::OpenCollection => "open_collection".into(),
             Self::NewCollection => "new_collection".into(),
         }
@@ -172,6 +176,7 @@ impl Action {
             Self::ThemeDark => strings.action_theme_dark,
             Self::Settings => strings.action_settings,
             Self::CollectionKey => strings.action_collection_key,
+            Self::Cookies => strings.action_cookies,
             Self::OpenCollection => strings.open_collection,
             Self::NewCollection => strings.new_collection,
         };
@@ -219,6 +224,7 @@ impl Action {
             | Self::ThemeLight
             | Self::ThemeDark
             | Self::CollectionKey
+            | Self::Cookies
             | Self::NewCollection => Vec::new(),
         }
     }

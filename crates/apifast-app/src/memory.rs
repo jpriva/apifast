@@ -645,3 +645,18 @@ impl crate::TokenStore for MemoryTokens {
         Ok(())
     }
 }
+
+/// A [`CookieStore`](crate::CookieStore) in memory.
+#[derive(Debug, Default)]
+pub struct MemoryCookies(Mutex<Vec<apifast_domain::Cookie>>);
+
+impl crate::CookieStore for MemoryCookies {
+    fn load(&self) -> Result<Vec<apifast_domain::Cookie>, StoreError> {
+        Ok(lock(&self.0).clone())
+    }
+
+    fn save(&self, cookies: &[apifast_domain::Cookie]) -> Result<(), StoreError> {
+        cookies.clone_into(&mut lock(&self.0));
+        Ok(())
+    }
+}

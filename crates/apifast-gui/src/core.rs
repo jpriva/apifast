@@ -11,6 +11,7 @@
 
 mod captures;
 mod collections;
+mod cookies;
 mod proxy;
 mod runner;
 mod tokens;
@@ -20,6 +21,7 @@ mod workspace;
 use collections::{Listed, Open};
 use workspace::ActiveWorkspace;
 
+pub use cookies::{CookieCommand, CookieSlot};
 pub use vault::{Revealed, SHOWN_FOR, SecretState, SecretStatus, VaultCommand, VaultView};
 
 use std::collections::{BTreeMap, HashMap};
@@ -96,12 +98,19 @@ fn stores(
         data_dir,
         keyring,
     );
+    // The cookie jar, sealed the same way.
+    let cookies = apifast_vault::FsCookieStore::new(
+        apifast_history::dirs::cookies_file_in(data_dir, root, id),
+        data_dir,
+        keyring,
+    );
     Ok(Stores {
         responses,
         sessions,
         history,
         vault: secrets,
         tokens: Arc::new(tokens),
+        cookies: Arc::new(cookies),
     })
 }
 
@@ -112,6 +121,7 @@ struct Stores {
     history: FsHistoryStore,
     vault: Option<Arc<VaultSecrets>>,
     tokens: Arc<dyn TokenStore>,
+    cookies: Arc<dyn apifast_app::CookieStore>,
 }
 
 /// A response whose body is in `store`.
@@ -328,6 +338,9 @@ pub enum Command {
         proxy: apifast_domain::ProxyChoice,
         /// How servers are trusted.
         trust: apifast_domain::TlsTrust,
+        /// Whether cookies from the jars are sent, and whether those that
+        /// responses set are stored.
+        cookies: (bool, bool),
     },
     /// Keeps the application proxy's password, sealed; `None` forgets it.
     SetProxyPassword(Option<apifast_domain::Secret>),
@@ -392,6 +405,8 @@ pub enum Command {
     },
     /// Something of the focused collection's vault: secrets and its key.
     Vault(VaultCommand),
+    /// A change to the focused collection's cookie jar.
+    Cookies(CookieCommand),
 }
 
 /// Everything the interface shows, as of one moment.
@@ -434,6 +449,8 @@ pub struct Snapshot {
     pub history: Arc<Vec<HistoryEntry>>,
     /// What the interface sees of the focused collection's vault.
     pub vault: VaultView,
+    /// The cookies of the focused collection's jar, in its order.
+    pub cookies: Arc<Vec<apifast_domain::Cookie>>,
     /// Values captured for its active environment, waiting for the user to
     /// write them there.
     pub captured: Option<PendingCaptures>,
@@ -760,6 +777,7 @@ impl Core {
                     limits: (HISTORY_LIMITS, RESPONSE_LIMITS),
                     proxy: apifast_domain::ProxyChoice::System,
                     trust: apifast_domain::TlsTrust::default(),
+                    cookie_policy: (true, true),
                     sealed,
                     shown: 0,
                     keyring,
@@ -835,6 +853,8 @@ struct State {
     proxy: apifast_domain::ProxyChoice,
     /// How servers are trusted, as the settings say.
     trust: apifast_domain::TlsTrust,
+    /// Whether cookies are sent and stored, as the settings say.
+    cookie_policy: (bool, bool),
     /// Values of the settings kept sealed with the master key, such as the
     /// proxy's password.
     sealed: apifast_vault::SealedValues,
@@ -859,9 +879,18 @@ impl State {
                         self.schedule_session_write();
                     }
                 }
-                Message::SendFinished(finished) => self.finish_send(*finished),
-                Message::Run(id, message) => self.run_message(id, message),
-                Message::TokenObtained(key, result) => self.token_obtained(&key, result),
+                Message::SendFinished(finished) => {
+                    self.finish_send(*finished);
+                    self.sync_cookies();
+                }
+                Message::Run(id, message) => {
+                    self.run_message(id, message);
+                    self.sync_cookies();
+                }
+                Message::TokenObtained(key, result) => {
+                    self.token_obtained(&key, result);
+                    self.sync_cookies();
+                }
                 Message::HistoryLoaded(opened, entries) => self.history_loaded(opened, entries),
                 Message::HideShown(shown) => self.hide_shown(shown),
                 Message::External(opened, changes) => {
@@ -967,6 +996,7 @@ impl State {
             | Command::SetProxyPassword(_)
             | Command::SaveCollectionSettings { .. } => self.handle_settings(command),
             Command::Vault(command) => self.vault_command(command),
+            Command::Cookies(command) => self.cookie_command(command),
             Command::ResolveConflict {
                 tab: key,
                 keep_draft,
@@ -1003,8 +1033,10 @@ impl State {
                 responses,
                 proxy,
                 trust,
+                cookies: (send, store),
             } => {
                 self.limits = (history, responses);
+                self.set_cookie_policy(send, store);
                 if proxy != self.proxy || trust != self.trust {
                     self.proxy = proxy;
                     self.trust = trust;

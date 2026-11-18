@@ -15,8 +15,8 @@ use std::time::{Duration, Instant};
 
 use apifast_app::memory::{CountingRandom, FixedClock};
 use apifast_app::{
-    AppHost, BodyWriter, CancelToken, HttpTransport, NoPrompter, RenderedRequest, ResponseHead,
-    StoreError, StoredBody, TimelineKind, TransportError, render_request,
+    AppHost, BodyWriter, CancelToken, Cookies, HttpTransport, NoPrompter, RenderedRequest,
+    ResponseHead, StoreError, StoredBody, TimelineKind, TransportError, render_request,
 };
 use apifast_domain::{
     ApiKeyAuth, ApiKeyPlacement, AuthScheme, Body, Chain, Collection, FormField, Header,
@@ -666,6 +666,70 @@ async fn encode_url_encodes_as_bruno_and_off_sends_the_url_as_written() {
     );
     // Only the URL parser's normalisation, as axios in Bruno.
     assert_eq!(received[1].path, "/a%20b/c%20d?q=a,b&r=%2F");
+}
+
+#[tokio::test]
+async fn cookies_set_on_a_redirect_go_with_the_next_requests_to_their_host() {
+    let server = Server::start(|r| match r.path.as_str() {
+        "/login" => Reply::redirect(302, "/me")
+            .header("Set-Cookie", "sid=abc; Path=/; HttpOnly")
+            .header("Set-Cookie", "theme=dark"),
+        "/away" => Reply::redirect(302, &r.headers["x-away"]),
+        _ => Reply::ok(""),
+    })
+    .await;
+    let cookies = Arc::new(Cookies::new());
+    let transport = transport().with_cookies(cookies.clone());
+    let cancel = CancelToken::new();
+
+    send_with(&transport, &get(server.url("/login")), &cancel)
+        .await
+        .0
+        .unwrap();
+    let mut written = get(server.url("/me"));
+    written.headers = vec![Header::new("Cookie", "theme=light; mine=1")];
+    send_with(&transport, &written, &cancel).await.0.unwrap();
+    // The same server under another host name gets none.
+    let mut away = get(server.url("/away"));
+    let other_host = server.url("/elsewhere").replace("127.0.0.1", "localhost");
+    away.headers = vec![Header::new("X-Away", &other_host)];
+    send_with(&transport, &away, &cancel).await.0.unwrap();
+
+    let received = server.received();
+    assert!(!received[0].headers.contains_key("cookie"));
+    assert_eq!(received[1].path, "/me");
+    assert_eq!(received[1].headers["cookie"], "sid=abc; theme=dark");
+    // The jar's value wins over the written one, as in Bruno.
+    assert_eq!(received[2].headers["cookie"], "theme=dark; mine=1; sid=abc");
+    assert_eq!(received[3].headers["cookie"], "sid=abc; theme=dark");
+    assert_eq!(received[4].path, "/elsewhere");
+    assert!(!received[4].headers.contains_key("cookie"));
+    assert_eq!(cookies.jar().cookies().len(), 2);
+}
+
+#[tokio::test]
+async fn cookies_are_neither_sent_nor_kept_when_turned_off() {
+    let server = Server::start(|_| Reply::ok("").header("Set-Cookie", "fresh=1")).await;
+    let cookies = Arc::new(Cookies::new());
+    cookies.receive(
+        ["old=1"],
+        &apifast_domain::CookieTarget::new("http", "127.0.0.1", "/"),
+        i64::MAX / 2,
+    );
+    cookies.set_policy(false, false);
+    let transport = transport().with_cookies(cookies.clone());
+    send_with(&transport, &get(server.url("/")), &CancelToken::new())
+        .await
+        .0
+        .unwrap();
+    assert!(!server.received()[0].headers.contains_key("cookie"));
+    let names: Vec<String> = cookies
+        .jar()
+        .cookies()
+        .iter()
+        .map(|c| c.name.clone())
+        .collect();
+    assert_eq!(names, ["old"]);
 }
 
 #[tokio::test]

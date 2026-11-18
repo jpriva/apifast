@@ -95,8 +95,16 @@ pub fn tokens_file_in(data_dir: &Path, root: &Path, collection_id: Option<&str>)
         .join(format!("{}.tokens", collection_key(root, collection_id)))
 }
 
+/// File with the cookie jar of the collection at `root`, sealed with the
+/// master key, under `data_dir`, keyed like [`responses_dir`].
+pub fn cookies_file_in(data_dir: &Path, root: &Path, collection_id: Option<&str>) -> PathBuf {
+    data_dir
+        .join("cookies")
+        .join(format!("{}.jar", collection_key(root, collection_id)))
+}
+
 /// Moves what apifast keeps of the collection at `root` under `data_dir`
-/// (responses, session, history and tokens) from its path's hash to `id`, when the
+/// (responses, session, history, tokens and cookies) from its path's hash to `id`, when the
 /// collection gets an id. What is already under `id` is left alone.
 ///
 /// # Errors
@@ -119,6 +127,10 @@ pub fn move_to_id(data_dir: &Path, root: &Path, id: &str) -> std::io::Result<()>
         (
             tokens_file_in(data_dir, root, None),
             tokens_file_in(data_dir, root, Some(id)),
+        ),
+        (
+            cookies_file_in(data_dir, root, None),
+            cookies_file_in(data_dir, root, Some(id)),
         ),
     ];
     for (from, to) in moves {
@@ -216,6 +228,9 @@ mod tests {
         let history = history_file_in(&data, root, None);
         std::fs::create_dir_all(history.parent().unwrap()).unwrap();
         std::fs::write(&history, "{}\n").unwrap();
+        let cookies = cookies_file_in(&data, root, None);
+        std::fs::create_dir_all(cookies.parent().unwrap()).unwrap();
+        std::fs::write(&cookies, "{}").unwrap();
 
         move_to_id(&data, root, "col_1").unwrap();
         assert!(
@@ -224,7 +239,9 @@ mod tests {
                 .exists()
         );
         assert!(history_file_in(&data, root, Some("col_1")).exists());
-        assert!(!old.exists() && !history.exists());
+        assert!(cookies_file_in(&data, root, Some("col_1")).ends_with("cookies/col_1.jar"));
+        assert!(cookies_file_in(&data, root, Some("col_1")).exists());
+        assert!(!old.exists() && !history.exists() && !cookies.exists());
         // Nothing to move the second time.
         move_to_id(&data, root, "col_1").unwrap();
         std::fs::remove_dir_all(&data).unwrap();

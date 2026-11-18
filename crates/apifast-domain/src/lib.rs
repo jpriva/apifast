@@ -17,6 +17,7 @@ mod auth;
 mod body;
 mod certificates;
 mod collection;
+mod cookie;
 mod environment;
 mod json;
 mod origin;
@@ -39,6 +40,10 @@ pub use auth::{
 pub use body::{Body, FormField, MultipartPart, MultipartValue};
 pub use certificates::{ClientCertificate, ClientCertificateKind, TlsTrust};
 pub use collection::{Collection, CollectionId, Folder, RequestDefaults};
+pub use cookie::{
+    Cookie, CookieJar, CookieTarget, SameSite, format_expiry, merge_cookie_header, parse_expiry,
+    parse_set_cookie,
+};
 pub use environment::{Environment, EnvironmentError, environment_chain};
 pub use json::{Json, JsonError, MAX_DEPTH as MAX_JSON_DEPTH, PathError};
 pub use origin::Origin;

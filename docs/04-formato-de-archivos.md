@@ -457,7 +457,7 @@ El historial, las respuestas, las cookies y la bóveda local viven en el directo
 ├── master.key                        # clave maestra, solo si no hay keyring (0600)
 ├── keys/<collection-id>.key          # clave de la colección, envuelta
 ├── vault/<collection-id>.vault       # secretos solo locales, cifrados (JSON, 0600)
-├── cookies/<collection-id>.jar       # cookies, cifradas
+├── cookies/<collection-id>.jar       # tarro de cookies, sellado entero (JSON, 0600)
 ├── oauth2/<collection-id>.tokens     # tokens OAuth 2.0, cada uno sellado (JSON, 0600)
 ├── settings.sealed                   # valores de los ajustes sellados, como la contraseña del proxy (0600)
 ├── history/<collection-id>.jsonl     # índice de ejecuciones
@@ -496,6 +496,8 @@ proxy_username: ""
 proxy_bypass: ""        # hosts que van directos, separados por comas
 ca_file: ""             # PEM con autoridades que se confían además de las del sistema
 tls_insecure: false     # no comprobar los certificados de los servidores
+send_cookies: true      # enviar las cookies del tarro de la colección
+store_cookies: true     # guardar en el tarro las cookies que fijan las respuestas
 ```
 
 La contraseña del proxy de la aplicación no está en `settings.yml`: se guarda sellada con la clave maestra en `settings.sealed`, en el directorio de datos.

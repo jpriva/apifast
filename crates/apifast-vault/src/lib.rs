@@ -11,6 +11,7 @@
 //! anywhere else does not open.
 
 mod collection;
+mod cookies;
 mod keys;
 mod local;
 mod sealed;
@@ -19,6 +20,7 @@ mod shareable;
 mod tokens;
 
 pub use collection::{CollectionKeyStore, check_challenge, new_challenge};
+pub use cookies::FsCookieStore;
 
 pub use keys::{
     KEY_FILE, KEYRING_ENTRY, KEYRING_SERVICE, KeyBackend, KeyFile, KeyLocation, KeyStoreError,

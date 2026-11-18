@@ -4,6 +4,7 @@
 mod body_viewer;
 mod collection_dialogs;
 mod collection_settings;
+mod cookies_window;
 mod environments;
 mod history;
 mod kv_table;
@@ -12,6 +13,7 @@ mod palette;
 mod proxy_editor;
 mod request_panel;
 mod response;
+mod response_cookies;
 mod runner_window;
 mod settings_window;
 mod shortcuts;
@@ -24,6 +26,7 @@ mod vault_window;
 pub use body_viewer::BodyViewer;
 pub use collection_dialogs::{CollectionDialogs, CollectionRequest, folder_name};
 pub use collection_settings::{CollectionSettings, CollectionSettingsWindow};
+pub use cookies_window::{CookieDraft, CookiesWindow, DraftError};
 pub use environments::{EnvironmentEditor, EnvironmentEvent, EnvironmentsView};
 pub use history::{HistoryView, ago, matches};
 pub use kv_table::{BulkRow, KvRow, KvTable, from_bulk, to_bulk};
@@ -34,6 +37,7 @@ pub use request_panel::{RequestChange, RequestPanel, RequestTab, TokenAction};
 pub use response::{
     BodyMode, COPY_LIMIT, PRETTY_LIMIT, ResponseTab, ResponseView, describe, millis,
 };
+pub use response_cookies::set_by as cookies_set_by;
 pub use runner_window::{RunnerEvent, RunnerWindow};
 pub use settings_window::SettingsWindow;
 pub use shortcuts::{ShortcutEditor, shortcut_of};

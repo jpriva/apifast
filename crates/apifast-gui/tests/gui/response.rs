@@ -298,3 +298,26 @@ fn harness_with_xml() -> Harness<'static, State> {
 fn has_text(harness: &Harness<'_, State>, text: &str) -> bool {
     harness.query_by_label_contains(text).is_some()
 }
+
+#[test]
+fn the_cookies_tab_lists_what_the_response_set() {
+    let ResponseState::Received(mut set) = received("text/plain", "x") else {
+        unreachable!()
+    };
+    set.head.headers.extend([
+        ("Set-Cookie".into(), "sid=abc; Path=/; HttpOnly".into()),
+        ("set-cookie".into(), "theme=dark; Max-Age=60".into()),
+    ]);
+    let mut harness = harness(ResponseState::Received(set));
+    harness.run();
+    harness.get_by_label("Cookies (2)").click();
+    harness.run();
+    assert!(has(&harness, "sid") && has(&harness, "theme"));
+    assert!(has(&harness, "HttpOnly") && has(&harness, EN.cookies_session));
+
+    let mut empty = self::harness(self::received("text/plain", "x"));
+    empty.run();
+    empty.get_by_label(EN.cookies).click();
+    empty.run();
+    assert!(has(&empty, EN.response_no_cookies));
+}
