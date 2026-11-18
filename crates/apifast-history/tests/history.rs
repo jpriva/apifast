@@ -68,6 +68,13 @@ fn received(at_ms: i64) -> HistoryEntry {
                 at_us: 42,
                 kind: TimelineKind::Body { bytes: 7 },
             },
+            TimelineEvent {
+                at_us: 42,
+                kind: TimelineKind::Decompressed {
+                    encoding: "gzip".into(),
+                    wire_bytes: 5,
+                },
+            },
         ],
     };
     HistoryEntry::received(

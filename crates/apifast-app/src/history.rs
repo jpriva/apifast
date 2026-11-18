@@ -79,7 +79,8 @@ impl HistoryEntry {
                     | TimelineKind::Reused { .. }
                     | TimelineKind::Tls { .. }
                     | TimelineKind::Headers { .. }
-                    | TimelineKind::Body { .. } => {}
+                    | TimelineKind::Body { .. }
+                    | TimelineKind::Decompressed { .. } => {}
                 }
             }
         }

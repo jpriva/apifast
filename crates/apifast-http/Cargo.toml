@@ -19,6 +19,11 @@ rustls-platform-verifier = "0.7.1"
 # To wrap reqwest's connector and time each new connection.
 tower-layer = "0.3.3"
 tower-service = "0.3.3"
+# Response bodies are decompressed by hand, to know both sizes. The same
+# decoders reqwest's decompression used.
+flate2 = "1.1.11"
+brotli-decompressor = "6.3.1"
+zstd = { version = "0.14.4", default-features = false }
 tokio = { version = "1.54.1", features = ["time", "fs", "macros", "net", "io-util", "rt"] }
 futures-util = { version = "0.3.34", default-features = false }
 form_urlencoded = "1.2.2"
@@ -33,7 +38,7 @@ workspace = true
 
 [dev-dependencies]
 apifast-template.workspace = true
-flate2 = "1.1.11"
+brotli = "9.1.1"
 base64.workspace = true
 hmac.workspace = true
 md-5.workspace = true

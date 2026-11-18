@@ -6,7 +6,9 @@
 use apifast_app::{ResponseHead, TimelineEvent, TimelineKind};
 use apifast_gui::body::BodyHandle;
 use apifast_gui::core::{Received, ResponseState};
-use apifast_gui::organisms::{BodyMode, PRETTY_LIMIT, ResponseTab, ResponseView, describe, millis};
+use apifast_gui::organisms::{
+    BodyMode, PRETTY_LIMIT, ResponseTab, ResponseView, describe, millis, size_text,
+};
 use apifast_gui::strings::EN;
 use eframe::egui;
 use egui_kittest::Harness;
@@ -185,6 +187,25 @@ fn times_and_events_read_well() {
         text(TimelineKind::Reused { address: None }),
         "Reused connection to ?"
     );
+    assert_eq!(
+        text(TimelineKind::Decompressed {
+            encoding: "gzip".into(),
+            wire_bytes: 2048,
+        }),
+        "Decompressed gzip: 2.0 KB"
+    );
+    let ResponseState::Received(mut compressed) = received("text/plain", vec![b'x'; 8192]) else {
+        unreachable!()
+    };
+    assert_eq!(size_text(&compressed), "8.0 KB");
+    compressed.head.timeline.push(TimelineEvent {
+        at_us: 0,
+        kind: TimelineKind::Decompressed {
+            encoding: "br".into(),
+            wire_bytes: 512,
+        },
+    });
+    assert_eq!(size_text(&compressed), "8.0 KB (512 B br)");
     assert_eq!(
         text(TimelineKind::Tls {
             version: Some("TLSv1.3".into()),

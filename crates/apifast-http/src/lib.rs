@@ -5,6 +5,7 @@
 //! Must run inside a tokio runtime with the time driver enabled.
 
 mod cookies;
+mod decode;
 mod digest;
 mod loopback;
 mod ntlm;
@@ -23,12 +24,12 @@ use std::time::{Duration, Instant};
 
 use apifast_app::{
     BodyWriter, CancelToken, Cookies, HttpTransport, RenderedBody, RenderedRequest, ResponseHead,
-    TimelineEvent, TimelineKind, TransportAuth, TransportError,
+    StoreError, TimelineEvent, TimelineKind, TransportAuth, TransportError,
 };
 use apifast_domain::{ClientCertificate, MultipartValue, ProxyChoice, ProxyConfig, TlsTrust};
 use reqwest::header::{
-    AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE, COOKIE, HeaderMap, HeaderName, HeaderValue,
-    LOCATION, USER_AGENT,
+    ACCEPT_ENCODING, AUTHORIZATION, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, COOKIE,
+    HeaderMap, HeaderName, HeaderValue, LOCATION, RANGE, USER_AGENT,
 };
 use reqwest::{Method, Url};
 
@@ -248,11 +249,21 @@ impl ReqwestTransport {
                 at_us: at(),
                 kind: TimelineKind::Headers { status },
             });
-            let bytes = stream_body(response, writer, &url).await?;
+            let (bytes, compressed) = stream_body(response, writer, &url).await?;
+            let at_end = at();
             timeline.push(TimelineEvent {
-                at_us: at(),
+                at_us: at_end,
                 kind: TimelineKind::Body { bytes },
             });
+            if let Some((encoding, wire_bytes)) = compressed {
+                timeline.push(TimelineEvent {
+                    at_us: at_end,
+                    kind: TimelineKind::Decompressed {
+                        encoding: encoding.name().to_owned(),
+                        wire_bytes,
+                    },
+                });
+            }
             head.elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
             head.timeline = timeline;
             return Ok(head);
@@ -426,6 +437,11 @@ fn build_client(
     // Our own rustls configuration, and a resolver and a layer over the
     // connector, so the timeline shows DNS, connection and TLS (probe.rs).
     let builder = builder
+        // Bodies are decompressed by hand, to know both sizes (decode.rs).
+        .no_gzip()
+        .no_brotli()
+        .no_zstd()
+        .no_deflate()
         .tls_backend_preconfigured(settings.rustls_config(identity, http1_only)?)
         .tls_info(true)
         .dns_resolver(probe::TimedResolver)
@@ -708,19 +724,39 @@ fn cnonce() -> String {
 }
 
 /// Writes the body of `response` to `writer` as it arrives; returns its size.
+/// Writes the body of `response` into `writer`, decompressing it if its
+/// `Content-Encoding` is one apifast decodes. Returns the body's size and,
+/// for a compressed one, its encoding and size on the wire.
 async fn stream_body<W: BodyWriter>(
     mut response: reqwest::Response,
     writer: &mut W,
     url: &Url,
-) -> Result<u64, TransportError> {
-    let mut bytes = 0;
+) -> Result<(u64, Option<(decode::Encoding, u64)>), TransportError> {
+    let store_error =
+        |e: &StoreError| TransportError::Other(format!("cannot store the response body: {e}"));
+    let encoding = (response.headers().get(CONTENT_ENCODING))
+        .and_then(|v| v.to_str().ok())
+        .and_then(decode::Encoding::of);
+    let Some(encoding) = encoding else {
+        let mut bytes = 0;
+        while let Some(chunk) = response.chunk().await.map_err(|e| classify(&e, url))? {
+            writer.write(&chunk).map_err(|e| store_error(&e))?;
+            bytes += chunk.len() as u64;
+        }
+        return Ok((bytes, None));
+    };
+    let decode_error = |e: decode::DecodeError| match e {
+        decode::DecodeError::Store(e) => store_error(&e),
+        decode::DecodeError::Corrupt(encoding, why) => {
+            TransportError::Protocol(format!("the body is not valid {}: {why}", encoding.name()))
+        }
+    };
+    let mut decoder = decode::Decoder::new(encoding, writer).map_err(decode_error)?;
     while let Some(chunk) = response.chunk().await.map_err(|e| classify(&e, url))? {
-        writer
-            .write(&chunk)
-            .map_err(|e| TransportError::Other(format!("cannot store the response body: {e}")))?;
-        bytes += chunk.len() as u64;
+        decoder.write(&chunk).map_err(decode_error)?;
     }
-    Ok(bytes)
+    let (wire, bytes) = decoder.finish().map_err(decode_error)?;
+    Ok((bytes, (wire > 0).then_some((encoding, wire))))
 }
 
 /// The URL, method and headers of the first request of an exchange.
@@ -731,6 +767,11 @@ fn first_request(request: &RenderedRequest) -> Result<(Url, Method, HeaderMap), 
     let mut headers = header_map(request.headers())?;
     if !headers.contains_key(USER_AGENT) {
         headers.insert(USER_AGENT, HeaderValue::from_static(DEFAULT_USER_AGENT));
+    }
+    // What reqwest offered, and when: not with a range, whose bytes would
+    // be of the compressed body.
+    if !headers.contains_key(ACCEPT_ENCODING) && !headers.contains_key(RANGE) {
+        headers.insert(ACCEPT_ENCODING, HeaderValue::from_static(decode::ACCEPTED));
     }
     Ok((url, method, headers))
 }

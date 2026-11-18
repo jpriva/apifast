@@ -37,7 +37,7 @@ pub use palette::{CommandPalette, PaletteItem, PaletteMode, fuzzy};
 pub use proxy_editor::proxy_fields;
 pub use request_panel::{RequestChange, RequestPanel, RequestTab, TokenAction};
 pub use response::{
-    BodyMode, COPY_LIMIT, PRETTY_LIMIT, ResponseTab, ResponseView, describe, millis,
+    BodyMode, COPY_LIMIT, PRETTY_LIMIT, ResponseTab, ResponseView, describe, millis, size_text,
 };
 pub use response_cookies::set_by as cookies_set_by;
 pub use runner_window::{RunnerEvent, RunnerWindow};

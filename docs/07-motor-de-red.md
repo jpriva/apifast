@@ -26,7 +26,7 @@ Los pasos anteriores a "Enviar" son puros y están en el dominio y la aplicació
 | TLS | rustls con el verificador de la plataforma |
 | HTTP/1.1 y HTTP/2 | Sí, negociado por ALPN o forzado por ajuste |
 | HTTP/3 | Fuera de la 1.0 |
-| Descompresión | gzip, deflate, brotli y zstd, en streaming |
+| Descompresión | gzip, deflate, brotli y zstd, en streaming y a mano (ver [Respuesta](#respuesta)) |
 | Runtime | tokio |
 
 Decisiones (ver [ADR 0007](adr/0007-pila-http-tls.md)):
@@ -63,7 +63,7 @@ Todos son heredables (colección → carpeta → request) y el timeline indica d
 - **Bodies de archivo y partes multipart** leídos del disco en streaming, relativos a la carpeta de la colección.
 - **Errores clasificados** como en la tabla de abajo. Los mensajes nunca incluyen la URL, que puede llevar secretos en la query, ni el valor de un header.
 
-Pendiente para F5: proxy, certificados, cookies, timeline instrumentado y descompresión manual. `encodeUrl`, las cookies y el timeline de conexión llegaron en F5 (ver abajo).
+Pendiente para F5: proxy, certificados, cookies, timeline instrumentado y descompresión manual. `encodeUrl`, las cookies, el timeline de conexión y la descompresión manual llegaron en F5 (ver abajo).
 
 Se prueba contra un servidor HTTP local escrito en los propios tests, sin red externa.
 
@@ -212,6 +212,11 @@ Las rutas relativas se resuelven contra la carpeta de la colección y las absolu
 - El cuerpo se escribe **en streaming a un archivo** en `responses/<collection-id>/`, con un búfer de lectura fijo. La memoria no crece con el tamaño de la respuesta.
 - La interfaz lee el archivo por ventanas para mostrarlo (ver [rendimiento](10-rendimiento-y-memoria.md)).
 - Metadatos que se guardan: estado, versión de HTTP, headers, dirección remota, tamaño (comprimido y descomprimido) y tiempos.
+- **Descompresión a mano** (`apifast-http/src/decode.rs`): reqwest no descomprime; apifast envía el `Accept-Encoding` que enviaba reqwest (`zstd,gzip,deflate,br`) si la request no tiene uno propio ni un `Range` (cuyos bytes serían del cuerpo comprimido), y descomprime según el `Content-Encoding`: `gzip` (y `x-gzip`), `deflate` (zlib), `br` y `zstd`. Cada trozo pasa por un decodificador que escribe en el almacén según llega, así que la memoria no crece con el cuerpo. Se guarda el cuerpo descomprimido; el tamaño en la red va en el evento `decompressed` del timeline. Los headers se guardan como llegaron (`Content-Encoding` incluido).
+  - Con un `Accept-Encoding` propio también se descomprime lo que llegue, como hace Bruno.
+  - `identity`, varias codificaciones encadenadas o una desconocida: el cuerpo se guarda tal cual.
+  - Un cuerpo vacío (HEAD, 204, 304) no se decodifica. Uno roto o cortado es un error de protocolo: `the body is not valid gzip: …`. Un zstd cortado no se detecta: el decodificador de escritura no lo distingue.
+  - Probado por codificación en trozos pequeños, con cuerpos rotos y cortados, y contra un servidor local.
 - Las aserciones y capturas leen del archivo; para JSON grande se usa un límite de tamaño configurable antes de parsear.
 - La cancelación corta la lectura y deja la respuesta marcada como cancelada.
 
@@ -237,7 +242,7 @@ Los eventos se emiten por un canal mientras ocurre el envío y se guardan junto 
 
 ### Implementado
 
-Hoy el timeline tiene `request`, `dns`, `connected` o `reused`, `tls`, `redirect`, `headers` y `body`, en orden y con su tiempo desde el inicio del envío. Cada salto (redirección o segunda request de Digest o NTLM) trae los suyos. Se guardan en el historial ([docs/04](04-formato-de-archivos.md#historial)).
+Hoy el timeline tiene `request`, `dns`, `connected` o `reused`, `tls`, `redirect`, `headers`, `body` y, si el cuerpo llegó comprimido, `decompressed` (codificación y bytes en la red), en orden y con su tiempo desde el inicio del envío. Cada salto (redirección o segunda request de Digest o NTLM) trae los suyos. Se guardan en el historial ([docs/04](04-formato-de-archivos.md#historial)).
 
 **DNS, conexión y TLS con el pool activo** (`apifast-http/src/probe.rs`). La request se envía dentro de una sonda (`Probe::watch`, un `task_local` de tokio), y tres piezas anotan en la sonda de la tarea que las ejecuta:
 

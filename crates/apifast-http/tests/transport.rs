@@ -711,12 +711,69 @@ async fn compressed_responses_are_decompressed() {
     let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
     encoder.write_all(b"compressed hello").unwrap();
     let gzipped = encoder.finish().unwrap();
+    let wire = gzipped.len() as u64;
     let server =
         Server::start(move |_| Reply::ok(gzipped.clone()).header("Content-Encoding", "gzip")).await;
     let (result, body) = send(&get(server.url("/gz"))).await;
-    result.unwrap();
+    let head = result.unwrap();
     assert_eq!(body.body, b"compressed hello");
-    assert!(server.received()[0].headers["accept-encoding"].contains("gzip"));
+    assert_eq!(
+        server.received()[0].headers["accept-encoding"],
+        "zstd,gzip,deflate,br"
+    );
+    // Both sizes: the body as stored, and what came over the wire.
+    let kinds = exchange_only(&head.timeline);
+    let tail = &kinds[kinds.len() - 2..];
+    assert_eq!(
+        tail,
+        [
+            TimelineKind::Body { bytes: 16 },
+            TimelineKind::Decompressed {
+                encoding: "gzip".into(),
+                wire_bytes: wire,
+            }
+        ]
+    );
+    // The server's headers are kept as they came.
+    assert!(
+        head.headers
+            .contains(&("content-encoding".into(), "gzip".into()))
+    );
+
+    // The request's own Accept-Encoding is kept; with a range, none is added.
+    let mut own = get(server.url("/own"));
+    own.headers = vec![Header::new("Accept-Encoding", "gzip")];
+    send(&own).await.0.unwrap();
+    let mut range = get(server.url("/range"));
+    range.headers = vec![Header::new("Range", "bytes=0-9")];
+    send(&range).await.0.unwrap();
+    let received = server.received();
+    assert_eq!(received[1].headers["accept-encoding"], "gzip");
+    assert!(!received[2].headers.contains_key("accept-encoding"));
+}
+
+#[tokio::test]
+async fn a_broken_compressed_body_is_a_protocol_error_and_unknown_encodings_stay() {
+    let server = Server::start(|r| {
+        if r.path == "/broken" {
+            Reply::ok("not gzip").header("Content-Encoding", "gzip")
+        } else {
+            Reply::ok("raw").header("Content-Encoding", "compress")
+        }
+    })
+    .await;
+    let error = send(&get(server.url("/broken"))).await.0.unwrap_err();
+    assert!(matches!(error, TransportError::Protocol(_)), "{error:?}");
+    assert!(error.to_string().contains("not valid gzip"), "{error}");
+    let (result, body) = send(&get(server.url("/other"))).await;
+    let head = result.unwrap();
+    assert_eq!(body.body, b"raw");
+    assert!(
+        !head
+            .timeline
+            .iter()
+            .any(|e| matches!(e.kind, TimelineKind::Decompressed { .. }))
+    );
 }
 
 #[tokio::test]

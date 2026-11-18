@@ -170,6 +170,10 @@ fn encode_event(event: &TimelineEvent) -> Value {
         } => json!({"type": "tls", "version": version, "duration_us": duration_us}),
         TimelineKind::Headers { status } => json!({"type": "headers", "status": status}),
         TimelineKind::Body { bytes } => json!({"type": "body", "bytes": bytes}),
+        TimelineKind::Decompressed {
+            encoding,
+            wire_bytes,
+        } => json!({"type": "decompressed", "encoding": encoding, "wire_bytes": wire_bytes}),
     };
     if let Value::Object(map) = &mut value {
         map.insert("at_us".into(), json!(event.at_us));
@@ -271,6 +275,10 @@ fn decode_event(event: &Value) -> Option<TimelineEvent> {
         },
         "body" => TimelineKind::Body {
             bytes: number(map, "bytes")?,
+        },
+        "decompressed" => TimelineKind::Decompressed {
+            encoding: text(map, "encoding")?,
+            wire_bytes: number(map, "wire_bytes")?,
         },
         _ => return None,
     };

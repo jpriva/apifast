@@ -518,7 +518,7 @@ Cada envío terminado añade una línea JSON a `history/<collection-id>.jsonl`; 
                {"type":"headers","at_us":11250,"status":200},{"type":"body","at_us":12000,"bytes":21}]}}
 ```
 
-- Los eventos del timeline son `request`, `dns`, `connected`, `reused` (con `address`), `tls` (con `version` y `duration_us`), `redirect`, `headers` y `body`. Un evento de un tipo desconocido (de una versión más nueva) se ignora y la entrada se conserva.
+- Los eventos del timeline son `request`, `dns`, `connected`, `reused` (con `address`), `tls` (con `version` y `duration_us`), `redirect`, `headers`, `body` y `decompressed` (con `encoding` y `wire_bytes`, el tamaño en la red; `size` es el descomprimido). Un evento de un tipo desconocido (de una versión más nueva) se ignora y la entrada se conserva.
 
 - Un envío fallido lleva `"error": "<mensaje>"` en lugar de `response`. Los mensajes de error nunca contienen secretos.
 - `url` es la URL tal como está escrita, con sus `{{variables}}` sin resolver.

@@ -443,8 +443,15 @@ pub enum TimelineKind {
     },
     /// The whole body arrived.
     Body {
-        /// Its size in bytes.
+        /// Its size in bytes, decompressed.
         bytes: u64,
+    },
+    /// The body came compressed, and was decompressed as it arrived.
+    Decompressed {
+        /// Its `Content-Encoding`, such as `gzip`.
+        encoding: String,
+        /// The bytes that came over the wire.
+        wire_bytes: u64,
     },
 }
 

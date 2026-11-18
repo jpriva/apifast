@@ -629,6 +629,8 @@ pub struct Strings {
     pub captured_as: &'static str,
     /// Timeline event: a redirect was followed.
     pub event_redirect: &'static str,
+    /// Timeline: the body came compressed, with its size on the wire.
+    pub event_decompressed: &'static str,
     /// Timeline: a name was resolved.
     pub event_dns: &'static str,
     /// Timeline: a new connection was opened.
@@ -1138,6 +1140,7 @@ pub const EN: Strings = Strings {
     tests_none: "No assertions or captures ran. Responses from the history do not keep their results.",
     captured_as: "=",
     event_redirect: "Redirect",
+    event_decompressed: "Decompressed",
     event_dns: "DNS",
     event_connected: "Connected to",
     event_reused: "Reused connection to",

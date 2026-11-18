@@ -122,7 +122,7 @@ impl ResponseView {
         ui.horizontal(|ui| {
             ui.add(StatusBadge::new(received.head.status));
             ui.label(RichText::new(format!("{} ms", received.head.elapsed_ms)).color(muted));
-            ui.label(RichText::new(human_size(received.size)).color(muted));
+            ui.label(RichText::new(size_text(received)).color(muted));
         });
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.tab, ResponseTab::Body, strings.body);
@@ -348,6 +348,26 @@ fn headers(ui: &mut egui::Ui, headers: &[(String, String)]) {
         });
 }
 
+/// The body's size and, when it came compressed, its size on the wire:
+/// `12.0 KB (3.1 KB gzip)`.
+pub fn size_text(received: &Received) -> String {
+    let wire = received.head.timeline.iter().find_map(|e| match &e.kind {
+        TimelineKind::Decompressed {
+            encoding,
+            wire_bytes,
+        } => Some((encoding, *wire_bytes)),
+        _ => None,
+    });
+    match wire {
+        Some((encoding, bytes)) => format!(
+            "{} ({} {encoding})",
+            human_size(received.size),
+            human_size(bytes)
+        ),
+        None => human_size(received.size),
+    }
+}
+
 /// Microseconds as milliseconds with one decimal: `12.3 ms`.
 pub fn millis(us: u64) -> String {
     format!("{}.{} ms", us / 1000, us % 1000 / 100)
@@ -399,6 +419,14 @@ pub fn describe(event: &TimelineEvent, strings: &Strings) -> String {
         TimelineKind::Body { bytes } => {
             format!("{}: {}", strings.event_body, human_size(*bytes))
         }
+        TimelineKind::Decompressed {
+            encoding,
+            wire_bytes,
+        } => format!(
+            "{} {encoding}: {}",
+            strings.event_decompressed,
+            human_size(*wire_bytes)
+        ),
     }
 }
 
