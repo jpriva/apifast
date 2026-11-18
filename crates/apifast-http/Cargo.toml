@@ -13,7 +13,13 @@ apifast-app.workspace = true
 apifast-template.workspace = true
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "http2", "charset", "gzip", "brotli", "zstd", "deflate", "stream", "multipart", "socks"] }
 rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
-tokio = { version = "1.54.1", features = ["time", "fs", "macros", "net", "io-util"] }
+# The platform verifier reqwest uses, now given to it in our own rustls
+# configuration, which also marks when each TLS handshake starts.
+rustls-platform-verifier = "0.7.1"
+# To wrap reqwest's connector and time each new connection.
+tower-layer = "0.3.3"
+tower-service = "0.3.3"
+tokio = { version = "1.54.1", features = ["time", "fs", "macros", "net", "io-util", "rt"] }
 futures-util = { version = "0.3.34", default-features = false }
 form_urlencoded = "1.2.2"
 hmac.workspace = true

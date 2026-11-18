@@ -353,6 +353,21 @@ fn sample_responses() -> Vec<ResponseState> {
                         },
                     },
                     TimelineEvent {
+                        at_us: 1_200,
+                        kind: TimelineKind::Dns {
+                            host: "localhost".into(),
+                            addresses: vec!["127.0.0.1".into()],
+                            duration_us: 1_150,
+                        },
+                    },
+                    TimelineEvent {
+                        at_us: 1_600,
+                        kind: TimelineKind::Connected {
+                            address: Some("127.0.0.1:8080".into()),
+                            duration_us: 400,
+                        },
+                    },
+                    TimelineEvent {
                         at_us: 151_400,
                         kind: TimelineKind::Headers { status },
                     },

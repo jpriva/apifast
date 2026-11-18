@@ -408,6 +408,34 @@ pub enum TimelineKind {
         /// Where it pointed, as sent by the server.
         location: String,
     },
+    /// The host's name was resolved, to open a new connection.
+    Dns {
+        /// The name.
+        host: String,
+        /// The addresses it resolved to.
+        addresses: Vec<String>,
+        /// How long it took, in microseconds.
+        duration_us: u64,
+    },
+    /// A new connection was opened (to the proxy, when there is one).
+    Connected {
+        /// The address it went to, when known.
+        address: Option<String>,
+        /// How long opening it took, in microseconds, without DNS and TLS.
+        duration_us: u64,
+    },
+    /// The request went on a connection that was already open.
+    Reused {
+        /// The address it goes to, when known.
+        address: Option<String>,
+    },
+    /// The TLS handshake of a new connection ended.
+    Tls {
+        /// The TLS version, such as `TLSv1.3`, when known.
+        version: Option<String>,
+        /// How long it took, in microseconds.
+        duration_us: u64,
+    },
     /// The status and headers of the final response arrived.
     Headers {
         /// The status.

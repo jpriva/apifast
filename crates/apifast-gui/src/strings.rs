@@ -629,6 +629,14 @@ pub struct Strings {
     pub captured_as: &'static str,
     /// Timeline event: a redirect was followed.
     pub event_redirect: &'static str,
+    /// Timeline: a name was resolved.
+    pub event_dns: &'static str,
+    /// Timeline: a new connection was opened.
+    pub event_connected: &'static str,
+    /// Timeline: the request went on an open connection.
+    pub event_reused: &'static str,
+    /// Timeline: the TLS handshake ended.
+    pub event_tls: &'static str,
     /// Timeline event: the status and headers arrived.
     pub event_headers: &'static str,
     /// Timeline event: the whole body arrived.
@@ -1130,6 +1138,10 @@ pub const EN: Strings = Strings {
     tests_none: "No assertions or captures ran. Responses from the history do not keep their results.",
     captured_as: "=",
     event_redirect: "Redirect",
+    event_dns: "DNS",
+    event_connected: "Connected to",
+    event_reused: "Reused connection to",
+    event_tls: "TLS handshake,",
     event_headers: "Headers received",
     event_body: "Body received",
     pretty: "Pretty",

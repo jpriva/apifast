@@ -362,10 +362,13 @@ dependencies = [
  "rcgen",
  "reqwest",
  "rustls",
+ "rustls-platform-verifier",
  "sha2",
  "tempfile",
  "tokio",
  "tokio-rustls",
+ "tower-layer",
+ "tower-service",
 ]
 
 [[package]]

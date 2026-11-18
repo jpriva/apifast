@@ -73,7 +73,13 @@ impl HistoryEntry {
                 match &mut event.kind {
                     TimelineKind::Request { url, .. } => *url = clean(url),
                     TimelineKind::Redirect { location, .. } => *location = clean(location),
-                    TimelineKind::Headers { .. } | TimelineKind::Body { .. } => {}
+                    // A host may come from a secret too.
+                    TimelineKind::Dns { host, .. } => *host = mask(host, secrets).into_owned(),
+                    TimelineKind::Connected { .. }
+                    | TimelineKind::Reused { .. }
+                    | TimelineKind::Tls { .. }
+                    | TimelineKind::Headers { .. }
+                    | TimelineKind::Body { .. } => {}
                 }
             }
         }

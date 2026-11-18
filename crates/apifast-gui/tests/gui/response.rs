@@ -165,6 +165,33 @@ fn times_and_events_read_well() {
         kind: TimelineKind::Body { bytes: 0 },
     };
     assert_eq!(describe(&event, &EN), "Body received: 0 B");
+    let text = |kind| describe(&TimelineEvent { at_us: 0, kind }, &EN);
+    assert_eq!(
+        text(TimelineKind::Dns {
+            host: "api.test".into(),
+            addresses: vec!["10.0.0.1".into(), "::1".into()],
+            duration_us: 1_500,
+        }),
+        "DNS api.test → 10.0.0.1, ::1 (1.5 ms)"
+    );
+    assert_eq!(
+        text(TimelineKind::Connected {
+            address: Some("10.0.0.1:443".into()),
+            duration_us: 800,
+        }),
+        "Connected to 10.0.0.1:443 (0.8 ms)"
+    );
+    assert_eq!(
+        text(TimelineKind::Reused { address: None }),
+        "Reused connection to ?"
+    );
+    assert_eq!(
+        text(TimelineKind::Tls {
+            version: Some("TLSv1.3".into()),
+            duration_us: 4_100,
+        }),
+        "TLS handshake, TLSv1.3 (4.1 ms)"
+    );
 }
 
 #[test]

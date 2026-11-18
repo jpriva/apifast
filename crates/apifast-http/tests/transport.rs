@@ -283,6 +283,54 @@ fn get(url: String) -> HttpRequest {
     HttpRequest::new("r", Method::Get, url)
 }
 
+/// The events of the exchange, without those of the connection.
+fn exchange_only(timeline: &[apifast_app::TimelineEvent]) -> Vec<TimelineKind> {
+    (timeline.iter())
+        .map(|e| e.kind.clone())
+        .filter(|k| {
+            !matches!(
+                k,
+                TimelineKind::Dns { .. }
+                    | TimelineKind::Connected { .. }
+                    | TimelineKind::Reused { .. }
+                    | TimelineKind::Tls { .. }
+            )
+        })
+        .collect()
+}
+
+/// A server that keeps each connection open, answering `ok` to every
+/// request without body on it, and counts the connections.
+async fn keep_alive_server() -> (u16, Arc<Mutex<usize>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let connections = Arc::new(Mutex::new(0));
+    let counted = connections.clone();
+    tokio::spawn(async move {
+        while let Ok((mut stream, _)) = listener.accept().await {
+            *counted.lock().unwrap() += 1;
+            tokio::spawn(async move {
+                let mut buffer = Vec::new();
+                let mut chunk = [0u8; 4096];
+                loop {
+                    while let Some(end) = find(&buffer, b"\r\n\r\n") {
+                        buffer.drain(..end + 4);
+                        let reply = b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok";
+                        if stream.write_all(reply).await.is_err() {
+                            return;
+                        }
+                    }
+                    match stream.read(&mut chunk).await {
+                        Ok(0) | Err(_) => return,
+                        Ok(n) => buffer.extend_from_slice(&chunk[..n]),
+                    }
+                }
+            });
+        }
+    });
+    (port, connections)
+}
+
 // --- Tests ----------------------------------------------------------------
 
 #[tokio::test]
@@ -514,7 +562,7 @@ async fn redirects_301_to_303_become_get_without_body() {
     assert!(!received[1].headers.contains_key("content-type"));
 
     // The timeline tells each hop, in order and with growing times.
-    let kinds: Vec<_> = head.timeline.iter().map(|e| e.kind.clone()).collect();
+    let kinds = exchange_only(&head.timeline);
     let request = |method: &str, path: &str| TimelineKind::Request {
         method: method.into(),
         url: server.url(path),
@@ -782,6 +830,60 @@ async fn cookies_are_neither_sent_nor_kept_when_turned_off() {
 }
 
 #[tokio::test]
+async fn the_timeline_shows_dns_and_the_connection_then_its_reuse() {
+    let (port, connections) = keep_alive_server().await;
+    let transport = transport();
+    let url = format!("http://localhost:{port}/a");
+    let cancel = CancelToken::new();
+    let (first, _) = send_with(&transport, &get(url.clone()), &cancel).await;
+    let (second, _) = send_with(&transport, &get(url), &cancel).await;
+    let (first, second) = (first.unwrap(), second.unwrap());
+    assert_eq!(
+        *connections.lock().unwrap(),
+        1,
+        "the pool keeps the connection"
+    );
+
+    let kinds = |head: &ResponseHead| -> Vec<TimelineKind> {
+        head.timeline.iter().map(|e| e.kind.clone()).collect()
+    };
+    let first_kinds = kinds(&first);
+    let TimelineKind::Dns {
+        host, addresses, ..
+    } = &first_kinds[1]
+    else {
+        panic!("{first_kinds:?}");
+    };
+    assert_eq!(host, "localhost");
+    assert!(addresses.iter().any(|a| a == "127.0.0.1"), "{addresses:?}");
+    let TimelineKind::Connected { address, .. } = &first_kinds[2] else {
+        panic!("{first_kinds:?}");
+    };
+    let address = address.clone().unwrap();
+    assert!(address.ends_with(&format!(":{port}")), "{address}");
+    assert!(
+        !first_kinds
+            .iter()
+            .any(|k| matches!(k, TimelineKind::Tls { .. }))
+    );
+    // The events are in time order.
+    assert!(first.timeline.windows(2).all(|w| w[0].at_us <= w[1].at_us));
+
+    // No lookup and no new connection the second time.
+    assert_eq!(
+        kinds(&second)[1],
+        TimelineKind::Reused {
+            address: Some(address)
+        }
+    );
+    assert!(
+        !kinds(&second)
+            .iter()
+            .any(|k| matches!(k, TimelineKind::Dns { .. }))
+    );
+}
+
+#[tokio::test]
 async fn a_refused_connection_is_classified_and_hides_the_query() {
     // Bind and drop, so nothing listens on the port.
     let port = std::net::TcpListener::bind("127.0.0.1:0")
@@ -998,10 +1100,9 @@ async fn digest_answers_the_challenge_and_sends_the_body_again() {
     assert!(!received[0].headers.contains_key("authorization"));
     assert_eq!(received[1].body, br#"{"a":1}"#, "the body goes again");
     // The timeline shows both requests and the 401 between them.
-    let kinds: Vec<String> = head
-        .timeline
+    let kinds: Vec<String> = exchange_only(&head.timeline)
         .iter()
-        .map(|e| format!("{:?}", e.kind))
+        .map(|k| format!("{k:?}"))
         .collect();
     assert!(kinds[1].contains("status: 401"), "{kinds:?}");
 }

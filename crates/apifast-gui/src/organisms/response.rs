@@ -360,6 +360,39 @@ pub fn describe(event: &TimelineEvent, strings: &Strings) -> String {
         TimelineKind::Redirect { status, location } => {
             format!("{} {status}: {location}", strings.event_redirect)
         }
+        TimelineKind::Dns {
+            host,
+            addresses,
+            duration_us,
+        } => format!(
+            "{} {host} → {} ({})",
+            strings.event_dns,
+            addresses.join(", "),
+            millis(*duration_us)
+        ),
+        TimelineKind::Connected {
+            address,
+            duration_us,
+        } => format!(
+            "{} {} ({})",
+            strings.event_connected,
+            address.as_deref().unwrap_or("?"),
+            millis(*duration_us)
+        ),
+        TimelineKind::Reused { address } => format!(
+            "{} {}",
+            strings.event_reused,
+            address.as_deref().unwrap_or("?")
+        ),
+        TimelineKind::Tls {
+            version,
+            duration_us,
+        } => format!(
+            "{} {} ({})",
+            strings.event_tls,
+            version.as_deref().unwrap_or("TLS"),
+            millis(*duration_us)
+        ),
         TimelineKind::Headers { status } => {
             format!("{}: {}", strings.event_headers, StatusBadge::text(*status))
         }

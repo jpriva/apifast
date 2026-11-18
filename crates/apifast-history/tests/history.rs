@@ -28,6 +28,32 @@ fn received(at_ms: i64) -> HistoryEntry {
                 },
             },
             TimelineEvent {
+                at_us: 2,
+                kind: TimelineKind::Dns {
+                    host: "api.test".into(),
+                    addresses: vec!["10.0.0.1".into(), "::1".into()],
+                    duration_us: 2,
+                },
+            },
+            TimelineEvent {
+                at_us: 4,
+                kind: TimelineKind::Connected {
+                    address: Some("10.0.0.1:443".into()),
+                    duration_us: 2,
+                },
+            },
+            TimelineEvent {
+                at_us: 8,
+                kind: TimelineKind::Tls {
+                    version: Some("TLSv1.3".into()),
+                    duration_us: 4,
+                },
+            },
+            TimelineEvent {
+                at_us: 9,
+                kind: TimelineKind::Reused { address: None },
+            },
+            TimelineEvent {
                 at_us: 10,
                 kind: TimelineKind::Redirect {
                     status: 307,
@@ -73,6 +99,22 @@ fn entries_survive_a_round_trip_in_order() {
     assert_eq!(store.entries().unwrap(), [received(1), failed(2)]);
     let text = std::fs::read_to_string(store.file()).unwrap();
     assert_eq!(text.lines().count(), 2, "one line per entry");
+}
+
+#[test]
+fn an_event_of_a_newer_version_is_skipped_and_its_entry_kept() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsHistoryStore::new(dir.path().join("c.jsonl"));
+    store.append(&received(1)).unwrap();
+    let text = std::fs::read_to_string(store.file()).unwrap();
+    let newer = text.replacen(
+        "\"timeline\":[",
+        "\"timeline\":[{\"type\":\"quic\",\"at_us\":1},",
+        1,
+    );
+    assert_ne!(newer, text);
+    std::fs::write(store.file(), newer).unwrap();
+    assert_eq!(store.entries().unwrap(), [received(1)]);
 }
 
 #[test]

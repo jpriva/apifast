@@ -63,7 +63,7 @@ Todos son heredables (colección → carpeta → request) y el timeline indica d
 - **Bodies de archivo y partes multipart** leídos del disco en streaming, relativos a la carpeta de la colección.
 - **Errores clasificados** como en la tabla de abajo. Los mensajes nunca incluyen la URL, que puede llevar secretos en la query, ni el valor de un header.
 
-Pendiente para F5: proxy, certificados, cookies, timeline instrumentado y descompresión manual. `encodeUrl` y las cookies llegaron en F5 (ver abajo).
+Pendiente para F5: proxy, certificados, cookies, timeline instrumentado y descompresión manual. `encodeUrl`, las cookies y el timeline de conexión llegaron en F5 (ver abajo).
 
 Se prueba contra un servidor HTTP local escrito en los propios tests, sin red externa.
 
@@ -234,6 +234,24 @@ Cada envío produce una lista de eventos tipados:
 | `Info` / `Error` | Mensajes del motor |
 
 Los eventos se emiten por un canal mientras ocurre el envío y se guardan junto a la respuesta.
+
+### Implementado
+
+Hoy el timeline tiene `request`, `dns`, `connected` o `reused`, `tls`, `redirect`, `headers` y `body`, en orden y con su tiempo desde el inicio del envío. Cada salto (redirección o segunda request de Digest o NTLM) trae los suyos. Se guardan en el historial ([docs/04](04-formato-de-archivos.md#historial)).
+
+**DNS, conexión y TLS con el pool activo** (`apifast-http/src/probe.rs`). La request se envía dentro de una sonda (`Probe::watch`, un `task_local` de tokio), y tres piezas anotan en la sonda de la tarea que las ejecuta:
+
+- un **resolutor propio** (`TimedResolver`, el del sistema como el de reqwest), que mide cada búsqueda y anota el nombre y las direcciones;
+- una **capa sobre el conector** de reqwest (`connector_layer`), que anota cuándo empieza y termina cada conexión nueva, con el proxy y TLS incluidos;
+- el **almacén de sesiones TLS** de rustls (`ProbedSessions`), que anota cuándo empieza el handshake: es lo primero que rustls consulta al escribir su `ClientHello`, justo tras abrir el TCP.
+
+Con eso: DNS es la búsqueda; la conexión va del fin del DNS (o del inicio, sin DNS, como con una IP) al inicio de TLS; TLS va de ahí al fin de la conexión. La versión de TLS sale de `TlsInfo`, y la dirección, de la respuesta. Si no hay anotaciones, la request fue por una conexión del pool y se indica como reutilizada. Una conexión que hyper termina en segundo plano, cuando la request ya tomó otra del pool, no anota nada.
+
+Para colgar el almacén de sesiones, apifast construye la configuración de rustls en vez de reqwest (`apifast-http/src/tls.rs`): ring, el verificador de la plataforma con las CA adicionales (o uno que acepta todo, sin validación), el certificado de cliente PEM y ALPN `h2` y `http/1.1` (solo `http/1.1` para NTLM). Es la misma que construía reqwest.
+
+Pendiente: la suite y el certificado del servidor en el evento TLS (`TlsInfo` no da la suite), el evento `Proxy`, y los de headers y bytes enviados.
+
+Probado con un servidor que mantiene la conexión (el primer envío a `localhost` tiene DNS y conexión; el segundo, conexión reutilizada y una sola conexión en el servidor) y contra el servidor TLS local (handshake después de la conexión, con `TLSv1.3`).
 
 ## Otros protocolos
 

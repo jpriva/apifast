@@ -152,6 +152,22 @@ fn encode_event(event: &TimelineEvent) -> Value {
         TimelineKind::Redirect { status, location } => {
             json!({"type": "redirect", "status": status, "location": location})
         }
+        TimelineKind::Dns {
+            host,
+            addresses,
+            duration_us,
+        } => {
+            json!({"type": "dns", "host": host, "addresses": addresses, "duration_us": duration_us})
+        }
+        TimelineKind::Connected {
+            address,
+            duration_us,
+        } => json!({"type": "connected", "address": address, "duration_us": duration_us}),
+        TimelineKind::Reused { address } => json!({"type": "reused", "address": address}),
+        TimelineKind::Tls {
+            version,
+            duration_us,
+        } => json!({"type": "tls", "version": version, "duration_us": duration_us}),
         TimelineKind::Headers { status } => json!({"type": "headers", "status": status}),
         TimelineKind::Body { bytes } => json!({"type": "body", "bytes": bytes}),
     };
@@ -202,8 +218,9 @@ fn decode(line: &Value) -> Option<HistoryEntry> {
                     .get("timeline")?
                     .as_array()?
                     .iter()
-                    .map(decode_event)
-                    .collect::<Option<_>>()?,
+                    // An event of a newer version is skipped, not the entry.
+                    .filter_map(decode_event)
+                    .collect(),
             },
             size: number(response, "size")?,
             body: ResponseId(text(response, "body")?),
@@ -230,6 +247,24 @@ fn decode_event(event: &Value) -> Option<TimelineEvent> {
         "redirect" => TimelineKind::Redirect {
             status: status(map)?,
             location: text(map, "location")?,
+        },
+        "dns" => TimelineKind::Dns {
+            host: text(map, "host")?,
+            addresses: (map.get("addresses")?.as_array()?.iter())
+                .filter_map(|a| a.as_str().map(str::to_owned))
+                .collect(),
+            duration_us: number(map, "duration_us")?,
+        },
+        "connected" => TimelineKind::Connected {
+            address: text(map, "address"),
+            duration_us: number(map, "duration_us")?,
+        },
+        "reused" => TimelineKind::Reused {
+            address: text(map, "address"),
+        },
+        "tls" => TimelineKind::Tls {
+            version: text(map, "version"),
+            duration_us: number(map, "duration_us")?,
         },
         "headers" => TimelineKind::Headers {
             status: status(map)?,

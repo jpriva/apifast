@@ -8,6 +8,7 @@ mod cookies;
 mod digest;
 mod loopback;
 mod ntlm;
+mod probe;
 mod sigv4;
 mod tls;
 
@@ -53,7 +54,7 @@ pub struct ReqwestTransport {
 #[derive(Debug, Clone)]
 struct Certified {
     certificate: ClientCertificate,
-    client: Result<(reqwest::Client, reqwest::Identity), String>,
+    client: Result<(reqwest::Client, tls::Identity), String>,
 }
 
 impl ReqwestTransport {
@@ -101,7 +102,7 @@ impl ReqwestTransport {
         let _ = rustls::crypto::ring::default_provider().install_default();
         let files_root = files_root.into();
         let settings = tls::ClientSettings::new(proxy, trust)?;
-        let client = build_client(reqwest::Client::builder(), &settings, None)?;
+        let client = build_client(reqwest::Client::builder(), &settings, None, false)?;
         let certified = (certificates.iter())
             .filter(|c| c.enabled)
             .map(|certificate| Certified {
@@ -111,6 +112,7 @@ impl ReqwestTransport {
                         reqwest::Client::builder(),
                         &settings,
                         Some(identity.clone()),
+                        false,
                     )
                     .map(|client| (client, identity))
                     .map_err(|e| e.to_string())
@@ -182,32 +184,16 @@ impl ReqwestTransport {
                 send_body,
                 first_origin: &first_origin,
             };
-            let mut sent_headers = signed_headers(request, &headers, &sent)?;
-            if let Some(jar) = &self.cookies {
-                cookies::add_from_jar(jar, &url, &mut sent_headers);
-            }
-            let client = match ntlm {
-                Some(client) => client,
-                None => self.client_for(&url)?,
-            };
-            let mut builder = client
-                .request(method.clone(), url.clone())
-                .headers(sent_headers);
-            if send_body {
-                builder = self.attach_body(builder, request.body()).await?;
-            }
-            timeline.push(TimelineEvent {
-                at_us: at(),
-                kind: TimelineKind::Request {
-                    method: method.as_str().to_owned(),
-                    url: url.to_string(),
-                },
-            });
-            let response = builder.send().await.map_err(|e| classify(&e, &url))?;
+            let sent_headers = signed_headers(request, &headers, &sent)?;
+            let response = self
+                .hop(
+                    ntlm,
+                    request,
+                    (&sent, sent_headers),
+                    (started, &mut timeline),
+                )
+                .await?;
             let status = response.status().as_u16();
-            if let Some(jar) = &self.cookies {
-                cookies::keep(jar, &url, response.headers());
-            }
 
             let response = if status == 401 && answered.as_ref() != Some(&url) {
                 match answer_challenge(request, response, &sent).await? {
@@ -271,6 +257,46 @@ impl ReqwestTransport {
             head.timeline = timeline;
             return Ok(head);
         }
+    }
+
+    /// Sends one request of the exchange, `sent` with its `headers`, and
+    /// notes it and its connection in `timeline`. Cookies go from the jar
+    /// and come back to it.
+    async fn hop(
+        &self,
+        ntlm: Option<&reqwest::Client>,
+        request: &RenderedRequest,
+        (sent, mut headers): (&Outgoing<'_>, HeaderMap),
+        (started, timeline): (Instant, &mut Vec<TimelineEvent>),
+    ) -> Result<reqwest::Response, TransportError> {
+        let url = sent.url;
+        if let Some(jar) = &self.cookies {
+            cookies::add_from_jar(jar, url, &mut headers);
+        }
+        let client = match ntlm {
+            Some(client) => client,
+            None => self.client_for(url)?,
+        };
+        let mut builder = client
+            .request(sent.method.clone(), url.clone())
+            .headers(headers);
+        if sent.send_body {
+            builder = self.attach_body(builder, request.body()).await?;
+        }
+        timeline.push(TimelineEvent {
+            at_us: u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
+            kind: TimelineKind::Request {
+                method: sent.method.as_str().to_owned(),
+                url: url.to_string(),
+            },
+        });
+        let (result, notes) = probe::Probe::watch(builder.send()).await;
+        let response = result.map_err(|e| classify(&e, url))?;
+        connection_events(&notes, &response, started, timeline);
+        if let Some(jar) = &self.cookies {
+            cookies::keep(jar, url, response.headers());
+        }
+        Ok(response)
     }
 
     async fn attach_body(
@@ -394,14 +420,16 @@ impl HttpTransport for ReqwestTransport {
 fn build_client(
     builder: reqwest::ClientBuilder,
     settings: &tls::ClientSettings,
-    identity: Option<reqwest::Identity>,
+    identity: Option<tls::Identity>,
+    http1_only: bool,
 ) -> Result<reqwest::Client, TransportError> {
-    let mut builder = builder
-        .tls_certs_merge(settings.extra_ca.iter().cloned())
-        .tls_danger_accept_invalid_certs(settings.insecure);
-    if let Some(identity) = identity {
-        builder = builder.identity(identity);
-    }
+    // Our own rustls configuration, and a resolver and a layer over the
+    // connector, so the timeline shows DNS, connection and TLS (probe.rs).
+    let builder = builder
+        .tls_backend_preconfigured(settings.rustls_config(identity, http1_only)?)
+        .tls_info(true)
+        .dns_resolver(probe::TimedResolver)
+        .connector_layer(probe::ProbeLayer);
     let builder = match &settings.proxy {
         // reqwest reads the HTTP_PROXY family of variables by default.
         ProxyChoice::System => builder,
@@ -409,7 +437,6 @@ fn build_client(
         ProxyChoice::Manual(config) => builder.proxy(manual_proxy(config)?),
     };
     builder
-        .tls_backend_rustls()
         // Redirects are followed by hand, to apply apifast's rules and count
         // them.
         .redirect(reqwest::redirect::Policy::none())
@@ -423,7 +450,7 @@ fn build_client(
 /// pool hands the same connection back.
 fn ntlm_client(
     settings: &tls::ClientSettings,
-    identity: Option<reqwest::Identity>,
+    identity: Option<tls::Identity>,
 ) -> Result<reqwest::Client, TransportError> {
     build_client(
         reqwest::Client::builder()
@@ -431,7 +458,79 @@ fn ntlm_client(
             .pool_max_idle_per_host(1),
         settings,
         identity,
+        true,
     )
+}
+
+/// The timeline events of the connection `response` came on: DNS, the
+/// new connection and its TLS handshake, as `notes` say; or that it was
+/// reused, when there are none.
+fn connection_events(
+    notes: &[probe::Note],
+    response: &reqwest::Response,
+    started: Instant,
+    timeline: &mut Vec<TimelineEvent>,
+) {
+    let since = |at: Instant| u64::try_from(at.saturating_duration_since(started).as_micros());
+    let span = |from: Instant, to: Instant| {
+        u64::try_from(to.saturating_duration_since(from).as_micros()).unwrap_or(u64::MAX)
+    };
+    let address = response.remote_addr().map(|a| a.to_string());
+    let connection = probe::Connection::of(notes);
+    let mut events = Vec::new();
+    for (host, addresses, start, end) in &connection.dns {
+        let mut ips: Vec<String> = addresses.iter().map(|a| a.ip().to_string()).collect();
+        ips.dedup();
+        events.push((
+            *end,
+            TimelineKind::Dns {
+                host: host.clone(),
+                addresses: ips,
+                duration_us: span(*start, *end),
+            },
+        ));
+    }
+    match connection.connected {
+        Some((start, end)) => events.push((
+            end,
+            TimelineKind::Connected {
+                address,
+                duration_us: span(start, end),
+            },
+        )),
+        None => events.push((Instant::now(), TimelineKind::Reused { address })),
+    }
+    if let Some((start, end)) = connection.tls {
+        let version = (response.extensions().get::<reqwest::tls::TlsInfo>())
+            .and_then(reqwest::tls::TlsInfo::version)
+            .map(tls_version);
+        events.push((
+            end,
+            TimelineKind::Tls {
+                version,
+                duration_us: span(start, end),
+            },
+        ));
+    }
+    for (at, kind) in events {
+        timeline.push(TimelineEvent {
+            at_us: since(at).unwrap_or(u64::MAX),
+            kind,
+        });
+    }
+}
+
+/// A TLS version as people write it.
+fn tls_version(version: reqwest::tls::Version) -> String {
+    use reqwest::tls::Version;
+    match version {
+        Version::TLS_1_3 => "TLSv1.3",
+        Version::TLS_1_2 => "TLSv1.2",
+        Version::TLS_1_1 => "TLSv1.1",
+        Version::TLS_1_0 => "TLSv1.0",
+        _ => "TLS",
+    }
+    .to_owned()
 }
 
 /// A proxy for every scheme, with its credentials and exclusions.

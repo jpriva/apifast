@@ -170,6 +170,23 @@ async fn get(
         .await
         .map_err(|e| e.to_string())?;
     assert_eq!(head.status, 200);
+    // Every new connection here is TLS: its handshake shows, after the
+    // connection, with the version.
+    let kinds: Vec<_> = head.timeline.iter().map(|e| &e.kind).collect();
+    let connected = kinds
+        .iter()
+        .position(|k| matches!(k, apifast_app::TimelineKind::Connected { .. }));
+    let tls = kinds.iter().position(|k| {
+        matches!(
+            k,
+            apifast_app::TimelineKind::Tls { version: Some(v), .. } if v == "TLSv1.3"
+        )
+    });
+    assert!(
+        connected.is_some() && tls > connected,
+        "{:#?}",
+        head.timeline
+    );
     Ok(body.0)
 }
 
