@@ -107,7 +107,12 @@ fn allowed(from: &str, a: Layer, to: &str, b: Layer) -> bool {
             matches!(from, "apifast-template" | "apifast-query") && to == "apifast-domain"
         }
         Layer::Application => b == Layer::Domain,
-        Layer::Adapter => matches!(b, Layer::Domain | Layer::Application),
+        // The WebSocket handshake is an HTTP request: it goes through the
+        // HTTP transport, for its proxy, TLS and certificates.
+        Layer::Adapter => {
+            matches!(b, Layer::Domain | Layer::Application)
+                || (from, to) == ("apifast-ws", "apifast-http")
+        }
         Layer::Driver => b != Layer::Driver && b != Layer::Tooling,
         Layer::Tooling => false,
     }
@@ -249,6 +254,14 @@ fn the_rules_catch_violations() {
         Adapter
     ));
     assert!(!allowed("apifast-http", Adapter, "apifast-cli", Driver));
+    assert!(allowed("apifast-ws", Adapter, "apifast-http", Adapter));
+    assert!(!allowed("apifast-http", Adapter, "apifast-ws", Adapter));
+    assert!(!allowed(
+        "apifast-history",
+        Adapter,
+        "apifast-http",
+        Adapter
+    ));
     assert!(allowed("apifast-cli", Driver, "apifast-http", Adapter));
     assert!(allowed(
         "apifast-template",

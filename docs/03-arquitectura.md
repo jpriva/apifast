@@ -65,7 +65,7 @@ flowchart TB
 | `apifast-watch` | Adaptador | Observación del sistema de archivos | Aplicación, notify |
 | `apifast-history` | Adaptador | Historial y cuerpos de respuesta en disco | Aplicación |
 | `apifast-import` | Adaptador | Importadores y exportadores. Hoy, cURL (`parse_curl` y `to_curl`) Postman (`import_postman`, `import_postman_environment`) OpenAPI 3 (`import_openapi`, sobre un valor JSON: el YAML lo convierte `yaml_to_json` de `apifast-storage-fs`, el único que usa oneyaml) , Bruno `.bru` (`import_bruno`, que lee la carpeta) e Insomnia v4 y v5 (`import_insomnia`, también sobre JSON): cURL (sobre una `RenderedRequest` de `render_for_copy`, el caso de uso que renderiza sin enviar); la interfaz lo usa directamente, sin puerto, porque es puro | Aplicación, serde |
-| `apifast-ws` | Adaptador | WebSocket | Aplicación, tokio-tungstenite |
+| `apifast-ws` | Adaptador | WebSocket: los frames, sobre el handshake de `apifast-http` | Aplicación, `apifast-http`, tokio-tungstenite |
 | `apifast-grpc` | Adaptador | gRPC y reflection | Aplicación, tonic, prost-reflect |
 | `apifast-script-js` | Adaptador | Motor JavaScript | Aplicación, rquickjs |
 | `apifast-gui` | Driver | Interfaz egui y composición | Aplicación y todos los adaptadores |
@@ -75,7 +75,7 @@ flowchart TB
 
 1. `apifast-domain` no depende de ningún otro crate del workspace, ni de tokio, serde, reqwest o egui. `apifast-template` y `apifast-query` solo dependen de él, y siguen siendo puros: sin E/S.
 2. `apifast-app` solo depende del dominio. Nunca de un adaptador.
-3. Un adaptador nunca depende de otro adaptador.
+3. Un adaptador nunca depende de otro adaptador. La única excepción es `apifast-ws`, que usa `apifast-http` para el handshake: así una conexión WebSocket tiene el mismo proxy, TLS, certificados y DNS que una request, sin duplicarlos.
 4. Solo los drivers (`apifast-gui`, `apifast-cli`) conocen los tipos concretos y los conectan (raíz de composición).
 5. Los DTO de serialización viven en el adaptador, no en el dominio.
 
@@ -120,6 +120,7 @@ Definidos como traits en `apifast-app`:
 | `SecretVault` | Cifrar, descifrar y almacenar secretos | `apifast-vault` |
 | `KeyStore` | Guardar y recuperar la clave maestra | `apifast-vault` (keyring o archivo `0600`) |
 | `HttpTransport` | Ejecutar una `ResolvedRequest` y emitir eventos | `apifast-http` |
+| `WsTransport` | Abrir una conexión WebSocket desde una `RenderedRequest`, enviar lo que da un `WsHandler` y avisarle de lo que pasa | `apifast-ws` |
 | `ResponseStore` | Escribir y leer cuerpos de respuesta por ventanas | `apifast-history` |
 | `HistoryStore` | Registrar y consultar ejecuciones | `apifast-history` |
 | `CookieStore` | Persistir el tarro de cookies de una colección, que comparten el transporte (`Cookies`) y el editor | `apifast-vault` (sellado con la clave maestra, como los tokens) |

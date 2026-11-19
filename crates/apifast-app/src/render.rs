@@ -469,7 +469,9 @@ impl Renderer<'_, '_> {
             ))
         };
         Ok(match body {
-            Body::None => (RenderedBody::None, None),
+            // A WebSocket handshake has no body: the messages go once the
+            // connection is open.
+            Body::None | Body::WebSocket(_) => (RenderedBody::None, None),
             Body::Json(text) => text_body(self, text, "application/json")?,
             Body::Text(text) => text_body(self, text, "text/plain")?,
             Body::Xml(text) => text_body(self, text, "application/xml")?,
@@ -518,11 +520,6 @@ impl Renderer<'_, '_> {
                     .filter(|t| !t.trim().is_empty())
                     .unwrap_or_else(|| "application/octet-stream".into());
                 (RenderedBody::File(self.text(path)?), Some(content_type))
-            }
-            Body::WebSocket(_) => {
-                return Err(AppError::Validation(
-                    "WebSocket requests cannot connect yet".into(),
-                ));
             }
             _ => {
                 return Err(AppError::Validation(

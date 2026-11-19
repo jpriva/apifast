@@ -264,7 +264,7 @@ settings:
 
 - En apifast es una request con los mensajes como body ([ADR 0011](adr/0011-websocket-como-body.md)): hereda headers y auth como una HTTP, y sus parámetros son los de la URL. Los tipos de mensaje son `json`, `xml` y `text`; uno desconocido se lee como `text`, como en Bruno.
 - Editar un mensaje cambia solo su `type` o su `data` (y `title` o `selected` en una variante); el archivo no gana claves que Bruno no había escrito. `keepAliveInterval` se conserva tal cual.
-- El runner no las corre y la exportación a Postman las deja fuera, las dos con aviso. Conectarse llega con `apifast-ws`.
+- El runner no las corre y la exportación a Postman las deja fuera, las dos con aviso. Para conectarse, ver [docs/07](07-motor-de-red.md#websocket-f7).
 
 ### Tipos de auth
 

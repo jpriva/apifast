@@ -360,6 +360,70 @@ impl HttpTransport for MemoryTransport {
     }
 }
 
+/// A WebSocket server that echoes every message, and keeps the
+/// handshakes it received. The connection closes, from the client, when
+/// the outbox is empty.
+#[derive(Debug, Default)]
+pub struct MemorySockets {
+    connected: Mutex<Vec<RenderedRequest>>,
+}
+
+impl MemorySockets {
+    /// The handshakes received so far.
+    pub fn connected(&self) -> Vec<RenderedRequest> {
+        lock(&self.connected).clone()
+    }
+}
+
+impl crate::WsTransport for MemorySockets {
+    async fn connect<H: crate::WsHandler>(
+        &self,
+        request: &RenderedRequest,
+        handler: &mut H,
+        cancel: &CancelToken,
+    ) -> Result<ResponseHead, TransportError> {
+        if cancel.is_cancelled() {
+            return Err(TransportError::Cancelled);
+        }
+        lock(&self.connected).push(request.clone());
+        let head = ResponseHead {
+            status: 101,
+            version: "HTTP/1.1".into(),
+            url: request.url().to_owned(),
+            redirects: 0,
+            headers: vec![
+                ("upgrade".into(), "websocket".into()),
+                ("connection".into(), "Upgrade".into()),
+            ],
+            elapsed_ms: 0,
+            timeline: Vec::new(),
+        };
+        handler.opened(&head);
+        while let Some(data) = handler.outgoing().await {
+            handler.event(apifast_domain::WsEvent::Sent(data.clone()));
+            handler.event(apifast_domain::WsEvent::Received(data));
+        }
+        handler.event(apifast_domain::WsEvent::Closed {
+            by: apifast_domain::WsSide::Client,
+            code: Some(1000),
+            reason: String::new(),
+        });
+        Ok(head)
+    }
+}
+
+/// Messages to send, in order; then the connection closes.
+#[derive(Debug, Default)]
+pub struct MemoryOutbox(pub std::collections::VecDeque<apifast_domain::WsMessage>);
+
+impl crate::WsOutbox for MemoryOutbox {
+    fn next(
+        &mut self,
+    ) -> impl std::future::Future<Output = Option<apifast_domain::WsMessage>> + Send {
+        std::future::ready(self.0.pop_front())
+    }
+}
+
 /// Response bodies kept in memory.
 #[derive(Debug, Default)]
 pub struct MemoryResponses {

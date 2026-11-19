@@ -172,11 +172,11 @@ const MAX_ROUNDS: usize = 16;
 /// current one, to refuse cycles, and the dependencies already sent, so
 /// each is sent once however many times it is used.
 #[derive(Default)]
-struct ChainContext {
+pub(crate) struct ChainContext {
     chain: Vec<RequestPath>,
     fetched: BTreeMap<RequestPath, Arc<Fetched>>,
     /// History entries written for dependencies.
-    recorded: Vec<HistoryEntry>,
+    pub(crate) recorded: Vec<HistoryEntry>,
 }
 
 /// Loads a request, resolves inheritance and variables, renders it, sends it
@@ -256,59 +256,13 @@ where
     S: ResponseStore + Sync,
     S::Writer: Send,
 {
-    let mut loaded = ports.collections.request(path)?;
-    if let Some(draft) = &options.draft {
-        loaded.request = draft.clone();
-    }
-    let collection = ports.collections.collection()?;
-    let mut variables = resolve_request_variables(
-        ports.collections,
-        ports.environments,
-        &loaded,
-        options.environment.as_deref(),
-        &options.runtime,
-    )?;
-    // Secrets come from the vault only now, for this send.
-    for (name, environment) in variables.secrets_without_value() {
-        if let Some(value) = ports.secrets.secret(&environment, &name)? {
-            variables.fill_secret(&name, VariableValue::text(value.expose()));
-        }
-    }
-    let resolved = resolve(Chain::new(&collection, &loaded.folders, &loaded.request));
-
     let read = |id: &ResponseId, len: usize| ports.responses.read(id, 0, len);
-    let mut host = AppHost::new(
-        ports.clock,
-        ports.random,
-        ports.prompter,
-        ports.environments.process_env()?,
-    )
-    .with_functions(ResponseFunctions::new(
-        ports.history,
-        &read,
-        ports.clock.unix_millis(),
-    ));
-    let mode = if options.allow_unresolved {
-        Mode::Lenient
-    } else {
-        Mode::Strict
-    };
-    // An OAuth 2.0 token is obtained before rendering, and goes in as a
-    // header or a query parameter.
-    let token_ports = crate::oauth2::TokenPorts::of(ports);
-    let resolved =
-        crate::oauth2::with_token(&token_ports, resolved, &mut variables, &mut host, cancel)
-            .await?;
-    let rendered = render_with_dependencies(
-        ports,
-        (&resolved, &variables, &mut host),
-        mode,
-        options,
-        cancel,
-        context,
-    )
-    .await?;
-    rendered.problems.iter().for_each(ports.report);
+    let mut host = host_for(ports, &read)?;
+    let Prepared {
+        loaded,
+        mut variables,
+        rendered,
+    } = prepare(ports, path, options, cancel, (context, &mut host, false)).await?;
 
     let at_ms = ports.clock.unix_millis();
     let mut writer = ports.responses.create()?;
@@ -359,6 +313,124 @@ where
         captures,
         assertions,
         dependencies: Vec::new(),
+    })
+}
+
+/// A request rendered and ready for its exchange.
+pub(crate) struct Prepared {
+    /// The request as loaded (or the draft), with its folders.
+    pub loaded: LoadedRequest,
+    /// Its variables, secrets filled in.
+    pub variables: ResolvedVariables,
+    /// The request to send.
+    pub rendered: RenderOutcome,
+}
+
+/// The template host of one send: the ports, and `response(...)` reading
+/// saved bodies through `read`.
+///
+/// # Errors
+///
+/// If the process environment cannot be read.
+pub(crate) fn host_for<'a, C, E, T, S>(
+    ports: &SendPorts<'a, C, E, T, S>,
+    read: crate::functions::ReadBody<'a>,
+) -> Result<AppHost<'a>, AppError>
+where
+    E: EnvironmentRepository,
+{
+    Ok(AppHost::new(
+        ports.clock,
+        ports.random,
+        ports.prompter,
+        ports.environments.process_env()?,
+    )
+    .with_functions(ResponseFunctions::new(
+        ports.history,
+        read,
+        ports.clock.unix_millis(),
+    )))
+}
+
+/// Loads `path` (or the draft), resolves its inheritance and variables,
+/// gets its OAuth 2.0 token and renders it, sending first what its
+/// `response(...)` calls need. Reports the template problems. A `socket`
+/// prepares a WebSocket request, which only connects; any other is sent.
+///
+/// # Errors
+///
+/// As [`send_request`], before the transport.
+pub(crate) async fn prepare<C, E, T, S>(
+    ports: &SendPorts<'_, C, E, T, S>,
+    path: &RequestPath,
+    options: &SendOptions,
+    cancel: &CancelToken,
+    (context, host, socket): (&mut ChainContext, &mut AppHost<'_>, bool),
+) -> Result<Prepared, AppError>
+where
+    C: CollectionRepository + Sync,
+    E: EnvironmentRepository + Sync,
+    T: HttpTransport + Sync,
+    S: ResponseStore + Sync,
+    S::Writer: Send,
+{
+    let mut loaded = ports.collections.request(path)?;
+    if let Some(draft) = &options.draft {
+        loaded.request = draft.clone();
+    }
+    match (loaded.request.body.is_websocket(), socket) {
+        (true, false) => {
+            return Err(AppError::Validation(format!(
+                "`{path}` is a WebSocket request: it connects, it is not sent"
+            )));
+        }
+        (false, true) => {
+            return Err(AppError::Validation(format!(
+                "`{path}` is not a WebSocket request"
+            )));
+        }
+        _ => {}
+    }
+    let collection = ports.collections.collection()?;
+    let mut variables = resolve_request_variables(
+        ports.collections,
+        ports.environments,
+        &loaded,
+        options.environment.as_deref(),
+        &options.runtime,
+    )?;
+    // Secrets come from the vault only now, for this send.
+    for (name, environment) in variables.secrets_without_value() {
+        if let Some(value) = ports.secrets.secret(&environment, &name)? {
+            variables.fill_secret(&name, VariableValue::text(value.expose()));
+        }
+    }
+    let resolved = resolve(Chain::new(&collection, &loaded.folders, &loaded.request));
+
+    let mode = if options.allow_unresolved {
+        Mode::Lenient
+    } else {
+        Mode::Strict
+    };
+    // An OAuth 2.0 token is obtained before rendering, and goes in as a
+    // header or a query parameter.
+    let token_ports = crate::oauth2::TokenPorts::of(ports);
+    let resolved =
+        crate::oauth2::with_token(&token_ports, resolved, &mut variables, host, cancel).await?;
+    let rendered = render_with_dependencies(
+        ports,
+        (&resolved, &variables, host),
+        mode,
+        options,
+        cancel,
+        context,
+    )
+    .await?;
+    rendered.problems.iter().for_each(ports.report);
+    Ok(Prepared {
+        loaded,
+        variables,
+        rendered,
     })
 }
 

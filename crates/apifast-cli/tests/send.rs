@@ -266,10 +266,7 @@ fn errors_are_one_clear_line() {
             &["send", "users/get.yml", "-e", "staging"],
             "error: environment `staging` does not exist\n",
         ),
-        (
-            &["send", "socket.yml"],
-            "error: WebSocket requests cannot connect yet\n",
-        ),
+        (&["send", "socket.yml"], "error: invalid URL: empty host\n"),
         (&["send", "nope.yml"], "error: cannot open `nope.yml`"),
         (
             &[
@@ -384,4 +381,72 @@ fn a_graphql_request_sends_its_query_and_variables_as_json() {
         "{}",
         text(&out.stderr)
     );
+}
+
+/// A WebSocket server that answers each text message with it in capitals,
+/// and closes with 4000 on `bye`. Keeps the handshake's authorization.
+fn websocket_server() -> (u16, std::sync::mpsc::Receiver<String>) {
+    use tungstenite::Message;
+    use tungstenite::handshake::server::{Request, Response};
+    use tungstenite::protocol::CloseFrame;
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (sender, received) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        #[expect(clippy::result_large_err, reason = "tungstenite's callback type")]
+        let callback = |request: &Request, response: Response| {
+            let auth = request.headers().get("authorization");
+            let _ = sender.send(auth.map_or("", |v| v.to_str().unwrap()).to_owned());
+            Ok(response)
+        };
+        let mut socket = tungstenite::accept_hdr(stream, callback).unwrap();
+        while let Ok(message) = socket.read() {
+            match message {
+                Message::Text(text) if text.as_str() == "bye" => {
+                    let _ = socket.close(Some(CloseFrame {
+                        code: 4000.into(),
+                        reason: "done".into(),
+                    }));
+                }
+                Message::Text(text) => {
+                    let _ = socket.send(Message::text(text.to_uppercase()));
+                }
+                _ => {}
+            }
+        }
+    });
+    (port, received)
+}
+
+#[test]
+fn a_websocket_request_connects_sends_its_messages_and_prints_what_arrives() {
+    let server = Server::start();
+    let dir = collection(server.port);
+    let (port, authorization) = websocket_server();
+    std::fs::write(
+        dir.path().join("live.yml"),
+        format!(
+            "info:\n  name: Live\n  type: websocket\nwebsocket:\n  url: ws://127.0.0.1:{port}/live\n  message:\n    - title: greet\n      message:\n        type: text\n        data: hello {{{{name}}}}\n    - title: end\n      message:\n        type: text\n        data: bye\n  auth: inherit\n"
+        ),
+    )
+    .unwrap();
+    let data = tempfile::tempdir().unwrap();
+    let out = apifast(
+        dir.path(),
+        data.path(),
+        &["send", "live.yml", "-e", "local"],
+    );
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert_eq!(text(&out.stdout), "HELLO ANA\n");
+    let stderr = text(&out.stderr);
+    assert!(
+        stderr.starts_with(
+            "> hello Ana\n> bye\nclosed by the server 4000 done\n101 Switching Protocols · "
+        ),
+        "{stderr}"
+    );
+    // The collection's bearer token went with the handshake.
+    assert_eq!(authorization.recv().unwrap(), "Bearer t0k3n");
 }

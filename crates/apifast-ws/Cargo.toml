@@ -1,0 +1,26 @@
+[package]
+name = "apifast-ws"
+description = "WebSocket transport of apifast."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+apifast-domain.workspace = true
+apifast-app.workspace = true
+# The handshake goes through the HTTP transport, for its proxy, TLS and
+# certificates (docs/03); only the frames are tungstenite's.
+apifast-http.workspace = true
+tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }
+futures-util = { version = "0.3.34", default-features = false, features = ["sink"] }
+tokio = { version = "1.54.1", features = ["time", "macros"] }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+apifast-template.workspace = true
+tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }
+tokio = { version = "1.54.1", features = ["rt", "macros", "net", "time"] }

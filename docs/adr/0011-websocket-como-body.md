@@ -18,7 +18,7 @@ Una variante propia de `Request` obligaría a duplicar en la GUI las pestañas, 
 - Una request WebSocket es una `HttpRequest` con `Body::WebSocket(Vec<WsMessage>)`. Cada mensaje tiene nombre, tipo (`json`, `xml` o `text`), texto y si está `selected`. `HttpRequest::kind()` dice qué es (`Http`, `GraphQl` o `WebSocket`) y el árbol lo lleva en `TreeItem::Request::kind`.
 - En el archivo se lee y se escribe como Bruno: `info.type: websocket` y el bloque `websocket` con `url`, `headers`, `message` y `auth`. Sus parámetros son los de la URL: no se escribe `params`, y tampoco `method`. Un solo mensaje sin nombre y con texto se escribe plano (`type` y `data`); cualquier otra lista, como variantes (`title`, `selected`, `message`). Se edita en su lugar, sin añadir claves que el archivo no tenía.
 - Lo que no aplica a una conexión se oculta en vez de modelarse aparte: no tiene aserciones, capturas ni ejemplos en la interfaz. El runner y la exportación a Postman la dejan fuera con su motivo.
-- Conectarse irá en `apifast-ws`, detrás de un puerto propio, y partirá de la misma `RenderedRequest`.
+- Conectarse va en `apifast-ws`, detrás de un puerto propio (`WsTransport`), y parte de la misma `RenderedRequest`. El handshake lo envía `apifast-http`, y el log de la conexión es el cuerpo de su respuesta ([docs/07](../07-motor-de-red.md#websocket-f7)).
 
 ## Consecuencias
 

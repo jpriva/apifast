@@ -167,6 +167,18 @@ El crate `apifast-query` evalúa las dos lenguas sobre el cuerpo de una respuest
 
 Muestra cada aserción en stderr (`pass` o `FAIL` con su motivo) y cada captura sin valor como aviso; con `--quiet`, solo los fallos. Si una aserción falla, termina con código 1.
 
+Una request WebSocket se conecta ([docs/07](07-motor-de-red.md#websocket-f7)): envía sus mensajes en orden y sigue abierta hasta que el servidor cierra o `Ctrl+C` la cierra. Cada mensaje recibido va a stdout en su línea, a medida que llega (los binarios, en hexadecimal), así que la salida se puede encadenar. En stderr van los enviados (`> …`), los que no se pudieron enviar (`warning: …`), el cierre y el resumen; con `--quiet`, solo los avisos.
+
+```text
+$ apifast send live.yml -e local
+> {"op":"subscribe"}
+{"price": 101.2}
+{"price": 101.4}
+^C
+closed 1000
+101 Switching Protocols · 5230 ms · 412 B
+```
+
 ## Runner de colección
 
 Ejecuta varias requests en secuencia y agrega los resultados.

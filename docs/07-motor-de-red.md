@@ -285,9 +285,12 @@ Probado con un servidor que mantiene la conexión (el primer envío a `localhost
 
 ### WebSocket (F7)
 
-- Adaptador propio (`apifast-ws`) con conectar, enviar y cerrar.
-- Reutiliza herencia de headers, autenticación, plantillas, proxy y TLS.
-- Cada mensaje enviado o recibido se añade al historial de la sesión, guardado en disco.
+- **Puerto propio** (`WsTransport`), implementado por `apifast-ws`; el caso de uso es `connect_request`. La request se prepara como cualquier otra: herencia de headers y auth (OAuth 2.0 incluido), plantillas, secretos de la bóveda y `response(...)`. Una request WebSocket no se envía con `send_request`, ni una HTTP se conecta: las dos dan un error que lo dice.
+- **El handshake es una request HTTP** de `apifast-http` (`ReqwestTransport::upgrade`): un `GET` HTTP/1.1 con `Upgrade: websocket`, por el mismo proxy, con la misma confianza TLS, los certificados de cliente, los overrides de DNS y el tarro de cookies, y con su timeline. `ws://` va como `http://` y `wss://` como `https://`; sin esquema, como `ws://`. El timeout cubre el handshake. Una respuesta que no es `101`, o un `Sec-WebSocket-Accept` que no corresponde a la clave enviada, es un error. Digest y NTLM, que necesitan más de una request, todavía no se pueden usar; AWS Signature v4 firma el `GET`.
+- **Abierta la conexión**, tungstenite lee y escribe los frames. Los mensajes que da el driver (un `WsOutbox`) se renderizan uno a uno al salir, con las variables de la request: uno que no se renderiza (una variable que falta, salvo con `allow_unresolved`) no se envía y el log dice por qué, sin cerrar la conexión. Los pings se contestan solos.
+- **Cerrar:** cancelar cierra normalmente (código 1000) y espera hasta 2 s el cierre del servidor. Si cierra el servidor, o la conexión se corta, no es un error: queda en el log con su código y su motivo.
+- **El log de la conexión** es el cuerpo de su respuesta: una línea JSON por evento (`sent`, `received`, `error`, `closed`), con los milisegundos desde que se abrió y los datos binarios en hexadecimal (`apifast_domain::WsLogEntry`). Se guarda en disco como cualquier cuerpo, a medida que llega, y los secretos que se enviaron van enmascarados. La respuesta es la del handshake (`101`, con `Upgrade: websocket`, que la distingue en el historial), y su tiempo es el de toda la conexión.
+- **En la CLI**, `apifast send` sobre una request WebSocket se conecta, envía sus mensajes en orden y espera hasta que el servidor cierra o `Ctrl+C` ([docs/08](08-tests-y-runner.md#apifast-send)).
 
 ### gRPC (F8)
 

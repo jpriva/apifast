@@ -7,6 +7,7 @@ mod export;
 mod import;
 mod locate;
 mod run;
+mod socket;
 mod system;
 mod vault;
 
@@ -19,7 +20,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use apifast_app::{
     CancelToken, CollectionRepository, NoSecrets, ResponseStore, SecretStore, SendOptions,
-    SendOutcome, SendPorts, send_request,
+    SendOutcome, SendPorts, connect_request, send_request,
 };
 use apifast_domain::Variable;
 use apifast_history::FsResponseStore;
@@ -286,29 +287,62 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
         draft: None,
     };
 
+    // A WebSocket request connects and sends its messages instead.
+    let messages = match repo.request(&located.request)?.request.body {
+        apifast_domain::Body::WebSocket(messages) => Some(messages),
+        _ => None,
+    };
     let tokens = apifast_app::memory::MemoryTokens::default();
     let authorizer = terminal_authorizer();
     let (runtime, cancel) = runtime()?;
-    let outcome = runtime.block_on(async {
-        let ports = SendPorts {
-            collections: &*repo,
-            environments: &*repo,
-            transport: &transport,
-            responses: &responses,
-            clock: &clock,
-            random: &random,
-            prompter: &system::TerminalPrompter,
-            secrets: secrets.as_ref(),
-            // Shown before sending, so they are seen even if the send fails.
-            report: &|problem| eprintln!("warning: {problem}"),
-            history: None,
-            tokens: Some(&tokens),
-            authorizer: authorizer
-                .as_ref()
-                .map(|a| a as &dyn apifast_app::Authorizer),
+    // The same ports for both, but for where the body goes.
+    macro_rules! ports {
+        ($responses:expr) => {
+            SendPorts {
+                collections: &*repo,
+                environments: &*repo,
+                transport: &transport,
+                responses: $responses,
+                clock: &clock,
+                random: &random,
+                prompter: &system::TerminalPrompter,
+                secrets: secrets.as_ref(),
+                // Shown before sending, so they are seen even if the send
+                // fails.
+                report: &|problem| eprintln!("warning: {problem}"),
+                history: None,
+                tokens: Some(&tokens),
+                authorizer: authorizer
+                    .as_ref()
+                    .map(|a| a as &dyn apifast_app::Authorizer),
+            }
         };
-        send_request(ports, &located.request, &options, &cancel).await
-    })?;
+    }
+    if let Some(messages) = messages {
+        let sockets = apifast_ws::TungsteniteTransport::new(transport.clone());
+        let printing = socket::Printing {
+            store: &responses,
+            quiet: args.quiet,
+        };
+        let mut outbox = socket::Messages(messages.into());
+        let outcome = runtime.block_on(connect_request(
+            ports!(&printing),
+            (&sockets, &mut outbox),
+            &located.request,
+            &options,
+            &cancel,
+        ))?;
+        if !args.quiet {
+            eprintln!("{}", summary(&outcome));
+        }
+        return Ok(ExitCode::SUCCESS);
+    }
+    let outcome = runtime.block_on(send_request(
+        ports!(&responses),
+        &located.request,
+        &options,
+        &cancel,
+    ))?;
 
     if !args.quiet {
         eprintln!("{}", summary(&outcome));

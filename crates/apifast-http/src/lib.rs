@@ -12,6 +12,7 @@ mod ntlm;
 mod probe;
 mod sigv4;
 mod tls;
+mod upgrade;
 
 use std::error::Error as _;
 use std::sync::Arc;
@@ -22,6 +23,7 @@ use base64::Engine as _;
 pub use loopback::{LoopbackAuthorizer, open_in_browser};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
+pub use upgrade::Upgraded;
 
 use apifast_app::{
     BodyWriter, CancelToken, Cookies, HttpTransport, RenderedBody, RenderedRequest, ResponseHead,

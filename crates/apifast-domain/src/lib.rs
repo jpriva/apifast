@@ -34,6 +34,7 @@ mod sse;
 mod status;
 mod url_params;
 mod variable;
+mod ws_log;
 
 pub use assertion::{Assertion, Capture, CaptureScope, Operator};
 pub use auth::{
@@ -68,4 +69,8 @@ pub use status::{human_size, reason_phrase};
 pub use url_params::{path_param_names, query_params, sync_params_from_url, sync_url_from_params};
 pub use variable::{
     ResolvedVariable, ResolvedVariables, ValueKind, Variable, VariableValue, resolve_variables,
+};
+pub use ws_log::{
+    WEBSOCKET_UPGRADE, WsData, WsEvent, WsLogEntry, WsLogParser, WsSide, is_websocket_handshake,
+    parse_ws_log,
 };
