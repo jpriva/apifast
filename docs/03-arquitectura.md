@@ -89,11 +89,11 @@ Tipos principales de `apifast-domain`:
 |---|---|
 | `Collection` | Raíz: identificador estable, nombre, valores por defecto de request, configuración |
 | `Folder` | Nodo intermedio con sus propios headers, auth, variables y ajustes |
-| `Request` | Enum: `Http`, `GraphQl`, `WebSocket`, `Grpc` |
+| `Request` | Enum: `Http`. GraphQL y WebSocket son una `HttpRequest` con su body (`GraphQl`, `WebSocket`), y `HttpRequest::kind()` dice cuál ([ADR 0011](adr/0011-websocket-como-body.md)); gRPC se decide en F8 |
 | `Environment` | Lista de variables, `extends`, color |
 | `Variable` | Nombre, valor, tipo (`String`, `Number`, `Bool`, `Object`), habilitada, clase de secreto |
 | `Auth` | `Setting<AuthScheme>`: `Inherit` o un esquema (`None`, `Basic`, `Bearer`, `ApiKey`, `Digest`, `Ntlm`, `AwsV4`, y en F5 `OAuth2`). Los que dependen de la request que sale o de la respuesta se aplican en el transporte (`TransportAuth`). Una request resuelta nunca tiene auth heredada |
-| `Body` | Enum: `None`, `Json`, `Text`, `Xml`, `FormUrlEncoded`, `Multipart`, `File`, `GraphQl` |
+| `Body` | Enum: `None`, `Json`, `Text`, `Xml`, `FormUrlEncoded`, `Multipart`, `File`, `GraphQl`, `WebSocket` (los mensajes de la conexión) |
 | `Assertion` | Expresión, operador, valor esperado |
 | `Capture` | Selector sobre la respuesta, variable de destino y ámbito |
 | `Setting<T>` | Valor heredable: `Inherit` o `Set(T)` |

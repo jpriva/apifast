@@ -21,6 +21,7 @@ fn request(path: &str, name: &str) -> TreeItem {
         path: RequestPath::new(path),
         name: name.into(),
         method: Method::Get,
+        kind: apifast_domain::RequestKind::Http,
         seq: None,
     }
 }

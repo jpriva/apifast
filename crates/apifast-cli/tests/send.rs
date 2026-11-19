@@ -268,7 +268,7 @@ fn errors_are_one_clear_line() {
         ),
         (
             &["send", "socket.yml"],
-            "error: `socket.yml`: `websocket` requests is not supported yet\n",
+            "error: WebSocket requests cannot connect yet\n",
         ),
         (&["send", "nope.yml"], "error: cannot open `nope.yml`"),
         (

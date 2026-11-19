@@ -254,6 +254,7 @@ fn sample_tree() -> CollectionTree {
         path: RequestPath::new(path),
         name: name.into(),
         method,
+        kind: apifast_domain::RequestKind::Http,
         seq: None,
     };
     CollectionTree {

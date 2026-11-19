@@ -26,6 +26,7 @@ fn tree() -> CollectionTree {
                     path: RequestPath::new("users/list.yml"),
                     name: "List users".into(),
                     method: Method::Get,
+                    kind: apifast_domain::RequestKind::Http,
                     seq: None,
                 }],
             },
@@ -33,6 +34,7 @@ fn tree() -> CollectionTree {
                 path: RequestPath::new("login.yml"),
                 name: "Login".into(),
                 method: Method::Post,
+                kind: apifast_domain::RequestKind::Http,
                 seq: None,
             },
             TreeItem::Other {

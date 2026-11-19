@@ -959,6 +959,22 @@ pub struct Strings {
     pub body_file: &'static str,
     /// Shown for body types this version cannot edit.
     pub body_not_editable: &'static str,
+    /// Request tab with a WebSocket request's messages.
+    pub ws_messages: &'static str,
+    /// Placeholder of a WebSocket message's name.
+    pub ws_message_name: &'static str,
+    /// Button that adds a WebSocket message.
+    pub ws_add_message: &'static str,
+    /// Button that removes the WebSocket message shown.
+    pub ws_remove_message: &'static str,
+    /// Shown when a WebSocket request has no message.
+    pub ws_no_messages: &'static str,
+    /// Hover text of the selector of the message shown.
+    pub ws_message_shown: &'static str,
+    /// Hover text of a message's kind selector.
+    pub ws_message_kind: &'static str,
+    /// Shown instead of the method of a WebSocket request.
+    pub ws_badge: &'static str,
     /// Button that formats the body.
     pub format: &'static str,
     /// Hover of the format button, with its shortcut.
@@ -1491,6 +1507,14 @@ pub const EN: Strings = Strings {
     body_multipart: "Multipart form",
     body_file: "File",
     body_not_editable: "This body type cannot be edited here yet; it is sent and saved as it is.",
+    ws_messages: "Messages",
+    ws_message_name: "Name (optional)",
+    ws_add_message: "Add message",
+    ws_remove_message: "Remove",
+    ws_no_messages: "No messages yet: add one to send it once connected.",
+    ws_message_shown: "The message shown",
+    ws_message_kind: "How the message is edited",
+    ws_badge: "WS",
     format: "Format",
     format_hint: "Format (Alt+Shift+F)",
     format_failed: "Could not format: brackets or tags do not match, or something is not closed. Check line",

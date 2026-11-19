@@ -238,6 +238,7 @@ impl FsCollection {
         match self.read_value(relative) {
             Ok(Some(doc)) => match read::item(&doc) {
                 read::Item::Http(request) => TreeItem::Request {
+                    kind: request.kind(),
                     path,
                     name: request.name,
                     method: request.method,

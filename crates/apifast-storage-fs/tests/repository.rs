@@ -535,7 +535,7 @@ fn paths_cannot_escape_the_collection() {
 
 #[test]
 fn missing_and_unsupported_requests() {
-    let (_dir, repo) = setup(&[("q.yml", "info:\n  name: Q\n  type: websocket\n")]);
+    let (_dir, repo) = setup(&[("q.yml", "info:\n  name: Q\n  type: grpc\n")]);
     assert_eq!(
         repo.request(&path("nope.yml")),
         Err(RepositoryError::NotFound("nope.yml".into()))
@@ -574,7 +574,7 @@ fn the_tree_lists_sorted_items_and_skips_ignored_ones() {
     let (_dir, repo) = setup(&[
         ("b.yml", "info:\n  name: B\n  type: http\n  seq: 2\n"),
         ("a.yml", "info:\n  name: A\n  type: http\n  seq: 1\n"),
-        ("q.yml", "info:\n  name: Q\n  type: websocket\n"),
+        ("q.yml", "info:\n  name: Q\n  type: grpc\n"),
         ("broken.yml", "info: [unclosed\n"),
         ("notes.txt", "not yaml"),
         (
@@ -603,7 +603,7 @@ fn the_tree_lists_sorted_items_and_skips_ignored_ones() {
         TreeItem::Invalid { path, .. } => format!("!{path}"),
     };
     let names: Vec<_> = tree.items.iter().map(describe).collect();
-    assert_eq!(names, ["A", "Users/1", "B", "Q:websocket", "!broken.yml"]);
+    assert_eq!(names, ["A", "Users/1", "B", "Q:grpc", "!broken.yml"]);
 }
 
 #[test]
@@ -1171,6 +1171,55 @@ fn a_graphql_request_edits_in_place_and_changes_kind_in_place() {
     assert!(
         !text.contains("type: graphql\n    "),
         "no type in the block's body: {text}"
+    );
+    assert_eq!(load(&repo, "new.yml"), new);
+}
+
+/// Bruno's own WebSocket file (its `tests/websockets` fixtures).
+const WEBSOCKET: &str = "info:\n  name: ws-multi-msg\n  type: websocket\n  seq: 1\n\nwebsocket:\n  url: ws://localhost:8081/ws/echo\n  message:\n    - title: message 1\n      message:\n        type: json\n        data: |-\n          {\n            \"action\": \"subscribe\"\n          }\n    - title: message 2\n      message:\n        type: text\n        data: hello world\n  auth: inherit\n\nsettings:\n  timeout: 0\n  keepAliveInterval: 0\n";
+
+#[test]
+fn a_websocket_request_edits_in_place() {
+    use apifast_domain::{WsMessage, WsMessageKind};
+    let (dir, repo) = setup(&[("ws.yml", WEBSOCKET)]);
+    let mut request = load(&repo, "ws.yml");
+    let Body::WebSocket(messages) = &mut request.body else {
+        panic!("{:?}", request.body);
+    };
+    assert_eq!(messages.len(), 2);
+    messages[1].data = "bye".into();
+    repo.save_request(&path("ws.yml"), &request).unwrap();
+    assert_eq!(
+        read(&dir, "ws.yml"),
+        WEBSOCKET.replace("data: hello world", "data: bye")
+    );
+
+    // A query in the URL is no `params` key; there is no method.
+    request.url = "ws://localhost:8081/ws/echo?room=1".into();
+    apifast_domain::sync_params_from_url(&mut request);
+    repo.save_request(&path("ws.yml"), &request).unwrap();
+    let text = read(&dir, "ws.yml");
+    assert!(
+        text.contains("  url: ws://localhost:8081/ws/echo?room=1\n"),
+        "{text}"
+    );
+    assert!(
+        !text.contains("params") && !text.contains("method"),
+        "{text}"
+    );
+    assert!(
+        text.ends_with("settings:\n  timeout: 0\n  keepAliveInterval: 0\n"),
+        "{text}"
+    );
+
+    // One unnamed message is written flat, as Bruno writes it.
+    let mut new = HttpRequest::new("new", Method::Get, "ws://h/ws");
+    new.body = Body::WebSocket(vec![WsMessage::new("", WsMessageKind::Json, "{\"a\": 1}")]);
+    repo.save_request(&path("new.yml"), &new).unwrap();
+    let text = read(&dir, "new.yml");
+    assert_eq!(
+        text,
+        "info:\n  name: new\n  type: websocket\n\nwebsocket:\n  url: ws://h/ws\n  message:\n    type: json\n    data: \"{\\\"a\\\": 1}\"\n  auth: inherit\n"
     );
     assert_eq!(load(&repo, "new.yml"), new);
 }

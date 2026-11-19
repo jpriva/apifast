@@ -135,6 +135,7 @@ enum RowKind {
     },
     Request {
         method: Method,
+        kind: apifast_domain::RequestKind,
     },
     /// A request of a kind this version cannot open.
     Other,
@@ -302,10 +303,13 @@ fn push_rows(
                     open: expanded.contains(&(root.clone(), path.clone())),
                 },
             ),
-            TreeItem::Request { name, method, .. } => (
+            TreeItem::Request {
+                name, method, kind, ..
+            } => (
                 name.clone(),
                 RowKind::Request {
                     method: method.clone(),
+                    kind: *kind,
                 },
             ),
             TreeItem::Other { name, kind, .. } => (format!("{name} ({kind})"), RowKind::Other),
@@ -468,7 +472,7 @@ fn paint_row(ui: &mut egui::Ui, row: &Row, rect: Rect, selected: bool, hovered: 
             paint_arrow(ui, icon, *open, palette.text_muted);
             x += size + theme::space::S;
         }
-        RowKind::Request { method } => {
+        RowKind::Request { method, kind } => {
             // A child that does not take space in the list: the badge sits
             // inside the row's rectangle.
             let badge = Rect::from_min_max(
@@ -476,7 +480,7 @@ fn paint_row(ui: &mut egui::Ui, row: &Row, rect: Rect, selected: bool, hovered: 
                 pos2(x + theme::METHOD_BADGE_WIDTH, rect.bottom()),
             );
             ui.new_child(UiBuilder::new().max_rect(badge))
-                .add(MethodBadge::new(method));
+                .add(MethodBadge::new(method).kind(*kind));
             x += theme::METHOD_BADGE_WIDTH + theme::space::S;
         }
         RowKind::Other | RowKind::Invalid { .. } => {}

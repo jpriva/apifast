@@ -368,7 +368,7 @@ Se cumple: cada origen tiene una prueba de extremo a extremo que importa y enví
 - [ ] `apifast-ws`: conectar, enviar, cerrar; historial de mensajes; herencia de headers y autenticación.
 - [ ] Formato de archivo para requests `graphql` y `websocket`.
   - [x] `graphql`, el de Bruno ([docs/04](04-formato-de-archivos.md#requests-graphql)): sus archivos del corpus se guardan byte a byte y pasan las ediciones; cambiar el body a GraphQL o desde él renombra el bloque en su lugar. Probado también con las pruebas de propiedades.
-  - [ ] `websocket`, con `apifast-ws`.
+  - [x] `websocket`, el de Bruno ([docs/04](04-formato-de-archivos.md#requests-websocket), [ADR 0011](adr/0011-websocket-como-body.md)): una request con los mensajes como body; sus archivos del corpus se guardan byte a byte y se editan en su lugar (un mensaje plano o variantes), sin `method` ni `params`. Se abre en la GUI con su editor de mensajes y `WS` en el árbol y la barra de URL; el runner y la exportación la dejan fuera con aviso. Conectarse llega con `apifast-ws`.
 
 ### Criterio de salida
 

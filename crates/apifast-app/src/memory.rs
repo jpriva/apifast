@@ -101,6 +101,7 @@ impl MemoryCollections {
             .iter()
             .filter(|(path, _)| parent(path.as_str()) == prefix)
             .map(|(path, request)| TreeItem::Request {
+                kind: request.kind(),
                 path: path.clone(),
                 name: request.name.clone(),
                 method: request.method.clone(),

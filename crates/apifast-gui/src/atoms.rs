@@ -12,7 +12,7 @@ pub use template_field::{
     complete_variable, spans, variable_prefix,
 };
 
-use apifast_domain::{Method, reason_phrase};
+use apifast_domain::{Method, RequestKind, reason_phrase};
 use eframe::egui::{self, Align, Layout, RichText, Sense, Widget};
 
 use crate::theme;
@@ -21,19 +21,37 @@ use crate::theme;
 #[derive(Debug, Clone, Copy)]
 pub struct MethodBadge<'a> {
     method: &'a Method,
+    kind: RequestKind,
 }
 
 impl<'a> MethodBadge<'a> {
     /// A badge for `method`.
     pub fn new(method: &'a Method) -> Self {
-        Self { method }
+        Self {
+            method,
+            kind: RequestKind::Http,
+        }
+    }
+
+    /// For a request of `kind`: a WebSocket one shows `WS`, not its method.
+    #[must_use]
+    pub fn kind(mut self, kind: RequestKind) -> Self {
+        self.kind = kind;
+        self
     }
 }
 
 impl Widget for MethodBadge<'_> {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        let color = theme::method_color(theme::palette(ui), self.method);
-        let text = RichText::new(self.method.as_str())
+        let palette = theme::palette(ui);
+        let (label, color) = match self.kind {
+            RequestKind::WebSocket => ("WS", palette.accent),
+            _ => (
+                self.method.as_str(),
+                theme::method_color(palette, self.method),
+            ),
+        };
+        let text = RichText::new(label)
             .monospace()
             .strong()
             .size(theme::text::SMALL)

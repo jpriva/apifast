@@ -7,7 +7,7 @@ use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use apifast_domain::{Collection, Environment, Folder, HttpRequest, Method, Secret};
+use apifast_domain::{Collection, Environment, Folder, HttpRequest, Method, RequestKind, Secret};
 
 use crate::{RenderedRequest, RepositoryError, StoreError, TransportError};
 
@@ -72,6 +72,8 @@ pub enum TreeItem {
         name: String,
         /// Method, shown next to the name.
         method: Method,
+        /// What it is: HTTP, GraphQL or WebSocket.
+        kind: RequestKind,
         /// Position among its siblings.
         seq: Option<u32>,
     },
@@ -618,6 +620,7 @@ mod tests {
             path: RequestPath::new(format!("{name}.yml")),
             name: name.into(),
             method: Method::Get,
+            kind: apifast_domain::RequestKind::Http,
             seq,
         }
     }

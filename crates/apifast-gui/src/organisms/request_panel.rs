@@ -4,7 +4,7 @@
 use apifast_domain::{
     ApiKeyAuth, ApiKeyPlacement, AuthScheme, BasicAuth, BearerAuth, Body, DigestAuth, FormField,
     Header, HttpRequest, MultipartPart, MultipartValue, NtlmAuth, Param, ParamKind, Resolved,
-    Setting,
+    Setting, WsMessage, WsMessageKind,
 };
 use eframe::egui::{self, RichText};
 
@@ -101,15 +101,23 @@ impl RequestPanel {
             let warning = theme::palette(ui).warning;
             ui.label(RichText::new(note.as_str()).color(warning).small());
         }
+        let websocket = request.body.is_websocket();
+        if websocket && matches!(self.tab, RequestTab::Tests | RequestTab::Examples) {
+            self.tab = RequestTab::Params;
+        }
         ui.horizontal(|ui| {
             let params = request.params.iter().filter(|p| p.enabled).count();
             let headers = request.headers.iter().filter(|h| h.enabled).count();
             let tests = request.assertions.iter().filter(|a| a.enabled).count()
                 + request.captures.iter().filter(|c| c.enabled).count();
+            let body = match &request.body {
+                Body::WebSocket(messages) => counted(strings.ws_messages, messages.len()),
+                _ => strings.body.to_owned(),
+            };
             for (tab, label) in [
                 (RequestTab::Params, counted(strings.params, params)),
                 (RequestTab::Headers, counted(strings.headers, headers)),
-                (RequestTab::Body, strings.body.to_owned()),
+                (RequestTab::Body, body),
                 (RequestTab::Auth, strings.auth.to_owned()),
                 (RequestTab::Tests, counted(strings.tests, tests)),
                 (RequestTab::Settings, strings.settings.to_owned()),
@@ -118,6 +126,10 @@ impl RequestPanel {
                     counted(strings.examples, request.examples.len()),
                 ),
             ] {
+                // A WebSocket request has no response to check or keep.
+                if websocket && matches!(tab, RequestTab::Tests | RequestTab::Examples) {
+                    continue;
+                }
                 ui.selectable_value(&mut self.tab, tab, label);
             }
         });
@@ -134,6 +146,10 @@ impl RequestPanel {
                     let shortcuts = (self.format_shortcuts.clone())
                         .unwrap_or_else(|| Action::FormatBody.defaults());
                     let now = std::mem::take(&mut self.format_now);
+                    if let Body::WebSocket(messages) = &mut request.body {
+                        return ws_messages(ui, messages, (&shortcuts, now), hints, strings)
+                            .then_some(RequestChange::Other);
+                    }
                     let files = &mut self.files;
                     let schema = (context.schema.as_ref()).and_then(|v| v.schema.as_deref());
                     let changed = body(
@@ -583,6 +599,127 @@ fn body(
         }
     }
     changed
+}
+
+/// The messages of a WebSocket request: which one is shown, adding and
+/// removing them, and the one shown: its name, its kind and its text.
+fn ws_messages(
+    ui: &mut egui::Ui,
+    messages: &mut Vec<WsMessage>,
+    (shortcuts, now): (&[egui::KeyboardShortcut], bool),
+    hints: &VariableHints,
+    strings: &Strings,
+) -> bool {
+    let editor = ui.make_persistent_id("ws-message-text");
+    let shown_id = editor.with("shown");
+    let mut shown: usize = ui.data(|d| d.get_temp(shown_id)).unwrap_or_default();
+    shown = shown.min(messages.len().saturating_sub(1));
+    let mut changed = false;
+    let label = |i: usize, m: &WsMessage| {
+        if m.name.trim().is_empty() {
+            format!("message {}", i + 1)
+        } else {
+            m.name.clone()
+        }
+    };
+    let mut format = false;
+    ui.horizontal(|ui| {
+        if !messages.is_empty() {
+            egui::ComboBox::from_id_salt("ws-message-shown")
+                .selected_text(label(shown, &messages[shown]))
+                .show_ui(ui, |ui| {
+                    for (i, message) in messages.iter().enumerate() {
+                        ui.selectable_value(&mut shown, i, label(i, message));
+                    }
+                })
+                .response
+                .on_hover_text(strings.ws_message_shown);
+        }
+        if ui.button(strings.ws_add_message).clicked() {
+            let kind = messages.get(shown).map(|m| m.kind).unwrap_or_default();
+            let name = if messages.is_empty() {
+                String::new()
+            } else {
+                format!("message {}", messages.len() + 1)
+            };
+            messages.push(WsMessage::new(name, kind, ""));
+            shown = messages.len() - 1;
+            changed = true;
+        }
+        if !messages.is_empty() && ui.button(strings.ws_remove_message).clicked() {
+            messages.remove(shown);
+            shown = shown.min(messages.len().saturating_sub(1));
+            changed = true;
+        }
+        if let Some(message) = messages.get_mut(shown) {
+            let before = message.kind;
+            egui::ComboBox::from_id_salt("ws-message-kind")
+                .selected_text(ws_kind_label(message.kind, strings))
+                .show_ui(ui, |ui| {
+                    for kind in [WsMessageKind::Json, WsMessageKind::Xml, WsMessageKind::Text] {
+                        let text = ws_kind_label(kind, strings);
+                        ui.selectable_value(&mut message.kind, kind, text);
+                    }
+                })
+                .response
+                .on_hover_text(strings.ws_message_kind);
+            changed |= message.kind != before;
+            if ws_language(message.kind).formats() {
+                format = ui
+                    .button(strings.format)
+                    .on_hover_text(strings.format_hint)
+                    .clicked();
+            }
+        }
+    });
+    ui.data_mut(|d| d.insert_temp(shown_id, shown));
+    let Some(message) = messages.get_mut(shown) else {
+        ui.label(muted(ui, strings.ws_no_messages));
+        return changed;
+    };
+    let language = ws_language(message.kind);
+    format |= language.formats() && now;
+    if language.formats() && ui.memory(|m| m.has_focus(editor)) {
+        format |= ui.input_mut(|i| {
+            let pressed = shortcuts.iter().any(|s| i.consume_shortcut(s));
+            if pressed {
+                i.events.retain(|e| !matches!(e, egui::Event::Text(_)));
+            }
+            pressed
+        });
+    }
+    ui.add_space(theme::space::S);
+    changed |= ui
+        .add(egui::TextEdit::singleline(&mut message.name).hint_text(strings.ws_message_name))
+        .accessible_name(strings.ws_message_name)
+        .changed();
+    let target = (editor, strings.ws_messages);
+    changed |= code_body(
+        ui,
+        &mut message.data,
+        (language, None),
+        target,
+        format,
+        hints,
+        strings,
+    );
+    changed
+}
+
+fn ws_kind_label(kind: WsMessageKind, strings: &Strings) -> &str {
+    match kind {
+        WsMessageKind::Xml => strings.body_xml,
+        WsMessageKind::Text => strings.body_text,
+        _ => strings.body_json,
+    }
+}
+
+fn ws_language(kind: WsMessageKind) -> Language {
+    match kind {
+        WsMessageKind::Xml => Language::Xml,
+        WsMessageKind::Text => Language::Text,
+        _ => Language::Json,
+    }
 }
 
 /// The editor of a text body. `format` asks to format it first. Returns

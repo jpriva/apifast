@@ -4,6 +4,7 @@
 
 use crate::import::{ImportWarning, ImportedCollection, ImportedItem};
 use crate::{AppError, CollectionRepository, EnvironmentRepository, TreeItem};
+use apifast_domain::RequestKind;
 
 /// The whole collection of `collections`, with its environments.
 ///
@@ -41,6 +42,17 @@ fn contents(
                 folder: folder.clone(),
                 items: contents(collections, children, warnings),
             }),
+            TreeItem::Request {
+                path,
+                kind: RequestKind::WebSocket,
+                ..
+            } => {
+                warnings.push(ImportWarning::new(
+                    path.as_str(),
+                    "a `websocket` request cannot be exported yet: left out",
+                ));
+                None
+            }
             TreeItem::Request { path, .. } => match collections.request(path) {
                 Ok(loaded) => Some(ImportedItem::Request {
                     request: Box::new(loaded.request),
@@ -116,5 +128,26 @@ mod tests {
         assert_eq!(names, ["Zeta", "Alpha"], "the tree's order");
         assert_eq!(read.environments.len(), 1);
         assert!(collections.request(&RequestPath::new("health.yml")).is_ok());
+    }
+
+    #[test]
+    fn a_websocket_request_is_left_out_with_a_warning() {
+        let collections = MemoryCollections::new(Collection::new("Shop"));
+        let environments = MemoryEnvironments::default();
+        let mut socket = HttpRequest::new("Socket", Method::Get, "ws://h");
+        socket.body = apifast_domain::Body::WebSocket(Vec::new());
+        let source = ImportedCollection {
+            name: "Shop".into(),
+            items: vec![ImportedItem::Request {
+                request: Box::new(socket),
+                key: None,
+            }],
+            ..ImportedCollection::default()
+        };
+        apply_import((&collections, &environments), &source, "").unwrap();
+        let read = collection_contents(&collections, &environments).unwrap();
+        assert_eq!(read.items.len(), 0);
+        assert_eq!(read.warnings.len(), 1);
+        assert!(read.warnings[0].message.contains("websocket"));
     }
 }

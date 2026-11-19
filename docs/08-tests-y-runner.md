@@ -189,7 +189,7 @@ El caso de uso `run_collection` (`apifast-app`) es el mismo para la CLI y la int
 
 - **Selección:** la colección entera o una carpeta (`folder`), con sus subcarpetas o sin ellas (`recursive`), en el orden del árbol: por `seq`, luego por nombre, y cada carpeta en su lugar. Una carpeta que no existe es un error antes de enviar nada.
 - **Tags:** con `tags`, solo corren las requests que tienen al menos uno; con `exclude_tags`, no corre ninguna que tenga alguno. Sin distinguir mayúsculas.
-- **Omitidas:** las requests filtradas por tags, las de tipos que aún no se pueden enviar (WebSocket, gRPC) y los archivos ilegibles no corren y quedan en el informe con su motivo.
+- **Omitidas:** las requests filtradas por tags, las WebSocket (una conexión no es un paso del runner), las de tipos que aún no se pueden enviar (gRPC) y los archivos ilegibles no corren y quedan en el informe con su motivo.
 - **Variables:** cada request ve lo que capturaron las anteriores, también entre iteraciones. El informe devuelve los valores finales.
 - **Errores:** una request que no se puede enviar (variable sin resolver, red…) queda en el informe con su error y la ejecución sigue.
 - **`bail`:** detiene la ejecución tras la primera request con un error o una aserción fallida.

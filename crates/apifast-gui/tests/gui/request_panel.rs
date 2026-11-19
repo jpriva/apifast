@@ -558,3 +558,45 @@ fn the_query_is_completed_from_the_schema() {
     harness.run();
     assert!(harness.query_by_label("id").is_some(), "asked for");
 }
+
+#[test]
+fn a_websocket_request_edits_its_messages() {
+    use apifast_domain::{WsMessage, WsMessageKind};
+    let mut socket = HttpRequest::new("Socket", Method::Get, "ws://h/ws");
+    socket.body = Body::WebSocket(vec![WsMessage::new("", WsMessageKind::Json, "{}")]);
+    let mut harness = harness(RequestTab::Body, socket);
+    // A socket has no response to check or keep.
+    assert!(harness.query_by_label_contains(EN.tests).is_none());
+    assert!(harness.query_by_label_contains(EN.examples).is_none());
+    harness.get_by_label("Messages (1)");
+
+    harness.get_by_label(EN.ws_add_message).click();
+    harness.run();
+    harness.get_by_label(EN.ws_message_name).click();
+    harness.run();
+    harness.get_by_label(EN.ws_message_name).type_text("-hi");
+    harness.run();
+    harness.get_by_label(EN.ws_messages).click();
+    harness.run();
+    harness.get_by_label(EN.ws_messages).type_text("ping");
+    harness.run();
+    let Body::WebSocket(messages) = &harness.state().request.body else {
+        panic!("{:?}", harness.state().request.body);
+    };
+    assert_eq!(messages.len(), 2);
+    assert_eq!(messages[1].name, "message 2-hi");
+    assert_eq!(messages[1].data, "ping");
+    assert_eq!(
+        messages[1].kind,
+        WsMessageKind::Json,
+        "the kind of the one shown"
+    );
+    assert_ne!(harness.state().changes.len(), 0);
+
+    harness.get_by_label(EN.ws_remove_message).click();
+    harness.run();
+    harness.get_by_label(EN.ws_remove_message).click();
+    harness.run();
+    harness.get_by_label(EN.ws_no_messages);
+    assert_eq!(harness.state().request.body, Body::WebSocket(Vec::new()));
+}

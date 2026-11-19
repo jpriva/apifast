@@ -231,6 +231,41 @@ graphql:
 - Cambiar el body de una request a GraphQL, o de GraphQL a otro tipo, renombra el bloque y `info.type` donde están, sin mover nada del archivo.
 - En un ejemplo guardado, que no tiene bloque propio, el body es `{type: graphql, query, variables}`.
 
+### Requests WebSocket
+
+Como las escribe Bruno (`stringifyWebsocketRequest.ts`): `info.type: websocket` y el bloque `websocket` con `url`, `headers`, `message` y `auth`, sin `method` ni `params`. `settings` lleva `timeout` y `keepAliveInterval`, en milisegundos. Un solo mensaje sin nombre se escribe plano; varios, como variantes con su `title` y su `selected`:
+
+```yaml
+info:
+  name: Chat
+  type: websocket
+  seq: 1
+
+websocket:
+  url: "{{ws_host}}/chat?room=1"
+  message:
+    - title: subscribe
+      selected: true
+      message:
+        type: json
+        data: |-
+          {"action": "subscribe"}
+    - title: ping
+      selected: false
+      message:
+        type: text
+        data: ping
+  auth: inherit
+
+settings:
+  timeout: 0
+  keepAliveInterval: 0
+```
+
+- En apifast es una request con los mensajes como body ([ADR 0011](adr/0011-websocket-como-body.md)): hereda headers y auth como una HTTP, y sus parámetros son los de la URL. Los tipos de mensaje son `json`, `xml` y `text`; uno desconocido se lee como `text`, como en Bruno.
+- Editar un mensaje cambia solo su `type` o su `data` (y `title` o `selected` en una variante); el archivo no gana claves que Bruno no había escrito. `keepAliveInterval` se conserva tal cual.
+- El runner no las corre y la exportación a Postman las deja fuera, las dos con aviso. Conectarse llega con `apifast-ws`.
+
 ### Tipos de auth
 
 `inherit`, `none`, `basic`, `bearer`, `apikey`, `digest`, `oauth2`, `awsv4`, `ntlm`. Los campos de cada uno siguen los nombres de OpenCollection (por ejemplo `username` y `password` en `basic`).
@@ -345,7 +380,7 @@ Los campos sensibles de auth **no guardan el secreto**: referencian una variable
 | `settings` con `timeout: 0` | Sin límite de tiempo |
 | `settings` con `timeout: inherit` | Se hereda |
 | `settings` sin `timeout` | 0 (sin límite), como en Bruno |
-| Request `grpc` o `websocket` | Aparece en el árbol; abrirla da "no soportado todavía" |
+| Request `grpc` | Aparece en el árbol; abrirla da "no soportado todavía" |
 | Archivo YAML inválido | Aparece en el árbol como inválido; no impide abrir el resto |
 
 OpenCollection no tiene ajustes de envío en carpetas ni en la colección, así que en archivos de Bruno solo la request los define. Sin bloque `settings`, apifast usa su valor por defecto de 30 s; Bruno usa su preferencia global (0, sin límite).

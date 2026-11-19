@@ -728,6 +728,7 @@ fn editor_area(
     ),
     strings: &Strings,
 ) -> (Option<UrlBarEvent>, bool) {
+    let kind = request.kind();
     let event = UrlBar::new(
         &mut request.method,
         &mut request.url,
@@ -737,6 +738,7 @@ fn editor_area(
     )
     .focus(focus_url)
     .streaming(matches!(tab.response, ResponseState::Streaming(_)))
+    .kind(kind)
     .show(ui);
     let mut edited = event == Some(UrlBarEvent::Edited);
     if edited {

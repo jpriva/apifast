@@ -6,7 +6,8 @@ use apifast_domain::{
     ApiKeyAuth, ApiKeyPlacement, Assertion, Auth, AuthScheme, AwsV4Auth, BasicAuth, BearerAuth,
     Body, Capture, CaptureScope, Collection, DigestAuth, Environment, Folder, FormField, Header,
     HttpRequest, Method, MultipartPart, MultipartValue, NtlmAuth, Operator, Param, ParamKind,
-    RequestDefaults, Setting, Settings, ValueKind, Variable, VariableValue,
+    RequestDefaults, Setting, Settings, ValueKind, Variable, VariableValue, WsMessage,
+    WsMessageKind,
 };
 use apifast_domain::{
     CredentialsPlacement, OAuth2Auth, OAuth2Flow, OAuth2Parameter, OAuth2Request,
@@ -37,6 +38,8 @@ pub(crate) fn item(doc: &Value) -> Item {
         Some("http") => Item::Http(http_request(doc, name, seq, "http")),
         // A GraphQL request is HTTP with its query as the body.
         Some("graphql") => Item::Http(http_request(doc, name, seq, "graphql")),
+        // A WebSocket request too, with its messages as the body.
+        Some("websocket") => Item::Http(http_request(doc, name, seq, "websocket")),
         // Without a type, a file with an `http` block is still an HTTP request.
         None if get(doc, "http").is_some() => Item::Http(http_request(doc, name, seq, "http")),
         _ => Item::Other {
@@ -47,16 +50,18 @@ pub(crate) fn item(doc: &Value) -> Item {
     }
 }
 
-/// The request in the block `block` of `doc`: `http`, or `graphql`, whose
-/// body is the query and its variables.
+/// The request in the block `block` of `doc`: `http`; `graphql`, whose
+/// body is the query and its variables; or `websocket`, whose body is its
+/// messages and whose parameters are those of its URL.
 fn http_request(doc: &Value, name: String, seq: Option<u32>, block: &str) -> HttpRequest {
     let http = get(doc, block);
     let graphql = block == "graphql";
+    let websocket = block == "websocket";
     let field = |key| http.and_then(|h| get(h, key));
     // Files from OpenCollection v3 rc1 keep the auth in `runtime.auth`.
     let auth = field("auth").or_else(|| get_in(doc, &["runtime", "auth"]));
 
-    HttpRequest {
+    let mut request = HttpRequest {
         name,
         seq,
         tags: items(get_in(doc, &["info", "tags"]))
@@ -71,6 +76,8 @@ fn http_request(doc: &Value, name: String, seq: Option<u32>, block: &str) -> Htt
         headers: headers(field("headers")),
         body: if graphql {
             graphql_body(field("body"))
+        } else if websocket {
+            Body::WebSocket(ws_messages(field("message")))
         } else {
             body(field("body"))
         },
@@ -88,6 +95,47 @@ fn http_request(doc: &Value, name: String, seq: Option<u32>, block: &str) -> Htt
         settings: settings(get(doc, "settings")),
         docs: text(get(doc, "docs")),
         examples: crate::examples::read_examples(doc),
+    };
+    if websocket {
+        // Its file has no parameters: they are those of its URL.
+        apifast_domain::sync_params_from_url(&mut request);
+    }
+    request
+}
+
+/// The messages of a `websocket` block: a list of named ones (`title`,
+/// `selected`, `message`), or a single one, as Bruno writes them.
+fn ws_messages(value: Option<&Value>) -> Vec<WsMessage> {
+    let message = |value: Option<&Value>| {
+        (
+            WsMessageKind::parse(&text_or_empty(value.and_then(|v| get(v, "type")))),
+            text_or_empty(value.and_then(|v| get(v, "data"))),
+        )
+    };
+    match value {
+        Some(list) if list.as_sequence().is_some() => items(Some(list))
+            .iter()
+            .enumerate()
+            .map(|(i, variant)| {
+                let (kind, data) = message(get(variant, "message"));
+                WsMessage {
+                    name: text(get(variant, "title"))
+                        .unwrap_or_else(|| format!("message {}", i + 1)),
+                    kind,
+                    data,
+                    selected: boolean(get(variant, "selected")).unwrap_or(false),
+                }
+            })
+            .collect(),
+        Some(single) => {
+            let (kind, data) = message(Some(single));
+            if data.trim().is_empty() {
+                Vec::new()
+            } else {
+                vec![WsMessage::new("", kind, data)]
+            }
+        }
+        None => Vec::new(),
     }
 }
 
@@ -748,14 +796,50 @@ mod tests {
     }
 
     #[test]
+    fn websocket_requests_have_their_messages_as_the_body() {
+        let Item::Http(request) = item(&yaml(
+            "info: {name: W, type: websocket, seq: 2}\nwebsocket:\n  url: ws://h/ws?room=1\n  headers: [{name: X-A, value: b}]\n  message:\n    type: json\n    data: '{\"a\": 1}'\n  auth: inherit\n",
+        )) else {
+            panic!("not read as a request");
+        };
+        assert_eq!(request.url, "ws://h/ws?room=1");
+        assert_eq!(request.params.len(), 1, "from the URL");
+        assert_eq!(request.headers.len(), 1);
+        assert_eq!(request.auth, Auth::Inherit);
+        assert_eq!(
+            request.body,
+            Body::WebSocket(vec![WsMessage::new("", WsMessageKind::Json, "{\"a\": 1}")])
+        );
+
+        let Item::Http(request) = item(&yaml(
+            "info: {name: W, type: websocket}\nwebsocket:\n  url: ws://h\n  message:\n    - title: hi\n      selected: true\n      message: {type: text, data: hello}\n    - message: {type: xml, data: <a/>}\n",
+        )) else {
+            panic!("not read as a request");
+        };
+        let Body::WebSocket(messages) = request.body else {
+            panic!("{:?}", request.body);
+        };
+        assert_eq!(
+            messages,
+            vec![
+                WsMessage {
+                    selected: true,
+                    ..WsMessage::new("hi", WsMessageKind::Text, "hello")
+                },
+                WsMessage::new("message 2", WsMessageKind::Xml, "<a/>"),
+            ]
+        );
+    }
+
+    #[test]
     fn other_request_kinds_are_listed_not_parsed() {
         assert_eq!(
             item(&yaml(
-                "info: {name: Q, type: websocket, seq: 3}\nwebsocket: {url: x}\n"
+                "info: {name: Q, type: grpc, seq: 3}\ngrpc: {url: x}\n"
             )),
             Item::Other {
                 name: "Q".into(),
-                kind: "websocket".into(),
+                kind: "grpc".into(),
                 seq: Some(3)
             }
         );

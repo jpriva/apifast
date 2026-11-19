@@ -11,7 +11,7 @@
 use apifast_domain::{
     ApiKeyPlacement, Assertion, Auth, AuthScheme, AwsV4Auth, Body, Capture, Collection,
     Environment, Folder, FormField, Header, HttpRequest, MultipartPart, MultipartValue, Param,
-    ParamKind, RequestDefaults, Setting, ValueKind, Variable, VariableValue,
+    ParamKind, RequestDefaults, Setting, ValueKind, Variable, VariableValue, WsMessage,
 };
 use apifast_domain::{
     CredentialsPlacement, OAuth2Auth, OAuth2Flow, OAuth2Request, ParameterPlacement, TokenPlacement,
@@ -71,30 +71,35 @@ pub(crate) fn to_text(doc: &Value) -> Result<String, oneyaml::Error> {
 
 // --- Requests ---------------------------------------------------------------
 
-/// The file's block, and `info.type`, of `request`: `graphql` for a
-/// GraphQL body, as Bruno writes it, `http` for any other.
+/// The blocks a request may live in, as its `info.type`.
+const REQUEST_BLOCKS: [&str; 3] = ["http", "graphql", "websocket"];
+
+/// The file's block, and `info.type`, of `request`, as Bruno writes it:
+/// `graphql` for a GraphQL body, `websocket` for WebSocket messages, `http`
+/// for any other.
 pub(crate) fn block_of(request: &HttpRequest) -> &'static str {
-    if matches!(request.body, Body::GraphQl { .. }) {
-        "graphql"
-    } else {
-        "http"
+    match request.body {
+        Body::GraphQl { .. } => "graphql",
+        Body::WebSocket(_) => "websocket",
+        _ => "http",
     }
 }
 
 /// `text` with its request block, and `info.type`, renamed to `block`
-/// (`http` or `graphql`) where they are, if the file has the other one.
-/// Only top-level `http:`/`graphql:` lines and the `type:` line under
-/// `info:` are touched.
+/// where they are, if the file has another of [`REQUEST_BLOCKS`]. Only the
+/// top-level block line and the `type:` line under `info:` are touched.
 pub(crate) fn retype_request_text(text: String, block: &str) -> String {
-    let other = if block == "graphql" {
-        "http"
-    } else {
-        "graphql"
+    let found = REQUEST_BLOCKS
+        .into_iter()
+        .filter(|other| *other != block)
+        .find(|other| {
+            let key = format!("{other}:");
+            text.lines().any(|line| line.trim_end() == key)
+        });
+    let Some(other) = found else {
+        return text;
     };
     let key = format!("{other}:");
-    if !text.lines().any(|line| line.trim_end() == key) {
-        return text;
-    }
     let mut in_info = false;
     let mut out = String::with_capacity(text.len());
     for line in text.split_inclusive('\n') {
@@ -114,7 +119,12 @@ pub(crate) fn retype_request_text(text: String, block: &str) -> String {
 
 pub(crate) fn new_request(request: &HttpRequest) -> Value {
     let block = block_of(request);
-    let method = if block == "graphql" { "POST" } else { "GET" };
+    // A WebSocket block has no method: the handshake is always a GET.
+    let method = match block {
+        "graphql" => Some(string("POST")),
+        "websocket" => None,
+        _ => Some(string("GET")),
+    };
     let mut doc = mapping([
         (
             "info",
@@ -125,10 +135,7 @@ pub(crate) fn new_request(request: &HttpRequest) -> Value {
         ),
         (
             block,
-            Some(mapping([
-                ("method", Some(string(method))),
-                ("url", Some(string(""))),
-            ])),
+            Some(mapping([("method", method), ("url", Some(string("")))])),
         ),
     ]);
     let read::Item::Http(blank) = read::item(&doc) else {
@@ -166,31 +173,7 @@ pub(crate) fn update_request(doc: &mut Value, old: &HttpRequest, new: &HttpReque
         &new.auth,
     );
     if http_changed {
-        let http = child_mut(doc, block);
-        if old.method != new.method {
-            set(http, "method", string(new.method.as_str()));
-        }
-        if old.url != new.url {
-            set(http, "url", string(&new.url));
-        }
-        update_list(
-            http,
-            "headers",
-            &old.headers,
-            &new.headers,
-            header_value,
-            merge_header,
-        );
-        update_list(
-            http,
-            "params",
-            &old.params,
-            &new.params,
-            param_value,
-            merge_param,
-        );
-        update_body(http, &old.body, &new.body);
-        update_auth(http, "auth", &old.auth, &new.auth, AuthLevel::Item);
+        update_block(child_mut(doc, block), block == "websocket", old, new);
     }
     if old.auth != new.auth {
         // The auth now lives in `http.auth`; drop the rc1 location if present.
@@ -244,6 +227,47 @@ pub(crate) fn update_request(doc: &mut Value, old: &HttpRequest, new: &HttpReque
     if old.examples != new.examples {
         crate::examples::update_examples(doc, &old.examples, &new.examples);
     }
+}
+
+/// The request's block (`http`, `graphql` or `websocket`): method, URL,
+/// headers, parameters, body and auth. A WebSocket block has no method
+/// and no parameters (they are those of its URL), and its body is its
+/// messages.
+fn update_block(http: &mut Value, websocket: bool, old: &HttpRequest, new: &HttpRequest) {
+    if old.method != new.method && !websocket {
+        set(http, "method", string(new.method.as_str()));
+    }
+    if old.url != new.url {
+        set(http, "url", string(&new.url));
+    }
+    update_list(
+        http,
+        "headers",
+        &old.headers,
+        &new.headers,
+        header_value,
+        merge_header,
+    );
+    // A WebSocket request's parameters are those of its URL.
+    if !websocket {
+        update_list(
+            http,
+            "params",
+            &old.params,
+            &new.params,
+            param_value,
+            merge_param,
+        );
+    }
+    match (&old.body, &new.body) {
+        (Body::WebSocket(o), Body::WebSocket(n)) if o == n => {}
+        (Body::WebSocket(o), Body::WebSocket(n)) => update_ws_messages(http, o, n),
+        (_, Body::WebSocket(messages)) => {
+            set_or_remove(http, "message", ws_message_value(messages));
+        }
+        (old_body, new_body) => update_body(http, old_body, new_body),
+    }
+    update_auth(http, "auth", &old.auth, &new.auth, AuthLevel::Item);
 }
 
 /// A list of `items` as values, or `None` when empty.
@@ -966,6 +990,89 @@ fn update_body(http: &mut Value, old: &Body, new: &Body) {
         }
     }
     set_or_remove(http, "body", request_body_value(new));
+}
+
+/// Writes what changed of a WebSocket request's messages, in place when
+/// the file keeps their shape (one flat message, or as many variants), so
+/// keys Bruno left out stay out.
+fn update_ws_messages(block: &mut Value, old: &[WsMessage], new: &[WsMessage]) {
+    let flat = |messages: &[WsMessage]| {
+        ws_message_value(messages).is_some_and(|v| v.as_mapping().is_some())
+    };
+    let existing = block
+        .as_mapping_mut()
+        .and_then(|m| m.get_mut(&string("message")));
+    let patch_message = |message: &mut Value, o: &WsMessage, n: &WsMessage| {
+        if o.kind != n.kind {
+            set(message, "type", string(n.kind.as_str()));
+        }
+        if o.data != n.data {
+            set(message, "data", string(&n.data));
+        }
+    };
+    match existing {
+        Some(message) if message.as_mapping().is_some() && flat(old) && flat(new) => {
+            patch_message(message, &old[0], &new[0]);
+        }
+        Some(variants)
+            if variants.as_sequence().is_some_and(|v| v.len() == new.len())
+                && old.len() == new.len()
+                && !flat(new) =>
+        {
+            let Some(variants) = variants.as_sequence_mut() else {
+                return;
+            };
+            for ((variant, o), n) in variants.iter_mut().zip(old).zip(new) {
+                if o.name != n.name {
+                    set(variant, "title", string(&n.name));
+                }
+                if o.selected != n.selected {
+                    set(variant, "selected", Value::Bool(n.selected));
+                }
+                if (o.kind, &o.data) != (n.kind, &n.data) {
+                    patch_message(child_mut(variant, "message"), o, n);
+                }
+            }
+        }
+        _ => set_or_remove(block, "message", ws_message_value(new)),
+    }
+}
+
+/// The messages of a WebSocket request, as Bruno writes them: the only
+/// one, unnamed and not empty, as a single `type` and `data`; any other
+/// list as named variants (`title`, `selected`, `message`).
+fn ws_message_value(messages: &[WsMessage]) -> Option<Value> {
+    let message = |m: &WsMessage| {
+        mapping([
+            ("type", Some(string(m.kind.as_str()))),
+            ("data", Some(string(&m.data))),
+        ])
+    };
+    match messages {
+        [] => None,
+        [only] if only.name.trim().is_empty() && !only.data.trim().is_empty() => {
+            Some(message(only))
+        }
+        _ => Some(
+            messages
+                .iter()
+                .enumerate()
+                .map(|(i, m)| {
+                    let title = if m.name.trim().is_empty() {
+                        format!("message {}", i + 1)
+                    } else {
+                        m.name.clone()
+                    };
+                    mapping([
+                        ("title", Some(string(&title))),
+                        ("selected", Some(Value::Bool(m.selected))),
+                        ("message", Some(message(m))),
+                    ])
+                })
+                .collect::<Vec<_>>()
+                .into(),
+        ),
+    }
 }
 
 /// A request's body: a GraphQL one as Bruno writes it in the `graphql`

@@ -2,7 +2,7 @@
 //! folder in order, carrying captured values from one to the next, and
 //! gathers their results.
 
-use apifast_domain::{HttpRequest, Variable};
+use apifast_domain::{HttpRequest, RequestKind, Variable};
 
 use crate::ports::is_within;
 use crate::use_cases::send_request;
@@ -243,6 +243,16 @@ fn collect(
                     collect(children, recursive, runnable, skipped);
                 }
             }
+            TreeItem::Request {
+                path,
+                name,
+                kind: RequestKind::WebSocket,
+                ..
+            } => skipped.push(Skipped {
+                path: path.clone(),
+                name: name.clone(),
+                reason: "websocket requests do not run in a run".into(),
+            }),
             TreeItem::Request { path, name, .. } => runnable.push((path.clone(), name.clone())),
             TreeItem::Other {
                 path, name, kind, ..

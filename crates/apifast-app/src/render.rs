@@ -519,6 +519,11 @@ impl Renderer<'_, '_> {
                     .unwrap_or_else(|| "application/octet-stream".into());
                 (RenderedBody::File(self.text(path)?), Some(content_type))
             }
+            Body::WebSocket(_) => {
+                return Err(AppError::Validation(
+                    "WebSocket requests cannot connect yet".into(),
+                ));
+            }
             _ => {
                 return Err(AppError::Validation(
                     "this body kind is not supported yet".into(),

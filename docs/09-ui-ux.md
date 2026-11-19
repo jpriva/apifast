@@ -105,6 +105,12 @@ La cabecera de la barra lateral tiene:
 | Ajustes | Timeout, redirecciones, TLS; cada uno con "heredar" |
 | Examples | Ejemplos guardados (`Examples (2)`): cada uno plegado con su estado, nombre editable y botón para borrarlo; al abrirlo, la descripción editable, la request enviada, los headers y el body de la respuesta, de solo lectura |
 
+### Requests WebSocket
+
+- En la barra de URL, `WS` ocupa el lugar del selector de método, y en el árbol la request lleva `WS` en vez de su método.
+- La pestaña Body se llama `Messages (2)`: un selector del mensaje que se muestra, "Add message" (con el tipo del mensaje mostrado) y "Remove"; del mensaje mostrado, su tipo (JSON, XML o Text, con "Format" para los dos primeros y su atajo), su nombre (opcional si es el único) y su texto con las variables resaltadas. Mostrar un mensaje no lo marca como `selected`: ver no ensucia la request.
+- No tiene las pestañas Tests ni Examples: una conexión no tiene una respuesta que comprobar o guardar.
+
 ### Bodies multipart y de archivo
 
 - **Multipart:** una fila por parte con casilla, nombre, tipo ("Text" o "Files"), `Content-Type` (vacío: lo elige apifast) y botón para quitarla. Una parte de texto tiene su valor con las variables resaltadas; una de archivos, su lista (nombre, y la ruta al pasar el cursor) con "Choose files…", que abre el diálogo del sistema y admite varios. "Add part" añade una parte. Cambiar de formulario a multipart conserva los campos como partes de texto, y al revés se conservan las partes de texto.

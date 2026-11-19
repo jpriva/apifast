@@ -1,6 +1,6 @@
 //! The URL bar: method, URL and the send or cancel button.
 
-use apifast_domain::Method;
+use apifast_domain::{Method, RequestKind};
 use eframe::egui::{self, Align, Layout, RichText};
 
 use crate::atoms::{TemplateField, TemplateFieldTexts, VariableHints};
@@ -42,6 +42,7 @@ pub struct UrlBar<'a> {
     hints: &'a VariableHints,
     sending: bool,
     streaming: bool,
+    kind: RequestKind,
     strings: &'a Strings,
     focus: bool,
 }
@@ -62,6 +63,7 @@ impl<'a> UrlBar<'a> {
             hints,
             sending,
             streaming: false,
+            kind: RequestKind::Http,
             strings,
             focus: false,
         }
@@ -82,6 +84,13 @@ impl<'a> UrlBar<'a> {
         self
     }
 
+    /// What the request is: a WebSocket connection has no method to pick.
+    #[must_use]
+    pub fn kind(mut self, kind: RequestKind) -> Self {
+        self.kind = kind;
+        self
+    }
+
     /// Draws the bar.
     pub fn show(self, ui: &mut egui::Ui) -> Option<UrlBarEvent> {
         let Self {
@@ -90,12 +99,16 @@ impl<'a> UrlBar<'a> {
             hints,
             sending,
             streaming,
+            kind,
             strings,
             focus,
         } = self;
         let mut event = None;
         ui.horizontal(|ui| {
-            if method_selector(ui, method, strings) {
+            if kind == RequestKind::WebSocket {
+                ui.add(crate::atoms::MethodBadge::new(method).kind(kind))
+                    .on_hover_text(strings.ws_badge);
+            } else if method_selector(ui, method, strings) {
                 event = Some(UrlBarEvent::Edited);
             }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {

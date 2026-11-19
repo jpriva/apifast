@@ -8,6 +8,31 @@ pub enum Request {
     Http(HttpRequest),
 }
 
+/// What a request is, by its body: what its file calls it and how it goes
+/// out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum RequestKind {
+    /// An HTTP request.
+    #[default]
+    Http,
+    /// HTTP with a GraphQL operation as the body.
+    GraphQl,
+    /// A WebSocket connection, with messages to send.
+    WebSocket,
+}
+
+impl RequestKind {
+    /// Its `info.type` in a file.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Http => "http",
+            Self::GraphQl => "graphql",
+            Self::WebSocket => "websocket",
+        }
+    }
+}
+
 /// HTTP request. Texts are unrendered templates.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HttpRequest {
@@ -44,6 +69,15 @@ pub struct HttpRequest {
 }
 
 impl HttpRequest {
+    /// What it is, by its body.
+    pub fn kind(&self) -> RequestKind {
+        match self.body {
+            crate::Body::GraphQl { .. } => RequestKind::GraphQl,
+            crate::Body::WebSocket(_) => RequestKind::WebSocket,
+            _ => RequestKind::Http,
+        }
+    }
+
     /// Request with no own headers, body or settings, and inherited auth.
     pub fn new(name: impl Into<String>, method: Method, url: impl Into<String>) -> Self {
         Self {

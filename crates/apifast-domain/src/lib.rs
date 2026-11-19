@@ -41,7 +41,7 @@ pub use auth::{
     CredentialsPlacement, DigestAuth, NtlmAuth, OAuth2Auth, OAuth2Flow, OAuth2Parameter,
     OAuth2Request, ParameterPlacement, TokenPlacement,
 };
-pub use body::{Body, FormField, MultipartPart, MultipartValue};
+pub use body::{Body, FormField, MultipartPart, MultipartValue, WsMessage, WsMessageKind};
 pub use certificates::{ClientCertificate, ClientCertificateKind, TlsTrust};
 pub use collection::{Collection, CollectionId, Folder, RequestDefaults};
 pub use cookie::{
@@ -58,7 +58,7 @@ pub use graphql::{
 pub use json::{Json, JsonError, MAX_DEPTH as MAX_JSON_DEPTH, PathError};
 pub use origin::Origin;
 pub use proxy::{CollectionProxy, ProxyChoice, ProxyConfig, ProxyMode, ProxyProtocol};
-pub use request::{Header, HttpRequest, Method, Param, ParamKind, Request};
+pub use request::{Header, HttpRequest, Method, Param, ParamKind, Request, RequestKind};
 pub use resolve::{Chain, ResolvedRequest, resolve};
 pub use secret::{MASK, Secret, mask};
 pub use setting::{Resolved, Setting};
