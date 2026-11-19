@@ -7,6 +7,27 @@ use std::fmt::Write as _;
 
 use crate::Host;
 
+/// The names of every dynamic variable apifast generates, without `$`.
+/// Kept in step with what generates them by a test.
+pub const DYNAMIC_VARIABLES: &[&str] = &[
+    "randomUUID",
+    "timestamp",
+    "isoTimestamp",
+    "randomInt",
+    "randomFirstName",
+    "randomLastName",
+    "randomFullName",
+    "randomUserName",
+    "randomEmail",
+    "randomWord",
+    "randomWords",
+    "randomCity",
+    "randomCountry",
+    "randomBoolean",
+    "randomAlphaNumeric",
+    "randomPhoneNumber",
+];
+
 /// Writes the value of dynamic variable `name` into `out`. Returns `false` if
 /// the variable is unknown.
 pub(crate) fn generate(name: &str, host: &mut dyn Host, out: &mut String) -> bool {
@@ -98,6 +119,27 @@ mod tests {
         assert_eq!(iso(1_700_000_000_123), "2023-11-14T22:13:20.123Z");
         assert_eq!(iso(951_782_400_000), "2000-02-29T00:00:00.000Z");
         assert_eq!(iso(-1), "1969-12-31T23:59:59.999Z");
+    }
+
+    struct Fixed;
+
+    impl Host for Fixed {
+        fn unix_millis(&mut self) -> i64 {
+            0
+        }
+        fn random_u64(&mut self) -> u64 {
+            7
+        }
+    }
+
+    #[test]
+    fn the_list_of_names_is_what_generates() {
+        for name in DYNAMIC_VARIABLES {
+            let mut out = String::new();
+            assert!(generate(name, &mut Fixed, &mut out), "{name}");
+            assert!(!out.is_empty(), "{name}");
+        }
+        assert!(!generate("guid", &mut Fixed, &mut String::new()));
     }
 
     #[test]

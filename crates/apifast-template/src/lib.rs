@@ -21,6 +21,6 @@ mod fake;
 mod parse;
 mod render;
 
-pub use dynamic::iso_timestamp;
+pub use dynamic::{DYNAMIC_VARIABLES, iso_timestamp};
 pub use parse::{Expr, Invalid, InvalidReason, Tag, Template, Token};
 pub use render::{FunctionArg, Host, MAX_DEPTH, Mode, Problem, RenderError, Rendered, render};

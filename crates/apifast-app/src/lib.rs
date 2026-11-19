@@ -19,6 +19,7 @@ mod examples;
 mod functions;
 mod history;
 mod host;
+mod import;
 pub mod memory;
 mod oauth2;
 mod organize;
@@ -43,6 +44,10 @@ pub use history::{
     HIDDEN, HistoryEntry, HistoryLimits, HistoryOutcome, HistoryStore, hide_query, within_limits,
 };
 pub use host::AppHost;
+pub use import::{
+    ImportPlan, ImportReport, ImportWarning, ImportedCollection, ImportedItem, PlannedEntry,
+    apply_import, plan_import,
+};
 pub use oauth2::{OAuth2Token, TokenInfo, TokenStore, forget_token, get_new_token, stored_token};
 pub use organize::{
     Placement, create_folder, create_request, delete_item, move_item, rename_item, slug,

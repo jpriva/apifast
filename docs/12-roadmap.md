@@ -331,7 +331,10 @@ Los dos se cumplen: cada esquema (Digest, NTLM, AWS SigV4, OAuth 2.0 en sus tres
 ### Tareas
 
 - [ ] Importadores: Bruno `.bru`, Postman (colecciones y entornos), Insomnia, OpenAPI 3, cURL.
+  - [x] Postman: colecciones v2.0 y v2.1 y entornos ([docs/08](08-tests-y-runner.md#apifast-import)). Probado con 33 exportaciones del corpus de Bruno, que se importan sin rutas repetidas, y de extremo a extremo: importar y enviar.
 - [ ] Plan de importación revisable: qué se crea, avisos, elementos no soportados.
+  - [x] El plan y su aplicación (`plan_import`, `apply_import`) y `apifast import`, que lo imprime y escribe (o no, con `--dry-run`).
+  - [ ] El diálogo de importación de la interfaz.
 - [ ] Reimportación que actualiza en lugar de duplicar.
 - [x] Pegar un comando cURL en la barra de URL crea la request. `parse_curl` en `apifast-import`: palabras como las separa un shell POSIX (comillas, `\`, `$'…'`, continuaciones de línea) y las opciones de Bruno y alguna más (`-X`, `-H`, `-A`, `-e`, `-b`, `-u` con `--digest`/`--ntlm`, `--oauth2-bearer`, `-d` y sus variantes juntadas con `&`, `--json`, `-F`/`--form-string`, `@archivo` como body de archivo, `-G`, `-I`, opciones cortas juntas como `-sSL` o `-XPOST`). Las que no cambian la request se saltan con su valor; las demás se listan, nunca se pierden en silencio. Es también la base del importador de cURL.
 - [x] Copiar como cURL. `render_for_copy` en `apifast-app` renderiza la request como la enviaría un envío, pero sin red: token OAuth 2.0 solo si está guardado, `response(...)` sin enviar, y en modo tolerante, con lo que falta listado. `to_curl` en `apifast-import` la escribe con opciones largas y comillas de shell; probado de ida y vuelta con `parse_curl` y con el curl real. En el menú de cada request del árbol y en la paleta ([docs/09](09-ui-ux.md#layout-principal)).

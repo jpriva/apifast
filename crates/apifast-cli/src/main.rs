@@ -3,6 +3,7 @@
 // The CLI is the only crate that writes straight to the terminal.
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
+mod import;
 mod locate;
 mod run;
 mod system;
@@ -54,6 +55,11 @@ enum Command {
     Run(run::RunArgs),
     /// Secrets and the collection's key.
     Vault(vault::VaultArgs),
+    /// Import a collection from another tool into a new folder.
+    ///
+    /// Prints what is created and what could not be kept; `--dry-run`
+    /// stops there.
+    Import(import::ImportArgs),
 }
 
 #[derive(clap::Args)]
@@ -142,6 +148,10 @@ fn main() -> ExitCode {
         Command::Run(args) => (run::run(&args), ExitCode::from(run::EXIT_RUN_ERROR)),
         Command::Vault(args) => (
             vault::run(&args).map(|()| ExitCode::SUCCESS),
+            ExitCode::FAILURE,
+        ),
+        Command::Import(args) => (
+            import::run(&args).map(|()| ExitCode::SUCCESS),
             ExitCode::FAILURE,
         ),
     };

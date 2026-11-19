@@ -299,6 +299,7 @@ dependencies = [
  "apifast-domain",
  "apifast-history",
  "apifast-http",
+ "apifast-import",
  "apifast-storage-fs",
  "apifast-template",
  "apifast-vault",
@@ -382,6 +383,7 @@ dependencies = [
  "apifast-app",
  "apifast-domain",
  "apifast-template",
+ "serde_json",
  "thiserror 2.0.21",
 ]
 

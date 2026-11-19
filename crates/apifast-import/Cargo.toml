@@ -11,9 +11,8 @@ publish.workspace = true
 apifast-domain.workspace = true
 apifast-app.workspace = true
 thiserror.workspace = true
+serde_json.workspace = true
+apifast-template.workspace = true
 
 [lints]
 workspace = true
-
-[dev-dependencies]
-apifast-template.workspace = true

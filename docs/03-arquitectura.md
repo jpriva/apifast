@@ -64,7 +64,7 @@ flowchart TB
 | `apifast-vault` | Adaptador | Cifrado, claves, keyring | Aplicación, chacha20poly1305, keyring |
 | `apifast-watch` | Adaptador | Observación del sistema de archivos | Aplicación, notify |
 | `apifast-history` | Adaptador | Historial y cuerpos de respuesta en disco | Aplicación |
-| `apifast-import` | Adaptador | Importadores y exportadores. Hoy, cURL: `parse_curl` y `to_curl` (sobre una `RenderedRequest` de `render_for_copy`, el caso de uso que renderiza sin enviar); la interfaz lo usa directamente, sin puerto, porque es puro | Aplicación, serde |
+| `apifast-import` | Adaptador | Importadores y exportadores. Hoy, cURL (`parse_curl` y `to_curl`) y Postman (`import_postman`, `import_postman_environment`): cURL (sobre una `RenderedRequest` de `render_for_copy`, el caso de uso que renderiza sin enviar); la interfaz lo usa directamente, sin puerto, porque es puro | Aplicación, serde |
 | `apifast-ws` | Adaptador | WebSocket | Aplicación, tokio-tungstenite |
 | `apifast-grpc` | Adaptador | gRPC y reflection | Aplicación, tonic, prost-reflect |
 | `apifast-script-js` | Adaptador | Motor JavaScript | Aplicación, rquickjs |
@@ -166,7 +166,7 @@ Cada tipo solo se construye a partir del anterior (`resolve` en el dominio, `ren
 | `RunCollection` | Ejecuta varias requests en orden y agrega resultados |
 | `UnlockVault` | Obtiene la clave maestra y la clave de la colección |
 | `SetSecret` | Cifra y guarda un secreto compartido o local |
-| `ImportCollection` | Genera un plan de importación y lo aplica |
+| `ImportCollection` | Genera un plan de importación y lo aplica: `plan_import` (qué carpetas, requests y entornos se crearían, con su ruta, y los avisos) y `apply_import` (los escribe con los puertos de colección y entornos, en el mismo orden). Cada importador traduce su formato a `ImportedCollection` |
 | `ApplyExternalChange` | Reconcilia un cambio detectado por el watcher |
 
 ### Flujo de `SendRequest`

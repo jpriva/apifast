@@ -231,6 +231,26 @@ apifast import <formato> <origen> --out <directorio>
 apifast vault <subcomando>
 ```
 
+### `apifast import`
+
+```
+apifast import postman <colección.json> [--env <entorno.json>]... --out <carpeta> [--dry-run]
+```
+
+Crea una colección nueva en `--out` a partir de una exportación de Postman (colección v2.0 o v2.1, también envuelta en `{"collection": …}` como la da su API) y, con `--env`, de sus entornos. Antes de escribir imprime el plan: cada carpeta y request con la ruta que tendrá, los entornos, y lo que no se conservó, con dónde estaba (`Users / Get user: a \`test\` script is not imported…`). Con `--dry-run` se queda ahí. Nunca escribe sobre una carpeta que ya tiene una colección.
+
+Lo que se traduce de Postman (con las decisiones del importador de Bruno):
+
+- Carpetas y requests en su orden (`seq`), con nombres de archivo sacados del nombre y únicos entre hermanos.
+- Auth de colección, carpeta y request: basic, bearer, digest, NTLM, API key, AWS SigV4 y OAuth 2.0 (sus cuatro flujos, PKCE, dónde va el token y los parámetros adicionales). Sin `auth`, hereda; `noauth`, ninguna. Las demás (OAuth 1, Hawk, EdgeGrid…) quedan sin auth y con aviso.
+- URL como texto o por partes, path params con su valor, params de query desactivados, headers (también desactivados), descripción como documentación.
+- Bodies: raw según su lenguaje o el `Content-Type` (JSON, XML o texto), urlencoded, form-data (texto y archivos), archivo. GraphQL pasa a un JSON con `query` y `variables`, con aviso.
+- `protocolProfileBehavior`: `followRedirects`, `maxRedirects` y `disableUrlEncoding` (como `encodeUrl: false`); los demás, con aviso.
+- Las respuestas guardadas, como ejemplos de la request.
+- Variables de colección. `{{$guid}}` pasa a `{{$randomUUID}}`; una variable dinámica que apifast no genera se avisa.
+- Entornos: sus variables; las de tipo `secret` se declaran secretas sin valor (el valor nunca va a un archivo) y se avisa para ponerlo en la bóveda.
+- Los scripts no se importan hasta que llegue el motor de JavaScript (F9): cada uno se avisa.
+
 ### `apifast run`
 
 ```

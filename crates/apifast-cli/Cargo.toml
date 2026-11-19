@@ -19,6 +19,7 @@ apifast-storage-fs.workspace = true
 apifast-http.workspace = true
 apifast-history.workspace = true
 apifast-vault.workspace = true
+apifast-import.workspace = true
 clap = { version = "4.6.7", features = ["derive"] }
 anyhow = "1.0.104"
 tokio = { version = "1.54.1", features = ["rt", "time", "signal", "macros"] }
