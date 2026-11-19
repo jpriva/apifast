@@ -99,6 +99,59 @@ pub enum TokenAction {
 }
 
 impl RequestPanel {
+    /// The tabs, with what each holds; those that do not apply to the
+    /// request are left out.
+    fn tab_bar(&mut self, ui: &mut egui::Ui, request: &HttpRequest, strings: &Strings) {
+        let (websocket, grpc) = (request.body.is_websocket(), request.body.is_grpc());
+        // A connection or a call has no response to check or keep, and a
+        // call has no parameters.
+        let hidden = |tab: RequestTab| {
+            ((websocket || grpc) && matches!(tab, RequestTab::Tests | RequestTab::Examples))
+                || (grpc && tab == RequestTab::Params)
+        };
+        if hidden(self.tab) {
+            self.tab = if grpc {
+                RequestTab::Body
+            } else {
+                RequestTab::Params
+            };
+        }
+        ui.horizontal(|ui| {
+            let params = request.params.iter().filter(|p| p.enabled).count();
+            let headers = request.headers.iter().filter(|h| h.enabled).count();
+            let tests = request.assertions.iter().filter(|a| a.enabled).count()
+                + request.captures.iter().filter(|c| c.enabled).count();
+            let body = match &request.body {
+                Body::WebSocket(messages) => counted(strings.ws_messages, messages.len()),
+                Body::Grpc(call) => counted(strings.ws_messages, call.messages.len()),
+                _ => strings.body.to_owned(),
+            };
+            // A call's headers are its metadata.
+            let headers_label = if grpc {
+                strings.grpc_metadata
+            } else {
+                strings.headers
+            };
+            for (tab, label) in [
+                (RequestTab::Params, counted(strings.params, params)),
+                (RequestTab::Headers, counted(headers_label, headers)),
+                (RequestTab::Body, body),
+                (RequestTab::Auth, strings.auth.to_owned()),
+                (RequestTab::Tests, counted(strings.tests, tests)),
+                (RequestTab::Settings, strings.settings.to_owned()),
+                (
+                    RequestTab::Examples,
+                    counted(strings.examples, request.examples.len()),
+                ),
+            ] {
+                if hidden(tab) {
+                    continue;
+                }
+                ui.selectable_value(&mut self.tab, tab, label);
+            }
+        });
+    }
+
     /// Draws the panel over `request`, which it edits in place. `context`
     /// is what the request inherits.
     pub fn show(
@@ -113,38 +166,7 @@ impl RequestPanel {
             let warning = theme::palette(ui).warning;
             ui.label(RichText::new(note.as_str()).color(warning).small());
         }
-        let websocket = request.body.is_websocket();
-        if websocket && matches!(self.tab, RequestTab::Tests | RequestTab::Examples) {
-            self.tab = RequestTab::Params;
-        }
-        ui.horizontal(|ui| {
-            let params = request.params.iter().filter(|p| p.enabled).count();
-            let headers = request.headers.iter().filter(|h| h.enabled).count();
-            let tests = request.assertions.iter().filter(|a| a.enabled).count()
-                + request.captures.iter().filter(|c| c.enabled).count();
-            let body = match &request.body {
-                Body::WebSocket(messages) => counted(strings.ws_messages, messages.len()),
-                _ => strings.body.to_owned(),
-            };
-            for (tab, label) in [
-                (RequestTab::Params, counted(strings.params, params)),
-                (RequestTab::Headers, counted(strings.headers, headers)),
-                (RequestTab::Body, body),
-                (RequestTab::Auth, strings.auth.to_owned()),
-                (RequestTab::Tests, counted(strings.tests, tests)),
-                (RequestTab::Settings, strings.settings.to_owned()),
-                (
-                    RequestTab::Examples,
-                    counted(strings.examples, request.examples.len()),
-                ),
-            ] {
-                // A WebSocket request has no response to check or keep.
-                if websocket && matches!(tab, RequestTab::Tests | RequestTab::Examples) {
-                    continue;
-                }
-                ui.selectable_value(&mut self.tab, tab, label);
-            }
-        });
+        self.tab_bar(ui, request, strings);
         ui.separator();
         egui::ScrollArea::vertical()
             .id_salt("request-panel")
@@ -158,6 +180,16 @@ impl RequestPanel {
                     let shortcuts = (self.format_shortcuts.clone())
                         .unwrap_or_else(|| Action::FormatBody.defaults());
                     let now = std::mem::take(&mut self.format_now);
+                    if let Body::Grpc(call) = &mut request.body {
+                        return super::grpc_editor::grpc_call(
+                            ui,
+                            call,
+                            (&shortcuts, now),
+                            hints,
+                            strings,
+                        )
+                        .then_some(RequestChange::Other);
+                    }
                     if let Body::WebSocket(messages) = &mut request.body {
                         let send = (self.connection.open, &mut self.connection.send);
                         return ws_messages(ui, messages, (&shortcuts, now), send, hints, strings)
@@ -306,7 +338,7 @@ fn counted(label: &str, count: usize) -> String {
     }
 }
 
-fn muted(ui: &egui::Ui, text: &str) -> RichText {
+pub(super) fn muted(ui: &egui::Ui, text: &str) -> RichText {
     RichText::new(text).color(theme::palette(ui).text_muted)
 }
 
@@ -812,7 +844,7 @@ fn graphql_from(text: String) -> Body {
     }
 }
 
-fn code_body(
+pub(super) fn code_body(
     ui: &mut egui::Ui,
     text: &mut String,
     (language, completer): (Language, Option<Completer<'_>>),

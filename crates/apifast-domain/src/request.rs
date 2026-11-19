@@ -20,6 +20,8 @@ pub enum RequestKind {
     GraphQl,
     /// A WebSocket connection, with messages to send.
     WebSocket,
+    /// A gRPC call, with messages to send.
+    Grpc,
 }
 
 impl RequestKind {
@@ -29,6 +31,7 @@ impl RequestKind {
             Self::Http => "http",
             Self::GraphQl => "graphql",
             Self::WebSocket => "websocket",
+            Self::Grpc => "grpc",
         }
     }
 }
@@ -74,6 +77,7 @@ impl HttpRequest {
         match self.body {
             crate::Body::GraphQl { .. } => RequestKind::GraphQl,
             crate::Body::WebSocket(_) => RequestKind::WebSocket,
+            crate::Body::Grpc(_) => RequestKind::Grpc,
             _ => RequestKind::Http,
         }
     }

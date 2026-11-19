@@ -10,8 +10,9 @@
 
 use apifast_domain::{
     ApiKeyPlacement, Assertion, Auth, AuthScheme, AwsV4Auth, Body, Capture, Collection,
-    Environment, Folder, FormField, Header, HttpRequest, MultipartPart, MultipartValue, Param,
-    ParamKind, RequestDefaults, Setting, ValueKind, Variable, VariableValue, WsMessage,
+    Environment, Folder, FormField, GrpcCall, GrpcMessage, Header, HttpRequest, MultipartPart,
+    MultipartValue, Param, ParamKind, RequestDefaults, Setting, ValueKind, Variable, VariableValue,
+    WsMessage,
 };
 use apifast_domain::{
     CredentialsPlacement, OAuth2Auth, OAuth2Flow, OAuth2Request, ParameterPlacement, TokenPlacement,
@@ -72,15 +73,16 @@ pub(crate) fn to_text(doc: &Value) -> Result<String, oneyaml::Error> {
 // --- Requests ---------------------------------------------------------------
 
 /// The blocks a request may live in, as its `info.type`.
-const REQUEST_BLOCKS: [&str; 3] = ["http", "graphql", "websocket"];
+const REQUEST_BLOCKS: [&str; 4] = ["http", "graphql", "websocket", "grpc"];
 
 /// The file's block, and `info.type`, of `request`, as Bruno writes it:
-/// `graphql` for a GraphQL body, `websocket` for WebSocket messages, `http`
-/// for any other.
+/// `graphql` for a GraphQL body, `websocket` for WebSocket messages,
+/// `grpc` for a gRPC call, `http` for any other.
 pub(crate) fn block_of(request: &HttpRequest) -> &'static str {
     match request.body {
         Body::GraphQl { .. } => "graphql",
         Body::WebSocket(_) => "websocket",
+        Body::Grpc(_) => "grpc",
         _ => "http",
     }
 }
@@ -119,10 +121,12 @@ pub(crate) fn retype_request_text(text: String, block: &str) -> String {
 
 pub(crate) fn new_request(request: &HttpRequest) -> Value {
     let block = block_of(request);
-    // A WebSocket block has no method: the handshake is always a GET.
+    // A WebSocket block has no method: the handshake is always a GET. A
+    // gRPC block's is the method it calls, none yet.
     let method = match block {
         "graphql" => Some(string("POST")),
         "websocket" => None,
+        "grpc" => Some(string("")),
         _ => Some(string("GET")),
     };
     let mut doc = mapping([
@@ -135,7 +139,12 @@ pub(crate) fn new_request(request: &HttpRequest) -> Value {
         ),
         (
             block,
-            Some(mapping([("method", method), ("url", Some(string("")))])),
+            // Bruno writes a gRPC block's URL before its method.
+            Some(if block == "grpc" {
+                mapping([("url", Some(string(""))), ("method", method)])
+            } else {
+                mapping([("method", method), ("url", Some(string("")))])
+            }),
         ),
     ]);
     let read::Item::Http(blank) = read::item(&doc) else {
@@ -173,7 +182,7 @@ pub(crate) fn update_request(doc: &mut Value, old: &HttpRequest, new: &HttpReque
         &new.auth,
     );
     if http_changed {
-        update_block(child_mut(doc, block), block == "websocket", old, new);
+        update_block(child_mut(doc, block), block, old, new);
     }
     if old.auth != new.auth {
         // The auth now lives in `http.auth`; drop the rc1 location if present.
@@ -229,12 +238,14 @@ pub(crate) fn update_request(doc: &mut Value, old: &HttpRequest, new: &HttpReque
     }
 }
 
-/// The request's block (`http`, `graphql` or `websocket`): method, URL,
-/// headers, parameters, body and auth. A WebSocket block has no method
-/// and no parameters (they are those of its URL), and its body is its
-/// messages.
-fn update_block(http: &mut Value, websocket: bool, old: &HttpRequest, new: &HttpRequest) {
-    if old.method != new.method && !websocket {
+/// The request's block (`http`, `graphql`, `websocket` or `grpc`): method,
+/// URL, headers, parameters, body and auth. A WebSocket block has no
+/// method and no parameters (they are those of its URL), and its body is
+/// its messages. A gRPC block has no parameters either; its headers are
+/// its `metadata`, and its body, its method and messages.
+fn update_block(http: &mut Value, block: &str, old: &HttpRequest, new: &HttpRequest) {
+    let (websocket, grpc) = (block == "websocket", block == "grpc");
+    if old.method != new.method && !websocket && !grpc {
         set(http, "method", string(new.method.as_str()));
     }
     if old.url != new.url {
@@ -242,14 +253,14 @@ fn update_block(http: &mut Value, websocket: bool, old: &HttpRequest, new: &Http
     }
     update_list(
         http,
-        "headers",
+        if grpc { "metadata" } else { "headers" },
         &old.headers,
         &new.headers,
         header_value,
         merge_header,
     );
-    // A WebSocket request's parameters are those of its URL.
-    if !websocket {
+    // A WebSocket or gRPC request's parameters are those of its URL.
+    if !websocket && !grpc {
         update_list(
             http,
             "params",
@@ -265,6 +276,8 @@ fn update_block(http: &mut Value, websocket: bool, old: &HttpRequest, new: &Http
         (_, Body::WebSocket(messages)) => {
             set_or_remove(http, "message", ws_message_value(messages));
         }
+        (Body::Grpc(o), Body::Grpc(n)) => update_grpc_call(http, o, n),
+        (_, Body::Grpc(n)) => update_grpc_call(http, &GrpcCall::default(), n),
         (old_body, new_body) => update_body(http, old_body, new_body),
     }
     update_auth(http, "auth", &old.auth, &new.auth, AuthLevel::Item);
@@ -1036,6 +1049,83 @@ fn update_ws_messages(block: &mut Value, old: &[WsMessage], new: &[WsMessage]) {
         }
         _ => set_or_remove(block, "message", ws_message_value(new)),
     }
+}
+
+/// Writes what changed of a gRPC call: its `method`, `methodType`,
+/// `protoFilePath` and messages, these in place when the file keeps their
+/// shape (one plain message, or as many variants).
+fn update_grpc_call(block: &mut Value, old: &GrpcCall, new: &GrpcCall) {
+    if old.method != new.method {
+        set(block, "method", string(&new.method));
+    }
+    if old.method_type != new.method_type {
+        let kind = new.method_type.map(|t| string(t.as_str()));
+        set_or_remove(block, "methodType", kind);
+    }
+    if old.proto_path != new.proto_path {
+        set_or_remove(
+            block,
+            "protoFilePath",
+            new.proto_path.as_deref().map(string),
+        );
+    }
+    if old.messages == new.messages {
+        return;
+    }
+    let plain =
+        |messages: &[GrpcMessage]| matches!(messages, [only] if only.name.trim().is_empty());
+    let existing = block
+        .as_mapping_mut()
+        .and_then(|m| m.get_mut(&string("message")));
+    match existing {
+        Some(message)
+            if message.as_sequence().is_none() && plain(&old.messages) && plain(&new.messages) =>
+        {
+            *message = string(&new.messages[0].data);
+        }
+        Some(variants)
+            if variants
+                .as_sequence()
+                .is_some_and(|v| v.len() == new.messages.len())
+                && old.messages.len() == new.messages.len() =>
+        {
+            let Some(variants) = variants.as_sequence_mut() else {
+                return;
+            };
+            for ((variant, o), n) in variants.iter_mut().zip(&old.messages).zip(&new.messages) {
+                if o.name != n.name {
+                    set(variant, "title", string(&n.name));
+                }
+                if o.data != n.data {
+                    set(variant, "message", string(&n.data));
+                }
+            }
+        }
+        _ => set_or_remove(block, "message", grpc_message_value(&new.messages)),
+    }
+}
+
+/// The messages of a gRPC request, as Bruno writes them: always as named
+/// variants (`title`, `message`).
+fn grpc_message_value(messages: &[GrpcMessage]) -> Option<Value> {
+    (!messages.is_empty()).then(|| {
+        messages
+            .iter()
+            .enumerate()
+            .map(|(i, m)| {
+                let title = if m.name.trim().is_empty() {
+                    format!("message {}", i + 1)
+                } else {
+                    m.name.clone()
+                };
+                mapping([
+                    ("title", Some(string(&title))),
+                    ("message", Some(string(&m.data))),
+                ])
+            })
+            .collect::<Vec<_>>()
+            .into()
+    })
 }
 
 /// The messages of a WebSocket request, as Bruno writes them: the only

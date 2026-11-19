@@ -53,6 +53,17 @@ fn contents(
                 ));
                 None
             }
+            TreeItem::Request {
+                path,
+                kind: RequestKind::Grpc,
+                ..
+            } => {
+                warnings.push(ImportWarning::new(
+                    path.as_str(),
+                    "a `grpc` request cannot be exported yet: left out",
+                ));
+                None
+            }
             TreeItem::Request { path, .. } => match collections.request(path) {
                 Ok(loaded) => Some(ImportedItem::Request {
                     request: Box::new(loaded.request),
@@ -131,23 +142,35 @@ mod tests {
     }
 
     #[test]
-    fn a_websocket_request_is_left_out_with_a_warning() {
+    fn websocket_and_grpc_requests_are_left_out_with_a_warning() {
         let collections = MemoryCollections::new(Collection::new("Shop"));
         let environments = MemoryEnvironments::default();
         let mut socket = HttpRequest::new("Socket", Method::Get, "ws://h");
         socket.body = apifast_domain::Body::WebSocket(Vec::new());
+        let mut call = HttpRequest::new("Call", Method::Get, "h:50051");
+        call.body = apifast_domain::Body::Grpc(apifast_domain::GrpcCall::default());
         let source = ImportedCollection {
             name: "Shop".into(),
-            items: vec![ImportedItem::Request {
-                request: Box::new(socket),
-                key: None,
-            }],
+            items: [socket, call]
+                .into_iter()
+                .map(|request| ImportedItem::Request {
+                    request: Box::new(request),
+                    key: None,
+                })
+                .collect(),
             ..ImportedCollection::default()
         };
         apply_import((&collections, &environments), &source, "").unwrap();
         let read = collection_contents(&collections, &environments).unwrap();
         assert_eq!(read.items.len(), 0);
-        assert_eq!(read.warnings.len(), 1);
-        assert!(read.warnings[0].message.contains("websocket"));
+        let mut warned: Vec<&str> = (read.warnings.iter()).map(|w| w.message.as_str()).collect();
+        warned.sort_unstable();
+        assert_eq!(
+            warned,
+            [
+                "a `grpc` request cannot be exported yet: left out",
+                "a `websocket` request cannot be exported yet: left out",
+            ]
+        );
     }
 }

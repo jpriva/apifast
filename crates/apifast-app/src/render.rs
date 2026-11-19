@@ -470,8 +470,9 @@ impl Renderer<'_, '_> {
         };
         Ok(match body {
             // A WebSocket handshake has no body: the messages go once the
-            // connection is open.
-            Body::None | Body::WebSocket(_) => (RenderedBody::None, None),
+            // connection is open. Nor does a gRPC call, whose messages are
+            // encoded by its transport.
+            Body::None | Body::WebSocket(_) | Body::Grpc(_) => (RenderedBody::None, None),
             Body::Json(text) => text_body(self, text, "application/json")?,
             Body::Text(text) => text_body(self, text, "text/plain")?,
             Body::Xml(text) => text_body(self, text, "application/xml")?,

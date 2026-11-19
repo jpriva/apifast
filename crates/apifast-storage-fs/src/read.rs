@@ -4,10 +4,10 @@
 
 use apifast_domain::{
     ApiKeyAuth, ApiKeyPlacement, Assertion, Auth, AuthScheme, AwsV4Auth, BasicAuth, BearerAuth,
-    Body, Capture, CaptureScope, Collection, DigestAuth, Environment, Folder, FormField, Header,
-    HttpRequest, Method, MultipartPart, MultipartValue, NtlmAuth, Operator, Param, ParamKind,
-    RequestDefaults, Setting, Settings, ValueKind, Variable, VariableValue, WsMessage,
-    WsMessageKind,
+    Body, Capture, CaptureScope, Collection, DigestAuth, Environment, Folder, FormField, GrpcCall,
+    GrpcMessage, GrpcMethodType, Header, HttpRequest, Method, MultipartPart, MultipartValue,
+    NtlmAuth, Operator, Param, ParamKind, RequestDefaults, Setting, Settings, ValueKind, Variable,
+    VariableValue, WsMessage, WsMessageKind,
 };
 use apifast_domain::{
     CredentialsPlacement, OAuth2Auth, OAuth2Flow, OAuth2Parameter, OAuth2Request,
@@ -40,6 +40,8 @@ pub(crate) fn item(doc: &Value) -> Item {
         Some("graphql") => Item::Http(http_request(doc, name, seq, "graphql")),
         // A WebSocket request too, with its messages as the body.
         Some("websocket") => Item::Http(http_request(doc, name, seq, "websocket")),
+        // And a gRPC one, with its method and messages as the body.
+        Some("grpc") => Item::Http(http_request(doc, name, seq, "grpc")),
         // Without a type, a file with an `http` block is still an HTTP request.
         None if get(doc, "http").is_some() => Item::Http(http_request(doc, name, seq, "http")),
         _ => Item::Other {
@@ -51,12 +53,14 @@ pub(crate) fn item(doc: &Value) -> Item {
 }
 
 /// The request in the block `block` of `doc`: `http`; `graphql`, whose
-/// body is the query and its variables; or `websocket`, whose body is its
-/// messages and whose parameters are those of its URL.
+/// body is the query and its variables; `websocket`, whose body is its
+/// messages and whose parameters are those of its URL; or `grpc`, whose
+/// body is its method and messages and whose headers are its `metadata`.
 fn http_request(doc: &Value, name: String, seq: Option<u32>, block: &str) -> HttpRequest {
     let http = get(doc, block);
     let graphql = block == "graphql";
     let websocket = block == "websocket";
+    let grpc = block == "grpc";
     let field = |key| http.and_then(|h| get(h, key));
     // Files from OpenCollection v3 rc1 keep the auth in `runtime.auth`.
     let auth = field("auth").or_else(|| get_in(doc, &["runtime", "auth"]));
@@ -68,16 +72,24 @@ fn http_request(doc: &Value, name: String, seq: Option<u32>, block: &str) -> Htt
             .iter()
             .filter_map(|t| text(Some(t)))
             .collect(),
-        method: Method::parse(
-            &text(field("method")).unwrap_or_else(|| if graphql { "POST" } else { "GET" }.into()),
-        ),
+        // A gRPC block's `method` is the method it calls.
+        method: if grpc {
+            Method::Get
+        } else {
+            Method::parse(
+                &text(field("method"))
+                    .unwrap_or_else(|| if graphql { "POST" } else { "GET" }.into()),
+            )
+        },
         url: text_or_empty(field("url")),
         params: items(field("params")).iter().map(param).collect(),
-        headers: headers(field("headers")),
+        headers: headers(field(if grpc { "metadata" } else { "headers" })),
         body: if graphql {
             graphql_body(field("body"))
         } else if websocket {
             Body::WebSocket(ws_messages(field("message")))
+        } else if grpc {
+            Body::Grpc(grpc_call(http))
         } else {
             body(field("body"))
         },
@@ -136,6 +148,38 @@ fn ws_messages(value: Option<&Value>) -> Vec<WsMessage> {
             }
         }
         None => Vec::new(),
+    }
+}
+
+/// The call of a `grpc` block: its `method`, `methodType` and
+/// `protoFilePath`, and its messages, a list of named ones (`title`,
+/// `message`) or a single one, as Bruno writes them.
+fn grpc_call(block: Option<&Value>) -> GrpcCall {
+    let field = |key| block.and_then(|b| get(b, key));
+    let messages = match field("message") {
+        Some(list) if list.as_sequence().is_some() => items(Some(list))
+            .iter()
+            .enumerate()
+            .map(|(i, variant)| GrpcMessage {
+                name: text(get(variant, "title")).unwrap_or_else(|| format!("message {}", i + 1)),
+                data: text_or_empty(get(variant, "message")),
+            })
+            .collect(),
+        Some(single) => {
+            let data = text_or_empty(Some(single));
+            if data.trim().is_empty() {
+                Vec::new()
+            } else {
+                vec![GrpcMessage::new("", data)]
+            }
+        }
+        None => Vec::new(),
+    };
+    GrpcCall {
+        method: text_or_empty(field("method")),
+        method_type: text(field("methodType")).and_then(|t| GrpcMethodType::parse(&t)),
+        proto_path: text(field("protoFilePath")).filter(|p| !p.trim().is_empty()),
+        messages,
     }
 }
 
@@ -832,14 +876,46 @@ mod tests {
     }
 
     #[test]
+    fn grpc_requests_have_their_call_as_the_body_and_metadata_as_headers() {
+        let request = http(
+            "info: {name: G, type: grpc, seq: 4}\ngrpc:\n  url: \"{{host}}\"\n  method: /hello.HelloService/SayHello\n  methodType: unary\n  protoFilePath: ../hello.proto\n  metadata:\n    - name: x-team\n      value: core\n    - name: x-off\n      value: \"1\"\n      disabled: true\n  message:\n    - title: hi\n      message: '{\"greeting\": \"hi\"}'\n    - message: '{}'\n  auth: inherit\n",
+        );
+        assert_eq!(request.url, "{{host}}");
+        assert_eq!(request.headers[0], Header::new("x-team", "core"));
+        assert!(!request.headers[1].enabled);
+        assert_eq!(request.auth, Setting::Inherit);
+        assert_eq!(
+            request.body,
+            Body::Grpc(GrpcCall {
+                method: "/hello.HelloService/SayHello".into(),
+                method_type: Some(GrpcMethodType::Unary),
+                proto_path: Some("../hello.proto".into()),
+                messages: vec![
+                    GrpcMessage::new("hi", "{\"greeting\": \"hi\"}"),
+                    GrpcMessage::new("message 2", "{}"),
+                ],
+            })
+        );
+        // A single plain message, as Bruno also reads it; an unknown type.
+        let request = http(
+            "info: {name: G, type: grpc}\ngrpc:\n  url: x\n  method: /a.B/C\n  methodType: other\n  message: '{}'\n",
+        );
+        let Body::Grpc(call) = request.body else {
+            panic!("{:?}", request.body);
+        };
+        assert_eq!(call.method_type, None);
+        assert_eq!(call.messages, [GrpcMessage::new("", "{}")]);
+    }
+
+    #[test]
     fn other_request_kinds_are_listed_not_parsed() {
         assert_eq!(
             item(&yaml(
-                "info: {name: Q, type: grpc, seq: 3}\ngrpc: {url: x}\n"
+                "info: {name: Q, type: soap, seq: 3}\nsoap: {url: x}\n"
             )),
             Item::Other {
                 name: "Q".into(),
-                kind: "grpc".into(),
+                kind: "soap".into(),
                 seq: Some(3)
             }
         );

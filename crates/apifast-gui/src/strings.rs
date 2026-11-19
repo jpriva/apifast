@@ -1009,6 +1009,32 @@ pub struct Strings {
     pub ws_closed_by_server: &'static str,
     /// Size of a binary message, before its bytes.
     pub ws_binary: &'static str,
+    /// Hover of the `gRPC` badge in the URL bar.
+    pub grpc_badge: &'static str,
+    /// The headers tab of a gRPC request.
+    pub grpc_metadata: &'static str,
+    /// Label of the method a gRPC request calls.
+    pub grpc_method: &'static str,
+    /// Placeholder of the method field.
+    pub grpc_method_hint: &'static str,
+    /// Label of how the method streams.
+    pub grpc_method_type: &'static str,
+    /// The method type is not known yet.
+    pub grpc_type_unknown: &'static str,
+    /// Method type: unary.
+    pub grpc_unary: &'static str,
+    /// Method type: client streaming.
+    pub grpc_client_streaming: &'static str,
+    /// Method type: server streaming.
+    pub grpc_server_streaming: &'static str,
+    /// Method type: bidirectional streaming.
+    pub grpc_bidi_streaming: &'static str,
+    /// Label of the `.proto` file of a gRPC request.
+    pub grpc_proto: &'static str,
+    /// Placeholder of the `.proto` field.
+    pub grpc_proto_hint: &'static str,
+    /// Shown when a gRPC request has no message.
+    pub grpc_no_messages: &'static str,
     /// Button that formats the body.
     pub format: &'static str,
     /// Hover of the format button, with its shortcut.
@@ -1566,6 +1592,19 @@ pub const EN: Strings = Strings {
     ws_closed_by_client: "closed",
     ws_closed_by_server: "closed by the server",
     ws_binary: "binary",
+    grpc_badge: "gRPC call",
+    grpc_metadata: "Metadata",
+    grpc_method: "Method",
+    grpc_method_hint: "/package.Service/Method",
+    grpc_method_type: "Streaming",
+    grpc_type_unknown: "Not known yet",
+    grpc_unary: "Unary",
+    grpc_client_streaming: "Client streaming",
+    grpc_server_streaming: "Server streaming",
+    grpc_bidi_streaming: "Bidirectional streaming",
+    grpc_proto: ".proto file",
+    grpc_proto_hint: "Empty: ask the server (reflection)",
+    grpc_no_messages: "No messages yet: add one to send it in the call.",
     format: "Format",
     format_hint: "Format (Alt+Shift+F)",
     format_failed: "Could not format: brackets or tags do not match, or something is not closed. Check line",

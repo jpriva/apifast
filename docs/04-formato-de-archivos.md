@@ -266,6 +266,38 @@ settings:
 - Editar un mensaje cambia solo su `type` o su `data` (y `title` o `selected` en una variante); el archivo no gana claves que Bruno no había escrito. `keepAliveInterval` se conserva tal cual.
 - El runner no las corre y la exportación a Postman las deja fuera, las dos con aviso. Para conectarse, ver [docs/07](07-motor-de-red.md#websocket-f7).
 
+### Requests gRPC
+
+Como las escribe Bruno (`stringifyGrpcRequest.ts`): `info.type: grpc` y el bloque `grpc` con `url` (el servidor), `method` (`/paquete.Servicio/Metodo`), `methodType`, `protoFilePath` (opcional), `metadata`, `message` y `auth`. Los mensajes son variantes con su `title` y el JSON del mensaje:
+
+```yaml
+info:
+  name: SayHello
+  type: grpc
+  seq: 1
+
+grpc:
+  url: "{{host}}"
+  method: /hello.HelloService/SayHello
+  methodType: unary
+  protoFilePath: ../protos/hello.proto
+  metadata:
+    - name: x-team
+      value: core
+  message:
+    - title: message 1
+      message: |-
+        {
+          "greeting": "hola"
+        }
+  auth: inherit
+```
+
+- En apifast es una request con la llamada como body ([ADR 0012](adr/0012-grpc-como-body.md)): sus headers son la `metadata`, y hereda metadata y auth como una HTTP. No tiene método HTTP ni parámetros.
+- `methodType` es `unary`, `client-streaming`, `server-streaming` o `bidi-streaming`; uno desconocido se lee como "no se sabe todavía" y se conserva mientras no se cambie. Sin `protoFilePath`, el servicio se pregunta al servidor (reflection).
+- Un `message` plano (un solo texto), que Bruno también lee, se conserva plano al editarlo; uno nuevo se escribe como variante, como lo hace Bruno.
+- Enviarla todavía no se puede (F8); el runner no las corre y la exportación a Postman las deja fuera, las dos con aviso. Sus aserciones y scripts se conservan.
+
 ### Tipos de auth
 
 `inherit`, `none`, `basic`, `bearer`, `apikey`, `digest`, `oauth2`, `awsv4`, `ntlm`. Los campos de cada uno siguen los nombres de OpenCollection (por ejemplo `username` y `password` en `basic`).
@@ -380,7 +412,7 @@ Los campos sensibles de auth **no guardan el secreto**: referencian una variable
 | `settings` con `timeout: 0` | Sin límite de tiempo |
 | `settings` con `timeout: inherit` | Se hereda |
 | `settings` sin `timeout` | 0 (sin límite), como en Bruno |
-| Request `grpc` | Aparece en el árbol; abrirla da "no soportado todavía" |
+| Request `grpc` | Se abre y se edita ([Requests gRPC](#requests-grpc)); enviarla da "todavía no soportado" |
 | Archivo YAML inválido | Aparece en el árbol como inválido; no impide abrir el resto |
 
 OpenCollection no tiene ajustes de envío en carpetas ni en la colección, así que en archivos de Bruno solo la request los define. Sin bloque `settings`, apifast usa su valor por defecto de 30 s; Bruno usa su preferencia global (0, sin límite).

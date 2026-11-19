@@ -535,7 +535,7 @@ fn paths_cannot_escape_the_collection() {
 
 #[test]
 fn missing_and_unsupported_requests() {
-    let (_dir, repo) = setup(&[("q.yml", "info:\n  name: Q\n  type: grpc\n")]);
+    let (_dir, repo) = setup(&[("q.yml", "info:\n  name: Q\n  type: soap\n")]);
     assert_eq!(
         repo.request(&path("nope.yml")),
         Err(RepositoryError::NotFound("nope.yml".into()))
@@ -574,7 +574,7 @@ fn the_tree_lists_sorted_items_and_skips_ignored_ones() {
     let (_dir, repo) = setup(&[
         ("b.yml", "info:\n  name: B\n  type: http\n  seq: 2\n"),
         ("a.yml", "info:\n  name: A\n  type: http\n  seq: 1\n"),
-        ("q.yml", "info:\n  name: Q\n  type: grpc\n"),
+        ("q.yml", "info:\n  name: Q\n  type: soap\n"),
         ("broken.yml", "info: [unclosed\n"),
         ("notes.txt", "not yaml"),
         (
@@ -603,7 +603,7 @@ fn the_tree_lists_sorted_items_and_skips_ignored_ones() {
         TreeItem::Invalid { path, .. } => format!("!{path}"),
     };
     let names: Vec<_> = tree.items.iter().map(describe).collect();
-    assert_eq!(names, ["A", "Users/1", "B", "Q:grpc", "!broken.yml"]);
+    assert_eq!(names, ["A", "Users/1", "B", "Q:soap", "!broken.yml"]);
 }
 
 #[test]
@@ -1220,6 +1220,62 @@ fn a_websocket_request_edits_in_place() {
     assert_eq!(
         text,
         "info:\n  name: new\n  type: websocket\n\nwebsocket:\n  url: ws://h/ws\n  message:\n    type: json\n    data: \"{\\\"a\\\": 1}\"\n  auth: inherit\n"
+    );
+    assert_eq!(load(&repo, "new.yml"), new);
+}
+
+/// Bruno's own gRPC file (its `tests/grpc/subpath` fixtures).
+const GRPC: &str = "info:\n  name: ProtoFileOnUnservedSubpath\n  type: grpc\n  seq: 4\n\ngrpc:\n  url: grpc://localhost:50051/Missing.Api\n  method: /hello.HelloService/SayHello\n  methodType: unary\n  protoFilePath: ../hello.proto\n  message:\n    - title: message 1\n      message: |-\n        {\n          \"greeting\": \"amoveo\"\n        }\n";
+
+#[test]
+fn a_grpc_request_edits_in_place() {
+    use apifast_domain::{GrpcCall, GrpcMessage, GrpcMethodType};
+    let (dir, repo) = setup(&[("g.yml", GRPC)]);
+    let mut request = load(&repo, "g.yml");
+    let Body::Grpc(call) = &mut request.body else {
+        panic!("{:?}", request.body);
+    };
+    call.messages[0].data = "{\n  \"greeting\": \"hi\"\n}".into();
+    call.method = "/hello.HelloService/LotsOfReplies".into();
+    call.method_type = Some(GrpcMethodType::ServerStreaming);
+    repo.save_request(&path("g.yml"), &request).unwrap();
+    assert_eq!(
+        read(&dir, "g.yml"),
+        GRPC.replace("amoveo", "hi")
+            .replace("/SayHello", "/LotsOfReplies")
+            .replace("unary", "server-streaming")
+    );
+
+    // Headers are its metadata; no `params`, no `headers`, no HTTP method.
+    request.headers.push(Header::new("x-team", "core"));
+    let Body::Grpc(call) = &mut request.body else {
+        unreachable!()
+    };
+    call.proto_path = None;
+    repo.save_request(&path("g.yml"), &request).unwrap();
+    let text = read(&dir, "g.yml");
+    assert!(
+        text.contains("  metadata:\n    - name: x-team\n      value: core\n"),
+        "{text}"
+    );
+    assert!(
+        !text.contains("params") && !text.contains("headers") && !text.contains("protoFilePath"),
+        "{text}"
+    );
+    assert_eq!(load(&repo, "g.yml"), request);
+
+    // A new one is written as Bruno writes it: its messages as variants.
+    let mut new = HttpRequest::new("new", Method::Get, "localhost:50051");
+    new.body = Body::Grpc(GrpcCall {
+        method: "/a.B/C".into(),
+        method_type: Some(GrpcMethodType::Unary),
+        proto_path: None,
+        messages: vec![GrpcMessage::new("hello", "{}")],
+    });
+    repo.save_request(&path("new.yml"), &new).unwrap();
+    assert_eq!(
+        read(&dir, "new.yml"),
+        "info:\n  name: new\n  type: grpc\n\ngrpc:\n  url: localhost:50051\n  method: /a.B/C\n  methodType: unary\n  message:\n    - title: hello\n      message: \"{}\"\n  auth: inherit\n"
     );
     assert_eq!(load(&repo, "new.yml"), new);
 }

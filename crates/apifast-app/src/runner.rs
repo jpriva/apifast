@@ -253,6 +253,16 @@ fn collect(
                 name: name.clone(),
                 reason: "websocket requests do not run in a run".into(),
             }),
+            TreeItem::Request {
+                path,
+                name,
+                kind: RequestKind::Grpc,
+                ..
+            } => skipped.push(Skipped {
+                path: path.clone(),
+                name: name.clone(),
+                reason: "grpc requests cannot run yet".into(),
+            }),
             TreeItem::Request { path, name, .. } => runnable.push((path.clone(), name.clone())),
             TreeItem::Other {
                 path, name, kind, ..

@@ -25,4 +25,4 @@ Una variante propia de `Request` obligaría a duplicar en la GUI las pestañas, 
 - La herencia, las plantillas, la auth (OAuth 2.0 incluido), los borradores y el guardado funcionan para WebSocket sin código nuevo.
 - Hay que distinguir el tipo donde importa (envío, runner, exportación, barra de URL), con `kind()` o `Body::is_websocket()`.
 - Un body no puede cambiar a WebSocket ni dejar de serlo desde el selector de body: es otro tipo de request.
-- gRPC, con servicio, método y mensajes en vez de URL y body, probablemente no encaje igual; se decidirá en F8.
+- gRPC, con servicio, método y mensajes en vez de URL y body, resultó encajar igual: ver el [ADR 0012](0012-grpc-como-body.md).

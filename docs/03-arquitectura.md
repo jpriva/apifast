@@ -89,7 +89,7 @@ Tipos principales de `apifast-domain`:
 |---|---|
 | `Collection` | Raíz: identificador estable, nombre, valores por defecto de request, configuración |
 | `Folder` | Nodo intermedio con sus propios headers, auth, variables y ajustes |
-| `Request` | Enum: `Http`. GraphQL y WebSocket son una `HttpRequest` con su body (`GraphQl`, `WebSocket`), y `HttpRequest::kind()` dice cuál ([ADR 0011](adr/0011-websocket-como-body.md)); gRPC se decide en F8 |
+| `Request` | Enum: `Http`. GraphQL, WebSocket y gRPC son una `HttpRequest` con su body (`GraphQl`, `WebSocket`, `Grpc`), y `HttpRequest::kind()` dice cuál ([ADR 0011](adr/0011-websocket-como-body.md), [ADR 0012](adr/0012-grpc-como-body.md)) |
 | `Environment` | Lista de variables, `extends`, color |
 | `Variable` | Nombre, valor, tipo (`String`, `Number`, `Bool`, `Object`), habilitada, clase de secreto |
 | `Auth` | `Setting<AuthScheme>`: `Inherit` o un esquema (`None`, `Basic`, `Bearer`, `ApiKey`, `Digest`, `Ntlm`, `AwsV4`, y en F5 `OAuth2`). Los que dependen de la request que sale o de la respuesta se aplican en el transporte (`TransportAuth`). Una request resuelta nunca tiene auth heredada |

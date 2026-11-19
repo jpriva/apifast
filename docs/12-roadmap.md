@@ -382,6 +382,7 @@ Cada protocolo tiene su editor y su visor, y sus archivos pasan el round-trip.
 
 ### Tareas
 
+- [x] Formato de archivo para requests `grpc`, el de Bruno ([docs/04](04-formato-de-archivos.md#requests-grpc), [ADR 0012](adr/0012-grpc-como-body.md)): una request con la llamada como body (método, tipo, `.proto` y mensajes) y la metadata como headers; sus 27 archivos del corpus se guardan byte a byte y se editan en su lugar. Se abre en la GUI con su editor (`gRPC` en el árbol y la barra de URL, pestaña Metadata); enviarla da un error claro, y el runner y la exportación la dejan fuera con aviso.
 - [ ] `apifast-grpc`: reflection (v1 y v1alpha) y carga de `.proto`.
 - [ ] Decidir cómo compilar `.proto` sin un `protoc` externo.
 - [ ] Unario, streaming de servidor, de cliente y bidireccional.

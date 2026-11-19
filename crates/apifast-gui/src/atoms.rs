@@ -46,6 +46,7 @@ impl Widget for MethodBadge<'_> {
         let palette = theme::palette(ui);
         let (label, color) = match self.kind {
             RequestKind::WebSocket => ("WS", palette.accent),
+            RequestKind::Grpc => ("gRPC", palette.info),
             _ => (
                 self.method.as_str(),
                 theme::method_color(palette, self.method),

@@ -610,3 +610,49 @@ fn a_websocket_request_edits_its_messages() {
     harness.get_by_label(EN.ws_no_messages);
     assert_eq!(harness.state().request.body, Body::WebSocket(Vec::new()));
 }
+
+#[test]
+fn a_grpc_request_edits_its_call() {
+    use apifast_domain::{GrpcCall, GrpcMessage, GrpcMethodType};
+    let mut call = HttpRequest::new("Call", Method::Get, "localhost:50051");
+    call.body = Body::Grpc(GrpcCall {
+        method: "/hello.HelloService/SayHello".into(),
+        method_type: Some(GrpcMethodType::Unary),
+        proto_path: None,
+        messages: vec![GrpcMessage::new("", "{\"greeting\":\"hi\"}")],
+    });
+    let mut harness = harness(RequestTab::Params, call);
+    // A call has no parameters, nor a response to check or keep; its
+    // headers are its metadata.
+    assert!(harness.query_by_label_contains(EN.params).is_none());
+    assert!(harness.query_by_label_contains(EN.tests).is_none());
+    assert!(harness.query_by_label_contains(EN.examples).is_none());
+    harness.get_by_label(EN.grpc_metadata);
+    harness.get_by_label("Messages (1)");
+
+    harness
+        .get_by_role_and_label(Role::TextInput, EN.grpc_proto)
+        .click();
+    harness.run();
+    harness
+        .get_by_role_and_label(Role::TextInput, EN.grpc_proto)
+        .type_text("hello.proto");
+    harness.run();
+    harness.get_by_label(EN.format).click();
+    harness.run();
+    harness.get_by_label(EN.ws_add_message).click();
+    harness.run();
+    let Body::Grpc(call) = &harness.state().request.body else {
+        panic!("{:?}", harness.state().request.body);
+    };
+    assert_eq!(call.proto_path.as_deref(), Some("hello.proto"));
+    assert_eq!(call.messages[0].data, "{\n  \"greeting\": \"hi\"\n}");
+    assert_eq!(call.messages[1], GrpcMessage::new("message 2", "{}"));
+    assert_ne!(harness.state().changes.len(), 0);
+
+    harness.get_by_label(EN.ws_remove_message).click();
+    harness.run();
+    harness.get_by_label(EN.ws_remove_message).click();
+    harness.run();
+    harness.get_by_label(EN.grpc_no_messages);
+}

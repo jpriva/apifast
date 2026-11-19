@@ -378,6 +378,11 @@ where
     if let Some(draft) = &options.draft {
         loaded.request = draft.clone();
     }
+    if loaded.request.body.is_grpc() {
+        return Err(AppError::Validation(format!(
+            "`{path}` is a gRPC request: gRPC calls are not supported yet"
+        )));
+    }
     match (loaded.request.body.is_websocket(), socket) {
         (true, false) => {
             return Err(AppError::Validation(format!(

@@ -113,6 +113,12 @@ La cabecera de la barra lateral tiene:
 - **Conectar:** el botón de la barra de URL dice "Connect" y, con la conexión abierta, "Disconnect", que la cierra normalmente (código 1000). Junto al mensaje mostrado, "Send" lo envía tal como está en pantalla (con su borrador), renderizado con las variables; sin conexión está deshabilitado y lo explica al pasar el cursor.
 - En el historial, la conexión lleva `WS`, como en el árbol.
 
+### Requests gRPC
+
+- En la barra de URL, `gRPC` ocupa el lugar del selector de método, y en el árbol la request lleva `gRPC`.
+- La pestaña Body se llama `Messages (1)`: el método (`/paquete.Servicio/Metodo`), cómo transmite (unario, streaming del cliente, del servidor o bidireccional, o "Not known yet"), el archivo `.proto` (vacío: se pregunta al servidor por reflection) y los mensajes, como los de WebSocket pero siempre en JSON, con "Format" y su atajo.
+- La pestaña Headers se llama Metadata. No tiene las pestañas Params, Tests ni Examples.
+
 ### Bodies multipart y de archivo
 
 - **Multipart:** una fila por parte con casilla, nombre, tipo ("Text" o "Files"), `Content-Type` (vacío: lo elige apifast) y botón para quitarla. Una parte de texto tiene su valor con las variables resaltadas; una de archivos, su lista (nombre, y la ruta al pasar el cursor) con "Choose files…", que abre el diálogo del sistema y admite varios. "Add part" añade una parte. Cambiar de formulario a multipart conserva los campos como partes de texto, y al revés se conservan las partes de texto.

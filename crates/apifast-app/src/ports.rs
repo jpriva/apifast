@@ -72,7 +72,7 @@ pub enum TreeItem {
         name: String,
         /// Method, shown next to the name.
         method: Method,
-        /// What it is: HTTP, GraphQL or WebSocket.
+        /// What it is: HTTP, GraphQL, WebSocket or gRPC.
         kind: RequestKind,
         /// Position among its siblings.
         seq: Option<u32>,

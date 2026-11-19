@@ -85,7 +85,8 @@ impl<'a> UrlBar<'a> {
         self
     }
 
-    /// What the request is: a WebSocket connection has no method to pick.
+    /// What the request is: a WebSocket connection or a gRPC call has no
+    /// method to pick.
     #[must_use]
     pub fn kind(mut self, kind: RequestKind) -> Self {
         self.kind = kind;
@@ -106,9 +107,14 @@ impl<'a> UrlBar<'a> {
         } = self;
         let mut event = None;
         ui.horizontal(|ui| {
-            if kind == RequestKind::WebSocket {
+            if matches!(kind, RequestKind::WebSocket | RequestKind::Grpc) {
+                let hover = if kind == RequestKind::Grpc {
+                    strings.grpc_badge
+                } else {
+                    strings.ws_badge
+                };
                 ui.add(crate::atoms::MethodBadge::new(method).kind(kind))
-                    .on_hover_text(strings.ws_badge);
+                    .on_hover_text(hover);
             } else if method_selector(ui, method, strings) {
                 event = Some(UrlBarEvent::Edited);
             }

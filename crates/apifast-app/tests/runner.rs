@@ -316,6 +316,13 @@ fn requests_that_cannot_run_are_skipped() {
             kind: apifast_domain::RequestKind::WebSocket,
             seq: None,
         },
+        TreeItem::Request {
+            path: RequestPath::new("call.yml"),
+            name: "Call".into(),
+            method: apifast_domain::Method::Get,
+            kind: apifast_domain::RequestKind::Grpc,
+            seq: None,
+        },
         TreeItem::Invalid {
             path: RequestPath::new("dir/broken.yml"),
             message: "bad YAML".into(),
@@ -333,6 +340,7 @@ fn requests_that_cannot_run_are_skipped() {
         [
             ("Query", "websocket requests cannot run yet"),
             ("Socket", "websocket requests do not run in a run"),
+            ("Call", "grpc requests cannot run yet"),
             ("broken.yml", "bad YAML")
         ]
     );

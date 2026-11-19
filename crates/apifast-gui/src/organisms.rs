@@ -9,6 +9,7 @@ mod cookies_window;
 mod environments;
 mod event_list;
 mod examples_panel;
+mod grpc_editor;
 mod history;
 mod import_window;
 mod kv_table;

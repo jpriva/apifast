@@ -42,7 +42,10 @@ pub use auth::{
     CredentialsPlacement, DigestAuth, NtlmAuth, OAuth2Auth, OAuth2Flow, OAuth2Parameter,
     OAuth2Request, ParameterPlacement, TokenPlacement,
 };
-pub use body::{Body, FormField, MultipartPart, MultipartValue, WsMessage, WsMessageKind};
+pub use body::{
+    Body, FormField, GrpcCall, GrpcMessage, GrpcMethodType, MultipartPart, MultipartValue,
+    WsMessage, WsMessageKind,
+};
 pub use certificates::{ClientCertificate, ClientCertificateKind, TlsTrust};
 pub use collection::{Collection, CollectionId, Folder, RequestDefaults};
 pub use cookie::{

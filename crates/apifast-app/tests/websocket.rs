@@ -198,3 +198,23 @@ fn only_a_websocket_request_connects_and_it_is_not_sent() {
     assert_eq!(world.transport.sent().len(), 0);
     assert_eq!(world.sockets.connected().len(), 0);
 }
+
+#[test]
+fn a_grpc_request_is_not_sent_yet() {
+    let mut world = World::new(Vec::new());
+    let mut call = HttpRequest::new("call", Method::Get, "localhost:50051");
+    call.body = Body::Grpc(apifast_domain::GrpcCall::default());
+    world.collections = world.collections.with_request("call.yml", call);
+    let error = block_on(send_request(
+        world.ports(),
+        &RequestPath::new("call.yml"),
+        &SendOptions::default(),
+        &CancelToken::new(),
+    ))
+    .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "`call.yml` is a gRPC request: gRPC calls are not supported yet"
+    );
+    assert_eq!(world.transport.sent().len(), 0);
+}
