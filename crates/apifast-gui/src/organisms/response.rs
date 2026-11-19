@@ -1,19 +1,20 @@
 //! The response panel: status, time and size, then the body, the headers or
-//! the timeline of the send.
+//! the timeline of the send, and the events of an event stream, live while
+//! it arrives.
 //!
 //! The body is shown "pretty" (formatted and colored) when it is JSON or XML
 //! small enough to load whole, and otherwise "raw", by windows, whatever its
 //! size.
 
 use apifast_app::{TimelineEvent, TimelineKind};
-use apifast_domain::human_size;
+use apifast_domain::{SseEvent, human_size, is_event_stream, parse_events};
 use eframe::egui::{self, RichText};
 
 use crate::atoms::StatusBadge;
 use crate::body::BodyHandle;
 use crate::code::{self, Language};
-use crate::core::{Received, ResponseState};
-use crate::organisms::{BodyViewer, response_cookies};
+use crate::core::{LiveStream, Received, ResponseState};
+use crate::organisms::{BodyViewer, EventList, response_cookies};
 use crate::strings::Strings;
 use crate::theme;
 
@@ -21,6 +22,8 @@ use crate::theme;
 pub const PRETTY_LIMIT: u64 = 2 * 1024 * 1024;
 /// Largest body the copy button copies, in bytes.
 pub const COPY_LIMIT: u64 = 16 * 1024 * 1024;
+/// Largest part of an event stream read into its events, in bytes.
+pub const EVENTS_LIMIT: u64 = 16 * 1024 * 1024;
 /// Bytes looked at to tell the language and whether the body is binary.
 const SNIFF_BYTES: usize = 8 * 1024;
 
@@ -38,6 +41,8 @@ pub enum ResponseTab {
     Timeline,
     /// The assertions and captures that ran.
     Tests,
+    /// The events of an event stream.
+    Events,
 }
 
 /// How the body is shown.
@@ -87,6 +92,10 @@ pub struct ResponseView {
     prepared: Option<Prepared>,
     /// What the filter selected, for the body and expression it ran on.
     filtered: Option<Filtered>,
+    events: EventList,
+    /// The events read from a stored stream: its key, them, and whether the
+    /// stream was longer than [`EVENTS_LIMIT`].
+    parsed: Option<(String, Vec<SseEvent>, bool)>,
 }
 
 /// The result of the filter over one body.
@@ -112,6 +121,7 @@ impl ResponseView {
                     ui.label(strings.sending);
                 });
             }
+            ResponseState::Streaming(stream) => self.streaming(ui, stream, strings),
             ResponseState::Cancelled => {
                 ui.label(RichText::new(strings.cancelled).color(palette.text_muted));
             }
@@ -122,14 +132,44 @@ impl ResponseView {
         }
     }
 
+    /// An event stream as it arrives: its status and its events so far.
+    fn streaming(&mut self, ui: &mut egui::Ui, stream: &LiveStream, strings: &Strings) {
+        let muted = theme::palette(ui).text_muted;
+        self.tab = ResponseTab::Events;
+        stream.read(|live| {
+            ui.horizontal(|ui| {
+                if let Some(head) = &live.head {
+                    ui.add(StatusBadge::new(head.status));
+                }
+                ui.spinner();
+                ui.label(RichText::new(strings.streaming).color(muted));
+                ui.label(RichText::new(human_size(live.bytes)).color(muted));
+            });
+            ui.separator();
+            self.events
+                .show(ui, (&live.events, live.dropped + 1), true, strings);
+        });
+    }
+
     fn received(&mut self, ui: &mut egui::Ui, received: &Received, strings: &Strings) {
         let muted = theme::palette(ui).text_muted;
+        let stream = (received.head.headers.iter()).any(|(name, value)| {
+            name.eq_ignore_ascii_case("content-type") && is_event_stream(value)
+        });
+        if !stream && self.tab == ResponseTab::Events {
+            self.tab = ResponseTab::Body;
+        }
         ui.horizontal(|ui| {
             ui.add(StatusBadge::new(received.head.status));
             ui.label(RichText::new(format!("{} ms", received.head.elapsed_ms)).color(muted));
             ui.label(RichText::new(size_text(received)).color(muted));
         });
         ui.horizontal(|ui| {
+            if stream {
+                let count = parsed_events(&mut self.parsed, received).1.len();
+                let label = format!("{} ({count})", strings.events);
+                ui.selectable_value(&mut self.tab, ResponseTab::Events, label);
+            }
             ui.selectable_value(&mut self.tab, ResponseTab::Body, strings.body);
             let headers = format!("{} ({})", strings.headers, received.head.headers.len());
             ui.selectable_value(&mut self.tab, ResponseTab::Headers, headers);
@@ -157,6 +197,13 @@ impl ResponseView {
             }
             ResponseTab::Timeline => timeline(ui, received, strings),
             ResponseTab::Tests => tests(ui, received, strings),
+            ResponseTab::Events => {
+                let (partial, events) = parsed_events(&mut self.parsed, received);
+                if partial {
+                    ui.label(RichText::new(strings.events_partial).color(muted));
+                }
+                self.events.show(ui, (events, 1), false, strings);
+            }
         }
     }
 
@@ -328,6 +375,25 @@ fn filter(
     let compact = value.to_string();
     let pretty = code::format(&compact, Language::Json).unwrap_or(compact);
     Ok((BodyHandle::memory(key, pretty), Some(Language::Json), count))
+}
+
+/// The events of the stored stream, read into `parsed` the first time they
+/// are asked for; whether the stream was longer than what was read.
+fn parsed_events<'a>(
+    parsed: &'a mut Option<(String, Vec<SseEvent>, bool)>,
+    received: &Received,
+) -> (bool, &'a [SseEvent]) {
+    let body = &received.body;
+    if parsed.as_ref().is_none_or(|(key, ..)| key != body.key()) {
+        let len = usize::try_from(body.len().min(EVENTS_LIMIT)).unwrap_or(usize::MAX);
+        let bytes = body.read(0, len).unwrap_or_default();
+        let events = parse_events(&bytes);
+        *parsed = Some((body.key().to_owned(), events, body.len() > EVENTS_LIMIT));
+    }
+    match parsed {
+        Some((_, events, partial)) => (*partial, events),
+        None => (false, &[]),
+    }
 }
 
 fn make_pretty(body: &BodyHandle, language: Language) -> Pretty {

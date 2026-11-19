@@ -30,6 +30,7 @@ mod resolve;
 mod secret;
 mod setting;
 mod settings;
+mod sse;
 mod status;
 mod url_params;
 mod variable;
@@ -62,6 +63,7 @@ pub use resolve::{Chain, ResolvedRequest, resolve};
 pub use secret::{MASK, Secret, mask};
 pub use setting::{Resolved, Setting};
 pub use settings::{ResolvedSettings, Settings};
+pub use sse::{DEFAULT_EVENT, SseEvent, SseParser, is_event_stream, parse_events};
 pub use status::{human_size, reason_phrase};
 pub use url_params::{path_param_names, query_params, sync_params_from_url, sync_url_from_params};
 pub use variable::{

@@ -15,6 +15,7 @@ mod tls;
 
 use std::error::Error as _;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use base64::Engine as _;
 
@@ -28,6 +29,7 @@ use apifast_app::{
 };
 use apifast_domain::{
     ClientCertificate, DnsOverride, MultipartValue, ProxyChoice, ProxyConfig, TlsTrust,
+    is_event_stream,
 };
 use reqwest::header::{
     ACCEPT_ENCODING, AUTHORIZATION, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, COOKIE,
@@ -170,7 +172,7 @@ impl ReqwestTransport {
         ntlm: Option<&reqwest::Client>,
         request: &RenderedRequest,
         writer: &mut W,
-        started: Instant,
+        (started, cancel, streaming): (Instant, &CancelToken, &AtomicBool),
     ) -> Result<ResponseHead, TransportError> {
         let (mut url, mut method, mut headers) = first_request(request)?;
         start_handshake(request, &mut headers);
@@ -253,7 +255,8 @@ impl ReqwestTransport {
                 at_us: at(),
                 kind: TimelineKind::Headers { status },
             });
-            let (bytes, compressed) = stream_body(response, writer, &url).await?;
+            let (bytes, compressed) =
+                final_body(response, writer, (&url, &head), (cancel, streaming)).await?;
             let at_end = at();
             timeline.push(TimelineEvent {
                 at_us: at_end,
@@ -414,19 +417,29 @@ impl HttpTransport for ReqwestTransport {
         } else {
             None
         };
-        let exchange = self.exchange(ntlm, request, body, started);
-        let limited = async {
+        // Set once the body of an event stream starts: from then on the
+        // timeout no longer applies, and cancelling ends the stream with
+        // what arrived instead of failing the send.
+        let streaming = AtomicBool::new(false);
+        let exchange = self.exchange(ntlm, request, body, (started, cancel, &streaming));
+        let expired = async {
             if timeout_ms == 0 {
-                exchange.await
-            } else {
-                tokio::time::timeout(Duration::from_millis(timeout_ms), exchange)
-                    .await
-                    .unwrap_or(Err(TransportError::Timeout(timeout_ms)))
+                std::future::pending::<()>().await;
+            }
+            tokio::time::sleep(Duration::from_millis(timeout_ms)).await;
+            if streaming.load(Ordering::Relaxed) {
+                std::future::pending::<()>().await;
+            }
+        };
+        let cancelled = async {
+            while !cancel.is_cancelled() || streaming.load(Ordering::Relaxed) {
+                tokio::time::sleep(CANCEL_POLL).await;
             }
         };
         tokio::select! {
-            result = limited => result,
-            () = cancelled(cancel) => Err(TransportError::Cancelled),
+            result = exchange => result,
+            () = expired => Err(TransportError::Timeout(timeout_ms)),
+            () = cancelled => Err(TransportError::Cancelled),
         }
     }
 }
@@ -730,14 +743,33 @@ fn cnonce() -> String {
     format!("{:016x}", hasher.finish())
 }
 
-/// Writes the body of `response` to `writer` as it arrives; returns its size.
-/// Writes the body of `response` into `writer`, decompressing it if its
-/// `Content-Encoding` is one apifast decodes. Returns the body's size and,
-/// for a compressed one, its encoding and size on the wire.
+/// Writes the body of the final response, `head` told to `writer` first.
+/// The body of an event stream sets `streaming`, and ends once `cancel` is
+/// cancelled.
+async fn final_body<W: BodyWriter>(
+    response: reqwest::Response,
+    writer: &mut W,
+    (url, head): (&Url, &ResponseHead),
+    (cancel, streaming): (&CancelToken, &AtomicBool),
+) -> Result<(u64, Option<(decode::Encoding, u64)>), TransportError> {
+    writer.begin(head);
+    let stream =
+        (head.headers.iter()).any(|(name, value)| name == "content-type" && is_event_stream(value));
+    if stream {
+        streaming.store(true, Ordering::Relaxed);
+    }
+    stream_body(response, writer, url, stream.then_some(cancel)).await
+}
+
+/// Writes the body of `response` into `writer` as it arrives, decompressing
+/// it if its `Content-Encoding` is one apifast decodes. Returns the body's
+/// size and, for a compressed one, its encoding and size on the wire. Once
+/// `stop` is cancelled the body ends there, as if the server had ended it.
 async fn stream_body<W: BodyWriter>(
     mut response: reqwest::Response,
     writer: &mut W,
     url: &Url,
+    stop: Option<&CancelToken>,
 ) -> Result<(u64, Option<(decode::Encoding, u64)>), TransportError> {
     let store_error =
         |e: &StoreError| TransportError::Other(format!("cannot store the response body: {e}"));
@@ -746,7 +778,7 @@ async fn stream_body<W: BodyWriter>(
         .and_then(decode::Encoding::of);
     let Some(encoding) = encoding else {
         let mut bytes = 0;
-        while let Some(chunk) = response.chunk().await.map_err(|e| classify(&e, url))? {
+        while let Some(chunk) = next_chunk(&mut response, url, stop).await? {
             writer.write(&chunk).map_err(|e| store_error(&e))?;
             bytes += chunk.len() as u64;
         }
@@ -759,11 +791,27 @@ async fn stream_body<W: BodyWriter>(
         }
     };
     let mut decoder = decode::Decoder::new(encoding, writer).map_err(decode_error)?;
-    while let Some(chunk) = response.chunk().await.map_err(|e| classify(&e, url))? {
+    while let Some(chunk) = next_chunk(&mut response, url, stop).await? {
         decoder.write(&chunk).map_err(decode_error)?;
     }
     let (wire, bytes) = decoder.finish().map_err(decode_error)?;
     Ok((bytes, (wire > 0).then_some((encoding, wire))))
+}
+
+/// The next chunk of the body, or `None` at its end or once `stop` is
+/// cancelled.
+async fn next_chunk(
+    response: &mut reqwest::Response,
+    url: &Url,
+    stop: Option<&CancelToken>,
+) -> Result<Option<impl std::ops::Deref<Target = [u8]> + use<>>, TransportError> {
+    let Some(stop) = stop else {
+        return response.chunk().await.map_err(|e| classify(&e, url));
+    };
+    tokio::select! {
+        chunk = response.chunk() => chunk.map_err(|e| classify(&e, url)),
+        () = cancelled(stop) => Ok(None),
+    }
 }
 
 /// The URL, method and headers of the first request of an exchange.

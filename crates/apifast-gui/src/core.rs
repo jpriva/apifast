@@ -19,6 +19,7 @@ mod proxy;
 mod reimport;
 mod runner;
 mod schema;
+mod stream;
 mod tokens;
 mod vault;
 mod workspace;
@@ -32,6 +33,7 @@ pub use export::Exported;
 pub use import::ImportView;
 pub use reimport::ReimportView;
 pub use schema::SchemaView;
+pub use stream::{Live, LiveStream, MAX_LIVE_EVENTS};
 pub use vault::{Revealed, SHOWN_FOR, SecretState, SecretStatus, VaultCommand, VaultView};
 
 use std::collections::{BTreeMap, HashMap};
@@ -179,6 +181,28 @@ fn response_of(
             )))
         }
         HistoryOutcome::Failed(message) => Some(ResponseState::Failed(message.clone())),
+    }
+}
+
+/// What the history keeps of a send at `at_ms` of the request at `path`,
+/// `written` as it was: nothing when it was cancelled.
+fn history_entry(
+    result: &Result<apifast_app::SendOutcome, AppError>,
+    at_ms: i64,
+    path: RequestPath,
+    written: (String, String),
+) -> Option<HistoryEntry> {
+    match result {
+        Ok(outcome) => Some(HistoryEntry::received(
+            at_ms,
+            path,
+            written,
+            outcome.head.clone(),
+            (outcome.body.size, outcome.body.id.clone()),
+            &outcome.secrets,
+        )),
+        Err(AppError::Transport(TransportError::Cancelled)) => None,
+        Err(e) => Some(HistoryEntry::failed(at_ms, path, written, e.to_string())),
     }
 }
 
@@ -703,12 +727,22 @@ pub enum ResponseState {
     Idle,
     /// Waiting for the response.
     Sending,
+    /// An event stream is arriving; it ends when the server ends it or
+    /// the user stops it.
+    Streaming(LiveStream),
     /// A response arrived.
     Received(Received),
     /// The send failed; the message is for the user.
     Failed(String),
     /// The user cancelled the send.
     Cancelled,
+}
+
+impl ResponseState {
+    /// Whether a send is under way: waiting, or receiving a stream.
+    pub fn is_sending(&self) -> bool {
+        matches!(self, Self::Sending | Self::Streaming(_))
+    }
 }
 
 /// A response that arrived.
@@ -754,6 +788,8 @@ enum Message {
     Run(u64, runner::RunMessage),
     /// The token for the tab was obtained, or why not.
     TokenObtained(TabKey, Result<(), String>),
+    /// Send number `.0` has news of its event stream.
+    Streamed(u64),
     /// The schema of collection `.0`, kept by `.1`, came, or why not.
     SchemaFetched(
         PathBuf,
@@ -911,7 +947,7 @@ struct State {
     focus: Option<PathBuf>,
     /// Sends in progress, by tab: a number for the send, and its token.
     /// The entry moves with its tab.
-    sending: HashMap<TabKey, (u64, CancelToken)>,
+    sending: HashMap<TabKey, (u64, CancelToken, LiveStream)>,
     /// The run that is going: its number and how to stop it.
     run: Option<(u64, CancelToken)>,
     /// Source of [`Tab::revision`], of send numbers and of openings.
@@ -972,6 +1008,7 @@ impl State {
                     self.schema_fetched(&root, key, result);
                     self.sync_cookies();
                 }
+                Message::Streamed(id) => self.streamed(id),
                 Message::HistoryLoaded(opened, entries) => self.history_loaded(opened, entries),
                 Message::HideShown(shown) => self.hide_shown(shown),
                 Message::External(opened, changes) => {
@@ -1061,7 +1098,7 @@ impl State {
             }
             Command::Send => self.start_send(),
             Command::Cancel => {
-                if let Some((_, token)) =
+                if let Some((_, token, _)) =
                     (self.snapshot.active.as_ref()).and_then(|key| self.sending.get(key))
                 {
                     token.cancel();
@@ -1258,7 +1295,7 @@ impl State {
         let Some(index) = self.snapshot.tabs.iter().position(|tab| tab.is(key)) else {
             return;
         };
-        if let Some((_, token)) = self.sending.remove(key) {
+        if let Some((_, token, _)) = self.sending.remove(key) {
             token.cancel();
         }
         self.snapshot.tabs.remove(index);
@@ -1420,9 +1457,17 @@ impl State {
         tab.response = ResponseState::Sending;
         let cancel = CancelToken::new();
         let id = self.next_revision();
-        self.sending.insert(key.clone(), (id, cancel.clone()));
+        let stream = LiveStream::default();
+        self.sending
+            .insert(key.clone(), (id, cancel.clone(), stream.clone()));
 
         let messages = self.messages.clone();
+        let live = stream::LiveResponses {
+            store: responses.clone(),
+            stream,
+            id,
+            messages: messages.clone(),
+        };
         tokio::spawn(async move {
             let authorizer = apifast_http::LoopbackAuthorizer::system();
             let (clock, random) = (SystemClock, SystemRandom::default());
@@ -1430,7 +1475,7 @@ impl State {
                 collections: &*repo,
                 environments: &*repo,
                 transport: &*transport,
-                responses: &*responses,
+                responses: &live,
                 clock: &clock,
                 random: &random,
                 prompter: &NoPrompter,
@@ -1442,23 +1487,7 @@ impl State {
             };
             let at_ms = clock.unix_millis();
             let result = send_request(ports, &key.path, &options, &cancel).await;
-            let entry = match &result {
-                Ok(outcome) => Some(HistoryEntry::received(
-                    at_ms,
-                    key.path.clone(),
-                    written,
-                    outcome.head.clone(),
-                    (outcome.body.size, outcome.body.id.clone()),
-                    &outcome.secrets,
-                )),
-                Err(AppError::Transport(TransportError::Cancelled)) => None,
-                Err(e) => Some(HistoryEntry::failed(
-                    at_ms,
-                    key.path.clone(),
-                    written,
-                    e.to_string(),
-                )),
-            };
+            let entry = history_entry(&result, at_ms, key.path.clone(), written);
             // A history that cannot be written does not hide the response.
             let entry = entry.filter(|entry| history.append(entry).is_ok());
             let dependencies = result
@@ -1486,6 +1515,23 @@ impl State {
         });
     }
 
+    /// Shows the event stream of send number `id` in its tab, from its
+    /// first news on.
+    fn streamed(&mut self, id: u64) {
+        let Some((key, stream)) = (self.sending.iter())
+            .find(|(_, (send, _, _))| *send == id)
+            .map(|(key, (_, _, stream))| (key.clone(), stream.clone()))
+        else {
+            return;
+        };
+        stream.handled();
+        if let Some(tab) = self.tab_mut(&key)
+            && tab.response == ResponseState::Sending
+        {
+            tab.response = ResponseState::Streaming(stream);
+        }
+    }
+
     /// Records the result of a send in its collection's history and in its
     /// tab, wherever the tab is now. A tab closed meanwhile has no entry,
     /// and the result is dropped.
@@ -1503,7 +1549,7 @@ impl State {
             entries.extend(entry);
         }
         let Some(key) = (self.sending.iter())
-            .find(|(_, (send, _))| *send == id)
+            .find(|(_, (send, _, _))| *send == id)
             .map(|(key, _)| key.clone())
         else {
             return;

@@ -522,6 +522,30 @@ pub struct Strings {
     pub timeline: &'static str,
     /// Shown when a response has no timeline.
     pub timeline_empty: &'static str,
+    /// Response tab with the events of an event stream.
+    pub events: &'static str,
+    /// Placeholder of the field that filters the events.
+    pub events_filter: &'static str,
+    /// Shown while a stream has sent no event yet.
+    pub events_waiting: &'static str,
+    /// Shown when no event matches the filter.
+    pub events_none_match: &'static str,
+    /// Shown when the stream has more events than the list reads.
+    pub events_partial: &'static str,
+    /// Shown next to the spinner while an event stream arrives.
+    pub streaming: &'static str,
+    /// Button that ends an event stream, keeping what arrived.
+    pub stop: &'static str,
+    /// Header of an event's name column.
+    pub event_name: &'static str,
+    /// Header of an event's id column.
+    pub event_id: &'static str,
+    /// Header of an event's data column.
+    pub event_data: &'static str,
+    /// Label of an event's reconnection time.
+    pub event_retry: &'static str,
+    /// Shown when no event is selected.
+    pub event_pick: &'static str,
     /// Request and response tab with the assertions and captures.
     pub tests: &'static str,
     /// Heading of the assertions.
@@ -1249,6 +1273,18 @@ pub const EN: Strings = Strings {
     days_ago: "d ago",
     timeline: "Timeline",
     timeline_empty: "This response has no timeline.",
+    events: "Events",
+    events_filter: "Filter by name, id or data",
+    events_waiting: "No events yet.",
+    events_none_match: "No event matches the filter.",
+    events_partial: "Only the start of a large stream is read here; the Body tab has it all.",
+    streaming: "Receiving events…",
+    stop: "Stop",
+    event_name: "Event",
+    event_id: "Id",
+    event_data: "Data",
+    event_retry: "Retry",
+    event_pick: "Select an event to see its data.",
     tests: "Tests",
     assertions: "Assertions",
     captured_for_environment: "Captured for the environment {environment}: {names}. They are used for now; save them to keep them.",

@@ -172,7 +172,7 @@ impl MainScreen {
         self.last_collections = collection_settings_of(snapshot);
         let active = snapshot.active_tab();
         let hints = self.follow(active, strings);
-        let sending = active.is_some_and(|tab| tab.response == ResponseState::Sending);
+        let sending = active.is_some_and(|tab| tab.response.is_sending());
         let selected = snapshot.active.as_ref();
         self.request.format_shortcuts = Some(self.keymap.shortcuts(Action::FormatBody));
         self.request.token_busy =
@@ -560,7 +560,7 @@ impl MainScreen {
     /// What `action` does now.
     fn run(&mut self, action: Action, snapshot: &Snapshot, strings: &Strings) -> Vec<Command> {
         let active = snapshot.active_tab();
-        let sending = active.is_some_and(|tab| tab.response == ResponseState::Sending);
+        let sending = active.is_some_and(|tab| tab.response.is_sending());
         let position = (snapshot.active.as_ref())
             .and_then(|key| snapshot.tabs.iter().position(|tab| tab.is(key)));
         let tab_at =
@@ -736,6 +736,7 @@ fn editor_area(
         strings,
     )
     .focus(focus_url)
+    .streaming(matches!(tab.response, ResponseState::Streaming(_)))
     .show(ui);
     let mut edited = event == Some(UrlBarEvent::Edited);
     if edited {

@@ -5,7 +5,7 @@
 
 use apifast_app::{ResponseHead, TimelineEvent, TimelineKind};
 use apifast_gui::body::BodyHandle;
-use apifast_gui::core::{Received, ResponseState};
+use apifast_gui::core::{Live, LiveStream, Received, ResponseState};
 use apifast_gui::organisms::{
     BodyMode, PRETTY_LIMIT, ResponseTab, ResponseView, describe, millis, size_text,
 };
@@ -369,4 +369,55 @@ fn the_cookies_tab_lists_what_the_response_set() {
     empty.get_by_label(EN.cookies).click();
     empty.run();
     assert!(has(&empty, EN.response_no_cookies));
+}
+
+const STREAM: &str =
+    "event: tick\nid: 1\ndata: {\"n\":1}\n\nevent: tick\nid: 2\ndata: {\"n\":2}\n\ndata: bye\n\n";
+
+#[test]
+fn an_event_stream_lists_its_events_and_shows_the_one_selected() {
+    let mut harness = harness(received("text/event-stream", STREAM));
+    harness.run();
+    harness.get_by_label("Events (3)").click();
+    harness.run();
+    assert!(has_text(&harness, "bye"));
+    assert!(has(&harness, EN.event_pick));
+    harness.get_by_label_contains("{\"n\":2}").click();
+    harness.run();
+    // Its data, formatted.
+    assert!(has_text(&harness, "{\n  \"n\": 2\n}"));
+
+    harness.get_by_label(EN.events_filter).click();
+    harness.run();
+    harness.get_by_label(EN.events_filter).type_text("bye");
+    harness.run();
+    assert!(!has_text(&harness, "{\"n\":1}"));
+    harness.get_by_label_contains("bye");
+}
+
+#[test]
+fn a_stream_arriving_shows_its_events_live() {
+    let live = Live {
+        events: apifast_domain::parse_events(STREAM.as_bytes()),
+        bytes: 99,
+        ..Live::default()
+    };
+    let mut harness = harness(ResponseState::Streaming(LiveStream::from(live)));
+    harness.run_steps(2);
+    assert!(has(&harness, EN.streaming));
+    harness.get_by_label_contains("bye");
+
+    // Ended, it is a response whose events are still shown.
+    harness.state_mut().response = received("text/event-stream", STREAM);
+    harness.run_steps(2);
+    assert_eq!(harness.state().view.tab, ResponseTab::Events);
+    harness.get_by_label("Events (3)");
+    harness.get_by_label_contains("bye");
+}
+
+#[test]
+fn another_body_has_no_events_tab() {
+    let mut harness = harness(received("text/plain", "data: x\n\n"));
+    harness.run();
+    assert!(!has(&harness, "Events (1)"));
 }

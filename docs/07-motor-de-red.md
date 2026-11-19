@@ -41,7 +41,7 @@ Todos son heredables (colección → carpeta → request) y el timeline indica d
 
 | Ajuste | Por defecto |
 |---|---|
-| `timeout` | 30 000 ms (0 = sin límite) |
+| `timeout` | 30 000 ms (0 = sin límite); en un event stream, solo hasta los headers |
 | `followRedirects` | Sí |
 | `maxRedirects` | 5 |
 | `encodeUrl` | Sí |
@@ -277,8 +277,10 @@ Probado con un servidor que mantiene la conexión (el primer envío a `localhost
 
 ### Server-Sent Events (F7)
 
-- Se detecta por `content-type: text/event-stream`.
-- Los eventos se parsean **en vivo** en Rust mientras llega el cuerpo y se muestran en una lista.
+- Se detecta por `content-type: text/event-stream` (sin importar mayúsculas ni parámetros como `charset`).
+- Los eventos se parsean **en vivo** mientras llega el cuerpo (`apifast_domain::SseParser`), como los lee el estándar WHATWG: líneas terminadas en CRLF, LF o CR aunque caigan en trozos distintos, BOM inicial, comentarios (`:`), un espacio tras los dos puntos, `data` de varias líneas unidas con `\n`, el último `id` vigente (uno vacío lo borra) y `retry` numérico. Un evento sin `data` no se emite, ni el incompleto del final.
+- El transporte avisa al escritor del cuerpo con el estado y los headers antes del primer trozo (`BodyWriter::begin`); el de la GUI lee ahí los eventos y despierta la ventana, con un solo aviso pendiente a la vez para que un stream rápido no inunde el núcleo.
+- **El timeout cubre la espera hasta los headers:** un stream puede durar lo que quiera. **Cancelar un stream no es un error:** el cuerpo termina ahí y la respuesta queda con lo recibido, en el historial y con sus aserciones y capturas. En la CLI, `Ctrl+C` hace lo mismo con `apifast send`.
 - El cuerpo completo se sigue guardando en disco.
 
 ### WebSocket (F7)

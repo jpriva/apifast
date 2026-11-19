@@ -488,6 +488,13 @@ pub struct StoredBody {
 
 /// Receives a response body in chunks.
 pub trait BodyWriter {
+    /// Learns the status and headers of the response whose body follows,
+    /// before its first chunk: a writer may read the body as it comes (an
+    /// event stream, to show its events live). Does nothing by default.
+    fn begin(&mut self, head: &ResponseHead) {
+        let _ = head;
+    }
+
     /// Appends a chunk.
     ///
     /// # Errors

@@ -41,6 +41,7 @@ pub struct UrlBar<'a> {
     url: &'a mut String,
     hints: &'a VariableHints,
     sending: bool,
+    streaming: bool,
     strings: &'a Strings,
     focus: bool,
 }
@@ -60,6 +61,7 @@ impl<'a> UrlBar<'a> {
             url,
             hints,
             sending,
+            streaming: false,
             strings,
             focus: false,
         }
@@ -72,6 +74,14 @@ impl<'a> UrlBar<'a> {
         self
     }
 
+    /// While sending, an event stream is arriving: the button stops it,
+    /// keeping what arrived.
+    #[must_use]
+    pub fn streaming(mut self, streaming: bool) -> Self {
+        self.streaming = streaming;
+        self
+    }
+
     /// Draws the bar.
     pub fn show(self, ui: &mut egui::Ui) -> Option<UrlBarEvent> {
         let Self {
@@ -79,6 +89,7 @@ impl<'a> UrlBar<'a> {
             url,
             hints,
             sending,
+            streaming,
             strings,
             focus,
         } = self;
@@ -89,7 +100,12 @@ impl<'a> UrlBar<'a> {
             }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let (text, action) = if sending {
-                    (strings.cancel, UrlBarEvent::Cancel)
+                    let text = if streaming {
+                        strings.stop
+                    } else {
+                        strings.cancel
+                    };
+                    (text, UrlBarEvent::Cancel)
                 } else {
                     (strings.send, UrlBarEvent::Send)
                 };

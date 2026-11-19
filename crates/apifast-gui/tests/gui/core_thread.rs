@@ -245,6 +245,71 @@ fn a_send_in_progress_can_be_cancelled() {
     assert!(started.elapsed() < Duration::from_secs(2));
 }
 
+/// Answers every request with an event stream: two events, a third later,
+/// and then nothing, without closing.
+fn event_server() -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            std::thread::spawn(move || {
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                let mut line = String::new();
+                while reader.read_line(&mut line).is_ok_and(|n| n > 2) {
+                    line.clear();
+                }
+                let mut stream = stream;
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\r\n\
+                     data: one\n\nevent: two\ndata: 2\n\n"
+                );
+                std::thread::sleep(Duration::from_millis(200));
+                let _ = write!(stream, "data: three\n\n");
+                std::thread::sleep(Duration::from_secs(30));
+            });
+        }
+    });
+    port
+}
+
+#[test]
+fn an_event_stream_shows_live_and_stopping_keeps_it() {
+    let dir = collection(event_server());
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
+    wait(&core, "the request", |s| s.active_tab().is_some());
+
+    core.send(Command::Send);
+    let snapshot = wait(&core, "three events", |s| match response(s) {
+        ResponseState::Streaming(stream) => stream.read(|live| live.events.len() == 3),
+        _ => false,
+    });
+    let ResponseState::Streaming(stream) = response(&snapshot) else {
+        unreachable!()
+    };
+    let names: Vec<String> =
+        stream.read(|live| live.events.iter().map(|e| e.event.clone()).collect());
+    assert_eq!(names, ["message", "two", "message"]);
+    assert_eq!(
+        stream.read(|live| live.head.as_ref().map(|h| h.status)),
+        Some(200)
+    );
+
+    core.send(Command::Cancel);
+    let snapshot = wait(&core, "the stream kept", |s| {
+        matches!(response(s), ResponseState::Received(_))
+    });
+    let ResponseState::Received(received) = response(&snapshot) else {
+        unreachable!()
+    };
+    assert_eq!(received.head.status, 200);
+    let body = received.body.read(0, 1024).unwrap();
+    assert_eq!(apifast_domain::parse_events(&body).len(), 3);
+}
+
 #[test]
 fn a_new_tab_starts_without_a_response() {
     let dir = collection(server(Duration::ZERO));

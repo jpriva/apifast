@@ -225,12 +225,19 @@ fn dechunk(mut data: &[u8]) -> Option<Vec<u8>> {
 /// Collects the body and how it arrived.
 #[derive(Default)]
 struct Collect {
+    /// The status [`BodyWriter::begin`] was told.
+    began: Option<u16>,
     body: Vec<u8>,
     writes: usize,
     largest_write: usize,
 }
 
 impl BodyWriter for Collect {
+    fn begin(&mut self, head: &ResponseHead) {
+        assert!(self.body.is_empty(), "begin comes before the body");
+        self.began = Some(head.status);
+    }
+
     fn write(&mut self, chunk: &[u8]) -> Result<(), StoreError> {
         self.body.extend_from_slice(chunk);
         self.writes += 1;
@@ -689,6 +696,61 @@ async fn cancelling_stops_a_pending_send() {
     let (result, _) = send_with(&transport(), &get(quiet.url("/")), &cancel).await;
     assert_eq!(result, Err(TransportError::Cancelled));
     assert!(quiet.received().is_empty());
+}
+
+/// A server answering an event stream: two events, a third half a second
+/// later, then nothing, without ever closing.
+async fn event_stream_server() -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        while let Ok((mut stream, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let mut buffer = Vec::new();
+                let mut chunk = [0u8; 4096];
+                while find(&buffer, b"\r\n\r\n").is_none() {
+                    match stream.read(&mut chunk).await {
+                        Ok(0) | Err(_) => return,
+                        Ok(n) => buffer.extend_from_slice(&chunk[..n]),
+                    }
+                }
+                let head = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\
+                    Cache-Control: no-cache\r\n\r\n";
+                let _ = stream.write_all(head.as_bytes()).await;
+                let _ = stream
+                    .write_all(b"data: one\n\nevent: two\ndata: 2\n\n")
+                    .await;
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                let _ = stream.write_all(b"data: three\n\n").await;
+                std::future::pending::<()>().await;
+            });
+        }
+    });
+    port
+}
+
+#[tokio::test]
+async fn an_event_stream_outlives_the_timeout_and_cancelling_keeps_it() {
+    let port = event_stream_server().await;
+    let mut request = get(format!("http://127.0.0.1:{port}/events"));
+    request.settings.timeout_ms = Setting::Set(200);
+    let cancel = CancelToken::new();
+    let trigger = cancel.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(900)).await;
+        trigger.cancel();
+    });
+    let (result, collect) = send_with(&transport(), &request, &cancel).await;
+    let head = result.unwrap();
+    assert_eq!(head.status, 200);
+    assert_eq!(collect.began, Some(200));
+    let events = apifast_domain::parse_events(&collect.body);
+    let data: Vec<&str> = events.iter().map(|e| e.data.as_str()).collect();
+    assert_eq!(data, ["one", "2", "three"]);
+    assert!(matches!(
+        exchange_only(&head.timeline).last(),
+        Some(TimelineKind::Body { .. })
+    ));
 }
 
 #[tokio::test]
