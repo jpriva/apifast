@@ -74,3 +74,50 @@ fn a_postman_export_becomes_a_collection_that_sends() {
     assert!(!again.status.success());
     assert!(text(&again.stderr).contains("already holds a collection"));
 }
+
+#[test]
+fn an_openapi_spec_in_yaml_becomes_a_collection_that_sends() {
+    let server = Server::start();
+    let dir = tempfile::tempdir().unwrap();
+    let data = tempfile::tempdir().unwrap();
+    let spec = format!(
+        "openapi: 3.0.0\ninfo:\n  title: Pets\nservers:\n  - url: http://127.0.0.1:{}/v1\ntags:\n  - name: pets\npaths:\n  /pets/{{petId}}:\n    get:\n      tags: [pets]\n      summary: Get pet\n      parameters:\n        - name: petId\n          in: path\n          required: true\n          schema: {{type: integer, example: 7}}\n      responses:\n        '200':\n          description: ok\n",
+        server.port
+    );
+    std::fs::write(dir.path().join("pets.yaml"), spec).unwrap();
+    let out = apifast(
+        dir.path(),
+        data.path(),
+        &["import", "openapi", "pets.yaml", "--out", "pets"],
+    );
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert!(
+        text(&out.stdout).contains("pets/get-pet.yml"),
+        "{}",
+        text(&out.stdout)
+    );
+
+    let collection = dir.path().join("pets");
+    let send = apifast(&collection, data.path(), &["send", "pets/get-pet.yml"]);
+    assert!(send.status.success(), "{}", text(&send.stderr));
+    assert!(
+        server.seen()[0].starts_with("GET /v1/pets/7 "),
+        "{:?}",
+        server.seen()
+    );
+
+    let with_env = apifast(
+        dir.path(),
+        data.path(),
+        &[
+            "import",
+            "openapi",
+            "pets.yaml",
+            "--env",
+            "x.json",
+            "--out",
+            "other",
+        ],
+    );
+    assert!(!with_env.status.success());
+}

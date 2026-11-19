@@ -2124,3 +2124,35 @@ fn a_postman_export_is_reviewed_then_imported_and_opened() {
     assert!(snapshot.import.is_some());
     assert!(snapshot.error.as_ref().unwrap().contains("already exists"));
 }
+
+#[test]
+fn an_openapi_spec_is_recognised_and_planned() {
+    let (core, _, _data) = start();
+    let dir = tempfile::tempdir().unwrap();
+    let spec = dir.path().join("pets.yaml");
+    std::fs::write(
+        &spec,
+        "openapi: 3.1.0\ninfo:\n  title: Pets\npaths:\n  /pets:\n    get:\n      summary: List pets\n      responses: {}\n",
+    )
+    .unwrap();
+    core.send(Command::PlanImport {
+        collection: spec,
+        environments: Vec::new(),
+    });
+    let snapshot = wait(&core, "the plan", |s| s.import.is_some());
+    let plan = snapshot.import.clone().unwrap().plan.unwrap();
+    assert_eq!(plan.collection, "Pets");
+    assert_eq!(plan.entries[0].path, "list-pets.yml");
+
+    let other = dir.path().join("notes.txt");
+    std::fs::write(&other, "just: text").unwrap();
+    core.send(Command::PlanImport {
+        collection: other,
+        environments: Vec::new(),
+    });
+    let snapshot = wait(&core, "the refusal", |s| {
+        s.import.as_ref().is_some_and(|i| i.plan.is_err())
+    });
+    let why = snapshot.import.clone().unwrap().plan.unwrap_err();
+    assert!(why.contains("nor an OpenAPI 3 spec"), "{why}");
+}

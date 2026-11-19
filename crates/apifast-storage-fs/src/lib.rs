@@ -10,6 +10,7 @@
 //! comments, formatting and keys apifast does not know survive, and saving an
 //! unchanged request leaves its file byte for byte the same.
 
+mod convert;
 mod diff;
 mod examples;
 mod fs;
@@ -32,6 +33,7 @@ use apifast_app::{
 use apifast_domain::{Collection, CollectionId, DnsOverride, Environment, Folder, HttpRequest};
 use oneyaml::Value;
 
+pub use convert::yaml_to_json;
 pub use keymap::FsKeymapStore;
 pub use session::FsSessionStore;
 pub use settings::FsSettingsStore;

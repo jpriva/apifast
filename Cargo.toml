@@ -37,7 +37,9 @@ notify = { version = "8.2.2", default-features = false, features = ["macos_fseve
 oneyaml = "1.2.0"
 regex = { version = "1.13.1", default-features = false, features = ["std", "unicode", "perf"] }
 roxmltree = "0.21.2"
-serde_json = "1.0.154"
+# `preserve_order`: imported specs keep the order of their paths and
+# properties, and files written as JSON the order they were built in.
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
 thiserror = "2.0.21"
 
 # Tests

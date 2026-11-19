@@ -15,9 +15,10 @@ pub struct ImportArgs {
     /// Where the collection comes from.
     #[arg(value_enum)]
     format: Format,
-    /// The exported file: a Postman collection (v2.0 or v2.1).
+    /// The file: a Postman collection (v2.0 or v2.1), or an OpenAPI 3 spec
+    /// (JSON or YAML).
     file: PathBuf,
-    /// A Postman environment to import with it (repeatable).
+    /// A Postman environment to import with it (repeatable; Postman only).
     #[arg(long = "env", value_name = "FILE")]
     environments: Vec<PathBuf>,
     /// The new collection's folder. Must not hold a collection already.
@@ -32,6 +33,8 @@ pub struct ImportArgs {
 enum Format {
     /// A Postman collection export.
     Postman,
+    /// An OpenAPI 3 spec.
+    Openapi,
 }
 
 /// Imports, or prints what importing would do with `--dry-run`.
@@ -67,10 +70,20 @@ fn read(args: &ImportArgs) -> Result<ImportedCollection> {
     let read_text = |path: &PathBuf| {
         std::fs::read_to_string(path).with_context(|| format!("cannot read `{}`", path.display()))
     };
-    let Format::Postman = args.format;
     let text = read_text(&args.file)?;
-    let mut imported = apifast_import::import_postman(&text)
-        .with_context(|| format!("`{}`", args.file.display()))?;
+    let context = || format!("`{}`", args.file.display());
+    let mut imported = match args.format {
+        Format::Postman => apifast_import::import_postman(&text).with_context(context)?,
+        Format::Openapi => {
+            if !args.environments.is_empty() {
+                bail!("--env takes Postman environments: an OpenAPI spec has its servers");
+            }
+            let spec = apifast_storage_fs::yaml_to_json(&text)
+                .map_err(anyhow::Error::msg)
+                .with_context(context)?;
+            apifast_import::import_openapi(&spec).with_context(context)?
+        }
+    };
     for path in &args.environments {
         let text = read_text(path)?;
         let (environment, warnings) = apifast_import::import_postman_environment(&text)

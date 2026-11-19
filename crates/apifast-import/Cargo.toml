@@ -16,3 +16,7 @@ apifast-template.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+# To read the YAML specs of the corpus; tests may use any crate.
+apifast-storage-fs.workspace = true

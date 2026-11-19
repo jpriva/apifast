@@ -5,7 +5,9 @@
 #![forbid(unsafe_code)]
 
 mod curl;
+mod openapi;
 mod postman;
 
 pub use curl::{CurlError, CurlImport, parse_curl, to_curl};
+pub use openapi::{OpenApiError, import_openapi};
 pub use postman::{PostmanError, import_postman, import_postman_environment};

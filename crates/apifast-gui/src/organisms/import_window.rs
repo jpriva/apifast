@@ -315,7 +315,11 @@ impl ImportWindow {
         let (sender, receiver) = channel();
         let ctx = ctx.clone();
         std::thread::spawn(move || {
-            let json = || rfd::FileDialog::new().add_filter("JSON", &["json"]);
+            let json = || {
+                rfd::FileDialog::new()
+                    .add_filter("Postman, OpenAPI", &["json", "yaml", "yml"])
+                    .add_filter("All files", &["*"])
+            };
             let picked = match pick {
                 Pick::Collection => json().pick_file().into_iter().collect(),
                 Pick::Environments => json().pick_files().unwrap_or_default(),

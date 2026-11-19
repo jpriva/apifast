@@ -35,8 +35,9 @@ impl State {
         }
     }
 
-    /// Reads the Postman `collection` and `environments` and makes the
-    /// plan, for the user to review.
+    /// Reads `collection` (a Postman collection or an OpenAPI spec) and
+    /// the Postman `environments`, and makes the plan, for the user to
+    /// review.
     fn plan_import(&mut self, collection: &Path, environments: &[PathBuf]) {
         let mut files = vec![collection.to_path_buf()];
         files.extend(environments.iter().cloned());
@@ -79,8 +80,17 @@ fn read_postman(collection: &Path, environments: &[PathBuf]) -> Result<ImportedC
     let read = |path: &Path| {
         std::fs::read_to_string(path).map_err(|e| format!("cannot read `{}`: {e}", path.display()))
     };
-    let mut imported = apifast_import::import_postman(&read(collection)?)
-        .map_err(|e| format!("`{}`: {e}", collection.display()))?;
+    let text = read(collection)?;
+    // A Postman collection, or else an OpenAPI 3 spec, in JSON or YAML.
+    let mut imported = if let Ok(imported) = apifast_import::import_postman(&text) {
+        imported
+    } else {
+        let spec = apifast_storage_fs::yaml_to_json(&text).map_err(|_| not_known(collection))?;
+        apifast_import::import_openapi(&spec).map_err(|e| match e {
+            apifast_import::OpenApiError::Swagger2 => format!("`{}`: {e}", collection.display()),
+            _ => not_known(collection),
+        })?
+    };
     for path in environments {
         let (environment, warnings) = apifast_import::import_postman_environment(&read(path)?)
             .map_err(|e| format!("`{}`: {e}", path.display()))?;
@@ -88,6 +98,13 @@ fn read_postman(collection: &Path, environments: &[PathBuf]) -> Result<ImportedC
         imported.warnings.extend(warnings);
     }
     Ok(imported)
+}
+
+fn not_known(file: &Path) -> String {
+    format!(
+        "`{}` is not a Postman collection (v2.0 or v2.1) nor an OpenAPI 3 spec",
+        file.display()
+    )
 }
 
 fn write(target: &Path, imported: &ImportedCollection) -> Result<(), String> {

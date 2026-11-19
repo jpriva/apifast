@@ -251,6 +251,20 @@ Lo que se traduce de Postman (con las decisiones del importador de Bruno):
 - Entornos: sus variables; las de tipo `secret` se declaran secretas sin valor (el valor nunca va a un archivo) y se avisa para ponerlo en la bóveda.
 - Los scripts no se importan hasta que llegue el motor de JavaScript (F9): cada uno se avisa.
 
+```
+apifast import openapi <spec.yaml|spec.json> --out <carpeta> [--dry-run]
+```
+
+Una especificación OpenAPI 3 (3.0 o 3.1), en JSON o YAML. Swagger 2.0 todavía no: se rechaza diciéndolo. Las decisiones, con las de Bruno donde las tiene:
+
+- Cada request empieza por `{{baseUrl}}`, una variable de la colección con el primer `server` (sus variables, con su valor por defecto). Con varios servidores, además, un entorno por servidor, con su descripción como nombre.
+- Una carpeta por el primer `tag` de cada operación, en el orden de `tags`; las operaciones sin tag van en la raíz. El nombre es el `summary` (su primera línea), el `operationId` o `MÉTODO ruta`.
+- `{id}` en la ruta pasa a ser un path param (`:id`) con su ejemplo. Los params de query y de header se listan todos, activos si son obligatorios, con su ejemplo, su `default` o el primer valor de `enum`; los de cookie se avisan.
+- El body del primer content type: JSON, formulario, multipart (las propiedades `binary` como partes de archivo, por elegir), archivo para `octet-stream`, o texto; con el ejemplo de la especificación o uno construido desde el esquema (`$ref`, `allOf`, `oneOf`/`anyOf` y los formatos habituales). Un content type que apifast no pone solo va como header. XML se deja vacío, con aviso.
+- La seguridad, global (en la colección) o de la operación (en la request; `security: []` es ninguna): basic, bearer, digest, API key en header o query y OAuth 2.0 (su primer flujo, con los scopes pedidos). Las credenciales son variables por llenar (`{{token}}`, `{{apiKey}}`, `{{clientId}}`…), nunca valores. OpenID Connect y las API key en cookie se avisan.
+- Las respuestas con contenido, como ejemplos de la request.
+- Solo se siguen los `$ref` locales (`#/…`); uno externo se avisa.
+
 ### `apifast run`
 
 ```

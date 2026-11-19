@@ -190,7 +190,7 @@ Los ajustes de la aplicación tienen una sección Cookies con "Send cookies" y "
 
 "Import…", junto a "New collection…" y "Open collection…" en la barra lateral, o la acción "Import…" de la paleta, abre la ventana de importación:
 
-1. Se elige la exportación de Postman (colección v2.0 o v2.1) y, si se quiere, sus entornos, con el diálogo del sistema o escribiendo la ruta.
+1. Se elige el archivo, con el diálogo del sistema o escribiendo la ruta: una exportación de Postman (colección v2.0 o v2.1), con sus entornos si se quiere, o una especificación OpenAPI 3 en JSON o YAML. El formato se reconoce solo.
 2. "Review" lee los archivos y muestra el plan: la colección con cuántas carpetas, requests y entornos crea, la ruta de cada una, y lo que no se conservó ("Not kept"), con dónde estaba. Un archivo que no es de Postman dice por qué.
 3. La carpeta de la colección nueva se propone a partir de su nombre, dentro del workspace activo; las dos se pueden cambiar.
 4. "Import" escribe exactamente el plan revisado y abre la colección en el workspace. Si los archivos cambiaron desde la revisión, hay que revisarlos otra vez. Nunca escribe sobre una carpeta que ya tiene colección: el plan sigue ahí para elegir otra.
