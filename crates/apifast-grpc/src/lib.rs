@@ -132,7 +132,18 @@ fn metadata(request: &RenderedRequest) -> Result<MetadataMap, TransportError> {
 
 /// A status from the server, or from tonic, as a transport error.
 fn status_error(status: &Status) -> TransportError {
-    let message = status.message();
+    // A status tonic made of a broken connection says why in its causes.
+    let message = match std::error::Error::source(status) {
+        Some(cause) => {
+            let causes = chain(cause);
+            if causes.starts_with(status.message()) {
+                causes
+            } else {
+                format!("{}: {causes}", status.message())
+            }
+        }
+        None => status.message().to_owned(),
+    };
     match status.code() {
         Code::Unavailable => {
             TransportError::Connect(format!("the server is unavailable: {message}"))

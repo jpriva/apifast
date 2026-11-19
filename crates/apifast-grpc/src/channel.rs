@@ -32,14 +32,20 @@ pub(crate) async fn connect(
     target: &Target,
 ) -> Result<Prefixed, TransportError> {
     let connection = http.open(&target.host, target.port, target.tls).await?;
-    let scheme = if target.tls { "https" } else { "http" };
     let host = if target.host.contains(':') {
         format!("[{}]", target.host)
     } else {
         target.host.clone()
     };
-    let endpoint = Endpoint::from_shared(format!("{scheme}://{host}:{}", target.port))
-        .map_err(|e| TransportError::InvalidUrl(e.to_string()))?;
+    let invalid = |e: &dyn std::fmt::Display| TransportError::InvalidUrl(e.to_string());
+    // The TLS is the connection's own: tonic is told `http`, and the
+    // requests say `https`.
+    let mut endpoint =
+        Endpoint::from_shared(format!("http://{host}:{}", target.port)).map_err(|e| invalid(&e))?;
+    if target.tls {
+        let origin = format!("https://{host}:{}", target.port);
+        endpoint = endpoint.origin(origin.parse().map_err(|e| invalid(&e))?);
+    }
     // The channel takes this one connection; it does not reconnect.
     let once = Arc::new(Mutex::new(Some(connection)));
     let connector = tower_service_fn(move |_| {

@@ -175,3 +175,161 @@ async fn a_server_that_is_not_there_cannot_be_reached() {
         .unwrap_err();
     assert!(matches!(error, TransportError::Connect(_)), "{error:?}");
 }
+
+/// A test PKI's files in a folder: `ca.pem`, `client.pem`,
+/// `client-key.pem`; and the server's certificate and key, in PEM.
+fn pki(dir: &Path) -> (String, String) {
+    use rcgen::{
+        BasicConstraints, CertificateParams, DnType, ExtendedKeyUsagePurpose, IsCa, Issuer,
+        KeyPair, KeyUsagePurpose,
+    };
+    let mut ca_params = CertificateParams::new(Vec::<String>::new()).unwrap();
+    ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+    ca_params
+        .distinguished_name
+        .push(DnType::CommonName, "apifast test CA");
+    ca_params.key_usages = vec![
+        KeyUsagePurpose::KeyCertSign,
+        KeyUsagePurpose::DigitalSignature,
+    ];
+    let ca_key = KeyPair::generate().unwrap();
+    let ca = ca_params.self_signed(&ca_key).unwrap();
+    let issuer = Issuer::new(ca_params, ca_key);
+    let leaf = |name: &str, purpose| {
+        let mut params = CertificateParams::new(vec![name.to_owned()]).unwrap();
+        params.distinguished_name.push(DnType::CommonName, name);
+        params.extended_key_usages = vec![purpose];
+        let key = KeyPair::generate().unwrap();
+        (params.signed_by(&key, &issuer).unwrap(), key)
+    };
+    let (server, server_key) = leaf("localhost", ExtendedKeyUsagePurpose::ServerAuth);
+    let (client, client_key) = leaf("client", ExtendedKeyUsagePurpose::ClientAuth);
+    std::fs::write(dir.join("ca.pem"), ca.pem()).unwrap();
+    std::fs::write(dir.join("client.pem"), client.pem()).unwrap();
+    std::fs::write(dir.join("client-key.pem"), client_key.serialize_pem()).unwrap();
+    (server.pem(), server_key.serialize_pem())
+}
+
+/// A server in TLS that requires a client certificate of the test CA,
+/// offering reflection of `hello.proto`; its port.
+async fn tls_server(dir: &Path) -> u16 {
+    use tonic::transport::{Certificate, Identity, ServerTlsConfig};
+    let (cert, key) = pki(dir);
+    let ca = std::fs::read_to_string(dir.join("ca.pem")).unwrap();
+    let mut compiler = protox::Compiler::new([dir]).unwrap();
+    compiler.include_imports(true);
+    compiler.open_file("hello.proto").unwrap();
+    let reflection = tonic_reflection::server::Builder::configure()
+        .register_file_descriptor_set(compiler.file_descriptor_set())
+        .build_v1()
+        .unwrap();
+    let tls = ServerTlsConfig::new()
+        .identity(Identity::from_pem(cert, key))
+        .client_ca_root(Certificate::from_pem(ca));
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let serving = Server::builder()
+        .tls_config(tls)
+        .unwrap()
+        .add_service(reflection)
+        .serve_with_incoming(TcpListenerStream::new(listener));
+    tokio::spawn(serving);
+    port
+}
+
+#[tokio::test]
+async fn a_server_in_tls_is_trusted_and_given_the_client_certificate() {
+    use apifast_domain::{ClientCertificate, ClientCertificateKind, ProxyChoice, TlsTrust};
+    let dir = protos();
+    let port = tls_server(dir.path()).await;
+    let url = format!("grpcs://localhost:{port}");
+    let trust = TlsTrust {
+        extra_ca: vec![dir.path().join("ca.pem")],
+        insecure: false,
+    };
+    let certificate = ClientCertificate {
+        domain: "localhost".into(),
+        kind: ClientCertificateKind::Pem {
+            certificate: "client.pem".into(),
+            private_key: "client-key.pem".into(),
+        },
+        passphrase: String::new(),
+        enabled: true,
+    };
+    let configured = |certificates: &[ClientCertificate]| {
+        TonicTransport::new(
+            ReqwestTransport::configured(dir.path(), ProxyChoice::Off, &trust, certificates, &[])
+                .unwrap(),
+        )
+    };
+    let services = configured(&[certificate])
+        .describe(&rendered(&url, false), None, &CancelToken::new())
+        .await
+        .unwrap();
+    assert_eq!(described(&services), hello_methods());
+
+    // Without the certificate the server does not let it in; without the
+    // CA, the server is not trusted.
+    let error = configured(&[])
+        .describe(&rendered(&url, false), None, &CancelToken::new())
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("CertificateRequired"), "{error}");
+    let untrusted =
+        TonicTransport::new(ReqwestTransport::with_proxy(dir.path(), ProxyChoice::Off).unwrap());
+    let error = untrusted
+        .describe(&rendered(&url, false), None, &CancelToken::new())
+        .await
+        .unwrap_err();
+    assert!(matches!(error, TransportError::Tls(_)), "{error:?}");
+}
+
+/// An HTTP proxy that joins each `CONNECT` to its host, and counts them.
+async fn http_proxy() -> (u16, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let count = std::sync::Arc::new(AtomicUsize::new(0));
+    let seen = count.clone();
+    tokio::spawn(async move {
+        loop {
+            let (mut tcp, _) = listener.accept().await.unwrap();
+            seen.fetch_add(1, Ordering::SeqCst);
+            tokio::spawn(async move {
+                let mut head = Vec::new();
+                while !head.ends_with(b"\r\n\r\n") {
+                    head.push(tcp.read_u8().await.unwrap());
+                }
+                let head = String::from_utf8(head).unwrap();
+                let target = head.split_whitespace().nth(1).unwrap().to_owned();
+                tcp.write_all(b"HTTP/1.1 200 OK\r\n\r\n").await.unwrap();
+                let mut upstream = tokio::net::TcpStream::connect(target).await.unwrap();
+                let _ = tokio::io::copy_bidirectional(&mut tcp, &mut upstream).await;
+            });
+        }
+    });
+    (port, count)
+}
+
+#[tokio::test]
+async fn a_call_goes_through_the_collections_proxy() {
+    use apifast_domain::{ProxyChoice, ProxyConfig};
+    let dir = protos();
+    let address = server(false).await;
+    let (proxy, count) = http_proxy().await;
+    let config = ProxyConfig {
+        hostname: "127.0.0.1".into(),
+        port: proxy.to_string(),
+        ..ProxyConfig::default()
+    };
+    let grpc = TonicTransport::new(
+        ReqwestTransport::with_proxy(dir.path(), ProxyChoice::Manual(config)).unwrap(),
+    );
+    let services = grpc
+        .describe(&rendered(&address, true), None, &CancelToken::new())
+        .await
+        .unwrap();
+    assert_eq!(described(&services), hello_methods());
+    assert_eq!(count.load(std::sync::atomic::Ordering::SeqCst), 1);
+}

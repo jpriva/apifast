@@ -33,10 +33,11 @@ workspace = true
 
 [dev-dependencies]
 apifast-template.workspace = true
-tonic = { version = "0.14.9", default-features = false, features = ["channel", "codegen", "server", "router"] }
+tonic = { version = "0.14.9", default-features = false, features = ["channel", "codegen", "server", "router", "tls-ring"] }
 tonic-reflection = { version = "0.14.9", default-features = false, features = ["server"] }
 tokio = { version = "1.54.1", features = ["rt", "macros", "net", "time"] }
 tokio-stream = { version = "0.1.17", default-features = false, features = ["net"] }
 tempfile.workspace = true
 prost = { version = "0.14.6", default-features = false, features = ["std", "derive"] }
 tonic-prost = "0.14.9"
+rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "ring", "pem"] }
