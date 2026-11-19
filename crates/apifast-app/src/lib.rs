@@ -16,6 +16,7 @@ mod data;
 mod environments;
 mod error;
 mod examples;
+mod export;
 mod functions;
 mod history;
 mod host;
@@ -41,6 +42,7 @@ pub use environments::{
 };
 pub use error::{AppError, RepositoryError, StoreError, TransportError};
 pub use examples::{EXAMPLE_LIMIT, ExampleError, example_from, example_name};
+pub use export::collection_contents;
 pub use history::{
     HIDDEN, HistoryEntry, HistoryLimits, HistoryOutcome, HistoryStore, hide_query, within_limits,
 };

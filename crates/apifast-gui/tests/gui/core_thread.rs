@@ -2270,3 +2270,55 @@ fn an_imported_collection_is_imported_again_with_the_chosen_changes() {
         .unwrap_err();
     assert!(why.contains("did not come from an import"), "{why}");
 }
+
+#[test]
+fn a_collection_is_exported_to_postman_with_its_environments() {
+    let (core, _, _data) = start();
+    let dir = tempfile::tempdir().unwrap();
+    let export = dir.path().join("shop.json");
+    std::fs::write(&export, POSTMAN).unwrap();
+    core.send(Command::PlanImport {
+        collection: export,
+        environments: Vec::new(),
+    });
+    wait(&core, "the plan", |s| {
+        s.import.as_ref().is_some_and(|i| i.plan.is_ok())
+    });
+    let target = dir.path().join("shop");
+    core.send(Command::ApplyImport(target.clone()));
+    let snapshot = wait(&core, "the collection open", |s| {
+        s.import.is_none() && s.collection.is_some()
+    });
+    let root = snapshot.collection.as_ref().unwrap().root.clone();
+    std::fs::create_dir_all(target.join("environments")).unwrap();
+    std::fs::write(
+        target.join("environments/local.yml"),
+        "name: local\nvariables:\n  - name: host\n    value: http://localhost\n",
+    )
+    .unwrap();
+
+    let file = dir.path().join("out.postman_collection.json");
+    core.send(Command::ExportPostman {
+        root: root.clone(),
+        file: file.clone(),
+    });
+    let snapshot = wait(&core, "the export", |s| s.exported.is_some());
+    let exported = snapshot.exported.clone().unwrap();
+    assert_eq!(exported.environments, 1);
+    assert!(exported.result.is_ok(), "{:?}", exported.result);
+    let back = apifast_import::import_postman(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(back.name, "Imported Shop");
+    assert!(dir.path().join("local.postman_environment.json").exists());
+
+    // A folder that cannot be written says why.
+    let first = exported.id;
+    core.send(Command::ExportPostman {
+        root,
+        file: dir.path().join("missing/out.json"),
+    });
+    let snapshot = wait(&core, "the failure", |s| {
+        s.exported.as_ref().is_some_and(|e| e.id != first)
+    });
+    let why = snapshot.exported.clone().unwrap().result.unwrap_err();
+    assert!(why.contains("cannot write"), "{why}");
+}

@@ -228,6 +228,7 @@ La CLI usa los mismos casos de uso que la interfaz.
 apifast send <archivo.yml> [--env <nombre>]
 apifast run <ruta> [opciones]
 apifast import <formato> <origen> --out <directorio>
+apifast export postman --out <archivo> [--env <nombre>]...
 apifast vault <subcomando>
 ```
 
@@ -313,6 +314,23 @@ Updating pets (last imported from ../specs/pets.yaml): 1 new, 2 changed, 5 uncha
 - Los entornos solo se añaden.
 
 Una carpeta con una colección que no se importó (sin `.apifast/import.yml`) se rechaza.
+
+### `apifast export`
+
+```
+apifast export postman [--collection <carpeta>] --out <archivo.json> [--env <nombre>]...
+```
+
+Escribe la colección (la de `--collection`, por defecto la carpeta actual o la que la contiene) como una colección de Postman v2.1, y cada entorno de `--env` junto a ella como `<nombre>.postman_environment.json`, el nombre que usa Postman. Reemplaza los archivos que ya existan. Después imprime lo que no se conservó, con dónde estaba.
+
+Es el camino inverso del importador, así que lo exportado se vuelve a importar igual: probado con las 33 colecciones del corpus de Postman (importar, exportar e importar otra vez da el mismo árbol y las mismas requests) y de extremo a extremo (exportar, importar lo exportado como lo haría Postman y enviar).
+
+- Carpetas y requests en el orden del árbol, con método, URL (también desarmada en `host`, `path`, `query` y `variable`, como la escribe Postman), headers, body (JSON, XML, texto, formulario, multipart con archivos, archivo), auth (basic, bearer, digest, NTLM, API key, AWS SigV4, OAuth 2.0 con sus flujos, PKCE y parámetros adicionales; heredada, no se escribe), documentación y ejemplos guardados.
+- Los params de query desactivados y los path params, que la URL no muestra, van en su lista.
+- `followRedirects`, `maxRedirects` y `encodeUrl` como `protocolProfileBehavior`; el timeout no tiene equivalente por request y se avisa.
+- Postman no hereda headers ni tiene variables de carpeta: los headers de la colección y de las carpetas se copian en cada request, y las variables de carpeta pasan a la colección (si el nombre ya existe, se avisa y no se exporta).
+- Un entorno que extiende a otro se exporta con las variables de los dos mezcladas. Los secretos van sin valor, de tipo `secret`.
+- Se avisan las aserciones, las capturas, las variables de request y las etiquetas, que Postman no tiene fuera de los scripts; las requests de otro tipo (GraphQL) se dejan fuera.
 
 ### `apifast run`
 

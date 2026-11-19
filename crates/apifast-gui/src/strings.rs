@@ -296,6 +296,16 @@ pub struct Strings {
     pub import_review_again: &'static str,
     /// Button: write the reviewed plan.
     pub import: &'static str,
+    /// Menu: export the collection to Postman.
+    pub export_postman_menu: &'static str,
+    /// Before the file an export wrote.
+    pub exported_to: &'static str,
+    /// After a count: environments exported with it.
+    pub exported_environments: &'static str,
+    /// Before what an export did not keep.
+    pub export_not_kept: &'static str,
+    /// Before why an export failed.
+    pub export_failed: &'static str,
     /// Menu: import a new version of the collection's source.
     pub reimport_menu: &'static str,
     /// Title of the reimport window.
@@ -1080,6 +1090,11 @@ pub const EN: Strings = Strings {
     import_folder: "Folder name",
     import_review_again: "The files changed: review them again before importing.",
     import: "Import",
+    export_postman_menu: "Export to Postman…",
+    exported_to: "Exported to",
+    exported_environments: "environments next to it",
+    export_not_kept: "Not kept:",
+    export_failed: "Cannot export:",
     reimport_menu: "Import again…",
     reimport_title: "Import again",
     reimport_into: "Collection",

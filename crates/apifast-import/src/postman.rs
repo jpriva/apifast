@@ -5,6 +5,11 @@
 //! warning where it was, never dropped silently.
 
 mod auth;
+mod export;
+
+pub use export::{
+    ExportError, PostmanFiles, export_postman, export_postman_environment, write_postman,
+};
 
 use std::fmt::Write as _;
 

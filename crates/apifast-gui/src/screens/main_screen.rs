@@ -20,7 +20,7 @@ use crate::organisms::{
     CollectionDialogs, CollectionRequest, CommandPalette, CookiesWindow, EnvironmentEditor,
     EnvironmentEvent, HistoryView, PaletteItem, PaletteMode, RequestChange, RequestPanel,
     ResponseView, RunnerEvent, RunnerWindow, SettingsWindow, ShortcutEditor, TabBar, TabEvent,
-    TreeEvent, TreeView, UrlBar, UrlBarEvent, VaultWindow, paste_key,
+    TreeEvent, TreeView, UrlBar, UrlBarEvent, VaultWindow, folder_name, paste_key,
 };
 use crate::settings::Settings;
 use crate::strings::Strings;
@@ -67,6 +67,10 @@ pub struct MainScreen {
     pub notice: Option<String>,
     /// The last copy put in the clipboard, so each goes there once.
     last_copied: Option<u64>,
+    /// The last export told, so each is told once.
+    last_exported: Option<u64>,
+    /// The save dialog of an export: the collection, and the file chosen.
+    export_dialog: Option<(PathBuf, std::sync::mpsc::Receiver<Option<PathBuf>>)>,
     /// The command palette.
     pub palette: CommandPalette,
     /// The editor of shortcuts.
@@ -163,6 +167,7 @@ impl MainScreen {
         strings: &Strings,
     ) -> Vec<Command> {
         self.take_copied(ui.ctx(), snapshot, strings);
+        self.take_exported(snapshot, strings);
         let collection = snapshot.collection.as_ref();
         self.last_collections = collection_settings_of(snapshot);
         let active = snapshot.active_tab();
@@ -342,6 +347,13 @@ impl MainScreen {
                 self.reimport_window.open();
                 vec![focus, Command::OpenReimport(root)]
             }
+            TreeEvent::ExportPostman => {
+                let name = (self.last_collections.iter())
+                    .find(|c| c.root == root)
+                    .map_or_else(|| "collection".to_owned(), |c| folder_name(&c.name));
+                self.export_dialog = Some((root, save_dialog(&name)));
+                vec![focus]
+            }
             TreeEvent::CopyAsCurl(path) => vec![Command::CopyAsCurl(TabKey::new(root, path))],
             TreeEvent::Close => vec![Command::CloseCollection(root)],
             TreeEvent::Remove => vec![Command::RemoveCollection(root)],
@@ -474,6 +486,7 @@ impl MainScreen {
             crate::organisms::ImportEvent::Import(target) => Command::ApplyImport(target),
             crate::organisms::ImportEvent::Close => Command::CloseImport,
         }));
+        commands.extend(self.take_export_file());
         let reimport = (self.reimport_window).show(&ctx, snapshot.reimport.as_ref(), strings);
         commands.extend(reimport.map(|event| match event {
             crate::organisms::ReimportEvent::Review(file) => Command::PlanReimport(file),
@@ -755,7 +768,46 @@ fn editor_area(
     (event, edited)
 }
 
+/// Opens the system's save dialog for a Postman export of the collection
+/// `name`, off the interface's thread.
+fn save_dialog(name: &str) -> std::sync::mpsc::Receiver<Option<PathBuf>> {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let file = format!("{name}.postman_collection.json");
+    std::thread::spawn(move || {
+        let picked = rfd::FileDialog::new()
+            .set_file_name(file)
+            .add_filter("Postman", &["json"])
+            .save_file();
+        let _ = sender.send(picked);
+    });
+    receiver
+}
+
 impl MainScreen {
+    /// The export to ask for, once the save dialog gives its file.
+    fn take_export_file(&mut self) -> Option<Command> {
+        let (_, receiver) = self.export_dialog.as_ref()?;
+        let picked = match receiver.try_recv() {
+            Ok(picked) => picked,
+            Err(std::sync::mpsc::TryRecvError::Empty) => return None,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => None,
+        };
+        let (root, _) = self.export_dialog.take()?;
+        picked.map(|file| Command::ExportPostman { root, file })
+    }
+
+    /// Says what a new export from the core did, once.
+    fn take_exported(&mut self, snapshot: &Snapshot, strings: &Strings) {
+        let Some(exported) = &snapshot.exported else {
+            return;
+        };
+        if self.last_exported == Some(exported.id) {
+            return;
+        }
+        self.last_exported = Some(exported.id);
+        self.notice = Some(exported_text(exported, strings));
+    }
+
     /// Puts a new copy from the core in the clipboard, once, and says so.
     fn take_copied(&mut self, ctx: &egui::Context, snapshot: &Snapshot, strings: &Strings) {
         let Some(copied) = &snapshot.copied else {
@@ -1237,6 +1289,43 @@ fn now_ms() -> i64 {
         .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
 }
 
+/// What the screen says about an export: where it went, and what was not
+/// kept (the first few), or why it failed.
+fn exported_text(exported: &crate::core::Exported, strings: &Strings) -> String {
+    use std::fmt::Write as _;
+    /// How many of the warnings are named; the rest are counted.
+    const NAMED: usize = 3;
+    let warnings = match &exported.result {
+        Ok(warnings) => warnings,
+        Err(why) => return format!("{} {why}", strings.export_failed),
+    };
+    let mut text = format!("{} {}", strings.exported_to, exported.file.display());
+    if exported.environments > 0 {
+        let _ = write!(
+            text,
+            " (+{} {})",
+            exported.environments, strings.exported_environments
+        );
+    }
+    text.push('.');
+    if !warnings.is_empty() {
+        let named: Vec<String> = (warnings.iter().take(NAMED))
+            .map(|w| {
+                if w.at.is_empty() {
+                    w.message.clone()
+                } else {
+                    format!("{}: {}", w.at, w.message)
+                }
+            })
+            .collect();
+        let _ = write!(text, " {} {}", strings.export_not_kept, named.join("; "));
+        if warnings.len() > NAMED {
+            let _ = write!(text, " (+{})", warnings.len() - NAMED);
+        }
+    }
+    text
+}
+
 #[cfg(test)]
 mod tests {
     use apifast_domain::{Origin, Variable, VariableValue, resolve_variables};
@@ -1268,5 +1357,27 @@ mod tests {
         assert_eq!(hints["resource"].origin, "Folder Users");
         assert_eq!(hints["token"].value, EN.secret_hidden);
         assert!(hints.values().all(|h| !h.value.contains("s3cr3t")));
+    }
+
+    #[test]
+    fn an_export_says_where_it_went_and_what_was_not_kept() {
+        use apifast_app::ImportWarning;
+
+        use crate::core::Exported;
+        use crate::strings::EN;
+
+        let warning = |at: &str| ImportWarning::new(at, "lost");
+        let mut exported = Exported {
+            id: 1,
+            file: "/tmp/shop.json".into(),
+            environments: 2,
+            result: Ok(vec![warning(""), warning("a"), warning("b"), warning("c")]),
+        };
+        assert_eq!(
+            exported_text(&exported, &EN),
+            "Exported to /tmp/shop.json (+2 environments next to it). Not kept: lost; a: lost; b: lost (+1)"
+        );
+        exported.result = Err("disk full".into());
+        assert_eq!(exported_text(&exported, &EN), "Cannot export: disk full");
     }
 }

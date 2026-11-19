@@ -40,6 +40,8 @@ pub enum TreeEvent {
     Settings,
     /// Import a new version of the collection's source.
     Reimport,
+    /// Export the collection to Postman.
+    ExportPostman,
     /// Open the runner on the collection, or on one of its folders.
     Run {
         /// The folder; `None` for the whole collection.
@@ -671,6 +673,11 @@ fn collection_menu(
         (strings.collection_key, TreeEvent::CollectionKey, true),
         (strings.cookies_menu, TreeEvent::Cookies, loaded),
         (strings.reimport_menu, TreeEvent::Reimport, loaded),
+        (
+            strings.export_postman_menu,
+            TreeEvent::ExportPostman,
+            loaded,
+        ),
         (strings.close_collection, TreeEvent::Close, loaded),
         (strings.remove_collection, TreeEvent::Remove, true),
     ];

@@ -207,6 +207,10 @@ La lectura y el plan los hace el núcleo, fuera del hilo de la interfaz; la cole
 
 En una colección que no salió de una importación, la ventana lo dice y no ofrece nada.
 
+### Exportar a Postman
+
+"Export to Postman…", en el menú de una colección del árbol, pide dónde guardar (propone `<colección>.postman_collection.json`) y escribe la colección y, junto a ella, todos sus entornos como `<nombre>.postman_environment.json`. Un aviso dice dónde quedó y lo que no se conservó (los primeros, con la cuenta del resto), o por qué no se pudo escribir. Lo que se traduce es lo de [`apifast export`](08-tests-y-runner.md#apifast-export).
+
 ## Bóveda
 
 - La clave de la colección no se pide nunca a quien la creó (se genera con el primer secreto compartido) ni a una máquina que ya la tiene: queda guardada, envuelta con la clave maestra.

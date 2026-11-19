@@ -13,6 +13,7 @@ mod captures;
 mod collections;
 mod cookies;
 mod copy;
+mod export;
 mod import;
 mod proxy;
 mod reimport;
@@ -26,6 +27,7 @@ use workspace::ActiveWorkspace;
 
 pub use cookies::{CookieCommand, CookieSlot};
 pub use copy::Copied;
+pub use export::Exported;
 pub use import::ImportView;
 pub use reimport::ReimportView;
 pub use vault::{Revealed, SHOWN_FOR, SecretState, SecretStatus, VaultCommand, VaultView};
@@ -441,6 +443,14 @@ pub enum Command {
     ApplyReimport(Vec<String>),
     /// Forgets the reimport being reviewed.
     CloseReimport,
+    /// Writes the collection at `root` to `file` as Postman, with its
+    /// environments next to it (see [`Snapshot::exported`]).
+    ExportPostman {
+        /// The collection's folder.
+        root: PathBuf,
+        /// The collection's file.
+        file: PathBuf,
+    },
 }
 
 /// Everything the interface shows, as of one moment.
@@ -491,6 +501,8 @@ pub struct Snapshot {
     pub import: Option<ImportView>,
     /// The reimport being reviewed, if any.
     pub reimport: Option<ReimportView>,
+    /// What the last export did.
+    pub exported: Option<Exported>,
     /// Values captured for its active environment, waiting for the user to
     /// write them there.
     pub captured: Option<PendingCaptures>,
@@ -1044,6 +1056,7 @@ impl State {
             Command::Vault(command) => self.vault_command(command),
             Command::Cookies(command) => self.cookie_command(command),
             Command::CopyAsCurl(key) => self.copy_as_curl(&key),
+            Command::ExportPostman { root, file } => self.export_postman(&root, &file),
             Command::PlanImport { .. }
             | Command::ApplyImport(_)
             | Command::CloseImport

@@ -278,3 +278,90 @@ fn importing_again_updates_and_keeps_edits() {
         text(&out.stderr)
     );
 }
+
+#[test]
+fn a_collection_exports_to_postman_and_imports_back() {
+    let server = Server::start();
+    let dir = tempfile::tempdir().unwrap();
+    let data = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("shop.json"), POSTMAN).unwrap();
+    let out = apifast(
+        dir.path(),
+        data.path(),
+        &["import", "postman", "shop.json", "--out", "shop"],
+    );
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let environment = format!(
+        "name: local\nvariables:\n  - name: host\n    value: http://127.0.0.1:{}\n",
+        server.port
+    );
+    std::fs::create_dir_all(dir.path().join("shop/environments")).unwrap();
+    std::fs::write(dir.path().join("shop/environments/local.yml"), environment).unwrap();
+
+    let args = [
+        "export",
+        "postman",
+        "--collection",
+        "shop",
+        "--out",
+        "back.json",
+        "--env",
+        "local",
+    ];
+    let out = apifast(dir.path(), data.path(), &args);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let printed = text(&out.stdout);
+    assert!(
+        printed.contains("Exported `Shop` to back.json"),
+        "{printed}"
+    );
+    assert!(
+        dir.path().join("local.postman_environment.json").exists(),
+        "{printed}"
+    );
+
+    // What Postman would read, imported again, still sends.
+    let args = [
+        "import",
+        "postman",
+        "back.json",
+        "--env",
+        "local.postman_environment.json",
+        "--out",
+        "again",
+    ];
+    let out = apifast(dir.path(), data.path(), &args);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let send = apifast(
+        &dir.path().join("again"),
+        data.path(),
+        &["send", "users/list-users.yml", "-e", "local"],
+    );
+    assert!(send.status.success(), "{}", text(&send.stderr));
+    assert!(
+        server.seen()[0].starts_with("GET /users "),
+        "{:?}",
+        server.seen()
+    );
+
+    let missing = apifast(
+        dir.path(),
+        data.path(),
+        &[
+            "export",
+            "postman",
+            "--collection",
+            "shop",
+            "--out",
+            "x.json",
+            "--env",
+            "prod",
+        ],
+    );
+    assert!(!missing.status.success());
+    assert!(
+        text(&missing.stderr).contains("no environment `prod`"),
+        "{}",
+        text(&missing.stderr)
+    );
+}

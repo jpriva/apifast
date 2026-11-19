@@ -3,6 +3,7 @@
 // The CLI is the only crate that writes straight to the terminal.
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
+mod export;
 mod import;
 mod locate;
 mod run;
@@ -60,6 +61,10 @@ enum Command {
     /// Prints what is created and what could not be kept; `--dry-run`
     /// stops there.
     Import(import::ImportArgs),
+    /// Export a collection, and its environments, to another tool.
+    ///
+    /// Prints what could not be kept.
+    Export(export::ExportArgs),
 }
 
 #[derive(clap::Args)]
@@ -152,6 +157,10 @@ fn main() -> ExitCode {
         ),
         Command::Import(args) => (
             import::run(&args).map(|()| ExitCode::SUCCESS),
+            ExitCode::FAILURE,
+        ),
+        Command::Export(args) => (
+            export::run(&args).map(|()| ExitCode::SUCCESS),
             ExitCode::FAILURE,
         ),
     };
