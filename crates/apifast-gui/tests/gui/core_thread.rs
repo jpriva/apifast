@@ -2026,3 +2026,43 @@ fn dns_overrides_are_saved_apart_and_used_by_the_next_send() {
     };
     assert_eq!(received.body.read(0, 100).unwrap(), b"GET /health HTTP/1.1");
 }
+
+#[test]
+fn a_request_is_copied_as_curl_with_its_environment_and_draft() {
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    let key = at(&core, "users/get.yml");
+    core.send(Command::CopyAsCurl(key.clone()));
+    let snapshot = wait(&core, "the copy", |s| s.copied.is_some());
+    let copied = snapshot.copied.clone().unwrap();
+    assert!(
+        copied.text.starts_with("curl --request GET"),
+        "{}",
+        copied.text
+    );
+    assert!(
+        copied.text.contains("--url 'http://127.0.0.1:"),
+        "{}",
+        copied.text
+    );
+    assert_eq!(copied.note, None);
+
+    // With the tab's draft, and a variable missing.
+    core.send(Command::OpenRequest(key.clone()));
+    wait(&core, "the tab", |s| s.active.as_ref() == Some(&key));
+    let mut draft = active_tab(&core.snapshot()).request().clone();
+    draft.url = "{{host}}/users/{{missing}}".into();
+    core.send(Command::Edit {
+        tab: key.clone(),
+        request: Box::new(draft),
+    });
+    core.send(Command::CopyAsCurl(key));
+    let snapshot = wait(&core, "the second copy", |s| {
+        s.copied.as_ref().is_some_and(|c| c.id != copied.id)
+    });
+    let second = snapshot.copied.clone().unwrap();
+    assert!(second.text.contains("/users/'"), "{}", second.text);
+    assert!(second.note.unwrap().contains("missing"));
+}

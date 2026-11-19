@@ -64,7 +64,7 @@ flowchart TB
 | `apifast-vault` | Adaptador | Cifrado, claves, keyring | Aplicación, chacha20poly1305, keyring |
 | `apifast-watch` | Adaptador | Observación del sistema de archivos | Aplicación, notify |
 | `apifast-history` | Adaptador | Historial y cuerpos de respuesta en disco | Aplicación |
-| `apifast-import` | Adaptador | Importadores y exportadores. Hoy, cURL (`parse_curl`); la interfaz lo usa directamente, sin puerto, porque es puro | Aplicación, serde |
+| `apifast-import` | Adaptador | Importadores y exportadores. Hoy, cURL: `parse_curl` y `to_curl` (sobre una `RenderedRequest` de `render_for_copy`, el caso de uso que renderiza sin enviar); la interfaz lo usa directamente, sin puerto, porque es puro | Aplicación, serde |
 | `apifast-ws` | Adaptador | WebSocket | Aplicación, tokio-tungstenite |
 | `apifast-grpc` | Adaptador | gRPC y reflection | Aplicación, tonic, prost-reflect |
 | `apifast-script-js` | Adaptador | Motor JavaScript | Aplicación, rquickjs |

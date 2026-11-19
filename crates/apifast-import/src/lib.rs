@@ -5,4 +5,4 @@
 
 mod curl;
 
-pub use curl::{CurlError, CurlImport, parse_curl};
+pub use curl::{CurlError, CurlImport, parse_curl, to_curl};

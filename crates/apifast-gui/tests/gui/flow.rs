@@ -567,3 +567,26 @@ fn a_pasted_curl_command_becomes_the_request() {
     harness.get_by_role_and_label(Role::TreeItem, "Health");
     wait_for(&mut harness, &format!("{} -k", EN.curl_ignored));
 }
+
+#[test]
+fn the_tree_copies_a_request_as_curl() {
+    let dir = collection(server());
+    let data = tempfile::tempdir().unwrap();
+    let mut harness = open_app(dir.path(), data.path());
+    menu(&mut harness, "Health", EN.copy_as_curl);
+    // No environment: `host` is missing, and the notice says so.
+    let start = Instant::now();
+    loop {
+        harness.step();
+        if harness
+            .query_all_by_label_contains(EN.copied_missing)
+            .next()
+            .is_some()
+        {
+            assert!(harness.query_all_by_label_contains("host").next().is_some());
+            break;
+        }
+        assert!(start.elapsed() < Duration::from_secs(10), "no copy notice");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}

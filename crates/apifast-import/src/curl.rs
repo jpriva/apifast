@@ -11,7 +11,10 @@
 //! skipped; any other is listed in [`CurlImport::ignored`], never dropped
 //! silently. Variables like `$HOST` are not expanded.
 
+mod export;
 mod shell;
+
+pub use export::to_curl;
 
 use std::fmt::Write as _;
 

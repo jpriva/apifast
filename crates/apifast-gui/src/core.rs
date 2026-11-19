@@ -12,6 +12,7 @@
 mod captures;
 mod collections;
 mod cookies;
+mod copy;
 mod proxy;
 mod runner;
 mod tokens;
@@ -22,6 +23,7 @@ use collections::{Listed, Open};
 use workspace::ActiveWorkspace;
 
 pub use cookies::{CookieCommand, CookieSlot};
+pub use copy::Copied;
 pub use vault::{Revealed, SHOWN_FOR, SecretState, SecretStatus, VaultCommand, VaultView};
 
 use std::collections::{BTreeMap, HashMap};
@@ -410,6 +412,9 @@ pub enum Command {
     Vault(VaultCommand),
     /// A change to the focused collection's cookie jar.
     Cookies(CookieCommand),
+    /// Renders the request as cURL, for the clipboard (see
+    /// [`Snapshot::copied`]).
+    CopyAsCurl(TabKey),
 }
 
 /// Everything the interface shows, as of one moment.
@@ -454,6 +459,8 @@ pub struct Snapshot {
     pub vault: VaultView,
     /// The cookies of the focused collection's jar, in its order.
     pub cookies: Arc<Vec<apifast_domain::Cookie>>,
+    /// The last text for the clipboard, such as a request as cURL.
+    pub copied: Option<Copied>,
     /// Values captured for its active environment, waiting for the user to
     /// write them there.
     pub captured: Option<PendingCaptures>,
@@ -1000,6 +1007,7 @@ impl State {
             | Command::SaveCollectionSettings { .. } => self.handle_settings(command),
             Command::Vault(command) => self.vault_command(command),
             Command::Cookies(command) => self.cookie_command(command),
+            Command::CopyAsCurl(key) => self.copy_as_curl(&key),
             Command::ResolveConflict {
                 tab: key,
                 keep_draft,

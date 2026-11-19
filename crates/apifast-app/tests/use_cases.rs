@@ -93,6 +93,28 @@ impl World {
         ))
     }
 
+    fn copy(
+        &self,
+        path: &str,
+        options: &SendOptions,
+    ) -> Result<apifast_app::CopiedRequest, AppError> {
+        let ports = SendPorts {
+            collections: &self.collections,
+            environments: &self.environments,
+            transport: &self.transport,
+            responses: &self.responses,
+            clock: &self.clock,
+            random: &self.random,
+            prompter: &self.prompter,
+            secrets: &self.secrets,
+            report: &|_| {},
+            history: None,
+            tokens: None,
+            authorizer: None,
+        };
+        apifast_app::render_for_copy(&ports, &RequestPath::new(path), options)
+    }
+
     #[expect(clippy::expect_used, reason = "test helper: fails the test")]
     fn last_sent(&self) -> apifast_app::RenderedRequest {
         self.transport.sent().pop().expect("nothing was sent")
@@ -797,4 +819,41 @@ fn a_failing_dependency_names_itself() {
             .contains("`$.missing` is not in the response of `auth/login.yml`"),
         "{error}"
     );
+}
+
+#[test]
+fn a_request_renders_for_copying_as_it_would_be_sent_without_sending() {
+    let world = users_world();
+    let copied = world.copy("users/create.yml", &prod()).unwrap();
+    let request = &copied.request;
+    assert_eq!(request.url(), "https://api.test/v1/users/981?notify=true");
+    assert_eq!(header(request, "authorization"), ["Bearer s3cr3t"]);
+    assert!(copied.problems.is_empty() && !copied.missing_token);
+    assert!(world.transport.sent().is_empty(), "nothing goes out");
+
+    // What is missing renders empty and is reported.
+    let without_runtime = SendOptions {
+        runtime: Vec::new(),
+        ..prod()
+    };
+    let copied = world.copy("users/create.yml", &without_runtime).unwrap();
+    assert_eq!(copied.problems.len(), 1, "{:?}", copied.problems);
+}
+
+#[test]
+fn copying_an_oauth2_request_uses_no_token_but_a_stored_one() {
+    let mut request = get("http://api/orders");
+    request.auth = Setting::Set(AuthScheme::OAuth2(Box::new(apifast_domain::OAuth2Auth {
+        flow: apifast_domain::OAuth2Flow::ClientCredentials,
+        access_token_url: "http://auth/token".into(),
+        client_id: "cli".into(),
+        ..apifast_domain::OAuth2Auth::default()
+    })));
+    let world = World::new(
+        MemoryCollections::new(Collection::new("c")).with_request("orders.yml", request),
+    );
+    let copied = world.copy("orders.yml", &SendOptions::default()).unwrap();
+    assert!(copied.missing_token);
+    assert_eq!(header(&copied.request, "authorization"), Vec::<&str>::new());
+    assert!(world.transport.sent().is_empty(), "no token was fetched");
 }

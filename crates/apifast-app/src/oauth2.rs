@@ -551,6 +551,45 @@ pub(crate) async fn with_token<T: HttpTransport + Sync>(
     let oauth = oauth.as_ref().clone();
     let rendered = render_fields(&oauth, variables, host)?;
     let token = token(ports, &oauth, &rendered, cancel).await?;
+    apply_token(resolved, &oauth, &token, variables)
+}
+
+/// As [`with_token`], with only the token already stored: none is fetched
+/// or refreshed. Without a valid one, the request goes as it is, and the
+/// second value says so. For copying a request, which must not send.
+///
+/// # Errors
+///
+/// If the auth's fields do not render, or the store cannot be read.
+pub(crate) fn with_stored_token(
+    tokens: Option<&dyn TokenStore>,
+    now_ms: i64,
+    resolved: ResolvedRequest,
+    variables: &mut ResolvedVariables,
+    host: &mut (dyn Host + Send),
+) -> Result<(ResolvedRequest, bool), AppError> {
+    let AuthScheme::OAuth2(oauth) = &resolved.auth().value else {
+        return Ok((resolved, true));
+    };
+    let oauth = oauth.as_ref().clone();
+    let rendered = render_fields(&oauth, variables, host)?;
+    let stored = match tokens {
+        Some(store) => store.token(&rendered.key())?,
+        None => None,
+    };
+    match stored.filter(|t| !t.expired(now_ms)) {
+        Some(token) => Ok((apply_token(resolved, &oauth, &token, variables)?, true)),
+        None => Ok((resolved.with_auth(AuthScheme::None), false)),
+    }
+}
+
+/// `resolved` with `token` where `oauth` puts it, as a secret variable.
+fn apply_token(
+    resolved: ResolvedRequest,
+    oauth: &OAuth2Auth,
+    token: &OAuth2Token,
+    variables: &mut ResolvedVariables,
+) -> Result<ResolvedRequest, AppError> {
     let value = if oauth.token_source == "id_token" {
         token
             .id_token

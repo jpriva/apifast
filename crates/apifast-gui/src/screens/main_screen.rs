@@ -62,9 +62,11 @@ pub struct MainScreen {
     pub keymap: Keymap,
     /// Whether the keymap changed since [`Self::take_keymap_change`].
     unsaved: Unsaved,
-    /// Something to tell about the keymap, such as entries of
-    /// `keymap.yml` that were ignored.
+    /// Something to tell, such as entries of `keymap.yml` that were
+    /// ignored, or that a request was copied as cURL.
     pub notice: Option<String>,
+    /// The last copy put in the clipboard, so each goes there once.
+    last_copied: Option<u64>,
     /// The command palette.
     pub palette: CommandPalette,
     /// The editor of shortcuts.
@@ -156,6 +158,7 @@ impl MainScreen {
         snapshot: &Snapshot,
         strings: &Strings,
     ) -> Vec<Command> {
+        self.take_copied(ui.ctx(), snapshot, strings);
         let collection = snapshot.collection.as_ref();
         self.last_collections = collection_settings_of(snapshot);
         let active = snapshot.active_tab();
@@ -331,6 +334,7 @@ impl MainScreen {
                 self.cookies_window.open = true;
                 vec![focus]
             }
+            TreeEvent::CopyAsCurl(path) => vec![Command::CopyAsCurl(TabKey::new(root, path))],
             TreeEvent::Close => vec![Command::CloseCollection(root)],
             TreeEvent::Remove => vec![Command::RemoveCollection(root)],
             TreeEvent::Settings => {
@@ -492,6 +496,19 @@ impl MainScreen {
         commands
     }
 
+    /// Opens the window `action` is about, if it opens one.
+    fn open_window(&mut self, action: Action) -> bool {
+        let open = match action {
+            Action::Shortcuts => &mut self.shortcuts.open,
+            Action::CollectionKey => &mut self.vault_window.open,
+            Action::Cookies => &mut self.cookies_window.open,
+            Action::Settings => &mut self.settings_window.open,
+            _ => return false,
+        };
+        *open = true;
+        true
+    }
+
     /// What `action` does now.
     fn run(&mut self, action: Action, snapshot: &Snapshot, strings: &Strings) -> Vec<Command> {
         let active = snapshot.active_tab();
@@ -502,6 +519,9 @@ impl MainScreen {
             |index: usize| (snapshot.tabs.get(index)).map(|tab| Command::ActivateTab(tab.key()));
         let count = snapshot.tabs.len();
         let one = |command: Option<Command>| command.into_iter().collect();
+        if self.open_window(action) {
+            return Vec::new();
+        }
         match action {
             Action::Send => one((active.is_some() && !sending).then_some(Command::Send)),
             Action::Cancel => one(sending.then_some(Command::Cancel)),
@@ -555,20 +575,9 @@ impl MainScreen {
                 self.request.format_now = true;
                 Vec::new()
             }
-            Action::Shortcuts => {
-                self.shortcuts.open = true;
-                Vec::new()
-            }
-            Action::CollectionKey => {
-                self.vault_window.open = true;
-                Vec::new()
-            }
-            Action::Cookies => {
-                self.cookies_window.open = true;
-                Vec::new()
-            }
-            Action::Settings => {
-                self.settings_window.open = true;
+            Action::CopyAsCurl => one(snapshot.active.clone().map(Command::CopyAsCurl)),
+            // Opened by `open_window`.
+            Action::Shortcuts | Action::CollectionKey | Action::Cookies | Action::Settings => {
                 Vec::new()
             }
             Action::OpenCollection => {
@@ -712,6 +721,29 @@ fn editor_area(
         });
     }
     (event, edited)
+}
+
+impl MainScreen {
+    /// Puts a new copy from the core in the clipboard, once, and says so.
+    fn take_copied(&mut self, ctx: &egui::Context, snapshot: &Snapshot, strings: &Strings) {
+        let Some(copied) = &snapshot.copied else {
+            return;
+        };
+        if self.last_copied == Some(copied.id) {
+            return;
+        }
+        self.last_copied = Some(copied.id);
+        self.notice = Some(if copied.text.is_empty() {
+            let why = copied.note.as_deref().unwrap_or_default();
+            format!("{} {why}", strings.copy_failed)
+        } else {
+            ctx.copy_text(copied.text.clone());
+            match &copied.note {
+                Some(missing) => format!("{} {missing}", strings.copied_missing),
+                None => strings.copied_as_curl.to_owned(),
+            }
+        });
+    }
 }
 
 /// Makes `request` the one the cURL `command` sends, keeping its name,

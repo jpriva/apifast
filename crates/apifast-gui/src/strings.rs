@@ -262,6 +262,14 @@ pub struct Strings {
     pub collection_key: &'static str,
     /// Action: open the collection key window.
     pub action_collection_key: &'static str,
+    /// Menu and action: copy a request as a cURL command.
+    pub copy_as_curl: &'static str,
+    /// After copying a request as cURL.
+    pub copied_as_curl: &'static str,
+    /// After copying, when something rendered empty; what follows.
+    pub copied_missing: &'static str,
+    /// When a request cannot be copied; why follows.
+    pub copy_failed: &'static str,
     /// Note after pasting a cURL: options follow.
     pub curl_ignored: &'static str,
     /// Note when a pasted cURL cannot be read.
@@ -995,6 +1003,10 @@ pub const EN: Strings = Strings {
     forget: "Forget",
     collection_key: "Collection key",
     action_collection_key: "Collection key",
+    copy_as_curl: "Copy as cURL",
+    copied_as_curl: "Copied as cURL.",
+    copied_missing: "Copied as cURL, with something missing:",
+    copy_failed: "Cannot copy as cURL:",
     curl_ignored: "Pasted the cURL command. Not kept:",
     curl_failed: "The pasted cURL command cannot be read",
     examples: "Examples",

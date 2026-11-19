@@ -61,6 +61,8 @@ pub enum Action {
     CollectionKey,
     /// Open the cookie editor.
     Cookies,
+    /// Copy the active request as a cURL command.
+    CopyAsCurl,
     /// Open a collection folder.
     OpenCollection,
     /// Create a collection.
@@ -101,6 +103,7 @@ pub const ALL: &[Action] = &[
     Action::Settings,
     Action::CollectionKey,
     Action::Cookies,
+    Action::CopyAsCurl,
     Action::OpenCollection,
     Action::NewCollection,
 ];
@@ -140,6 +143,7 @@ impl Action {
             Self::Settings => "settings".into(),
             Self::CollectionKey => "collection_key".into(),
             Self::Cookies => "cookies".into(),
+            Self::CopyAsCurl => "copy_as_curl".into(),
             Self::OpenCollection => "open_collection".into(),
             Self::NewCollection => "new_collection".into(),
         }
@@ -177,6 +181,7 @@ impl Action {
             Self::Settings => strings.action_settings,
             Self::CollectionKey => strings.action_collection_key,
             Self::Cookies => strings.action_cookies,
+            Self::CopyAsCurl => strings.copy_as_curl,
             Self::OpenCollection => strings.open_collection,
             Self::NewCollection => strings.new_collection,
         };
@@ -225,6 +230,7 @@ impl Action {
             | Self::ThemeDark
             | Self::CollectionKey
             | Self::Cookies
+            | Self::CopyAsCurl
             | Self::NewCollection => Vec::new(),
         }
     }

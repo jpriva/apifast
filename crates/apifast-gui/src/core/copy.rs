@@ -1,0 +1,80 @@
+//! "Copy as cURL": a request rendered as its send would render it, without
+//! sending, as a command for the interface to put in the clipboard.
+
+use std::sync::Arc;
+
+use apifast_app::{
+    CopiedRequest, HistoryStore, NoPrompter, NoSecrets, SecretStore, SendOptions, SendPorts,
+    render_for_copy,
+};
+
+use super::{State, TabKey};
+use crate::system::{SystemClock, SystemRandom};
+
+/// A text for the clipboard, and what to say about it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Copied {
+    /// Increases with every copy, so each is put in the clipboard once.
+    pub id: u64,
+    /// The text.
+    pub text: String,
+    /// What it could not fill in, or why there is nothing to copy.
+    pub note: Option<String>,
+}
+
+impl State {
+    /// Renders the request `key` (with its tab's draft, if open) as cURL.
+    pub(super) fn copy_as_curl(&mut self, key: &TabKey) {
+        let id = self.next_revision();
+        let Some(open) = self.open.get(&key.root) else {
+            return;
+        };
+        let options = SendOptions {
+            environment: open.environment.clone(),
+            runtime: open.runtime.clone(),
+            draft: self.tab(key).and_then(|tab| tab.draft.clone()),
+            ..SendOptions::default()
+        };
+        let secrets: Arc<dyn SecretStore + Send> = match &open.vault {
+            Some(vault) => vault.clone(),
+            None => Arc::new(NoSecrets),
+        };
+        let (clock, random) = (SystemClock, SystemRandom::default());
+        let ports = SendPorts {
+            collections: &*open.repo,
+            environments: &*open.repo,
+            transport: &*open.transport,
+            responses: &*open.responses,
+            clock: &clock,
+            random: &random,
+            prompter: &NoPrompter,
+            secrets: &*secrets,
+            report: &|_| {},
+            history: Some(&*open.history as &(dyn HistoryStore + Sync)),
+            tokens: Some(open.tokens.as_ref()),
+            authorizer: None,
+        };
+        let copied = match render_for_copy(&ports, &key.path, &options) {
+            Ok(copied) => Copied {
+                id,
+                text: apifast_import::to_curl(&copied.request, Some(&key.root)),
+                note: note(&copied),
+            },
+            Err(e) => Copied {
+                id,
+                text: String::new(),
+                note: Some(e.to_string()),
+            },
+        };
+        self.snapshot.copied = Some(copied);
+    }
+}
+
+/// What a copied request could not fill in.
+fn note(copied: &CopiedRequest) -> Option<String> {
+    let mut missing: Vec<String> = copied.problems.iter().map(ToString::to_string).collect();
+    if copied.missing_token {
+        missing.push("no OAuth 2.0 token stored yet".into());
+    }
+    (!missing.is_empty()).then(|| missing.join("; "))
+}

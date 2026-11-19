@@ -11,6 +11,7 @@
 mod assertions;
 mod checks;
 mod cookies;
+mod copy;
 mod data;
 mod environments;
 mod error;
@@ -31,6 +32,7 @@ mod use_cases;
 pub use assertions::{ExpressionError, ResponseFacts, Verdict, check, reason_phrase};
 pub use checks::{AssertionOutcome, CHECK_LIMIT, CaptureOutcome, apply_captures, variable_value};
 pub use cookies::{CookieStore, Cookies};
+pub use copy::{CopiedRequest, render_for_copy};
 pub use data::{DataError, DataFormat, parse_data};
 pub use environments::{
     create_environment, delete_environment, rename_environment, save_environment,
