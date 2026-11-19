@@ -11,6 +11,7 @@ mod loopback;
 mod ntlm;
 mod probe;
 mod sigv4;
+mod stream;
 mod tls;
 mod upgrade;
 
@@ -23,6 +24,7 @@ use base64::Engine as _;
 pub use loopback::{LoopbackAuthorizer, open_in_browser};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
+pub use stream::Connection;
 pub use upgrade::Upgraded;
 
 use apifast_app::{
@@ -143,6 +145,11 @@ impl ReqwestTransport {
     pub fn with_cookies(mut self, cookies: Arc<Cookies>) -> Self {
         self.cookies = Some(cookies);
         self
+    }
+
+    /// The folder relative paths of files are resolved against.
+    pub fn files_root(&self) -> &Path {
+        &self.files_root
     }
 
     /// The client certificate for `url`'s host, if one is for it.

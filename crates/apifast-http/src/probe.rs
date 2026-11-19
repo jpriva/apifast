@@ -154,6 +154,32 @@ impl TimedResolver {
     }
 }
 
+impl TimedResolver {
+    /// The addresses of `host`, on `port`: those of its DNS override, or
+    /// the system's.
+    ///
+    /// # Errors
+    ///
+    /// If the name cannot be resolved, or its override has no address.
+    pub(crate) async fn addresses(
+        &self,
+        host: &str,
+        port: u16,
+    ) -> Result<Vec<SocketAddr>, apifast_app::TransportError> {
+        use apifast_app::TransportError;
+        match overridden_addresses(&self.overrides, host) {
+            Some(ips) if ips.is_empty() => Err(TransportError::Dns(format!(
+                "the DNS override of `{host}` has no valid IP address"
+            ))),
+            Some(ips) => Ok(ips.iter().map(|ip| SocketAddr::new(*ip, port)).collect()),
+            None => tokio::net::lookup_host((host, port))
+                .await
+                .map(Iterator::collect)
+                .map_err(|e| TransportError::Dns(format!("cannot resolve `{host}`: {e}"))),
+        }
+    }
+}
+
 impl Resolve for TimedResolver {
     fn resolve(&self, name: Name) -> Resolving {
         let host = name.as_str().to_owned();

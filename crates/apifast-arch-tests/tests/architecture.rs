@@ -50,6 +50,8 @@ const EXCLUSIVE_OWNERS: &[(&str, &[&str])] = &[
     ("tokio-tungstenite", &["apifast-ws"]),
     ("tonic", &["apifast-grpc"]),
     ("prost-reflect", &["apifast-grpc"]),
+    ("tonic-reflection", &["apifast-grpc"]),
+    ("protox", &["apifast-grpc"]),
     ("rquickjs", &["apifast-script-js"]),
     ("roxmltree", &["apifast-query"]),
     ("egui", &["apifast-gui"]),
@@ -108,10 +110,11 @@ fn allowed(from: &str, a: Layer, to: &str, b: Layer) -> bool {
         }
         Layer::Application => b == Layer::Domain,
         // The WebSocket handshake is an HTTP request: it goes through the
-        // HTTP transport, for its proxy, TLS and certificates.
+        // HTTP transport, for its proxy, TLS and certificates; a gRPC
+        // connection is opened by it too.
         Layer::Adapter => {
             matches!(b, Layer::Domain | Layer::Application)
-                || (from, to) == ("apifast-ws", "apifast-http")
+                || matches!((from, to), ("apifast-ws" | "apifast-grpc", "apifast-http"))
         }
         Layer::Driver => b != Layer::Driver && b != Layer::Tooling,
         Layer::Tooling => false,
@@ -256,6 +259,8 @@ fn the_rules_catch_violations() {
     assert!(!allowed("apifast-http", Adapter, "apifast-cli", Driver));
     assert!(allowed("apifast-ws", Adapter, "apifast-http", Adapter));
     assert!(!allowed("apifast-http", Adapter, "apifast-ws", Adapter));
+    assert!(allowed("apifast-grpc", Adapter, "apifast-http", Adapter));
+    assert!(!allowed("apifast-grpc", Adapter, "apifast-ws", Adapter));
     assert!(!allowed(
         "apifast-history",
         Adapter,

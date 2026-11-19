@@ -22,6 +22,7 @@ mod dns;
 mod environment;
 mod example;
 mod graphql;
+mod grpc;
 mod json;
 mod origin;
 mod proxy;
@@ -59,6 +60,7 @@ pub use graphql::{
     EnumValue, GraphQlSchema, INTROSPECTION_QUERY, InputValue, SchemaError, SchemaField,
     SchemaType, TypeKind, TypeRef,
 };
+pub use grpc::{GrpcMethod, GrpcService, find_grpc_method};
 pub use json::{Json, JsonError, MAX_DEPTH as MAX_JSON_DEPTH, PathError};
 pub use origin::Origin;
 pub use proxy::{CollectionProxy, ProxyChoice, ProxyConfig, ProxyMode, ProxyProtocol};

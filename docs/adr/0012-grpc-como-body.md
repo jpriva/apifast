@@ -11,7 +11,7 @@ Un archivo gRPC de Bruno (`stringifyGrpcRequest.ts`) tiene `url` (el servidor), 
 
 ## Decisión
 
-- Una request gRPC es una `HttpRequest` con `Body::Grpc(GrpcCall)`. `GrpcCall` tiene el método, su tipo (`unary`, `client-streaming`, `server-streaming` o `bidi-streaming`, o ninguno mientras no se sepa), la ruta del `.proto` (ninguna: se pregunta al servidor por reflection) y los mensajes (`GrpcMessage`: nombre y JSON). `HttpRequest::kind()` da `RequestKind::Grpc`.
+- Una request gRPC es una `HttpRequest` con `Body::Grpc(GrpcCall)`. `GrpcCall` tiene el método, su tipo (`unary`, `client-streaming`, `server-streaming` o `bidi-streaming`, o ninguno mientras no se sepa), la ruta del `.proto`, relativa a la carpeta de la colección como en Bruno (ninguna: se pregunta al servidor por reflection) y los mensajes (`GrpcMessage`: nombre y JSON). `HttpRequest::kind()` da `RequestKind::Grpc`.
 - Los headers de la request son la metadata de la llamada, y su auth va en ella: heredan de la carpeta y la colección como los de una HTTP. El método HTTP y los parámetros no se usan y no se escriben.
 - En el archivo se lee y se escribe como Bruno: `info.type: grpc` y el bloque `grpc` con `url`, `method`, `methodType`, `protoFilePath`, `metadata`, `message` y `auth`. Los mensajes se escriben como variantes (`title`, `message`), como Bruno; un mensaje plano, que Bruno también lee, se conserva plano al editarlo. Se edita en su lugar, sin añadir claves que el archivo no tenía.
 - Lo que una llamada no usa se oculta: en la interfaz no tiene Params, Tests ni Examples, y la pestaña Headers se llama Metadata. Sus aserciones se conservan en el archivo.

@@ -1,0 +1,38 @@
+[package]
+name = "apifast-grpc"
+description = "gRPC transport of apifast."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+apifast-domain.workspace = true
+apifast-app.workspace = true
+# The connection (TCP, TLS, certificates, DNS overrides) is the HTTP
+# transport's (docs/03); HTTP/2 and gRPC over it are tonic's.
+apifast-http.workspace = true
+tonic = { version = "0.14.9", default-features = false, features = ["channel", "codegen"] }
+tonic-reflection = { version = "0.14.9", default-features = false }
+prost = { version = "0.14.6", default-features = false, features = ["std"] }
+prost-types = { version = "0.14.6", default-features = false, features = ["std"] }
+prost-reflect = { version = "0.16.5", default-features = false }
+# Compiles `.proto` files without an external `protoc`.
+protox = { version = "0.10.0", default-features = false }
+hyper-util = { version = "0.1.21", default-features = false, features = ["tokio"] }
+tower-service = "0.3.3"
+http = "1.5.0"
+futures-util = { version = "0.3.34", default-features = false }
+tokio = { version = "1.54.1", features = ["time", "macros"] }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+apifast-template.workspace = true
+tonic = { version = "0.14.9", default-features = false, features = ["channel", "codegen", "server", "router"] }
+tonic-reflection = { version = "0.14.9", default-features = false, features = ["server"] }
+tokio = { version = "1.54.1", features = ["rt", "macros", "net", "time"] }
+tokio-stream = { version = "0.1.17", default-features = false, features = ["net"] }
+tempfile.workspace = true

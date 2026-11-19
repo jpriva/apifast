@@ -62,7 +62,8 @@ pub struct GrpcCall {
     /// How the method streams, when known.
     pub method_type: Option<GrpcMethodType>,
     /// The `.proto` file that describes the service, relative to the
-    /// request's file; `None` to ask the server (reflection).
+    /// collection's folder, as in Bruno; `None` to ask the server
+    /// (reflection).
     pub proto_path: Option<String>,
     /// The messages, as JSON (templates).
     pub messages: Vec<GrpcMessage>,

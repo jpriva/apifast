@@ -412,6 +412,47 @@ impl crate::WsTransport for MemorySockets {
     }
 }
 
+/// A gRPC server offering `services`, which keeps what it was asked:
+/// each request and the `.proto` given with it.
+#[derive(Debug, Default)]
+pub struct MemoryGrpc {
+    /// What it offers.
+    pub services: Vec<apifast_domain::GrpcService>,
+    asked: Mutex<Vec<(RenderedRequest, Option<String>)>>,
+}
+
+impl MemoryGrpc {
+    /// A server offering `services`.
+    pub fn new(services: Vec<apifast_domain::GrpcService>) -> Self {
+        Self {
+            services,
+            asked: Mutex::default(),
+        }
+    }
+
+    /// What it was asked so far.
+    pub fn asked(&self) -> Vec<(RenderedRequest, Option<String>)> {
+        lock(&self.asked).clone()
+    }
+}
+
+impl crate::GrpcTransport for MemoryGrpc {
+    fn describe(
+        &self,
+        request: &RenderedRequest,
+        proto: Option<&str>,
+        cancel: &CancelToken,
+    ) -> impl Future<Output = Result<Vec<apifast_domain::GrpcService>, TransportError>> + Send {
+        let result = if cancel.is_cancelled() {
+            Err(TransportError::Cancelled)
+        } else {
+            lock(&self.asked).push((request.clone(), proto.map(str::to_owned)));
+            Ok(self.services.clone())
+        };
+        std::future::ready(result)
+    }
+}
+
 /// Messages to send, in order; then the connection closes.
 #[derive(Debug, Default)]
 pub struct MemoryOutbox(pub std::collections::VecDeque<apifast_domain::WsMessage>);

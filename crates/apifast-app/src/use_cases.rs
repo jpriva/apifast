@@ -4,7 +4,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use apifast_domain::{
-    Chain, HttpRequest, Origin, ResolvedRequest, ResolvedVariables, Secret, Variable,
+    Chain, HttpRequest, Origin, RequestKind, ResolvedRequest, ResolvedVariables, Secret, Variable,
     VariableValue, environment_chain, resolve, resolve_variables,
 };
 use apifast_template::{Mode, Problem};
@@ -262,7 +262,14 @@ where
         loaded,
         mut variables,
         rendered,
-    } = prepare(ports, path, options, cancel, (context, &mut host, false)).await?;
+    } = prepare(
+        ports,
+        path,
+        options,
+        cancel,
+        (context, &mut host, RequestKind::Http),
+    )
+    .await?;
 
     let at_ms = ports.clock.unix_millis();
     let mut writer = ports.responses.create()?;
@@ -354,8 +361,10 @@ where
 
 /// Loads `path` (or the draft), resolves its inheritance and variables,
 /// gets its OAuth 2.0 token and renders it, sending first what its
-/// `response(...)` calls need. Reports the template problems. A `socket`
-/// prepares a WebSocket request, which only connects; any other is sent.
+/// `response(...)` calls need. Reports the template problems. `expected`
+/// is what the caller does with it: send it (`Http`, GraphQL too), connect
+/// it (`WebSocket`) or call it (`Grpc`); a request of another kind is an
+/// error that says so.
 ///
 /// # Errors
 ///
@@ -365,7 +374,7 @@ pub(crate) async fn prepare<C, E, T, S>(
     path: &RequestPath,
     options: &SendOptions,
     cancel: &CancelToken,
-    (context, host, socket): (&mut ChainContext, &mut AppHost<'_>, bool),
+    (context, host, expected): (&mut ChainContext, &mut AppHost<'_>, RequestKind),
 ) -> Result<Prepared, AppError>
 where
     C: CollectionRepository + Sync,
@@ -378,23 +387,21 @@ where
     if let Some(draft) = &options.draft {
         loaded.request = draft.clone();
     }
-    if loaded.request.body.is_grpc() {
-        return Err(AppError::Validation(format!(
-            "`{path}` is a gRPC request: gRPC calls are not supported yet"
-        )));
-    }
-    match (loaded.request.body.is_websocket(), socket) {
-        (true, false) => {
-            return Err(AppError::Validation(format!(
-                "`{path}` is a WebSocket request: it connects, it is not sent"
-            )));
-        }
-        (false, true) => {
-            return Err(AppError::Validation(format!(
-                "`{path}` is not a WebSocket request"
-            )));
-        }
-        _ => {}
+    // A GraphQL request is sent as any HTTP one.
+    let kind = match loaded.request.kind() {
+        RequestKind::GraphQl => RequestKind::Http,
+        kind => kind,
+    };
+    if kind != expected {
+        let why = match (kind, expected) {
+            (RequestKind::WebSocket, RequestKind::Http) => {
+                "is a WebSocket request: it connects, it is not sent"
+            }
+            (_, RequestKind::WebSocket) => "is not a WebSocket request",
+            (RequestKind::Grpc, _) => "is a gRPC request: gRPC calls are not supported yet",
+            _ => "is not a gRPC request",
+        };
+        return Err(AppError::Validation(format!("`{path}` {why}")));
     }
     let collection = ports.collections.collection()?;
     let mut variables = resolve_request_variables(

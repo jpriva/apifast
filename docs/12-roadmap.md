@@ -383,8 +383,8 @@ Cada protocolo tiene su editor y su visor, y sus archivos pasan el round-trip.
 ### Tareas
 
 - [x] Formato de archivo para requests `grpc`, el de Bruno ([docs/04](04-formato-de-archivos.md#requests-grpc), [ADR 0012](adr/0012-grpc-como-body.md)): una request con la llamada como body (método, tipo, `.proto` y mensajes) y la metadata como headers; sus 27 archivos del corpus se guardan byte a byte y se editan en su lugar. Se abre en la GUI con su editor (`gRPC` en el árbol y la barra de URL, pestaña Metadata); enviarla da un error claro, y el runner y la exportación la dejan fuera con aviso.
-- [ ] `apifast-grpc`: reflection (v1 y v1alpha) y carga de `.proto`.
-- [ ] Decidir cómo compilar `.proto` sin un `protoc` externo.
+- [x] `apifast-grpc`: reflection (v1 y v1alpha) y carga de `.proto` ([docs/07](07-motor-de-red.md#grpc-f8)): la conexión la abre `apifast-http` (TLS, certificados y DNS de la colección), la metadata son los headers heredados, y `apifast describe` lista los métodos. Probado contra un servidor local con reflection v1 y v1alpha (con un interceptor que exige el token), con un `.proto` con imports y de extremo a extremo con la CLI.
+- [x] Decidir cómo compilar `.proto` sin un `protoc` externo: protox ([ADR 0013](adr/0013-protox-para-proto.md)).
 - [ ] Unario, streaming de servidor, de cliente y bidireccional.
 - [ ] Editor de mensajes JSON con esquema para autocompletar.
 - [ ] Metadata, TLS y autenticación reutilizando el motor.

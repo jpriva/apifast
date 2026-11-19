@@ -23,6 +23,7 @@ apifast-vault = { path = "crates/apifast-vault" }
 apifast-query = { path = "crates/apifast-query" }
 apifast-import = { path = "crates/apifast-import" }
 apifast-ws = { path = "crates/apifast-ws" }
+apifast-grpc = { path = "crates/apifast-grpc" }
 
 # External
 base64 = "0.23.1"

@@ -103,7 +103,11 @@ where
         path,
         options,
         cancel,
-        (&mut context, &mut host, true),
+        (
+            &mut context,
+            &mut host,
+            apifast_domain::RequestKind::WebSocket,
+        ),
     )
     .await?;
     let mut handler = Connection {

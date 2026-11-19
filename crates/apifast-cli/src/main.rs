@@ -3,6 +3,7 @@
 // The CLI is the only crate that writes straight to the terminal.
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
+mod describe;
 mod export;
 mod import;
 mod locate;
@@ -62,6 +63,12 @@ enum Command {
     /// Prints what is created and what could not be kept; `--dry-run`
     /// stops there.
     Import(import::ImportArgs),
+    /// List what a gRPC request can call: the methods of its .proto file or,
+    /// without one, of its server, by reflection.
+    ///
+    /// One method per line: its path, how it streams, and the messages it
+    /// takes and answers with.
+    Describe(describe::DescribeArgs),
     /// Export a collection, and its environments, to another tool.
     ///
     /// Prints what could not be kept.
@@ -156,6 +163,7 @@ fn main() -> ExitCode {
             vault::run(&args).map(|()| ExitCode::SUCCESS),
             ExitCode::FAILURE,
         ),
+        Command::Describe(args) => (describe::run(&args), ExitCode::FAILURE),
         Command::Import(args) => (
             import::run(&args).map(|()| ExitCode::SUCCESS),
             ExitCode::FAILURE,

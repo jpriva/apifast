@@ -238,10 +238,21 @@ La CLI usa los mismos casos de uso que la interfaz.
 
 ```
 apifast send <archivo.yml> [--env <nombre>]
+apifast describe <archivo.yml> [--env <nombre>]
 apifast run <ruta> [opciones]
 apifast import <formato> <origen> --out <directorio>
 apifast export postman --out <archivo> [--env <nombre>]...
 apifast vault <subcomando>
+```
+
+### `apifast describe`
+
+Lista lo que puede llamar una request gRPC: los métodos de su `.proto` o, sin uno, los de su servidor por reflection ([docs/07](07-motor-de-red.md#grpc-f8)). Una línea por método en stdout: su ruta, cómo transmite y los mensajes que recibe y devuelve. Acepta las mismas opciones de entorno, colección, variables y TLS que `send`.
+
+```text
+$ apifast describe hello.yml -e local
+/hello.Greeter/SayHello       unary             hello.HelloRequest -> hello.HelloReply
+/hello.Greeter/LotsOfReplies  server-streaming  hello.HelloRequest -> hello.HelloReply
 ```
 
 ### `apifast import`

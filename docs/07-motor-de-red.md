@@ -295,11 +295,12 @@ Probado con un servidor que mantiene la conexión (el primer envío a `localhost
 
 ### gRPC (F8)
 
-- Adaptador `apifast-grpc` con tonic y prost-reflect.
-- Descubrimiento de servicios por reflection (v1, con respaldo a v1alpha) o por archivos `.proto`.
+- Adaptador `apifast-grpc` con tonic y prost-reflect, detrás del puerto `GrpcTransport`. Una request gRPC es una `HttpRequest` con la llamada como body ([ADR 0012](adr/0012-grpc-como-body.md)): se prepara como cualquier otra (herencia, plantillas, secretos, OAuth 2.0), y sus headers renderizados son la metadata de la llamada, nombres en minúscula. Digest, NTLM y AWS Signature, que necesitan el transporte HTTP, no se pueden usar.
+- **La conexión la abre `apifast-http`** (`ReqwestTransport::open`): TCP, y TLS con ALPN `h2`, con la misma confianza, los certificados de cliente y los overrides de DNS que una request; tonic habla HTTP/2 y gRPC sobre ella. El proxy todavía no se usa para gRPC.
+- **La URL** es la de Bruno: `host:puerto` o `grpc://` en texto plano, `grpcs://` en TLS (también `http://` y `https://`); sin puerto, 80 o 443. Una ruta después del servidor (`grpc://h:50051/api`) se antepone a la de cada método, para servidores detrás de un prefijo.
+- **Descubrir servicios** (`describe_grpc`): con un `.proto`, se compila sin preguntar al servidor ([ADR 0013](adr/0013-protox-para-proto.md)); sin él, por reflection, v1 y, si el servidor no la tiene, v1alpha. Se piden los servicios, el archivo de cada uno y los que importan; los tipos de Google que el servidor no sirve se toman de protox. El timeout de la request cubre todo, y se puede cancelar. Un servidor sin reflection da un error que pide elegir un `.proto`.
 - Los cuatro modos: unario, streaming de servidor, de cliente y bidireccional.
 - Mensajes escritos en JSON y convertidos dinámicamente, sin código generado.
-- **Punto abierto:** compilar `.proto` sin depender de un binario `protoc` externo. Se evalúa un parser en Rust en la fase F8.
 - El adaptador se inicializa al abrir la primera request gRPC.
 
 ## Errores
