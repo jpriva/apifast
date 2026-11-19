@@ -21,6 +21,7 @@ apifast-history = { path = "crates/apifast-history" }
 apifast-watch = { path = "crates/apifast-watch" }
 apifast-vault = { path = "crates/apifast-vault" }
 apifast-query = { path = "crates/apifast-query" }
+apifast-import = { path = "crates/apifast-import" }
 
 # External
 base64 = "0.23.1"

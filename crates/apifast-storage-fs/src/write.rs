@@ -213,8 +213,8 @@ fn update_info(doc: &mut Value, old: &HttpRequest, new: &HttpRequest) {
         set_or_remove(info, "seq", new.seq.map(number));
     }
     if old.tags != new.tags {
-        let tags = (!new.tags.is_empty())
-            .then(|| new.tags.iter().map(string).collect::<Vec<_>>().into());
+        let tags =
+            (!new.tags.is_empty()).then(|| new.tags.iter().map(string).collect::<Vec<_>>().into());
         set_or_remove(info, "tags", tags);
     }
 }

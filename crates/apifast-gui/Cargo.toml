@@ -16,6 +16,7 @@ apifast-domain.workspace = true
 apifast-template.workspace = true
 apifast-history.workspace = true
 apifast-http.workspace = true
+apifast-import.workspace = true
 apifast-storage-fs.workspace = true
 apifast-watch.workspace = true
 apifast-vault.workspace = true

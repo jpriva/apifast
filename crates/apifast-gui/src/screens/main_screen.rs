@@ -244,7 +244,7 @@ impl MainScreen {
         if let Some(index) = picked {
             commands.push(Command::OpenHistory(index));
         }
-        commands.extend(self.editor_commands(edited, url_event));
+        commands.extend(self.editor_commands(edited, url_event.as_ref()));
         if let Some(event) = tab_event {
             commands.extend(self.tab_commands(event));
         }
@@ -254,7 +254,7 @@ impl MainScreen {
 
     /// The commands of the editor: the edits made, and sending or
     /// cancelling from the URL bar.
-    fn editor_commands(&self, edited: bool, url_event: Option<UrlBarEvent>) -> Vec<Command> {
+    fn editor_commands(&self, edited: bool, url_event: Option<&UrlBarEvent>) -> Vec<Command> {
         let mut commands = Vec::new();
         if let (true, Some(editor)) = (edited, &self.editor) {
             commands.push(Command::Edit {
@@ -265,7 +265,7 @@ impl MainScreen {
         match url_event {
             Some(UrlBarEvent::Send) => commands.push(Command::Send),
             Some(UrlBarEvent::Cancel) => commands.push(Command::Cancel),
-            Some(UrlBarEvent::Edited) | None => {}
+            Some(UrlBarEvent::Edited | UrlBarEvent::PastedCurl(_)) | None => {}
         }
         commands
     }
@@ -676,6 +676,11 @@ fn editor_area(
     let mut edited = event == Some(UrlBarEvent::Edited);
     if edited {
         sync_params_from_url(request);
+        panel.note = None;
+    }
+    if let Some(UrlBarEvent::PastedCurl(command)) = &event {
+        panel.note = paste_curl(request, command, strings);
+        edited = true;
     }
     ui.separator();
     let change = egui::Panel::top("request-panel")
@@ -707,6 +712,26 @@ fn editor_area(
         });
     }
     (event, edited)
+}
+
+/// Makes `request` the one the cURL `command` sends, keeping its name,
+/// position, tests, settings, docs and examples. Returns what the screen
+/// says about it: the options not kept, or why the command is not one.
+fn paste_curl(request: &mut HttpRequest, command: &str, strings: &Strings) -> Option<String> {
+    match apifast_import::parse_curl(command) {
+        Ok(import) => {
+            let new = import.request;
+            request.method = new.method;
+            request.url = new.url;
+            request.params = new.params;
+            request.headers = new.headers;
+            request.body = new.body;
+            request.auth = new.auth;
+            (!import.ignored.is_empty())
+                .then(|| format!("{} {}", strings.curl_ignored, import.ignored.join(", ")))
+        }
+        Err(e) => Some(format!("{}: {e}", strings.curl_failed)),
+    }
 }
 
 /// Adds the response `received` to `request` as an example. Returns its

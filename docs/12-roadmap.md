@@ -333,7 +333,7 @@ Los dos se cumplen: cada esquema (Digest, NTLM, AWS SigV4, OAuth 2.0 en sus tres
 - [ ] Importadores: Bruno `.bru`, Postman (colecciones y entornos), Insomnia, OpenAPI 3, cURL.
 - [ ] Plan de importación revisable: qué se crea, avisos, elementos no soportados.
 - [ ] Reimportación que actualiza en lugar de duplicar.
-- [ ] Pegar un comando cURL en la barra de URL crea la request.
+- [x] Pegar un comando cURL en la barra de URL crea la request. `parse_curl` en `apifast-import`: palabras como las separa un shell POSIX (comillas, `\`, `$'…'`, continuaciones de línea) y las opciones de Bruno y alguna más (`-X`, `-H`, `-A`, `-e`, `-b`, `-u` con `--digest`/`--ntlm`, `--oauth2-bearer`, `-d` y sus variantes juntadas con `&`, `--json`, `-F`/`--form-string`, `@archivo` como body de archivo, `-G`, `-I`, opciones cortas juntas como `-sSL` o `-XPOST`). Las que no cambian la request se saltan con su valor; las demás se listan, nunca se pierden en silencio. Es también la base del importador de cURL.
 - [ ] Copiar como cURL.
 - [ ] Exportar a Postman.
 - [ ] Generación de código para los lenguajes más usados (a decidir según demanda).

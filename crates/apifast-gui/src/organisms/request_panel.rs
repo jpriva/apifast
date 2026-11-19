@@ -67,6 +67,9 @@ pub struct RequestPanel {
     /// The collection's folder and the file dialog of multipart and file
     /// bodies.
     pub files: super::body_parts::BodyFiles,
+    /// A note over the tabs, such as the options of a pasted cURL that
+    /// were not kept. Gone with the next edit of the URL.
+    pub note: Option<String>,
 }
 
 /// What the user can ask of a request's OAuth 2.0 token.
@@ -89,6 +92,10 @@ impl RequestPanel {
         hints: &VariableHints,
         strings: &Strings,
     ) -> Option<RequestChange> {
+        if let Some(note) = &self.note {
+            let warning = theme::palette(ui).warning;
+            ui.label(RichText::new(note.as_str()).color(warning).small());
+        }
         ui.horizontal(|ui| {
             let params = request.params.iter().filter(|p| p.enabled).count();
             let headers = request.headers.iter().filter(|h| h.enabled).count();

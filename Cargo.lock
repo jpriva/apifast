@@ -323,6 +323,7 @@ dependencies = [
  "apifast-domain",
  "apifast-history",
  "apifast-http",
+ "apifast-import",
  "apifast-query",
  "apifast-storage-fs",
  "apifast-template",
@@ -372,6 +373,15 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "zstd",
+]
+
+[[package]]
+name = "apifast-import"
+version = "0.0.0"
+dependencies = [
+ "apifast-app",
+ "apifast-domain",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

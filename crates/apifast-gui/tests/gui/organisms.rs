@@ -266,3 +266,36 @@ fn collection_settings_mark_an_override_that_is_not_an_ip_and_save_them() {
     assert_eq!(root, std::path::Path::new("/shop"));
     assert_eq!(saved.dns_overrides, settings.dns_overrides);
 }
+
+#[test]
+fn pasting_a_curl_command_into_the_url_is_an_event_and_not_text() {
+    let mut events = Vec::new();
+    let (mut method, mut url) = (Method::Get, String::new());
+    let command = "curl 'https://api.test/x' \\\n  -H 'a: b'";
+    let mut harness = Harness::new_ui(|ui| {
+        if let Some(event) =
+            UrlBar::new(&mut method, &mut url, &VariableHints::new(), false, &EN).show(ui)
+        {
+            events.push(event);
+        }
+    });
+    harness
+        .get_by_role(egui::accesskit::Role::TextInput)
+        .focus();
+    harness.run();
+    harness
+        .input_mut()
+        .events
+        .push(egui::Event::Paste(command.into()));
+    harness.run();
+    // Other text is pasted as always.
+    harness
+        .input_mut()
+        .events
+        .push(egui::Event::Paste("http://h".into()));
+    harness.run();
+    drop(harness);
+    assert_eq!(url, "http://h");
+    assert_eq!(events[0], UrlBarEvent::PastedCurl(command.into()));
+    assert_eq!(events[1..], [UrlBarEvent::Edited]);
+}

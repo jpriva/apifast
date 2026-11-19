@@ -43,12 +43,14 @@ La interfaz se construye con egui (eframe). El objetivo es que resulte familiar 
 | Barra superior | Nombre de la colección de la pestaña activa, búsqueda y paleta de comandos, selector de entorno de esa colección con su color |
 | Barra lateral | Selector de workspace, árbol con una raíz por colección, historial de la colección activa. Se puede ocultar y redimensionar |
 | Pestañas | Una por request abierta, de cualquier colección; un punto indica cambios sin guardar. El nombre de la colección aparece en el tooltip, y delante del nombre ("Billing / Health") cuando dos pestañas de colecciones distintas se llaman igual |
-| Barra de URL | Método, URL con resaltado de variables, botón de enviar o cancelar |
+| Barra de URL | Método, URL con resaltado de variables, botón de enviar o cancelar. Pegar un comando cURL convierte la request (ver abajo) |
 | Panel de request | Pestañas de edición |
 | Panel de respuesta | Estado, tiempo, tamaño y pestañas de visualización |
 | Barra de estado | Rama de git, cambios sin guardar, estado de la bóveda |
 
 Los paneles de request y respuesta se pueden disponer uno encima del otro o lado a lado (`Ctrl+J`).
+
+**Pegar un cURL en la barra de URL.** Si lo que se pega en el campo de la URL empieza por `curl `, no se pega como texto: la request pasa a ser la del comando (método, URL, params, headers, body y auth), y conserva su nombre, su posición, sus tests, sus ajustes, su documentación y sus ejemplos. Queda como un cambio sin guardar, que se puede deshacer descartándolo. Se intercepta el pegado antes de que lo vea el campo, que es de una línea y perdería los saltos de línea del comando. Una nota sobre las pestañas dice las opciones que no se conservaron (`-k`, `--proxy …`) o por qué el comando no se puede leer; desaparece al editar la URL. Escribir `curl` a mano no convierte nada.
 
 ## Arranque y workspaces
 

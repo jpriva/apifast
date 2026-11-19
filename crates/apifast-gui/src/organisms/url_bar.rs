@@ -20,7 +20,7 @@ const METHODS: [Method; 7] = [
 ];
 
 /// What the user did in the URL bar.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UrlBarEvent {
     /// The method or the URL changed.
     Edited,
@@ -28,6 +28,9 @@ pub enum UrlBarEvent {
     Send,
     /// Cancel the send in progress.
     Cancel,
+    /// A cURL command was pasted into the URL: the request should become
+    /// it. The URL was left as it was.
+    PastedCurl(String),
 }
 
 /// The URL bar of the open request. It edits the caller's copy of the
@@ -98,20 +101,44 @@ impl<'a> UrlBar<'a> {
                     missing: strings.variable_missing,
                     generated: strings.variable_generated,
                 };
+                let id = ui.make_persistent_id("url-field");
+                // Taken before the field sees it: a one-line field would
+                // drop the command's line breaks.
+                if let Some(command) = take_pasted_curl(ui, id) {
+                    event = Some(UrlBarEvent::PastedCurl(command));
+                }
                 let field = TemplateField::new(url, hints, texts)
+                    .id(id)
                     .accessible_name(strings.url)
                     .desired_width(ui.available_width())
                     .show(ui);
                 if focus {
                     field.request_focus();
                 }
-                if field.changed() {
+                if field.changed() && event.is_none() {
                     event = Some(UrlBarEvent::Edited);
                 }
             });
         });
         event
     }
+}
+
+/// A `curl …` pasted into the field `id`, if it has the focus, taken out
+/// of the input so the field does not get it.
+fn take_pasted_curl(ui: &egui::Ui, id: egui::Id) -> Option<String> {
+    if !ui.memory(|m| m.has_focus(id)) {
+        return None;
+    }
+    ui.input_mut(|input| {
+        let at = input.events.iter().position(
+            |e| matches!(e, egui::Event::Paste(text) if text.trim_start().starts_with("curl ")),
+        )?;
+        match input.events.remove(at) {
+            egui::Event::Paste(text) => Some(text),
+            _ => None,
+        }
+    })
 }
 
 /// The method, colored as its badge. Returns whether the user changed it.

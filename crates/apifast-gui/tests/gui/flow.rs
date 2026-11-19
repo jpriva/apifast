@@ -532,3 +532,38 @@ fn a_response_is_saved_as_an_example_of_its_request() {
         Some("200 OK")
     );
 }
+
+#[test]
+fn a_pasted_curl_command_becomes_the_request() {
+    let dir = collection(server());
+    let data = tempfile::tempdir().unwrap();
+    let mut harness = open_app(dir.path(), data.path());
+    harness
+        .get_by_role_and_label(Role::TreeItem, "Health")
+        .click();
+    wait_for(&mut harness, "Send");
+    harness
+        .get_by_role_and_label(Role::TextInput, "URL")
+        .focus();
+    harness.step();
+    harness.input_mut().events.push(egui::Event::Paste(
+        "curl -k 'https://api.test/v1/users' \\\n  -H 'X-Trace: 1' \\\n  --data-raw '{\"a\":1}' \\\n  -H 'Content-Type: application/json'"
+            .into(),
+    ));
+    wait_for(&mut harness, EN.unsaved);
+    assert_eq!(
+        harness
+            .get_by_role_and_label(Role::TextInput, "URL")
+            .value()
+            .as_deref(),
+        Some("https://api.test/v1/users")
+    );
+    assert_eq!(
+        harness.get_by_label("Method").value().as_deref(),
+        Some("POST")
+    );
+    harness.get_by_label("Headers (2)");
+    // The name stays; what was not kept is said.
+    harness.get_by_role_and_label(Role::TreeItem, "Health");
+    wait_for(&mut harness, &format!("{} -k", EN.curl_ignored));
+}

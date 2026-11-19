@@ -262,6 +262,10 @@ pub struct Strings {
     pub collection_key: &'static str,
     /// Action: open the collection key window.
     pub action_collection_key: &'static str,
+    /// Note after pasting a cURL: options follow.
+    pub curl_ignored: &'static str,
+    /// Note when a pasted cURL cannot be read.
+    pub curl_failed: &'static str,
     /// Request tab: saved examples.
     pub examples: &'static str,
     /// Examples tab without examples.
@@ -991,6 +995,8 @@ pub const EN: Strings = Strings {
     forget: "Forget",
     collection_key: "Collection key",
     action_collection_key: "Collection key",
+    curl_ignored: "Pasted the cURL command. Not kept:",
+    curl_failed: "The pasted cURL command cannot be read",
     examples: "Examples",
     examples_empty: "No examples yet. Send the request and press “Save as example” on its response.",
     example_name: "Example name",
