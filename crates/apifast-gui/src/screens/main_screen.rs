@@ -89,6 +89,8 @@ pub struct MainScreen {
     pub cookies_window: CookiesWindow,
     /// The import of a collection.
     pub import_window: crate::organisms::ImportWindow,
+    /// Importing again into an imported collection.
+    pub reimport_window: crate::organisms::ReimportWindow,
     /// The collection runner.
     pub runner: RunnerWindow,
     /// A collection's settings.
@@ -336,6 +338,10 @@ impl MainScreen {
                 self.cookies_window.open = true;
                 vec![focus]
             }
+            TreeEvent::Reimport => {
+                self.reimport_window.open();
+                vec![focus, Command::OpenReimport(root)]
+            }
             TreeEvent::CopyAsCurl(path) => vec![Command::CopyAsCurl(TabKey::new(root, path))],
             TreeEvent::Close => vec![Command::CloseCollection(root)],
             TreeEvent::Remove => vec![Command::RemoveCollection(root)],
@@ -467,6 +473,12 @@ impl MainScreen {
             },
             crate::organisms::ImportEvent::Import(target) => Command::ApplyImport(target),
             crate::organisms::ImportEvent::Close => Command::CloseImport,
+        }));
+        let reimport = (self.reimport_window).show(&ctx, snapshot.reimport.as_ref(), strings);
+        commands.extend(reimport.map(|event| match event {
+            crate::organisms::ReimportEvent::Review(file) => Command::PlanReimport(file),
+            crate::organisms::ReimportEvent::Apply(keys) => Command::ApplyReimport(keys),
+            crate::organisms::ReimportEvent::Close => Command::CloseReimport,
         }));
         if let Some((root, settings)) = self.collection_settings.show(&ctx, strings) {
             commands.push(Command::SaveCollectionSettings {

@@ -18,6 +18,7 @@ mod keymap;
 mod read;
 mod session;
 mod settings;
+mod source;
 mod workspace;
 mod write;
 mod yaml;
@@ -37,6 +38,7 @@ pub use convert::yaml_to_json;
 pub use keymap::FsKeymapStore;
 pub use session::FsSessionStore;
 pub use settings::FsSettingsStore;
+pub use source::{import_source, import_source_path};
 pub use workspace::{
     FsKnownWorkspaces, FsWorkspace, FsWorkspaceState, KnownWorkspaces, WORKSPACE_FILE,
     WorkspaceStateData,

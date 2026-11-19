@@ -62,12 +62,8 @@ enum Format {
 /// cannot be written.
 pub fn run(args: &ImportArgs) -> Result<()> {
     let imported = read(args)?;
-    let source = format!(
-        "{} {}",
-        format!("{:?}", args.format).to_ascii_lowercase(),
-        args.file.display()
-    );
     if args.out.join("opencollection.yml").exists() {
+        let source = apifast_storage_fs::import_source(&args.out, &args.file);
         return reimport(args, &imported, &source);
     }
     if args.overwrite || args.prune {
@@ -80,6 +76,7 @@ pub fn run(args: &ImportArgs) -> Result<()> {
     }
     let repo = FsCollection::create(&args.out, &Collection::new(imported.name.clone()))
         .with_context(|| format!("cannot create the collection in `{}`", args.out.display()))?;
+    let source = apifast_storage_fs::import_source(&args.out, &args.file);
     let report = apply_import((&repo, &repo), &imported, &source)?;
     println!(
         "Imported {} folders, {} requests and {} environments into {}",

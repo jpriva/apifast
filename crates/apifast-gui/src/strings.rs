@@ -296,6 +296,32 @@ pub struct Strings {
     pub import_review_again: &'static str,
     /// Button: write the reviewed plan.
     pub import: &'static str,
+    /// Menu: import a new version of the collection's source.
+    pub reimport_menu: &'static str,
+    /// Title of the reimport window.
+    pub reimport_title: &'static str,
+    /// Label: the collection being updated.
+    pub reimport_into: &'static str,
+    /// Field: the new version of the source.
+    pub reimport_file: &'static str,
+    /// Before reviewing a reimport.
+    pub reimport_hint: &'static str,
+    /// A request new in the source.
+    pub reimport_new: &'static str,
+    /// A request changed only in the source.
+    pub reimport_changed: &'static str,
+    /// A request changed in the source and here.
+    pub reimport_conflict: &'static str,
+    /// A request deleted here.
+    pub reimport_deleted: &'static str,
+    /// A request the source no longer has.
+    pub reimport_removed: &'static str,
+    /// After a count: requests the same as the source.
+    pub reimport_unchanged: &'static str,
+    /// When the source did not change.
+    pub reimport_nothing: &'static str,
+    /// Button: apply the chosen changes.
+    pub reimport_apply: &'static str,
     /// Menu and action: copy a request as a cURL command.
     pub copy_as_curl: &'static str,
     /// After copying a request as cURL.
@@ -1054,6 +1080,19 @@ pub const EN: Strings = Strings {
     import_folder: "Folder name",
     import_review_again: "The files changed: review them again before importing.",
     import: "Import",
+    reimport_menu: "Import again…",
+    reimport_title: "Import again",
+    reimport_into: "Collection",
+    reimport_file: "New version",
+    reimport_hint: "Choose the new version of the file or folder this collection was imported from. Requests changed only in the source are updated; those you edited are kept unless you choose them.",
+    reimport_new: "new",
+    reimport_changed: "changed in the source",
+    reimport_conflict: "changed in the source and here",
+    reimport_deleted: "deleted here",
+    reimport_removed: "no longer in the source",
+    reimport_unchanged: "unchanged",
+    reimport_nothing: "Nothing changed in the source.",
+    reimport_apply: "Apply",
     copy_as_curl: "Copy as cURL",
     copied_as_curl: "Copied as cURL.",
     copied_missing: "Copied as cURL, with something missing:",

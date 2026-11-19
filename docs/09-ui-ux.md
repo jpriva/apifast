@@ -197,6 +197,16 @@ Los ajustes de la aplicación tienen una sección Cookies con "Send cookies" y "
 
 La lectura y el plan los hace el núcleo, fuera del hilo de la interfaz; la colección leída se guarda hasta que se importa o se cierra la ventana.
 
+### Importar otra vez
+
+"Import again…", en el menú de una colección importada del árbol, trae una versión nueva de su fuente sin pisar lo editado ([ADR 0010](adr/0010-reimportacion.md)):
+
+1. Propone el archivo de la última importación (o la carpeta, para Bruno); se puede elegir otro.
+2. "Review" muestra cuántas requests son nuevas, cambiaron o siguen igual, y una casilla por cada una que no sigue igual: nueva, cambiada en la fuente, cambiada en la fuente y aquí, borrada aquí, o ya no está en la fuente. Vienen marcadas las nuevas y las cambiadas solo en la fuente.
+3. "Apply" aplica lo marcado y recarga la colección. Lo no marcado se vuelve a ofrecer la próxima vez.
+
+En una colección que no salió de una importación, la ventana lo dice y no ofrece nada.
+
 ## Bóveda
 
 - La clave de la colección no se pide nunca a quien la creó (se genera con el primer secreto compartido) ni a una máquina que ya la tiene: queda guardada, envuelta con la clave maestra.

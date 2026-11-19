@@ -339,10 +339,10 @@ Los dos se cumplen: cada esquema (Digest, NTLM, AWS SigV4, OAuth 2.0 en sus tres
 - [x] Plan de importación revisable: qué se crea, avisos, elementos no soportados.
   - [x] El plan y su aplicación (`plan_import`, `apply_import`) y `apifast import`, que lo imprime y escribe (o no, con `--dry-run`).
   - [x] El diálogo de importación de la interfaz ([docs/09](09-ui-ux.md#importar)): elegir la exportación y sus entornos, revisar el plan y la carpeta, importar y abrir.
-- [ ] Reimportación que actualiza en lugar de duplicar ([ADR 0010](adr/0010-reimportacion.md)).
+- [x] Reimportación que actualiza en lugar de duplicar ([ADR 0010](adr/0010-reimportacion.md)).
   - [x] Clave estable por request en cada importador, registro en `.apifast/import.yml`, y `plan_reimport`/`apply_reimport`: crear, actualizar, conflicto, borrado aquí, retirado de la fuente; lo no elegido se vuelve a ofrecer.
   - [x] `apifast import` sobre una colección importada la actualiza, con `--overwrite` y `--prune` ([docs/08](08-tests-y-runner.md#importar-otra-vez)). Probado de extremo a extremo con una especificación que cambia y una request editada.
-  - [ ] Revisar y aplicar una reimportación en la interfaz.
+  - [x] Revisar y aplicar una reimportación en la interfaz: "Import again…" en el menú de la colección, con una casilla por request ([docs/09](09-ui-ux.md#importar-otra-vez)). La fuente se guarda relativa a la colección, para proponerla en cualquier clon.
 - [x] Pegar un comando cURL en la barra de URL crea la request. `parse_curl` en `apifast-import`: palabras como las separa un shell POSIX (comillas, `\`, `$'…'`, continuaciones de línea) y las opciones de Bruno y alguna más (`-X`, `-H`, `-A`, `-e`, `-b`, `-u` con `--digest`/`--ntlm`, `--oauth2-bearer`, `-d` y sus variantes juntadas con `&`, `--json`, `-F`/`--form-string`, `@archivo` como body de archivo, `-G`, `-I`, opciones cortas juntas como `-sSL` o `-XPOST`). Las que no cambian la request se saltan con su valor; las demás se listan, nunca se pierden en silencio. Es también la base del importador de cURL.
 - [x] Copiar como cURL. `render_for_copy` en `apifast-app` renderiza la request como la enviaría un envío, pero sin red: token OAuth 2.0 solo si está guardado, `response(...)` sin enviar, y en modo tolerante, con lo que falta listado. `to_curl` en `apifast-import` la escribe con opciones largas y comillas de shell; probado de ida y vuelta con `parse_curl` y con el curl real. En el menú de cada request del árbol y en la paleta ([docs/09](09-ui-ux.md#layout-principal)).
 - [ ] Exportar a Postman.

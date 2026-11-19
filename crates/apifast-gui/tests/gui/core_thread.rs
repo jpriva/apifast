@@ -2199,3 +2199,74 @@ fn a_bru_folder_is_recognised_and_planned() {
         ("Old", "ping.yml")
     );
 }
+
+#[test]
+fn an_imported_collection_is_imported_again_with_the_chosen_changes() {
+    let (core, _, _data) = start();
+    let dir = tempfile::tempdir().unwrap();
+    let spec = dir.path().join("pets.yaml");
+    let version = |summary: &str, extra: &str| {
+        format!(
+            "openapi: 3.0.0\ninfo: {{title: Pets, version: '1'}}\npaths:\n  /pets:\n    get: {{operationId: listPets, summary: {summary}}}\n  /pets/{{id}}:\n    get: {{operationId: getPet, summary: Get pet}}\n{extra}"
+        )
+    };
+    std::fs::write(&spec, version("List pets", "")).unwrap();
+    core.send(Command::PlanImport {
+        collection: spec.clone(),
+        environments: Vec::new(),
+    });
+    wait(&core, "the plan", |s| {
+        s.import.as_ref().is_some_and(|i| i.plan.is_ok())
+    });
+    let target = dir.path().join("pets");
+    core.send(Command::ApplyImport(target.clone()));
+    let snapshot = wait(&core, "the collection open", |s| {
+        s.import.is_none() && s.collection.is_some()
+    });
+    let root = snapshot.collection.as_ref().unwrap().root.clone();
+    assert_eq!(root, target.canonicalize().unwrap());
+
+    // The spec changes a request and adds one.
+    let extra = "  /owners:\n    get: {operationId: listOwners, summary: List owners}\n";
+    std::fs::write(&spec, version("All pets", extra)).unwrap();
+    core.send(Command::OpenReimport(root.clone()));
+    let snapshot = wait(&core, "the reimport", |s| s.reimport.is_some());
+    let view = snapshot.reimport.clone().unwrap();
+    assert!(view.plan.is_none());
+    let previous = view.previous_source.unwrap().canonicalize().unwrap();
+    assert_eq!(previous, spec.canonicalize().unwrap(), "proposed again");
+
+    core.send(Command::PlanReimport(spec.clone()));
+    let snapshot = wait(&core, "the reimport plan", |s| {
+        s.reimport.as_ref().is_some_and(|r| r.plan.is_some())
+    });
+    let plan = snapshot.reimport.clone().unwrap().plan.unwrap().unwrap();
+    let action = |key: &str| plan.entries.iter().find(|e| e.key == key).unwrap().action;
+    assert_eq!(action("listPets"), apifast_app::ReimportAction::Update);
+    assert_eq!(action("listOwners"), apifast_app::ReimportAction::Create);
+    assert_eq!(action("getPet"), apifast_app::ReimportAction::Unchanged);
+
+    // Only the update is chosen.
+    core.send(Command::ApplyReimport(vec!["listPets".into()]));
+    wait(&core, "the reimport applied", |s| s.reimport.is_none());
+    let list = std::fs::read_to_string(target.join("pets/list-pets.yml"))
+        .or_else(|_| std::fs::read_to_string(target.join("list-pets.yml")))
+        .unwrap();
+    assert!(list.contains("All pets"), "{list}");
+    assert!(!target.join("list-owners.yml").exists(), "not chosen");
+
+    // A collection that was not imported says so.
+    std::fs::remove_file(target.join(".apifast/import.yml")).unwrap();
+    core.send(Command::OpenReimport(root));
+    let snapshot = wait(&core, "the refusal", |s| {
+        s.reimport.as_ref().is_some_and(|r| r.plan.is_some())
+    });
+    let why = snapshot
+        .reimport
+        .clone()
+        .unwrap()
+        .plan
+        .unwrap()
+        .unwrap_err();
+    assert!(why.contains("did not come from an import"), "{why}");
+}

@@ -38,6 +38,8 @@ pub enum TreeEvent {
     Remove,
     /// Edit the collection's settings, such as its proxy.
     Settings,
+    /// Import a new version of the collection's source.
+    Reimport,
     /// Open the runner on the collection, or on one of its folders.
     Run {
         /// The folder; `None` for the whole collection.
@@ -668,6 +670,7 @@ fn collection_menu(
         ),
         (strings.collection_key, TreeEvent::CollectionKey, true),
         (strings.cookies_menu, TreeEvent::Cookies, loaded),
+        (strings.reimport_menu, TreeEvent::Reimport, loaded),
         (strings.close_collection, TreeEvent::Close, loaded),
         (strings.remove_collection, TreeEvent::Remove, true),
     ];

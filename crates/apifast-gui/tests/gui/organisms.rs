@@ -388,3 +388,105 @@ fn the_import_window_reviews_then_imports_only_what_was_reviewed() {
         Some(&ImportEvent::Import("/work/my-shop".into()))
     );
 }
+
+#[test]
+fn the_reimport_window_proposes_the_source_and_applies_what_is_chosen() {
+    use apifast_app::{ReimportAction, ReimportEntry, ReimportPlan};
+    use apifast_gui::core::ReimportView;
+    use apifast_gui::organisms::{ReimportEvent, ReimportWindow};
+    use egui::accesskit::Role;
+    use std::sync::Arc;
+
+    struct State {
+        window: ReimportWindow,
+        view: Option<ReimportView>,
+        events: Vec<ReimportEvent>,
+    }
+    let entry = |key: &str, action, selected| ReimportEntry {
+        key: key.into(),
+        name: key.into(),
+        path: format!("{key}.yml"),
+        action,
+        selected,
+        previous_hash: None,
+    };
+    let mut window = ReimportWindow::default();
+    window.open();
+    let view = ReimportView {
+        root: "/work/pets".into(),
+        previous_source: Some("/specs/pets.yaml".into()),
+        file: None,
+        plan: None,
+    };
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(900.0, 800.0))
+        .build_ui_state(
+            |ui, state: &mut State| {
+                let ctx = ui.ctx().clone();
+                if let Some(event) = state.window.show(&ctx, state.view.as_ref(), &EN) {
+                    state.events.push(event);
+                }
+            },
+            State {
+                window,
+                view: Some(view),
+                events: Vec::new(),
+            },
+        );
+    harness.run();
+    assert!(harness.query_by_label(EN.reimport_hint).is_some());
+    assert_eq!(
+        harness
+            .get_by_role_and_label(Role::TextInput, EN.reimport_file)
+            .value()
+            .as_deref(),
+        Some("/specs/pets.yaml"),
+        "the file it came from"
+    );
+    harness.get_by_label(EN.import_review).click();
+    harness.run();
+    assert_eq!(
+        harness.state().events,
+        [ReimportEvent::Review("/specs/pets.yaml".into())]
+    );
+
+    let plan = ReimportPlan {
+        previous_source: "../specs/pets.yaml".into(),
+        entries: vec![
+            entry("same", ReimportAction::Unchanged, false),
+            entry("changed", ReimportAction::Update, true),
+            entry("mine", ReimportAction::Conflict, false),
+        ],
+        warnings: Vec::new(),
+    };
+    let view = harness.state().view.clone().unwrap();
+    harness.state_mut().view = Some(ReimportView {
+        file: Some("/specs/pets.yaml".into()),
+        plan: Some(Ok(Arc::new(plan))),
+        ..view
+    });
+    harness.run();
+    harness.run();
+    assert!(
+        harness
+            .query_by_label_contains("0 new, 2 changed")
+            .is_some()
+    );
+    assert!(
+        harness.query_by_label_contains("same.yml").is_none(),
+        "unchanged is not listed"
+    );
+    let changed = format!("changed.yml: {}", EN.reimport_changed);
+    let mine = format!("mine.yml: {}", EN.reimport_conflict);
+    assert!(harness.query_by_label(&changed).is_some());
+    harness.get_by_label(&mine).click();
+    harness.run();
+    harness.get_by_label(EN.reimport_apply).click();
+    harness.run();
+    assert_eq!(
+        harness.state().events.last(),
+        Some(&ReimportEvent::Apply(vec!["changed".into(), "mine".into()])),
+        "the default, and the one clicked"
+    );
+    assert!(!harness.state().window.open);
+}

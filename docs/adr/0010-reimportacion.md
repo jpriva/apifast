@@ -24,10 +24,10 @@ La clave no depende del nombre del archivo en apifast: renombrar la request en l
 
 ### La importación deja un registro, versionado
 
-`.apifast/import.yml` guarda la fuente (`openapi pets.yaml`) y, por cada request escrita, su clave, su archivo y una huella de la request tal como vino (sin su posición). Va en git con la colección, así cualquiera del equipo puede reimportar.
+`.apifast/import.yml` guarda la fuente, como ruta relativa a la carpeta de la colección (`../specs/pets.yaml`; absoluta solo si no comparten ningún ancestro), y, por cada request escrita, su clave, su archivo y una huella de la request tal como vino (sin su posición). Va en git con la colección, así cualquiera del equipo puede reimportar; con la ruta relativa, la interfaz propone el archivo en cualquier clon que tenga la fuente al lado.
 
 ```yaml
-source: openapi pets.yaml
+source: ../specs/pets.yaml
 requests:
   - key: listPets
     path: pets/list-pets.yml
@@ -55,4 +55,4 @@ No se mezclan campos: un conflicto se resuelve tomando la versión de la fuente 
 
 - `apifast import` sobre una carpeta que ya importó esa fuente la actualiza; `--overwrite` toma la fuente en los conflictos y en lo borrado, `--prune` borra lo que la fuente ya no tiene. Sobre una colección que no se importó, se niega.
 - Una colección importada antes de este cambio no tiene registro: no se puede reimportar.
-- La interfaz importa con registro; revisar una reimportación en la interfaz queda pendiente.
+- En la interfaz, "Import again…" en el menú de una colección abre una ventana que propone el archivo de la última importación, muestra el plan con una casilla por request (marcadas las que se crean o actualizan) y aplica lo elegido.

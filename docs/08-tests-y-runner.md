@@ -299,7 +299,7 @@ apifast import <formato> <archivo> --out <colección importada> [--dry-run] [--o
 Si `--out` es una colección que salió de una importación, la actualiza en lugar de negarse ([ADR 0010](adr/0010-reimportacion.md)). Cada importación deja en `.apifast/import.yml` qué escribió; la siguiente compara cada request como vino entonces, como está ahora y como la trae la fuente, y lo imprime:
 
 ```
-Updating pets (last imported from openapi pets.yaml): 1 new, 2 changed, 5 unchanged
+Updating pets (last imported from ../specs/pets.yaml): 1 new, 2 changed, 5 unchanged
   pets/list-pets.yml: changed in the source
   pets/get-pet.yml: changed in the source and here [skip]
   pets/adopt.yml: new

@@ -15,6 +15,7 @@ mod cookies;
 mod copy;
 mod import;
 mod proxy;
+mod reimport;
 mod runner;
 mod tokens;
 mod vault;
@@ -26,6 +27,7 @@ use workspace::ActiveWorkspace;
 pub use cookies::{CookieCommand, CookieSlot};
 pub use copy::Copied;
 pub use import::ImportView;
+pub use reimport::ReimportView;
 pub use vault::{Revealed, SHOWN_FOR, SecretState, SecretStatus, VaultCommand, VaultView};
 
 use std::collections::{BTreeMap, HashMap};
@@ -429,6 +431,16 @@ pub enum Command {
     ApplyImport(PathBuf),
     /// Forgets the import being reviewed.
     CloseImport,
+    /// Starts importing again into the collection at this folder (see
+    /// [`Snapshot::reimport`]).
+    OpenReimport(PathBuf),
+    /// Reads this file and plans importing it again.
+    PlanReimport(PathBuf),
+    /// Applies the reviewed reimport, with the requests of these keys
+    /// chosen.
+    ApplyReimport(Vec<String>),
+    /// Forgets the reimport being reviewed.
+    CloseReimport,
 }
 
 /// Everything the interface shows, as of one moment.
@@ -477,6 +489,8 @@ pub struct Snapshot {
     pub copied: Option<Copied>,
     /// The import being reviewed, if any.
     pub import: Option<ImportView>,
+    /// The reimport being reviewed, if any.
+    pub reimport: Option<ReimportView>,
     /// Values captured for its active environment, waiting for the user to
     /// write them there.
     pub captured: Option<PendingCaptures>,
@@ -805,6 +819,7 @@ impl Core {
                     trust: apifast_domain::TlsTrust::default(),
                     cookie_policy: (true, true),
                     importing: None,
+                    reimporting: None,
                     sealed,
                     shown: 0,
                     keyring,
@@ -884,6 +899,8 @@ struct State {
     cookie_policy: (bool, bool),
     /// The collection read for the import being reviewed.
     importing: Option<apifast_app::ImportedCollection>,
+    /// The source read for the reimport being reviewed.
+    reimporting: reimport::Reimporting,
     /// Values of the settings kept sealed with the master key, such as the
     /// proxy's password.
     sealed: apifast_vault::SealedValues,
@@ -1027,23 +1044,17 @@ impl State {
             Command::Vault(command) => self.vault_command(command),
             Command::Cookies(command) => self.cookie_command(command),
             Command::CopyAsCurl(key) => self.copy_as_curl(&key),
-            Command::PlanImport { .. } | Command::ApplyImport(_) | Command::CloseImport => {
-                self.handle_import(command);
-            }
+            Command::PlanImport { .. }
+            | Command::ApplyImport(_)
+            | Command::CloseImport
+            | Command::OpenReimport(_)
+            | Command::PlanReimport(_)
+            | Command::ApplyReimport(_)
+            | Command::CloseReimport => self.handle_import(command),
             Command::ResolveConflict {
                 tab: key,
                 keep_draft,
-            } => {
-                let revision = self.next_revision();
-                if let Some(tab) = self.tab_mut(&key) {
-                    tab.conflict = false;
-                    if !keep_draft {
-                        tab.draft = None;
-                        tab.revision = revision;
-                    }
-                }
-                self.refresh_variables(Some(&key));
-            }
+            } => self.resolve_conflict(&key, keep_draft),
             Command::CreateEnvironment(_)
             | Command::RenameEnvironment { .. }
             | Command::SaveEnvironment(_)
@@ -1056,6 +1067,20 @@ impl State {
             Command::CloseRun => self.close_run(),
             Command::OpenRunStep(index) => self.open_run_step(index),
         }
+    }
+
+    /// The file of the tab at `key` changed while it had a draft: keeps
+    /// the draft, or takes the file.
+    fn resolve_conflict(&mut self, key: &TabKey, keep_draft: bool) {
+        let revision = self.next_revision();
+        if let Some(tab) = self.tab_mut(key) {
+            tab.conflict = false;
+            if !keep_draft {
+                tab.draft = None;
+                tab.revision = revision;
+            }
+        }
+        self.refresh_variables(Some(key));
     }
 
     /// Commands about settings: limits and proxies.

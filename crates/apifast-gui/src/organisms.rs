@@ -14,6 +14,7 @@ mod kv_table;
 mod oauth2_editor;
 mod palette;
 mod proxy_editor;
+mod reimport_window;
 mod request_panel;
 mod response;
 mod response_cookies;
@@ -39,6 +40,7 @@ pub use kv_table::{BulkRow, KvRow, KvTable, from_bulk, to_bulk};
 pub use oauth2_editor::oauth2_fields;
 pub use palette::{CommandPalette, PaletteItem, PaletteMode, fuzzy};
 pub use proxy_editor::proxy_fields;
+pub use reimport_window::{ReimportEvent, ReimportWindow};
 pub use request_panel::{RequestChange, RequestPanel, RequestTab, TokenAction};
 pub use response::{
     BodyMode, COPY_LIMIT, PRETTY_LIMIT, ResponseTab, ResponseView, describe, millis, size_text,

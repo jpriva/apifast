@@ -22,7 +22,7 @@ pub struct ImportView {
 }
 
 impl State {
-    /// The commands about an import.
+    /// The commands about an import, or a reimport.
     pub(super) fn handle_import(&mut self, command: super::Command) {
         match command {
             super::Command::PlanImport {
@@ -31,7 +31,7 @@ impl State {
             } => self.plan_import(&collection, &environments),
             super::Command::ApplyImport(target) => self.apply_import(&target),
             super::Command::CloseImport => self.close_import(),
-            _ => {}
+            other => self.handle_reimport(other),
         }
     }
 
@@ -41,7 +41,7 @@ impl State {
     fn plan_import(&mut self, collection: &Path, environments: &[PathBuf]) {
         let mut files = vec![collection.to_path_buf()];
         files.extend(environments.iter().cloned());
-        let read = read_postman(collection, environments);
+        let read = read_source(collection, environments);
         let plan = read
             .as_ref()
             .map(|imported| Arc::new(plan_import(imported)))
@@ -58,7 +58,8 @@ impl State {
         };
         let source = (self.snapshot.import.as_ref())
             .and_then(|view| view.files.first())
-            .map_or_else(String::new, |file| file.display().to_string());
+            .cloned()
+            .unwrap_or_default();
         match write(target, &imported, &source) {
             Ok(()) => {
                 self.snapshot.import = None;
@@ -79,7 +80,12 @@ impl State {
     }
 }
 
-fn read_postman(collection: &Path, environments: &[PathBuf]) -> Result<ImportedCollection, String> {
+/// Reads `collection`, whatever its format (a Bruno folder, a Postman,
+/// Insomnia or OpenAPI file), with the Postman `environments`.
+pub(super) fn read_source(
+    collection: &Path,
+    environments: &[PathBuf],
+) -> Result<ImportedCollection, String> {
     let read = |path: &Path| {
         std::fs::read_to_string(path).map_err(|e| format!("cannot read `{}`: {e}", path.display()))
     };
@@ -125,9 +131,11 @@ fn not_known(file: &Path) -> String {
     )
 }
 
-fn write(target: &Path, imported: &ImportedCollection, source: &str) -> Result<(), String> {
+/// Writes `imported`, read from `source`, as a new collection in `target`.
+fn write(target: &Path, imported: &ImportedCollection, source: &Path) -> Result<(), String> {
     let repo = FsCollection::create(target, &Collection::new(imported.name.clone()))
         .map_err(|e| format!("cannot import into `{}`: {e}", target.display()))?;
-    apply_import((&repo, &repo), imported, source).map_err(|e| e.to_string())?;
+    let source = apifast_storage_fs::import_source(target, source);
+    apply_import((&repo, &repo), imported, &source).map_err(|e| e.to_string())?;
     Ok(())
 }
