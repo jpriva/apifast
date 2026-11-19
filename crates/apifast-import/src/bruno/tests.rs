@@ -88,7 +88,7 @@ fn the_collection_and_its_folders_give_their_defaults() {
     let names: Vec<&str> = items
         .iter()
         .map(|i| match i {
-            ImportedItem::Request(r) => r.name.as_str(),
+            ImportedItem::Request { request: r, .. } => r.name.as_str(),
             ImportedItem::Folder { folder, .. } => folder.name.as_str(),
         })
         .collect();
@@ -101,7 +101,10 @@ fn a_request_keeps_its_url_params_body_checks_and_settings() {
     let ImportedItem::Folder { items, .. } = &collection.items[0] else {
         unreachable!()
     };
-    let ImportedItem::Request(create) = &items[1] else {
+    let ImportedItem::Request {
+        request: create, ..
+    } = &items[1]
+    else {
         unreachable!()
     };
     assert_eq!(create.method, Method::Post);
@@ -126,7 +129,7 @@ fn a_request_keeps_its_url_params_body_checks_and_settings() {
     assert_eq!(create.settings.timeout_ms, Setting::Inherit, "0 is not set");
     assert_eq!(create.docs.as_deref(), Some("Creates a user."));
     assert!(warned(&collection, "Users / Create user", "tests block"));
-    let ImportedItem::Request(list) = &items[0] else {
+    let ImportedItem::Request { request: list, .. } = &items[0] else {
         unreachable!()
     };
     assert_eq!(list.auth, Setting::Set(AuthScheme::None));
@@ -139,7 +142,7 @@ fn multipart_aws_environments_and_what_is_left_out() {
         .items
         .iter()
         .find_map(|i| match i {
-            ImportedItem::Request(r) if r.name == "Upload" => Some(r),
+            ImportedItem::Request { request: r, .. } if r.name == "Upload" => Some(r),
             _ => None,
         })
         .unwrap();

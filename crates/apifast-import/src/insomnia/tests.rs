@@ -41,9 +41,9 @@ fn v4() -> Value {
 fn find<'a>(items: &'a [ImportedItem], name: &str) -> &'a HttpRequest {
     fn walk<'a>(items: &'a [ImportedItem], name: &str) -> Option<&'a HttpRequest> {
         items.iter().find_map(|i| match i {
-            ImportedItem::Request(r) if r.name == name => Some(r.as_ref()),
+            ImportedItem::Request { request: r, .. } if r.name == name => Some(r.as_ref()),
             ImportedItem::Folder { items, .. } => walk(items, name),
-            ImportedItem::Request(_) => None,
+            ImportedItem::Request { .. } => None,
         })
     }
     walk(items, name).unwrap_or_else(|| panic!("no `{name}`"))
@@ -60,14 +60,14 @@ fn a_v4_export_gives_its_tree_in_order() {
     let shape: Vec<String> = (collection.items.iter())
         .map(|i| match i {
             ImportedItem::Folder { folder, items } => format!("{}({})", folder.name, items.len()),
-            ImportedItem::Request(r) => r.name.clone(),
+            ImportedItem::Request { request: r, .. } => r.name.clone(),
         })
         .collect();
     assert_eq!(shape, ["Users(2)", "Upload", "Login"]);
     let ImportedItem::Folder { folder, items } = &collection.items[0] else {
         unreachable!()
     };
-    let ImportedItem::Request(first) = &items[0] else {
+    let ImportedItem::Request { request: first, .. } = &items[0] else {
         unreachable!()
     };
     assert_eq!(first.name, "List", "by metaSortKey");

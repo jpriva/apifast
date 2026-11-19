@@ -109,13 +109,15 @@ fn imported() -> ImportedCollection {
 fn find<'a>(items: &'a [ImportedItem], name: &str) -> &'a HttpRequest {
     for item in items {
         match item {
-            ImportedItem::Request(request) if request.name == name => return request.as_ref(),
+            ImportedItem::Request { request, .. } if request.name == name => {
+                return request.as_ref();
+            }
             ImportedItem::Folder { items, .. } => {
                 if let Some(found) = try_find(items, name) {
                     return found;
                 }
             }
-            ImportedItem::Request(_) => {}
+            ImportedItem::Request { .. } => {}
         }
     }
     panic!("no request `{name}`")
@@ -123,9 +125,9 @@ fn find<'a>(items: &'a [ImportedItem], name: &str) -> &'a HttpRequest {
 
 fn try_find<'a>(items: &'a [ImportedItem], name: &str) -> Option<&'a HttpRequest> {
     items.iter().find_map(|item| match item {
-        ImportedItem::Request(request) if request.name == name => Some(request.as_ref()),
+        ImportedItem::Request { request, .. } if request.name == name => Some(request.as_ref()),
         ImportedItem::Folder { items, .. } => try_find(items, name),
-        ImportedItem::Request(_) => None,
+        ImportedItem::Request { .. } => None,
     })
 }
 

@@ -78,9 +78,9 @@ fn spec() -> Value {
 fn request<'a>(collection: &'a ImportedCollection, name: &str) -> &'a HttpRequest {
     fn find<'a>(items: &'a [ImportedItem], name: &str) -> Option<&'a HttpRequest> {
         items.iter().find_map(|item| match item {
-            ImportedItem::Request(r) if r.name == name => Some(r.as_ref()),
+            ImportedItem::Request { request: r, .. } if r.name == name => Some(r.as_ref()),
             ImportedItem::Folder { items, .. } => find(items, name),
-            ImportedItem::Request(_) => None,
+            ImportedItem::Request { .. } => None,
         })
     }
     find(&collection.items, name).unwrap_or_else(|| panic!("no `{name}`"))
@@ -117,7 +117,7 @@ fn operations_are_grouped_by_tag_and_named() {
         .iter()
         .map(|item| match item {
             ImportedItem::Folder { folder, items } => format!("{}({})", folder.name, items.len()),
-            ImportedItem::Request(r) => r.name.clone(),
+            ImportedItem::Request { request: r, .. } => r.name.clone(),
         })
         .collect();
     assert_eq!(

@@ -30,6 +30,18 @@ pub struct MemoryCollections {
     collection: Mutex<Collection>,
     folders: Mutex<BTreeMap<String, Folder>>,
     requests: Mutex<BTreeMap<RequestPath, HttpRequest>>,
+    import_record: Mutex<Option<crate::ImportRecord>>,
+}
+
+impl crate::ImportRecords for MemoryCollections {
+    fn import_record(&self) -> Result<Option<crate::ImportRecord>, RepositoryError> {
+        Ok(lock(&self.import_record).clone())
+    }
+
+    fn save_import_record(&self, record: &crate::ImportRecord) -> Result<(), RepositoryError> {
+        *lock(&self.import_record) = Some(record.clone());
+        Ok(())
+    }
 }
 
 impl MemoryCollections {
@@ -39,6 +51,7 @@ impl MemoryCollections {
             collection: Mutex::new(collection),
             folders: Mutex::new(BTreeMap::new()),
             requests: Mutex::new(BTreeMap::new()),
+            import_record: Mutex::new(None),
         }
     }
 

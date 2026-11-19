@@ -145,7 +145,13 @@ fn items(node: &Value, path: &[String], warnings: &mut Vec<ImportWarning>) -> Ve
                     items: items(item, &here, warnings),
                 }
             } else {
-                ImportedItem::Request(Box::new(request(item, name, &at, warnings)))
+                let key = Some(text(item, "id"))
+                    .filter(|id| !id.is_empty())
+                    .unwrap_or_else(|| at.clone());
+                ImportedItem::Request {
+                    request: Box::new(request(item, name, &at, warnings)),
+                    key: Some(key),
+                }
             }
         })
         .collect()

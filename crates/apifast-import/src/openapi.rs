@@ -43,6 +43,31 @@ pub enum OpenApiError {
     Swagger2,
 }
 
+/// Puts `item` in the folder of its first tag, or at the root.
+fn file_under(
+    tag: Option<&str>,
+    item: ImportedItem,
+    (folders, root): (
+        &mut Vec<(String, Vec<ImportedItem>)>,
+        &mut Vec<ImportedItem>,
+    ),
+) {
+    match tag {
+        Some(tag) => match folders.iter_mut().find(|(name, _)| name == tag) {
+            Some((_, items)) => items.push(item),
+            None => folders.push((tag.to_owned(), vec![item])),
+        },
+        None => root.push(item),
+    }
+}
+
+/// An operation is known by its id, or by its method and path.
+fn operation_key(operation: &Value, method: &str, path: &str) -> String {
+    Some(text(operation, "operationId"))
+        .filter(|id| !id.is_empty())
+        .unwrap_or_else(|| format!("{} {path}", method.to_ascii_uppercase()))
+}
+
 /// The collection the OpenAPI 3 document `spec` describes (read from JSON
 /// or YAML into a JSON value).
 ///
@@ -120,18 +145,18 @@ pub fn import_openapi(spec: &Value) -> Result<ImportedCollection, OpenApiError> 
             let Some(operation) = item.get(*method) else {
                 continue;
             };
-            let request = operation_request(&doc, (path, method, item, operation), &mut warnings);
             let tag = (operation.get("tags").and_then(Value::as_array))
                 .and_then(|tags| tags.first())
                 .and_then(Value::as_str);
-            let item = ImportedItem::Request(Box::new(request));
-            match tag {
-                Some(tag) => match folders.iter_mut().find(|(name, _)| name == tag) {
-                    Some((_, items)) => items.push(item),
-                    None => folders.push((tag.to_owned(), vec![item])),
-                },
-                None => root.push(item),
-            }
+            let item = ImportedItem::Request {
+                request: Box::new(operation_request(
+                    &doc,
+                    (path, method, item, operation),
+                    &mut warnings,
+                )),
+                key: Some(operation_key(operation, method, path)),
+            };
+            file_under(tag, item, (&mut folders, &mut root));
         }
     }
     let mut items: Vec<ImportedItem> = folders

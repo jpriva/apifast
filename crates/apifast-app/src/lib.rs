@@ -24,6 +24,7 @@ pub mod memory;
 mod oauth2;
 mod organize;
 mod ports;
+mod reimport;
 mod render;
 mod report;
 mod runner;
@@ -58,6 +59,10 @@ pub use ports::{
     NoSecrets, Pause, Prompter, Random, RequestPath, ResponseHead, ResponseId, ResponseStore,
     SecretStore, Session, SessionStore, SessionTab, SharedSecretFiles, StoredBody, TimelineEvent,
     TimelineKind, TreeItem, Workspace, WorkspaceEntry, WorkspaceRepository, sort_tree,
+};
+pub use reimport::{
+    ImportRecord, ImportRecords, RecordedRequest, ReimportAction, ReimportEntry, ReimportPlan,
+    apply_reimport, plan_reimport, request_hash,
 };
 pub use render::{
     AwsV4Credentials, RenderOutcome, RenderedBody, RenderedPart, RenderedRequest, TransportAuth,

@@ -104,9 +104,14 @@ fn v5_items(
             }
             // Only requests have a method.
             item.get("method")?;
-            Some(ImportedItem::Request(Box::new(request(
-                item, name, &at, warnings,
-            ))))
+            let key = item
+                .pointer("/meta/id")
+                .and_then(Value::as_str)
+                .map_or_else(|| at.clone(), str::to_owned);
+            Some(ImportedItem::Request {
+                request: Box::new(request(item, name, &at, warnings)),
+                key: Some(key),
+            })
         })
         .collect()
 }
@@ -182,7 +187,13 @@ fn v4_children(
                 let items = v4_children(resources, &text(resource, "_id"), &here, warnings);
                 ImportedItem::Folder { folder, items }
             } else {
-                ImportedItem::Request(Box::new(request(resource, name, &at, warnings)))
+                let key = Some(text(resource, "_id"))
+                    .filter(|id| !id.is_empty())
+                    .unwrap_or_else(|| at.clone());
+                ImportedItem::Request {
+                    request: Box::new(request(resource, name, &at, warnings)),
+                    key: Some(key),
+                }
             }
         })
         .collect()

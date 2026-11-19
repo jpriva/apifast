@@ -125,6 +125,6 @@ fn not_known(file: &Path) -> String {
 fn write(target: &Path, imported: &ImportedCollection) -> Result<(), String> {
     let repo = FsCollection::create(target, &Collection::new(imported.name.clone()))
         .map_err(|e| format!("cannot import into `{}`: {e}", target.display()))?;
-    apply_import(&repo, &repo, imported).map_err(|e| e.to_string())?;
+    apply_import((&repo, &repo), imported, &imported.name).map_err(|e| e.to_string())?;
     Ok(())
 }

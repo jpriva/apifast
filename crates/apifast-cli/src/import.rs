@@ -29,7 +29,7 @@ pub struct ImportArgs {
     dry_run: bool,
 }
 
-#[derive(Clone, Copy, clap::ValueEnum)]
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
 enum Format {
     /// A Postman collection export.
     Postman,
@@ -59,7 +59,12 @@ pub fn run(args: &ImportArgs) -> Result<()> {
     }
     let repo = FsCollection::create(&args.out, &Collection::new(imported.name.clone()))
         .with_context(|| format!("cannot create the collection in `{}`", args.out.display()))?;
-    let report = apply_import(&repo, &repo, &imported)?;
+    let source = format!(
+        "{} {}",
+        format!("{:?}", args.format).to_ascii_lowercase(),
+        args.file.display()
+    );
+    let report = apply_import((&repo, &repo), &imported, &source)?;
     println!(
         "Imported {} folders, {} requests and {} environments into {}",
         report.folders,

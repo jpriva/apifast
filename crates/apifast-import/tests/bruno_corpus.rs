@@ -11,7 +11,7 @@ use apifast_import::import_bruno;
 fn requests(items: &[ImportedItem], out: &mut Vec<String>) {
     for item in items {
         match item {
-            ImportedItem::Request(request) => {
+            ImportedItem::Request { request, .. } => {
                 assert!(!request.url.is_empty(), "`{}` has no URL", request.name);
                 out.push(request.name.clone());
             }

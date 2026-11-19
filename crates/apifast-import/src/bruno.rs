@@ -59,7 +59,7 @@ pub fn import_bruno(dir: &Path) -> Result<ImportedCollection, BrunoError> {
         Some(file) => defaults(&file, "", &mut warnings),
         None => RequestDefaults::default(),
     };
-    let items = folder_items(dir, &[], &mut warnings)?;
+    let items = folder_items(dir, (&[], ""), &mut warnings)?;
     let environments = environments(&dir.join("environments"), &mut warnings);
     Ok(ImportedCollection {
         name,
@@ -87,9 +87,11 @@ fn read_bru(path: &Path, at: &str, warnings: &mut Vec<ImportWarning>) -> Option<
 }
 
 /// The requests and folders in `dir`, by their `seq` and then their name.
+/// `rel` is `dir` relative to the collection, `/`-separated (empty for
+/// its root): with a file's name, its key across imports.
 fn folder_items(
     dir: &Path,
-    path: &[String],
+    (path, rel): (&[String], &str),
     warnings: &mut Vec<ImportWarning>,
 ) -> Result<Vec<ImportedItem>, BrunoError> {
     let listing = std::fs::read_dir(dir)
@@ -121,7 +123,12 @@ fn folder_items(
             let seq = folder_file
                 .as_ref()
                 .and_then(|f| f.get("meta", "seq")?.parse().ok());
-            let children = folder_items(&entry_path, &here, warnings)?;
+            let child = if rel.is_empty() {
+                file_name.clone()
+            } else {
+                format!("{rel}/{file_name}")
+            };
+            let children = folder_items(&entry_path, (&here, &child), warnings)?;
             items.push((
                 seq,
                 name,
@@ -161,7 +168,16 @@ fn folder_items(
         }
         let seq = file.get("meta", "seq").and_then(|s| s.parse().ok());
         let request = request(&file, name.clone(), &at, warnings);
-        items.push((seq, name, ImportedItem::Request(Box::new(request))));
+        let key = if rel.is_empty() {
+            file_name.clone()
+        } else {
+            format!("{rel}/{file_name}")
+        };
+        let item = ImportedItem::Request {
+            request: Box::new(request),
+            key: Some(key),
+        };
+        items.push((seq, name, item));
     }
     // Bruno orders by `seq`; without one, after those with one.
     items.sort_by(|a, b| (a.0.unwrap_or(u32::MAX), &a.1).cmp(&(b.0.unwrap_or(u32::MAX), &b.1)));

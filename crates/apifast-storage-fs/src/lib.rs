@@ -881,3 +881,50 @@ fn new_collection_id(random: &dyn Random) -> CollectionId {
     }
     CollectionId::new(id)
 }
+
+/// What the last import wrote, in `.apifast/import.yml`, versioned with the
+/// collection so anyone can import the source again.
+const IMPORT_FILE: &str = ".apifast/import.yml";
+
+impl apifast_app::ImportRecords for FsCollection {
+    fn import_record(&self) -> Result<Option<apifast_app::ImportRecord>, RepositoryError> {
+        Ok(self
+            .read_value(IMPORT_FILE)?
+            .map(|doc| apifast_app::ImportRecord {
+                source: yaml::text_or_empty(yaml::get(&doc, "source")),
+                requests: yaml::items(yaml::get(&doc, "requests"))
+                    .iter()
+                    .map(|r| apifast_app::RecordedRequest {
+                        key: yaml::text_or_empty(yaml::get(r, "key")),
+                        path: yaml::text_or_empty(yaml::get(r, "path")),
+                        hash: yaml::text_or_empty(yaml::get(r, "hash")),
+                    })
+                    .collect(),
+            }))
+    }
+
+    fn save_import_record(
+        &self,
+        record: &apifast_app::ImportRecord,
+    ) -> Result<(), RepositoryError> {
+        let requests: Vec<Value> = (record.requests.iter())
+            .map(|r| {
+                yaml::mapping([
+                    ("key", Some(yaml::string(r.key.clone()))),
+                    ("path", Some(yaml::string(r.path.clone()))),
+                    ("hash", Some(yaml::string(r.hash.clone()))),
+                ])
+            })
+            .collect();
+        let doc = yaml::mapping([
+            ("source", Some(yaml::string(record.source.clone()))),
+            ("requests", Some(Value::from(requests))),
+        ]);
+        let text = write::to_text(&doc).map_err(|e| invalid(IMPORT_FILE, &e))?;
+        let path = self.root.join(IMPORT_FILE);
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| io_error(IMPORT_FILE, &e))?;
+        }
+        fs::write_atomic(&path, text.as_bytes()).map_err(|e| io_error(IMPORT_FILE, &e))
+    }
+}

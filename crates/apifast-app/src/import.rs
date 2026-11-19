@@ -36,8 +36,15 @@ pub enum ImportedItem {
         /// Its folders and requests.
         items: Vec<ImportedItem>,
     },
-    /// A request.
-    Request(Box<HttpRequest>),
+    /// A request, and what identifies it in its source across imports:
+    /// an id, or its operation, or its place. `None` when the source has
+    /// nothing stable, as a cURL command.
+    Request {
+        /// The request.
+        request: Box<HttpRequest>,
+        /// Its key in the source.
+        key: Option<String>,
+    },
 }
 
 /// Something an importer could not keep as it was.
@@ -95,7 +102,7 @@ pub struct PlannedEntry {
 /// What would be written for `imported`.
 pub fn plan_import(imported: &ImportedCollection) -> ImportPlan {
     let mut entries = Vec::new();
-    walk(&imported.items, "", &mut |entry, _| entries.push(entry));
+    walk_planned(&imported.items, "", &mut |entry, _| entries.push(entry));
     ImportPlan {
         collection: imported.name.clone(),
         entries,
@@ -121,16 +128,21 @@ pub struct ImportReport {
 
 /// Writes `imported` into the collection of `collections`, which should be
 /// new: its name and defaults, then each folder and request where
-/// [`plan_import`] put them, then the environments.
+/// [`plan_import`] put them, then the environments. Records what it wrote
+/// as coming from `source`, to import it again later
+/// ([`crate::plan_reimport`]).
 ///
 /// # Errors
 ///
 /// On the first file that cannot be written; what was written before
 /// stays.
 pub fn apply_import(
-    collections: &impl CollectionRepository,
-    environments: &impl EnvironmentRepository,
+    (collections, environments): (
+        &(impl CollectionRepository + crate::ImportRecords),
+        &impl EnvironmentRepository,
+    ),
     imported: &ImportedCollection,
+    source: &str,
 ) -> Result<ImportReport, AppError> {
     let mut collection = collections.collection()?;
     collection.name.clone_from(&imported.name);
@@ -143,7 +155,11 @@ pub fn apply_import(
         environments: 0,
     };
     let mut failure = None;
-    walk(&imported.items, "", &mut |entry, item| {
+    let mut record = crate::ImportRecord {
+        source: source.to_owned(),
+        requests: Vec::new(),
+    };
+    walk_planned(&imported.items, "", &mut |entry, item| {
         if failure.is_some() {
             return;
         }
@@ -152,8 +168,13 @@ pub fn apply_import(
                 report.folders += 1;
                 collections.save_folder(&entry.path, folder)
             }
-            ImportedItem::Request(request) => {
+            ImportedItem::Request { request, key } => {
                 report.requests += 1;
+                record.requests.push(crate::RecordedRequest {
+                    key: key.clone().unwrap_or_else(|| entry.path.clone()),
+                    path: entry.path.clone(),
+                    hash: crate::reimport::request_hash(request),
+                });
                 collections.save_request(&RequestPath::new(entry.path.clone()), request)
             }
         };
@@ -166,13 +187,14 @@ pub fn apply_import(
         environments.save_environment(environment)?;
         report.environments += 1;
     }
+    collections.save_import_record(&record)?;
     Ok(report)
 }
 
 /// Calls `visit` on each folder (before what it holds) and request, with
 /// its path: the slug of its name, made unique among its siblings, and its
 /// position (`seq`) as the order in the source.
-fn walk<'a>(
+pub(crate) fn walk_planned<'a>(
     items: &'a [ImportedItem],
     parent: &str,
     visit: &mut dyn FnMut(PlannedEntry, &ImportedItem),
@@ -182,7 +204,7 @@ fn walk<'a>(
         let seq = u32::try_from(index + 1).unwrap_or(u32::MAX);
         let (name, base, extension) = match item {
             ImportedItem::Folder { folder, .. } => (&folder.name, slug(&folder.name, "folder"), ""),
-            ImportedItem::Request(request) => {
+            ImportedItem::Request { request, .. } => {
                 (&request.name, slug(&request.name, "request"), ".yml")
             }
         };
@@ -212,13 +234,16 @@ fn walk<'a>(
                     items: Vec::new(),
                 };
                 visit(entry, &positioned);
-                walk(items, &path, visit);
+                walk_planned(items, &path, visit);
             }
-            ImportedItem::Request(request) => {
-                let positioned = ImportedItem::Request(Box::new(HttpRequest {
-                    seq: Some(seq),
-                    ..request.as_ref().clone()
-                }));
+            ImportedItem::Request { request, key } => {
+                let positioned = ImportedItem::Request {
+                    request: Box::new(HttpRequest {
+                        seq: Some(seq),
+                        ..request.as_ref().clone()
+                    }),
+                    key: key.clone(),
+                };
                 visit(entry, &positioned);
             }
         }
@@ -233,7 +258,10 @@ mod tests {
     use crate::memory::{MemoryCollections, MemoryEnvironments};
 
     fn request(name: &str) -> ImportedItem {
-        ImportedItem::Request(Box::new(HttpRequest::new(name, Method::Get, "/")))
+        ImportedItem::Request {
+            request: Box::new(HttpRequest::new(name, Method::Get, "/")),
+            key: Some(name.to_owned()),
+        }
     }
 
     fn sample() -> ImportedCollection {
@@ -283,7 +311,7 @@ mod tests {
     fn applying_writes_what_the_plan_showed_with_positions() {
         let collections = MemoryCollections::new(Collection::new("new"));
         let environments = MemoryEnvironments::default();
-        let report = apply_import(&collections, &environments, &sample()).unwrap();
+        let report = apply_import((&collections, &environments), &sample(), "test").unwrap();
         assert_eq!(
             report,
             ImportReport {
