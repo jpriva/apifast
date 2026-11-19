@@ -21,9 +21,9 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use apifast_app::{
     CancelToken, CollectionRepository, NoSecrets, ResponseStore, SecretStore, SendOptions,
-    SendOutcome, SendPorts, connect_request, send_request,
+    SendOutcome, SendPorts, call_grpc, connect_request, send_request,
 };
-use apifast_domain::Variable;
+use apifast_domain::{Variable, WsMessageKind};
 use apifast_history::FsResponseStore;
 use apifast_http::ReqwestTransport;
 use apifast_storage_fs::FsCollection;
@@ -101,7 +101,8 @@ struct SendArgs {
     /// Also print the status line and headers to stdout, before the body.
     #[arg(short, long)]
     include: bool,
-    /// Exit with code 4 when the status is 400 or more.
+    /// Exit with code 4 when the status is 400 or more, or a gRPC call ends
+    /// with a status other than OK.
     #[arg(long)]
     fail: bool,
     /// Print no summary to stderr.
@@ -295,11 +296,7 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
         draft: None,
     };
 
-    // A WebSocket request connects and sends its messages instead.
-    let messages = match repo.request(&located.request)?.request.body {
-        apifast_domain::Body::WebSocket(messages) => Some(messages),
-        _ => None,
-    };
+    let (messages, grpc) = exchanged(repo.request(&located.request)?.request.body);
     let tokens = apifast_app::memory::MemoryTokens::default();
     let authorizer = terminal_authorizer();
     let (runtime, cancel) = runtime()?;
@@ -327,12 +324,27 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
         };
     }
     if let Some(messages) = messages {
-        let sockets = apifast_ws::TungsteniteTransport::new(transport.clone());
+        let ended = socket::Ended::default();
         let printing = socket::Printing {
             store: &responses,
             quiet: args.quiet,
+            grpc,
+            ended: ended.clone(),
         };
-        let mut outbox = socket::Messages(messages.into());
+        let mut outbox = socket::Messages(messages.into(), grpc);
+        if grpc {
+            let calls = apifast_grpc::TonicTransport::new(transport.clone());
+            let outcome = runtime.block_on(call_grpc(
+                ports!(&printing),
+                (&calls, &mut outbox),
+                &located.request,
+                &options,
+                &cancel,
+            ))?;
+            let ended = ended.lock().map(|e| e.clone()).unwrap_or_default();
+            return Ok(call_ended(&outcome, ended, args));
+        }
+        let sockets = apifast_ws::TungsteniteTransport::new(transport.clone());
         let outcome = runtime.block_on(connect_request(
             ports!(&printing),
             (&sockets, &mut outbox),
@@ -442,6 +454,40 @@ fn report_checks(outcome: &SendOutcome, quiet: bool) {
             None => {}
             Some(message) => eprintln!("FAIL  {text}: {message}"),
         }
+    }
+}
+
+/// The messages of a request that exchanges them, and whether it is a gRPC
+/// call: a WebSocket request connects and sends them instead of being
+/// sent, and a gRPC one is called with them.
+fn exchanged(body: apifast_domain::Body) -> (Option<Vec<apifast_domain::WsMessage>>, bool) {
+    match body {
+        apifast_domain::Body::WebSocket(messages) => (Some(messages), false),
+        apifast_domain::Body::Grpc(call) => {
+            let messages = (call.messages.into_iter())
+                .map(|m| apifast_domain::WsMessage::new(m.name, WsMessageKind::Json, m.data))
+                .collect();
+            (Some(messages), true)
+        }
+        _ => (None, false),
+    }
+}
+
+/// Tells how a gRPC call `ended` (its status, then its time) and gives its
+/// exit code: with `--fail`, 4 for a status other than `OK`.
+fn call_ended(
+    outcome: &SendOutcome,
+    ended: Option<(Option<u16>, String)>,
+    args: &SendArgs,
+) -> ExitCode {
+    let (code, status) = ended.unwrap_or((None, "ended without a status".into()));
+    if !args.quiet || code != Some(0) {
+        eprintln!("{status} · {} ms", outcome.head.elapsed_ms);
+    }
+    if args.fail && code != Some(0) {
+        ExitCode::from(EXIT_HTTP_ERROR)
+    } else {
+        ExitCode::SUCCESS
     }
 }
 

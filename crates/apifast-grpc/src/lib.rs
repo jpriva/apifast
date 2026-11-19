@@ -6,7 +6,9 @@
 //!
 //! Must run inside a tokio runtime with the time driver enabled.
 
+mod call;
 mod channel;
+mod codec;
 mod protos;
 mod reflection;
 mod services;
@@ -14,7 +16,11 @@ mod target;
 
 use std::time::Duration;
 
-use apifast_app::{CancelToken, GrpcTransport, RenderedRequest, TransportAuth, TransportError};
+use apifast_app::{
+    CancelToken, GrpcTransport, RenderedRequest, ResponseHead, TransportAuth, TransportError,
+    WsHandler,
+};
+use apifast_domain::GrpcCall;
 use apifast_domain::GrpcService;
 use apifast_http::ReqwestTransport;
 use tonic::metadata::{MetadataKey, MetadataMap, MetadataValue};
@@ -59,6 +65,16 @@ impl GrpcTransport for TonicTransport {
             return Ok(services::services(&pool));
         }
         within(request, cancel, self.reflect(request)).await
+    }
+
+    async fn call<H: WsHandler>(
+        &self,
+        request: &RenderedRequest,
+        call: &GrpcCall,
+        handler: &mut H,
+        cancel: &CancelToken,
+    ) -> Result<ResponseHead, TransportError> {
+        call::call(&self.http, request, call, handler, cancel).await
     }
 }
 

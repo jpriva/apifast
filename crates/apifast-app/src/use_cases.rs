@@ -398,7 +398,7 @@ where
                 "is a WebSocket request: it connects, it is not sent"
             }
             (_, RequestKind::WebSocket) => "is not a WebSocket request",
-            (RequestKind::Grpc, _) => "is a gRPC request: gRPC calls are not supported yet",
+            (RequestKind::Grpc, _) => "is a gRPC request: it is called, not sent",
             _ => "is not a gRPC request",
         };
         return Err(AppError::Validation(format!("`{path}` {why}")));

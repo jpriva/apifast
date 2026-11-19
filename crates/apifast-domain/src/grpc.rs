@@ -27,6 +27,45 @@ pub struct GrpcMethod {
     pub output: String,
 }
 
+/// The names of gRPC's status codes, by code.
+const STATUS_NAMES: [&str; 17] = [
+    "OK",
+    "CANCELLED",
+    "UNKNOWN",
+    "INVALID_ARGUMENT",
+    "DEADLINE_EXCEEDED",
+    "NOT_FOUND",
+    "ALREADY_EXISTS",
+    "PERMISSION_DENIED",
+    "RESOURCE_EXHAUSTED",
+    "FAILED_PRECONDITION",
+    "ABORTED",
+    "OUT_OF_RANGE",
+    "UNIMPLEMENTED",
+    "INTERNAL",
+    "UNAVAILABLE",
+    "DATA_LOSS",
+    "UNAUTHENTICATED",
+];
+
+/// The name of the gRPC status `code` (`OK`, `NOT_FOUND`…), if it is one.
+pub fn grpc_status_name(code: u16) -> Option<&'static str> {
+    STATUS_NAMES.get(usize::from(code)).copied()
+}
+
+/// Whether a response's headers are those of a gRPC call: its stored body
+/// is then the call's log, as a WebSocket connection's
+/// ([`crate::WsLogEntry`]).
+pub fn is_grpc_response(headers: &[(String, String)]) -> bool {
+    headers.iter().any(|(name, value)| {
+        name.eq_ignore_ascii_case("content-type")
+            && value
+                .trim()
+                .to_ascii_lowercase()
+                .starts_with("application/grpc")
+    })
+}
+
 /// The method at `path` (`/package.Service/Method`) among `services`.
 pub fn find_grpc_method<'a>(services: &'a [GrpcService], path: &str) -> Option<&'a GrpcMethod> {
     let path = path.trim();
@@ -38,6 +77,16 @@ pub fn find_grpc_method<'a>(services: &'a [GrpcService], path: &str) -> Option<&
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn statuses_have_names_and_calls_are_told_by_their_content_type() {
+        assert_eq!(grpc_status_name(0), Some("OK"));
+        assert_eq!(grpc_status_name(16), Some("UNAUTHENTICATED"));
+        assert_eq!(grpc_status_name(17), None);
+        let headers = |value: &str| vec![("Content-Type".to_owned(), value.to_owned())];
+        assert!(is_grpc_response(&headers("application/grpc+proto")));
+        assert!(!is_grpc_response(&headers("application/json")));
+    }
 
     #[test]
     fn a_method_is_found_by_its_path() {

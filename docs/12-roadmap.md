@@ -386,6 +386,8 @@ Cada protocolo tiene su editor y su visor, y sus archivos pasan el round-trip.
 - [x] `apifast-grpc`: reflection (v1 y v1alpha) y carga de `.proto` ([docs/07](07-motor-de-red.md#grpc-f8)): la conexión la abre `apifast-http` (TLS, certificados y DNS de la colección), la metadata son los headers heredados, y `apifast describe` lista los métodos. Probado contra un servidor local con reflection v1 y v1alpha (con un interceptor que exige el token), con un `.proto` con imports y de extremo a extremo con la CLI.
 - [x] Decidir cómo compilar `.proto` sin un `protoc` externo: protox ([ADR 0013](adr/0013-protox-para-proto.md)).
 - [ ] Unario, streaming de servidor, de cliente y bidireccional.
+  - [x] Transporte, caso de uso y CLI ([docs/07](07-motor-de-red.md#grpc-f8), [docs/08](08-tests-y-runner.md#apifast-send)): los cuatro modos como un stream HTTP/2 en cada sentido, mensajes JSON convertidos con prost-reflect, el log de la llamada como el de WebSocket y el estado al final. `apifast send` la llama e imprime cada respuesta en una línea. Probado contra un servidor local con los cuatro modos (con `.proto` y por reflection), un estado de error, la cancelación y de extremo a extremo con la CLI.
+  - [ ] En la GUI: llamar, terminar el stream del cliente, cancelar y ver los mensajes en vivo; la llamada en el historial.
 - [ ] Editor de mensajes JSON con esquema para autocompletar.
 - [ ] Metadata, TLS y autenticación reutilizando el motor.
 - [ ] Inicialización diferida y feature de Cargo.

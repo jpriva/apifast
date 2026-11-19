@@ -47,7 +47,7 @@ pub use error::{AppError, RepositoryError, StoreError, TransportError};
 pub use examples::{EXAMPLE_LIMIT, ExampleError, example_from, example_name};
 pub use export::collection_contents;
 pub use graphql::{SchemaCache, cached_schema, fetch_schema, schema_key};
-pub use grpc::{GrpcTransport, describe_grpc};
+pub use grpc::{GrpcTransport, call_grpc, describe_grpc};
 pub use history::{
     HIDDEN, HistoryEntry, HistoryLimits, HistoryOutcome, HistoryStore, hide_query, within_limits,
 };

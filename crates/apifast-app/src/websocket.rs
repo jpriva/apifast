@@ -6,7 +6,10 @@
 
 use std::future::Future;
 
-use apifast_domain::{ResolvedVariables, Secret, WsData, WsEvent, WsLogEntry, WsMessage, mask};
+use apifast_domain::{
+    HttpRequest, RequestKind, ResolvedVariables, Secret, WsData, WsEvent, WsLogEntry, WsMessage,
+    mask,
+};
 use apifast_template::{Mode, render};
 
 use crate::use_cases::{ChainContext, Prepared, host_for, prepare};
@@ -91,23 +94,75 @@ where
     W: WsTransport + Sync,
     O: WsOutbox,
 {
+    exchange(ports, (&Socket(sockets), outbox), path, options, cancel).await
+}
+
+/// What runs an exchange of messages once the request is rendered: a
+/// WebSocket connection, or a gRPC call.
+pub(crate) trait Exchange {
+    /// The kind of request it runs.
+    const KIND: RequestKind;
+
+    /// Runs the exchange of `request` (loaded as `loaded`), telling
+    /// `handler` what happens; returns the response's head.
+    fn run<H: WsHandler>(
+        &self,
+        request: &RenderedRequest,
+        loaded: &HttpRequest,
+        handler: &mut H,
+        cancel: &CancelToken,
+    ) -> impl Future<Output = Result<ResponseHead, TransportError>> + Send;
+}
+
+/// A WebSocket connection, as an [`Exchange`].
+struct Socket<'w, W>(&'w W);
+
+impl<W: WsTransport + Sync> Exchange for Socket<'_, W> {
+    const KIND: RequestKind = RequestKind::WebSocket;
+
+    fn run<H: WsHandler>(
+        &self,
+        request: &RenderedRequest,
+        _: &HttpRequest,
+        handler: &mut H,
+        cancel: &CancelToken,
+    ) -> impl Future<Output = Result<ResponseHead, TransportError>> + Send {
+        self.0.connect(request, handler, cancel)
+    }
+}
+
+/// Prepares the request at `path` as `X::KIND`, and runs it with `runner`:
+/// `outbox` gives the messages to send, which are rendered as they go, and
+/// what happens is written to a log, the outcome's body.
+pub(crate) async fn exchange<C, E, T, S, X, O>(
+    ports: SendPorts<'_, C, E, T, S>,
+    (runner, outbox): (&X, &mut O),
+    path: &RequestPath,
+    options: &SendOptions,
+    cancel: &CancelToken,
+) -> Result<SendOutcome, AppError>
+where
+    C: CollectionRepository + Sync,
+    E: EnvironmentRepository + Sync,
+    T: HttpTransport + Sync,
+    S: ResponseStore + Sync,
+    S::Writer: Send,
+    X: Exchange + Sync,
+    O: WsOutbox,
+{
     let mut context = ChainContext::default();
     let read = |id: &ResponseId, len: usize| ports.responses.read(id, 0, len);
     let mut host = host_for(&ports, &read)?;
     let Prepared {
+        loaded,
         variables,
         rendered,
-        ..
     } = prepare(
         &ports,
         path,
         options,
         cancel,
-        (
-            &mut context,
-            &mut host,
-            apifast_domain::RequestKind::WebSocket,
-        ),
+        (&mut context, &mut host, X::KIND),
     )
     .await?;
     let mut handler = Connection {
@@ -126,8 +181,8 @@ where
         failed: None,
         report: ports.report,
     };
-    let head = sockets
-        .connect(&rendered.request, &mut handler, cancel)
+    let head = runner
+        .run(&rendered.request, &loaded.request, &mut handler, cancel)
         .await?;
     if let Some(error) = handler.failed {
         return Err(error.into());

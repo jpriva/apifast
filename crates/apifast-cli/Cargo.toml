@@ -32,3 +32,12 @@ workspace = true
 [dev-dependencies]
 tempfile.workspace = true
 tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }
+# A local gRPC server for the `send` tests.
+tonic = { version = "0.14.9", default-features = false, features = ["server", "router"] }
+tonic-prost = "0.14.9"
+prost = { version = "0.14.6", default-features = false, features = ["std", "derive"] }
+http = "1.5.0"
+tower-service = "0.3.3"
+futures-util = { version = "0.3.34", default-features = false }
+tokio = { version = "1.54.1", features = ["rt", "net", "macros"] }
+tokio-stream = { version = "0.1.17", default-features = false, features = ["net"] }

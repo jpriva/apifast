@@ -245,6 +245,15 @@ apifast export postman --out <archivo> [--env <nombre>]...
 apifast vault <subcomando>
 ```
 
+Una request gRPC se llama ([docs/07](07-motor-de-red.md#grpc-f8)) con sus mensajes en orden: solo el primero si el cliente del método no transmite, y si transmite, todos y luego cierra su lado. Cada respuesta va a stdout en una línea de JSON, a medida que llega, así que se puede encadenar con `jq`. En stderr van los enviados (`> …`), los que no se pudieron enviar y, al final, el estado con el tiempo; con `--quiet`, solo los avisos y un estado que no sea `OK`. Con `--fail`, un estado distinto de `OK` termina con código 4.
+
+```text
+$ apifast send hello.yml -e local
+> {"greeting": "Ana"}
+{"reply":"hello Ana"}
+OK · 14 ms
+```
+
 ### `apifast describe`
 
 Lista lo que puede llamar una request gRPC: los métodos de su `.proto` o, sin uno, los de su servidor por reflection ([docs/07](07-motor-de-red.md#grpc-f8)). Una línea por método en stdout: su ruta, cómo transmite y los mensajes que recibe y devuelve. Acepta las mismas opciones de entorno, colección, variables y TLS que `send`.

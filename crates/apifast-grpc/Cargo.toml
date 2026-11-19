@@ -17,14 +17,16 @@ tonic = { version = "0.14.9", default-features = false, features = ["channel", "
 tonic-reflection = { version = "0.14.9", default-features = false }
 prost = { version = "0.14.6", default-features = false, features = ["std"] }
 prost-types = { version = "0.14.6", default-features = false, features = ["std"] }
-prost-reflect = { version = "0.16.5", default-features = false }
+prost-reflect = { version = "0.16.5", default-features = false, features = ["serde"] }
+# Messages are written and shown as JSON.
+serde_json.workspace = true
 # Compiles `.proto` files without an external `protoc`.
 protox = { version = "0.10.0", default-features = false }
 hyper-util = { version = "0.1.21", default-features = false, features = ["tokio"] }
 tower-service = "0.3.3"
 http = "1.5.0"
 futures-util = { version = "0.3.34", default-features = false }
-tokio = { version = "1.54.1", features = ["time", "macros"] }
+tokio = { version = "1.54.1", features = ["time", "macros", "sync"] }
 
 [lints]
 workspace = true
@@ -36,3 +38,5 @@ tonic-reflection = { version = "0.14.9", default-features = false, features = ["
 tokio = { version = "1.54.1", features = ["rt", "macros", "net", "time"] }
 tokio-stream = { version = "0.1.17", default-features = false, features = ["net"] }
 tempfile.workspace = true
+prost = { version = "0.14.6", default-features = false, features = ["std", "derive"] }
+tonic-prost = "0.14.9"

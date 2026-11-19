@@ -413,7 +413,9 @@ impl crate::WsTransport for MemorySockets {
 }
 
 /// A gRPC server offering `services`, which keeps what it was asked:
-/// each request and the `.proto` given with it.
+/// each request and the `.proto` given with it. A call echoes each message
+/// it gets (only the first, unless the method's client streams) and ends
+/// with `OK`.
 #[derive(Debug, Default)]
 pub struct MemoryGrpc {
     /// What it offers.
@@ -450,6 +452,46 @@ impl crate::GrpcTransport for MemoryGrpc {
             Ok(self.services.clone())
         };
         std::future::ready(result)
+    }
+
+    async fn call<H: crate::WsHandler>(
+        &self,
+        request: &RenderedRequest,
+        call: &apifast_domain::GrpcCall,
+        handler: &mut H,
+        cancel: &CancelToken,
+    ) -> Result<ResponseHead, TransportError> {
+        use apifast_domain::{WsEvent, WsSide};
+        if cancel.is_cancelled() {
+            return Err(TransportError::Cancelled);
+        }
+        lock(&self.asked).push((request.clone(), call.proto_path.clone()));
+        let head = ResponseHead {
+            status: 200,
+            version: "HTTP/2.0".into(),
+            url: request.url().to_owned(),
+            redirects: 0,
+            headers: vec![("content-type".into(), "application/grpc".into())],
+            elapsed_ms: 0,
+            timeline: Vec::new(),
+        };
+        handler.opened(&head);
+        let streams = call
+            .method_type
+            .is_some_and(apifast_domain::GrpcMethodType::client_streams);
+        while let Some(data) = handler.outgoing().await {
+            handler.event(WsEvent::Sent(data.clone()));
+            handler.event(WsEvent::Received(data));
+            if !streams {
+                break;
+            }
+        }
+        handler.event(WsEvent::Closed {
+            by: WsSide::Server,
+            code: Some(0),
+            reason: "OK".into(),
+        });
+        Ok(head)
     }
 }
 

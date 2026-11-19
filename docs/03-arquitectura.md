@@ -120,7 +120,7 @@ Definidos como traits en `apifast-app`:
 | `SecretVault` | Cifrar, descifrar y almacenar secretos | `apifast-vault` |
 | `KeyStore` | Guardar y recuperar la clave maestra | `apifast-vault` (keyring o archivo `0600`) |
 | `HttpTransport` | Ejecutar una `ResolvedRequest` y emitir eventos | `apifast-http` |
-| `GrpcTransport` | Describir los servicios de una request gRPC: por reflection, desde su `RenderedRequest`, o desde su archivo `.proto` | `apifast-grpc` |
+| `GrpcTransport` | Describir los servicios de una request gRPC (por reflection, desde su `RenderedRequest`, o desde su archivo `.proto`) y llamar a un método, con un `WsHandler` que da los mensajes y recibe lo que pasa | `apifast-grpc` |
 | `WsTransport` | Abrir una conexión WebSocket desde una `RenderedRequest`, enviar lo que da un `WsHandler` y avisarle de lo que pasa | `apifast-ws` |
 | `ResponseStore` | Escribir y leer cuerpos de respuesta por ventanas | `apifast-history` |
 | `HistoryStore` | Registrar y consultar ejecuciones | `apifast-history` |

@@ -5,13 +5,14 @@
 
 use std::future::Future;
 
-use apifast_domain::{Body, GrpcService, RequestKind};
+use apifast_domain::{Body, GrpcCall, GrpcService, HttpRequest, RequestKind};
 
 use crate::use_cases::{ChainContext, Prepared, host_for, prepare};
+use crate::websocket::{Exchange, exchange};
 use crate::{
     AppError, CancelToken, CollectionRepository, EnvironmentRepository, HttpTransport,
-    RenderedRequest, RequestPath, ResponseId, ResponseStore, SendOptions, SendPorts,
-    TransportError,
+    RenderedRequest, RequestPath, ResponseHead, ResponseId, ResponseStore, SendOptions,
+    SendOutcome, SendPorts, TransportError, WsHandler, WsOutbox,
 };
 
 /// Talks to gRPC servers.
@@ -31,6 +32,90 @@ pub trait GrpcTransport {
         proto: Option<&str>,
         cancel: &CancelToken,
     ) -> impl Future<Output = Result<Vec<GrpcService>, TransportError>> + Send;
+
+    /// Calls `call.method` on the server of `request`, its messages
+    /// described by `call.proto_path` or else by reflection; the request's
+    /// headers go as metadata.
+    ///
+    /// `handler` gives the messages to send, as JSON: only the first for a
+    /// method whose client does not stream; else all until it gives
+    /// `None`, which ends the client's stream. It is told each message
+    /// sent and received (as JSON), one that could not be encoded, and how
+    /// the call ended: closed by the server with the gRPC status code and
+    /// its name and message (`OK`, `NOT_FOUND: …`), or by the client when
+    /// `cancel` asks to. A call that ends in an error status is no error:
+    /// its log says so.
+    ///
+    /// Returns the response's head: HTTP status 200, its headers the
+    /// response's metadata and trailers (with `content-type:
+    /// application/grpc`), its time that of the whole call.
+    ///
+    /// # Errors
+    ///
+    /// If the server cannot be reached or described, the method is not
+    /// one of its methods, or there is no message to send to a method
+    /// whose client does not stream.
+    fn call<H: WsHandler>(
+        &self,
+        request: &RenderedRequest,
+        call: &GrpcCall,
+        handler: &mut H,
+        cancel: &CancelToken,
+    ) -> impl Future<Output = Result<ResponseHead, TransportError>> + Send;
+}
+
+/// Calls the gRPC request at `path` (or the draft) and keeps the call until
+/// it ends: `outbox` gives the messages to send, which are rendered with
+/// the request's variables as they go. Everything that happens is written
+/// to a log in `ports.responses`, as a WebSocket connection's, which the
+/// outcome's `body` is.
+///
+/// A message that does not render is not sent; the log says why. Secret
+/// values are masked in the log.
+///
+/// # Errors
+///
+/// As [`send_request`](crate::send_request) up to the transport, and if the
+/// request is not a gRPC one or the call cannot start.
+pub async fn call_grpc<C, E, T, S, G, O>(
+    ports: SendPorts<'_, C, E, T, S>,
+    (grpc, outbox): (&G, &mut O),
+    path: &RequestPath,
+    options: &SendOptions,
+    cancel: &CancelToken,
+) -> Result<SendOutcome, AppError>
+where
+    C: CollectionRepository + Sync,
+    E: EnvironmentRepository + Sync,
+    T: HttpTransport + Sync,
+    S: ResponseStore + Sync,
+    S::Writer: Send,
+    G: GrpcTransport + Sync,
+    O: WsOutbox,
+{
+    exchange(ports, (&Call(grpc), outbox), path, options, cancel).await
+}
+
+/// A gRPC call, as an [`Exchange`].
+struct Call<'g, G>(&'g G);
+
+impl<G: GrpcTransport + Sync> Exchange for Call<'_, G> {
+    const KIND: RequestKind = RequestKind::Grpc;
+
+    async fn run<H: WsHandler>(
+        &self,
+        request: &RenderedRequest,
+        loaded: &HttpRequest,
+        handler: &mut H,
+        cancel: &CancelToken,
+    ) -> Result<ResponseHead, TransportError> {
+        let Body::Grpc(call) = &loaded.body else {
+            return Err(TransportError::InvalidRequest(
+                "the request is not a gRPC call".into(),
+            ));
+        };
+        self.0.call(request, call, handler, cancel).await
+    }
 }
 
 /// The services the gRPC request at `path` (or the draft) can call, as its
