@@ -61,10 +61,11 @@ todo = "deny"
 print_stdout = "deny"
 print_stderr = "deny"
 
-# Debug builds: full debug info for our crates, none for dependencies, and
-# kept out of the executables (`unpacked`), so linking the many test
-# binaries is lighter and faster. Backtraces still show our lines.
+# Debug builds: only line tables for our crates, none for dependencies, and
+# kept out of the executables (`unpacked`), so the many test binaries stay
+# small and link fast. Backtraces still show our files and lines.
 [profile.dev]
+debug = "line-tables-only"
 split-debuginfo = "unpacked"
 
 [profile.dev.package."*"]
