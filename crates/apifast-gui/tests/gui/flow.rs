@@ -590,3 +590,38 @@ fn the_tree_copies_a_request_as_curl() {
         std::thread::sleep(Duration::from_millis(5));
     }
 }
+
+#[test]
+fn a_postman_export_is_imported_from_the_sidebar() {
+    let data = tempfile::tempdir().unwrap();
+    let source = tempfile::tempdir().unwrap();
+    let export = source.path().join("pets.json");
+    std::fs::write(
+        &export,
+        r#"{"info": {"name": "Pet Store", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+            "item": [{"name": "List pets", "request": {"method": "GET", "url": "https://pets.test/pets"}}]}"#,
+    )
+    .unwrap();
+    let app = App::new(Core::start_with(
+        data.path().to_path_buf(),
+        SystemKeyring::off(),
+        || {},
+    ));
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(1280.0, 900.0))
+        .build_ui_state(|ui, app: &mut App| app.show(ui), app);
+    harness.run_steps(2);
+    harness.get_by_label(EN.import_collection_action).click();
+    wait_for(&mut harness, EN.import_hint);
+    harness
+        .get_by_role_and_label(Role::TextInput, EN.import_collection_file)
+        .focus();
+    harness.step();
+    type_into_focus(&mut harness, &export.display().to_string());
+    harness.get_by_label(EN.import_review).click();
+    wait_for(&mut harness, EN.import);
+    harness.run_steps(2);
+    harness.get_by_label(EN.import).click();
+    wait_for(&mut harness, "Pet Store");
+    wait_for_row(&mut harness, "List pets");
+}

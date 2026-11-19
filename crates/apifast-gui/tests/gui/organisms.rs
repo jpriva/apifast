@@ -299,3 +299,92 @@ fn pasting_a_curl_command_into_the_url_is_an_event_and_not_text() {
     assert_eq!(events[0], UrlBarEvent::PastedCurl(command.into()));
     assert_eq!(events[1..], [UrlBarEvent::Edited]);
 }
+
+#[test]
+fn the_import_window_reviews_then_imports_only_what_was_reviewed() {
+    use apifast_app::{ImportPlan, ImportWarning, PlannedEntry};
+    use apifast_gui::core::ImportView;
+    use apifast_gui::organisms::{ImportEvent, ImportWindow};
+    use egui::accesskit::Role;
+    use std::sync::Arc;
+
+    struct State {
+        window: ImportWindow,
+        view: Option<ImportView>,
+        events: Vec<ImportEvent>,
+    }
+    let mut window = ImportWindow::default();
+    window.open_in(std::path::Path::new("/work"));
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(900.0, 800.0))
+        .build_ui_state(
+            |ui, state: &mut State| {
+                let ctx = ui.ctx().clone();
+                if let Some(event) = state.window.show(&ctx, state.view.as_ref(), &EN) {
+                    state.events.push(event);
+                }
+            },
+            State {
+                window,
+                view: None,
+                events: Vec::new(),
+            },
+        );
+    harness.run();
+    assert!(harness.query_by_label(EN.import_hint).is_some());
+    harness
+        .get_by_role_and_label(Role::TextInput, EN.import_collection_file)
+        .focus();
+    harness.run();
+    harness
+        .get_by_role_and_label(Role::TextInput, EN.import_collection_file)
+        .type_text("/tmp/shop.json");
+    harness.run();
+    harness.get_by_label(EN.import_review).click();
+    harness.run();
+    assert_eq!(
+        harness.state().events,
+        [ImportEvent::Review {
+            collection: "/tmp/shop.json".into(),
+            environments: Vec::new(),
+        }]
+    );
+
+    harness.state_mut().view = Some(ImportView {
+        files: vec!["/tmp/shop.json".into()],
+        plan: Ok(Arc::new(ImportPlan {
+            collection: "My Shop".into(),
+            entries: vec![PlannedEntry {
+                path: "users".into(),
+                name: "Users".into(),
+                is_folder: true,
+            }],
+            environments: Vec::new(),
+            warnings: vec![ImportWarning::new(
+                "Users",
+                "a `test` script is not imported",
+            )],
+        })),
+    });
+    harness.run();
+    harness.run();
+    assert!(
+        harness
+            .query_by_label_contains("My Shop: 1 folders")
+            .is_some()
+    );
+    assert!(harness.query_by_label_contains("a `test` script").is_some());
+    assert_eq!(
+        harness
+            .get_by_role_and_label(Role::TextInput, EN.import_folder)
+            .value()
+            .as_deref(),
+        Some("my-shop")
+    );
+    harness.get_by_label(EN.import).click();
+    harness.run();
+    assert_eq!(
+        harness.state().events.last(),
+        Some(&ImportEvent::Import("/work/my-shop".into()))
+    );
+}

@@ -186,6 +186,17 @@ Los ajustes de la aplicación tienen una sección Cookies con "Send cookies" y "
 - **Resultados:** una fila por request terminada: PASS, FAIL o ERROR, nombre (con la iteración si hay varias), ruta, estado y duración; debajo, las aserciones que fallan o el error. El nombre es un enlace que abre la request con esa respuesta y sus resultados en la pestaña Tests. Al terminar: los totales, las omitidas con su motivo y "Save report:" en HTML, JUnit o JSON, que pide dónde guardarlo.
 - Cada request del runner queda en el historial, y lo capturado sigue disponible para los envíos siguientes. Las capturas de ámbito `environment` del runner no se ofrecen para guardar en el entorno.
 
+## Importar
+
+"Import…", junto a "New collection…" y "Open collection…" en la barra lateral, o la acción "Import…" de la paleta, abre la ventana de importación:
+
+1. Se elige la exportación de Postman (colección v2.0 o v2.1) y, si se quiere, sus entornos, con el diálogo del sistema o escribiendo la ruta.
+2. "Review" lee los archivos y muestra el plan: la colección con cuántas carpetas, requests y entornos crea, la ruta de cada una, y lo que no se conservó ("Not kept"), con dónde estaba. Un archivo que no es de Postman dice por qué.
+3. La carpeta de la colección nueva se propone a partir de su nombre, dentro del workspace activo; las dos se pueden cambiar.
+4. "Import" escribe exactamente el plan revisado y abre la colección en el workspace. Si los archivos cambiaron desde la revisión, hay que revisarlos otra vez. Nunca escribe sobre una carpeta que ya tiene colección: el plan sigue ahí para elegir otra.
+
+La lectura y el plan los hace el núcleo, fuera del hilo de la interfaz; la colección leída se guarda hasta que se importa o se cierra la ventana.
+
 ## Bóveda
 
 - La clave de la colección no se pide nunca a quien la creó (se genera con el primer secreto compartido) ni a una máquina que ya la tiene: queda guardada, envuelta con la clave maestra.

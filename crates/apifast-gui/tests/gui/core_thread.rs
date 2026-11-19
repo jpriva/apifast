@@ -2066,3 +2066,61 @@ fn a_request_is_copied_as_curl_with_its_environment_and_draft() {
     assert!(second.text.contains("/users/'"), "{}", second.text);
     assert!(second.note.unwrap().contains("missing"));
 }
+
+const POSTMAN: &str = r#"{
+  "info": {"name": "Imported Shop", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+  "item": [{"name": "Users", "item": [{"name": "List", "event": [{"listen": "test", "script": {"exec": ["x"]}}], "request": {"method": "GET", "url": "{{host}}/users"}}]}]
+}"#;
+
+#[test]
+fn a_postman_export_is_reviewed_then_imported_and_opened() {
+    let (core, _, _data) = start();
+    let dir = tempfile::tempdir().unwrap();
+    let export = dir.path().join("shop.json");
+    std::fs::write(&export, POSTMAN).unwrap();
+    std::fs::write(dir.path().join("bad.json"), "{}").unwrap();
+
+    core.send(Command::PlanImport {
+        collection: dir.path().join("bad.json"),
+        environments: Vec::new(),
+    });
+    let snapshot = wait(&core, "the refusal", |s| s.import.is_some());
+    assert!(snapshot.import.as_ref().unwrap().plan.is_err());
+
+    core.send(Command::PlanImport {
+        collection: export.clone(),
+        environments: Vec::new(),
+    });
+    let snapshot = wait(&core, "the plan", |s| {
+        s.import.as_ref().is_some_and(|i| i.plan.is_ok())
+    });
+    let view = snapshot.import.clone().unwrap();
+    assert_eq!(view.files, [export]);
+    let plan = view.plan.unwrap();
+    assert_eq!(plan.collection, "Imported Shop");
+    assert_eq!(plan.counts(), (1, 1));
+    assert_eq!(plan.warnings.len(), 1);
+
+    let target = dir.path().join("imported-shop");
+    core.send(Command::ApplyImport(target.clone()));
+    let root = target.canonicalize().unwrap_or(target.clone());
+    let snapshot = wait(&core, "the collection open", |s| {
+        s.import.is_none() && s.collection.as_ref().is_some_and(|c| c.root == root)
+    });
+    assert_eq!(
+        snapshot.collection.as_ref().unwrap().tree.collection.name,
+        "Imported Shop"
+    );
+    assert!(target.join("users/list.yml").exists());
+
+    // Never over a collection: the plan stays for another folder.
+    core.send(Command::PlanImport {
+        collection: dir.path().join("shop.json"),
+        environments: Vec::new(),
+    });
+    wait(&core, "the second plan", |s| s.import.is_some());
+    core.send(Command::ApplyImport(target));
+    let snapshot = wait(&core, "the error", |s| s.error.is_some());
+    assert!(snapshot.import.is_some());
+    assert!(snapshot.error.as_ref().unwrap().contains("already exists"));
+}

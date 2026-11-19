@@ -262,6 +262,36 @@ pub struct Strings {
     pub collection_key: &'static str,
     /// Action: open the collection key window.
     pub action_collection_key: &'static str,
+    /// Button and action: import a collection.
+    pub import_collection_action: &'static str,
+    /// Title of the import window.
+    pub import_title: &'static str,
+    /// Field: the collection's export.
+    pub import_collection_file: &'static str,
+    /// Field: environments' exports.
+    pub import_environments: &'static str,
+    /// Button: add environment exports.
+    pub import_add_environments: &'static str,
+    /// Button: make the plan.
+    pub import_review: &'static str,
+    /// Before reviewing.
+    pub import_hint: &'static str,
+    /// After a count: folders.
+    pub import_folders: &'static str,
+    /// After a count: requests.
+    pub import_requests: &'static str,
+    /// After a count: environments.
+    pub import_environments_count: &'static str,
+    /// Heading of the warnings.
+    pub import_not_kept: &'static str,
+    /// Where a warning about the collection is.
+    pub import_collection: &'static str,
+    /// Field: the new collection's folder.
+    pub import_folder: &'static str,
+    /// When the files changed after reviewing.
+    pub import_review_again: &'static str,
+    /// Button: write the reviewed plan.
+    pub import: &'static str,
     /// Menu and action: copy a request as a cURL command.
     pub copy_as_curl: &'static str,
     /// After copying a request as cURL.
@@ -1003,6 +1033,21 @@ pub const EN: Strings = Strings {
     forget: "Forget",
     collection_key: "Collection key",
     action_collection_key: "Collection key",
+    import_collection_action: "Import…",
+    import_title: "Import a Postman collection",
+    import_collection_file: "Collection (.json)",
+    import_environments: "Environments",
+    import_add_environments: "Add environments…",
+    import_review: "Review",
+    import_hint: "Choose a Postman export (v2.0 or v2.1) and review what it creates before importing.",
+    import_folders: "folders",
+    import_requests: "requests",
+    import_environments_count: "environments",
+    import_not_kept: "Not kept",
+    import_collection: "Collection",
+    import_folder: "Folder name",
+    import_review_again: "The files changed: review them again before importing.",
+    import: "Import",
     copy_as_curl: "Copy as cURL",
     copied_as_curl: "Copied as cURL.",
     copied_missing: "Copied as cURL, with something missing:",

@@ -13,6 +13,7 @@ mod captures;
 mod collections;
 mod cookies;
 mod copy;
+mod import;
 mod proxy;
 mod runner;
 mod tokens;
@@ -24,6 +25,7 @@ use workspace::ActiveWorkspace;
 
 pub use cookies::{CookieCommand, CookieSlot};
 pub use copy::Copied;
+pub use import::ImportView;
 pub use vault::{Revealed, SHOWN_FOR, SecretState, SecretStatus, VaultCommand, VaultView};
 
 use std::collections::{BTreeMap, HashMap};
@@ -415,6 +417,18 @@ pub enum Command {
     /// Renders the request as cURL, for the clipboard (see
     /// [`Snapshot::copied`]).
     CopyAsCurl(TabKey),
+    /// Reads a Postman collection and its environments and makes the plan
+    /// of importing them (see [`Snapshot::import`]).
+    PlanImport {
+        /// The collection's export.
+        collection: PathBuf,
+        /// Its environments' exports.
+        environments: Vec<PathBuf>,
+    },
+    /// Writes the reviewed import into this new folder, and opens it.
+    ApplyImport(PathBuf),
+    /// Forgets the import being reviewed.
+    CloseImport,
 }
 
 /// Everything the interface shows, as of one moment.
@@ -461,6 +475,8 @@ pub struct Snapshot {
     pub cookies: Arc<Vec<apifast_domain::Cookie>>,
     /// The last text for the clipboard, such as a request as cURL.
     pub copied: Option<Copied>,
+    /// The import being reviewed, if any.
+    pub import: Option<ImportView>,
     /// Values captured for its active environment, waiting for the user to
     /// write them there.
     pub captured: Option<PendingCaptures>,
@@ -788,6 +804,7 @@ impl Core {
                     proxy: apifast_domain::ProxyChoice::System,
                     trust: apifast_domain::TlsTrust::default(),
                     cookie_policy: (true, true),
+                    importing: None,
                     sealed,
                     shown: 0,
                     keyring,
@@ -865,6 +882,8 @@ struct State {
     trust: apifast_domain::TlsTrust,
     /// Whether cookies are sent and stored, as the settings say.
     cookie_policy: (bool, bool),
+    /// The collection read for the import being reviewed.
+    importing: Option<apifast_app::ImportedCollection>,
     /// Values of the settings kept sealed with the master key, such as the
     /// proxy's password.
     sealed: apifast_vault::SealedValues,
@@ -1008,6 +1027,9 @@ impl State {
             Command::Vault(command) => self.vault_command(command),
             Command::Cookies(command) => self.cookie_command(command),
             Command::CopyAsCurl(key) => self.copy_as_curl(&key),
+            Command::PlanImport { .. } | Command::ApplyImport(_) | Command::CloseImport => {
+                self.handle_import(command);
+            }
             Command::ResolveConflict {
                 tab: key,
                 keep_draft,

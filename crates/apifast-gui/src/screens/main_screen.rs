@@ -87,6 +87,8 @@ pub struct MainScreen {
     pub vault_window: VaultWindow,
     /// The cookie editor.
     pub cookies_window: CookiesWindow,
+    /// The import of a collection.
+    pub import_window: crate::organisms::ImportWindow,
     /// The collection runner.
     pub runner: RunnerWindow,
     /// A collection's settings.
@@ -452,6 +454,20 @@ impl MainScreen {
         let cookies =
             (self.cookies_window).show(&ctx, collection, &snapshot.cookies, now_ms(), strings);
         commands.extend(cookies.into_iter().map(Command::Cookies));
+        let import = self
+            .import_window
+            .show(&ctx, snapshot.import.as_ref(), strings);
+        commands.extend(import.map(|event| match event {
+            crate::organisms::ImportEvent::Review {
+                collection,
+                environments,
+            } => Command::PlanImport {
+                collection,
+                environments,
+            },
+            crate::organisms::ImportEvent::Import(target) => Command::ApplyImport(target),
+            crate::organisms::ImportEvent::Close => Command::CloseImport,
+        }));
         if let Some((root, settings)) = self.collection_settings.show(&ctx, strings) {
             commands.push(Command::SaveCollectionSettings {
                 root,
@@ -582,6 +598,10 @@ impl MainScreen {
             }
             Action::OpenCollection => {
                 self.collections.open_collection();
+                Vec::new()
+            }
+            Action::ImportCollection => {
+                self.import_window.open_in(&snapshot.default_parent);
                 Vec::new()
             }
             Action::NewCollection => {
@@ -1155,6 +1175,9 @@ fn workspace_header(
         }
         if ui.small_button(strings.open_collection).clicked() {
             ask = Some(SidebarAsk::Action(Action::OpenCollection));
+        }
+        if ui.small_button(strings.import_collection_action).clicked() {
+            ask = Some(SidebarAsk::Action(Action::ImportCollection));
         }
     });
     ask
