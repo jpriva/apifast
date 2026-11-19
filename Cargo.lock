@@ -332,11 +332,13 @@ dependencies = [
  "apifast-template",
  "apifast-vault",
  "apifast-watch",
+ "apifast-ws",
  "eframe",
  "egui_kittest",
  "rfd",
  "tempfile",
  "tokio",
+ "tungstenite",
 ]
 
 [[package]]

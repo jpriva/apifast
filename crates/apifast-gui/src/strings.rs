@@ -975,6 +975,40 @@ pub struct Strings {
     pub ws_message_kind: &'static str,
     /// Shown instead of the method of a WebSocket request.
     pub ws_badge: &'static str,
+    /// Button that opens a WebSocket connection.
+    pub ws_connect: &'static str,
+    /// Button that closes a WebSocket connection.
+    pub ws_disconnect: &'static str,
+    /// Shown next to the spinner while a WebSocket connection is open.
+    pub ws_connected: &'static str,
+    /// Button that sends the message shown over the open connection.
+    pub ws_send: &'static str,
+    /// Hover of the send button.
+    pub ws_send_hint: &'static str,
+    /// Hover of the send button while there is no connection.
+    pub ws_send_disconnected: &'static str,
+    /// Placeholder of the field that filters a connection's messages.
+    pub ws_filter: &'static str,
+    /// Shown while nothing went over a connection yet.
+    pub ws_waiting: &'static str,
+    /// Shown when no message matches the filter.
+    pub ws_none_match: &'static str,
+    /// Shown when a connection's log is larger than the list reads.
+    pub ws_partial: &'static str,
+    /// Asks to pick a message to see it whole.
+    pub ws_pick: &'static str,
+    /// A message that went out.
+    pub ws_sent: &'static str,
+    /// A message that arrived.
+    pub ws_received: &'static str,
+    /// A message that could not be sent, or a broken connection.
+    pub ws_failed: &'static str,
+    /// The connection closed: by apifast.
+    pub ws_closed_by_client: &'static str,
+    /// The connection closed: by the server.
+    pub ws_closed_by_server: &'static str,
+    /// Size of a binary message, before its bytes.
+    pub ws_binary: &'static str,
     /// Button that formats the body.
     pub format: &'static str,
     /// Hover of the format button, with its shortcut.
@@ -1515,6 +1549,23 @@ pub const EN: Strings = Strings {
     ws_message_shown: "The message shown",
     ws_message_kind: "How the message is edited",
     ws_badge: "WS",
+    ws_connect: "Connect",
+    ws_disconnect: "Disconnect",
+    ws_connected: "Connected",
+    ws_send: "Send",
+    ws_send_hint: "Send this message over the open connection",
+    ws_send_disconnected: "Connect first to send messages",
+    ws_filter: "Filter messages",
+    ws_waiting: "Nothing sent or received yet.",
+    ws_none_match: "No message matches the filter.",
+    ws_partial: "Only the start of a long connection is read here; the Body tab has it all.",
+    ws_pick: "Pick a message to see it whole.",
+    ws_sent: "sent",
+    ws_received: "received",
+    ws_failed: "error",
+    ws_closed_by_client: "closed",
+    ws_closed_by_server: "closed by the server",
+    ws_binary: "binary",
     format: "Format",
     format_hint: "Format (Alt+Shift+F)",
     format_failed: "Could not format: brackets or tags do not match, or something is not closed. Check line",

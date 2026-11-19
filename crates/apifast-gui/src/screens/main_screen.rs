@@ -178,6 +178,7 @@ impl MainScreen {
         self.request.token_busy =
             snapshot.getting_token.is_some() && snapshot.getting_token == snapshot.active;
         self.request.files.root = selected.map(|key| key.root.clone());
+        self.request.connection.open = active.is_some_and(is_connected);
         self.response.pretty_limit = Some(self.settings.pretty_limit());
         let focus_url = std::mem::take(&mut self.focus_url);
         let notice = self.notice.as_deref();
@@ -269,15 +270,19 @@ impl MainScreen {
         commands
     }
 
-    /// The commands of the editor: the edits made, and sending or
-    /// cancelling from the URL bar.
-    fn editor_commands(&self, edited: bool, url_event: Option<&UrlBarEvent>) -> Vec<Command> {
+    /// The commands of the editor: the edits made, a WebSocket message to
+    /// send, and sending or cancelling from the URL bar.
+    fn editor_commands(&mut self, edited: bool, url_event: Option<&UrlBarEvent>) -> Vec<Command> {
         let mut commands = Vec::new();
         if let (true, Some(editor)) = (edited, &self.editor) {
             commands.push(Command::Edit {
                 tab: editor.key.clone(),
                 request: Box::new(editor.request.clone()),
             });
+        }
+        // After the edit, so the message goes as it is on screen.
+        if let Some(index) = self.request.connection.send.take() {
+            commands.push(Command::SendMessage(index));
         }
         match url_event {
             Some(UrlBarEvent::Send) => commands.push(Command::Send),
@@ -779,6 +784,14 @@ fn editor_area(
         });
     }
     (event, edited)
+}
+
+/// Whether `tab`'s WebSocket connection is open.
+fn is_connected(tab: &Tab) -> bool {
+    match &tab.response {
+        ResponseState::Streaming(stream) => stream.read(|live| live.socket),
+        _ => false,
+    }
 }
 
 /// Copies the active request in the language of the "copy as" `action`.

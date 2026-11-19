@@ -593,6 +593,16 @@ fn a_websocket_request_edits_its_messages() {
     );
     assert_ne!(harness.state().changes.len(), 0);
 
+    // Messages are sent only over an open connection: the one shown.
+    harness.get_by_label(EN.ws_send).click();
+    harness.run();
+    assert_eq!(harness.state().panel.connection.send, None);
+    harness.state_mut().panel.connection.open = true;
+    harness.run();
+    harness.get_by_label(EN.ws_send).click();
+    harness.run();
+    assert_eq!(harness.state_mut().panel.connection.send.take(), Some(1));
+
     harness.get_by_label(EN.ws_remove_message).click();
     harness.run();
     harness.get_by_label(EN.ws_remove_message).click();

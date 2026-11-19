@@ -19,6 +19,7 @@ mod proxy;
 mod reimport;
 mod runner;
 mod schema;
+mod socket;
 mod stream;
 mod tokens;
 mod vault;
@@ -206,6 +207,39 @@ fn history_entry(
     }
 }
 
+/// How send number `id` of the tab `key` ended, `written` as it was and
+/// sent at `.1` (ms): its result, kept in `responses`, and its entry,
+/// appended to `history`.
+fn finished(
+    id: u64,
+    key: TabKey,
+    (written, at_ms): ((String, String), i64),
+    result: Result<apifast_app::SendOutcome, AppError>,
+    (responses, history): (&Arc<FsResponseStore>, &FsHistoryStore),
+) -> Finished {
+    let entry = history_entry(&result, at_ms, key.path.clone(), written);
+    // A history that cannot be written does not hide the response.
+    let entry = entry.filter(|entry| history.append(entry).is_ok());
+    let dependencies = result
+        .as_ref()
+        .map(|outcome| outcome.dependencies.clone())
+        .unwrap_or_default();
+    let result = result.map(|outcome| Received {
+        checks: Checks {
+            captures: outcome.captures,
+            assertions: outcome.assertions,
+        },
+        ..received(responses, outcome.head, outcome.body.size, outcome.body.id)
+    });
+    Finished {
+        id,
+        root: key.root,
+        result,
+        entry,
+        dependencies,
+    }
+}
+
 impl BodySource for StoredBody {
     fn len(&self) -> u64 {
         self.size
@@ -318,8 +352,11 @@ pub enum Command {
     SaveAll,
     /// Sends the active tab, as it is on screen (with its draft).
     Send,
-    /// Cancels the send of the active tab.
+    /// Cancels the send of the active tab; a WebSocket connection closes.
     Cancel,
+    /// Sends message number `.0` of the active tab's WebSocket request, as
+    /// it is on screen, over its open connection.
+    SendMessage(usize),
     /// Creates a request called `name` in `folder` (`""` for the root) of
     /// the collection at `root`, and opens it.
     CreateRequest {
@@ -798,6 +835,18 @@ enum Message {
     ),
 }
 
+/// A send or a connection in progress.
+struct InFlight {
+    /// Its number.
+    id: u64,
+    /// Stops it; a connection closes normally.
+    cancel: CancelToken,
+    /// What arrived of an event stream or a connection.
+    stream: LiveStream,
+    /// Where the messages to send over a connection go; `None` for a send.
+    outbox: Option<mpsc::UnboundedSender<apifast_domain::WsMessage>>,
+}
+
 /// How a send ended: its number, its collection, its result and its
 /// history entry.
 struct Finished {
@@ -945,9 +994,9 @@ struct State {
     open: BTreeMap<PathBuf, Open>,
     /// The focused collection (see [`Snapshot::collection`]).
     focus: Option<PathBuf>,
-    /// Sends in progress, by tab: a number for the send, and its token.
-    /// The entry moves with its tab.
-    sending: HashMap<TabKey, (u64, CancelToken, LiveStream)>,
+    /// Sends and connections in progress, by tab. The entry moves with its
+    /// tab.
+    sending: HashMap<TabKey, InFlight>,
     /// The run that is going: its number and how to stop it.
     run: Option<(u64, CancelToken)>,
     /// Source of [`Tab::revision`], of send numbers and of openings.
@@ -986,7 +1035,10 @@ impl State {
         while let Some(message) = receiver.recv().await {
             match message {
                 Message::Command(command) => {
-                    let touches_session = !matches!(command, Command::Send | Command::Cancel);
+                    let touches_session = !matches!(
+                        command,
+                        Command::Send | Command::Cancel | Command::SendMessage(_)
+                    );
                     self.handle(command);
                     if touches_session {
                         self.schedule_session_write();
@@ -1097,11 +1149,12 @@ impl State {
                 }
             }
             Command::Send => self.start_send(),
+            Command::SendMessage(index) => self.send_message(index),
             Command::Cancel => {
-                if let Some((_, token, _)) =
+                if let Some(sending) =
                     (self.snapshot.active.as_ref()).and_then(|key| self.sending.get(key))
                 {
-                    token.cancel();
+                    sending.cancel.cancel();
                 }
             }
             Command::CreateRequest { .. }
@@ -1295,8 +1348,8 @@ impl State {
         let Some(index) = self.snapshot.tabs.iter().position(|tab| tab.is(key)) else {
             return;
         };
-        if let Some((_, token, _)) = self.sending.remove(key) {
-            token.cancel();
+        if let Some(sending) = self.sending.remove(key) {
+            sending.cancel.cancel();
         }
         self.snapshot.tabs.remove(index);
         if self.snapshot.active.as_ref() == Some(key) {
@@ -1444,6 +1497,10 @@ impl State {
         let Some(request) = self.tab(&key).map(Tab::request) else {
             return;
         };
+        if request.body.is_websocket() {
+            self.start_connect(key);
+            return;
+        }
         let written = (request.method.as_str().to_owned(), request.url.clone());
         let options = SendOptions {
             environment: open.environment.clone(),
@@ -1458,8 +1515,15 @@ impl State {
         let cancel = CancelToken::new();
         let id = self.next_revision();
         let stream = LiveStream::default();
-        self.sending
-            .insert(key.clone(), (id, cancel.clone(), stream.clone()));
+        self.sending.insert(
+            key.clone(),
+            InFlight {
+                id,
+                cancel: cancel.clone(),
+                stream: stream.clone(),
+                outbox: None,
+            },
+        );
 
         let messages = self.messages.clone();
         let live = stream::LiveResponses {
@@ -1487,29 +1551,9 @@ impl State {
             };
             let at_ms = clock.unix_millis();
             let result = send_request(ports, &key.path, &options, &cancel).await;
-            let entry = history_entry(&result, at_ms, key.path.clone(), written);
-            // A history that cannot be written does not hide the response.
-            let entry = entry.filter(|entry| history.append(entry).is_ok());
-            let dependencies = result
-                .as_ref()
-                .map(|outcome| outcome.dependencies.clone())
-                .unwrap_or_default();
-            let result = result.map(|outcome| Received {
-                checks: Checks {
-                    captures: outcome.captures,
-                    assertions: outcome.assertions,
-                },
-                ..received(&responses, outcome.head, outcome.body.size, outcome.body.id)
-            });
+            let finished = finished(id, key, (written, at_ms), result, (&responses, &*history));
             // Gone only when the core is stopping, and then nobody waits.
             if let Some(messages) = messages.upgrade() {
-                let finished = Finished {
-                    id,
-                    root: key.root,
-                    result,
-                    entry,
-                    dependencies,
-                };
                 let _ = messages.send(Message::SendFinished(Box::new(finished)));
             }
         });
@@ -1519,8 +1563,8 @@ impl State {
     /// first news on.
     fn streamed(&mut self, id: u64) {
         let Some((key, stream)) = (self.sending.iter())
-            .find(|(_, (send, _, _))| *send == id)
-            .map(|(key, (_, _, stream))| (key.clone(), stream.clone()))
+            .find(|(_, sending)| sending.id == id)
+            .map(|(key, sending)| (key.clone(), sending.stream.clone()))
         else {
             return;
         };
@@ -1549,7 +1593,7 @@ impl State {
             entries.extend(entry);
         }
         let Some(key) = (self.sending.iter())
-            .find(|(_, (send, _, _))| *send == id)
+            .find(|(_, sending)| sending.id == id)
             .map(|(key, _)| key.clone())
         else {
             return;

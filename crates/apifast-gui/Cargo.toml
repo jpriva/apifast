@@ -16,6 +16,7 @@ apifast-domain.workspace = true
 apifast-template.workspace = true
 apifast-history.workspace = true
 apifast-http.workspace = true
+apifast-ws.workspace = true
 apifast-import.workspace = true
 apifast-storage-fs.workspace = true
 apifast-watch.workspace = true
@@ -32,3 +33,4 @@ workspace = true
 [dev-dependencies]
 egui_kittest = "0.37.0"
 tempfile.workspace = true
+tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }

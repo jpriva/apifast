@@ -421,3 +421,54 @@ fn another_body_has_no_events_tab() {
     harness.run();
     assert!(!has(&harness, "Events (1)"));
 }
+
+const LOG: &str = concat!(
+    "{\"at\":0,\"type\":\"sent\",\"text\":\"{\\\"op\\\":\\\"hi\\\"}\"}\n",
+    "{\"at\":12,\"type\":\"received\",\"text\":\"welcome\"}\n",
+    "{\"at\":30,\"type\":\"error\",\"message\":\"not sent: `missing` is not defined\"}\n",
+    "{\"at\":95,\"type\":\"closed\",\"by\":\"server\",\"code\":4000,\"reason\":\"done\"}\n",
+);
+
+/// The connection whose log is [`LOG`], once closed.
+fn connection() -> ResponseState {
+    let ResponseState::Received(mut received) = received("text/plain", LOG) else {
+        unreachable!()
+    };
+    received.head.status = 101;
+    received.head.headers = vec![("Upgrade".into(), "websocket".into())];
+    ResponseState::Received(received)
+}
+
+#[test]
+fn a_websocket_connection_lists_its_messages_live_and_once_closed() {
+    let live = Live {
+        messages: apifast_domain::parse_ws_log(LOG.as_bytes()),
+        socket: true,
+        ..Live::default()
+    };
+    let mut harness = harness(ResponseState::Streaming(LiveStream::from(live)));
+    harness.run_steps(2);
+    assert!(has(&harness, EN.ws_connected));
+    assert_eq!(harness.state().view.tab, ResponseTab::Messages);
+    harness.get_by_label_contains("welcome");
+    harness.get_by_label_contains("4000 done");
+
+    // Closed, it is a response whose messages are still shown, with no
+    // checks.
+    harness.state_mut().response = connection();
+    harness.run_steps(2);
+    assert_eq!(harness.state().view.tab, ResponseTab::Messages);
+    harness.get_by_label("Messages (4)");
+    assert!(!has(&harness, EN.tests));
+    harness.get_by_label_contains("{\"op\":\"hi\"}").click();
+    harness.run();
+    // The message, formatted.
+    assert!(has_text(&harness, "{\n  \"op\": \"hi\"\n}"));
+
+    harness.get_by_label(EN.ws_filter).click();
+    harness.run();
+    harness.get_by_label(EN.ws_filter).type_text("missing");
+    harness.run();
+    assert!(harness.query_by_label_contains("welcome").is_none());
+    harness.get_by_label_contains("is not defined");
+}

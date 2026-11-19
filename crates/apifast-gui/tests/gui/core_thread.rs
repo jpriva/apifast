@@ -310,6 +310,96 @@ fn an_event_stream_shows_live_and_stopping_keeps_it() {
     assert_eq!(apifast_domain::parse_events(&body).len(), 3);
 }
 
+/// A WebSocket server that answers each text message in capitals.
+fn websocket_server() -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        let mut socket = tungstenite::accept(stream).unwrap();
+        while let Ok(message) = socket.read() {
+            if let tungstenite::Message::Text(text) = message {
+                let _ = socket.send(tungstenite::Message::text(text.to_uppercase()));
+            }
+        }
+    });
+    port
+}
+
+#[test]
+fn a_websocket_request_connects_sends_the_message_picked_and_disconnects() {
+    use apifast_domain::{WsData, WsEvent, WsSide};
+
+    let dir = collection(server(Duration::ZERO));
+    let port = websocket_server();
+    std::fs::write(
+        dir.path().join("live.yml"),
+        format!(
+            "info:\n  name: Live\n  type: websocket\nwebsocket:\n  url: ws://127.0.0.1:{port}/live\n  message:\n    - title: greet\n      message:\n        type: text\n        data: hello {{{{name}}}}\n"
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("environments/local.yml"),
+        "name: local\nvariables:\n  - name: name\n    value: Ana\n",
+    )
+    .unwrap();
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    core.send(Command::OpenRequest(at(&core, "live.yml")));
+    wait(&core, "the request", |s| s.active_tab().is_some());
+
+    core.send(Command::Send);
+    wait(&core, "the connection", |s| match response(s) {
+        ResponseState::Streaming(stream) => stream.read(|live| live.socket),
+        _ => false,
+    });
+    core.send(Command::SendMessage(0));
+    // A message that is not there is not sent.
+    core.send(Command::SendMessage(7));
+    let snapshot = wait(&core, "the answer", |s| match response(s) {
+        ResponseState::Streaming(stream) => stream.read(|live| live.messages.len() == 2),
+        _ => false,
+    });
+    let ResponseState::Streaming(stream) = response(&snapshot) else {
+        unreachable!()
+    };
+    let events: Vec<WsEvent> =
+        stream.read(|live| live.messages.iter().map(|m| m.event.clone()).collect());
+    assert_eq!(
+        events,
+        [
+            WsEvent::Sent(WsData::Text("hello Ana".into())),
+            WsEvent::Received(WsData::Text("HELLO ANA".into())),
+        ]
+    );
+
+    core.send(Command::Cancel);
+    let snapshot = wait(&core, "the connection kept", |s| {
+        matches!(response(s), ResponseState::Received(_))
+    });
+    let ResponseState::Received(received) = response(&snapshot) else {
+        unreachable!()
+    };
+    assert_eq!(received.head.status, 101);
+    let log = received.body.read(0, 4096).unwrap();
+    let last = apifast_domain::parse_ws_log(&log).pop().unwrap();
+    assert_eq!(
+        last.event,
+        WsEvent::Closed {
+            by: WsSide::Client,
+            code: Some(1000),
+            reason: String::new(),
+        }
+    );
+    let entries = snapshot.history.as_ref();
+    assert!(
+        entries.iter().any(|e| e.request.as_str() == "live.yml"),
+        "{entries:?}"
+    );
+}
+
 #[test]
 fn a_new_tab_starts_without_a_response() {
     let dir = collection(server(Duration::ZERO));

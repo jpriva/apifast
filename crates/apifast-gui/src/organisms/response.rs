@@ -1,20 +1,24 @@
 //! The response panel: status, time and size, then the body, the headers or
-//! the timeline of the send, and the events of an event stream, live while
-//! it arrives.
+//! the timeline of the send, the events of an event stream, live while it
+//! arrives, and the messages of a WebSocket connection, live while it is
+//! open.
 //!
 //! The body is shown "pretty" (formatted and colored) when it is JSON or XML
 //! small enough to load whole, and otherwise "raw", by windows, whatever its
 //! size.
 
 use apifast_app::{TimelineEvent, TimelineKind};
-use apifast_domain::{SseEvent, human_size, is_event_stream, parse_events};
+use apifast_domain::{
+    SseEvent, WsLogEntry, human_size, is_event_stream, is_websocket_handshake, parse_events,
+    parse_ws_log,
+};
 use eframe::egui::{self, RichText};
 
 use crate::atoms::StatusBadge;
 use crate::body::BodyHandle;
 use crate::code::{self, Language};
 use crate::core::{LiveStream, Received, ResponseState};
-use crate::organisms::{BodyViewer, EventList, response_cookies};
+use crate::organisms::{BodyViewer, EventList, MessageList, response_cookies};
 use crate::strings::Strings;
 use crate::theme;
 
@@ -43,6 +47,8 @@ pub enum ResponseTab {
     Tests,
     /// The events of an event stream.
     Events,
+    /// The messages of a WebSocket connection.
+    Messages,
 }
 
 /// How the body is shown.
@@ -96,6 +102,9 @@ pub struct ResponseView {
     /// The events read from a stored stream: its key, them, and whether the
     /// stream was longer than [`EVENTS_LIMIT`].
     parsed: Option<(String, Vec<SseEvent>, bool)>,
+    messages: MessageList,
+    /// The entries read from a stored connection's log, as `parsed`.
+    logged: Option<(String, Vec<WsLogEntry>, bool)>,
 }
 
 /// The result of the filter over one body.
@@ -133,21 +142,36 @@ impl ResponseView {
     }
 
     /// An event stream as it arrives: its status and its events so far.
+    /// A WebSocket connection, too, while it is open: its messages so far.
     fn streaming(&mut self, ui: &mut egui::Ui, stream: &LiveStream, strings: &Strings) {
         let muted = theme::palette(ui).text_muted;
-        self.tab = ResponseTab::Events;
         stream.read(|live| {
+            self.tab = if live.socket {
+                ResponseTab::Messages
+            } else {
+                ResponseTab::Events
+            };
             ui.horizontal(|ui| {
                 if let Some(head) = &live.head {
                     ui.add(StatusBadge::new(head.status));
                 }
                 ui.spinner();
-                ui.label(RichText::new(strings.streaming).color(muted));
+                let doing = if live.socket {
+                    strings.ws_connected
+                } else {
+                    strings.streaming
+                };
+                ui.label(RichText::new(doing).color(muted));
                 ui.label(RichText::new(human_size(live.bytes)).color(muted));
             });
             ui.separator();
-            self.events
-                .show(ui, (&live.events, live.dropped + 1), true, strings);
+            let first = live.dropped + 1;
+            if live.socket {
+                self.messages
+                    .show(ui, (&live.messages, first), true, strings);
+            } else {
+                self.events.show(ui, (&live.events, first), true, strings);
+            }
         });
     }
 
@@ -156,9 +180,14 @@ impl ResponseView {
         let stream = (received.head.headers.iter()).any(|(name, value)| {
             name.eq_ignore_ascii_case("content-type") && is_event_stream(value)
         });
-        if !stream && self.tab == ResponseTab::Events {
-            self.tab = ResponseTab::Body;
-        }
+        let socket = is_websocket_handshake(received.head.status, &received.head.headers);
+        self.tab = match self.tab {
+            ResponseTab::Events if !stream => ResponseTab::Body,
+            ResponseTab::Messages if !socket => ResponseTab::Body,
+            // A connection has no checks.
+            ResponseTab::Tests | ResponseTab::Events if socket => ResponseTab::Messages,
+            tab => tab,
+        };
         ui.horizontal(|ui| {
             ui.add(StatusBadge::new(received.head.status));
             ui.label(RichText::new(format!("{} ms", received.head.elapsed_ms)).color(muted));
@@ -170,6 +199,11 @@ impl ResponseView {
                 let label = format!("{} ({count})", strings.events);
                 ui.selectable_value(&mut self.tab, ResponseTab::Events, label);
             }
+            if socket {
+                let count = logged_entries(&mut self.logged, received).1.len();
+                let label = format!("{} ({count})", strings.ws_messages);
+                ui.selectable_value(&mut self.tab, ResponseTab::Messages, label);
+            }
             ui.selectable_value(&mut self.tab, ResponseTab::Body, strings.body);
             let headers = format!("{} ({})", strings.headers, received.head.headers.len());
             ui.selectable_value(&mut self.tab, ResponseTab::Headers, headers);
@@ -179,11 +213,13 @@ impl ResponseView {
             };
             ui.selectable_value(&mut self.tab, ResponseTab::Cookies, cookies);
             ui.selectable_value(&mut self.tab, ResponseTab::Timeline, strings.timeline);
-            ui.selectable_value(
-                &mut self.tab,
-                ResponseTab::Tests,
-                tests_label(ui, received, strings),
-            );
+            if !socket {
+                ui.selectable_value(
+                    &mut self.tab,
+                    ResponseTab::Tests,
+                    tests_label(ui, received, strings),
+                );
+            }
         });
         ui.separator();
         match self.tab {
@@ -203,6 +239,13 @@ impl ResponseView {
                     ui.label(RichText::new(strings.events_partial).color(muted));
                 }
                 self.events.show(ui, (events, 1), false, strings);
+            }
+            ResponseTab::Messages => {
+                let (partial, entries) = logged_entries(&mut self.logged, received);
+                if partial {
+                    ui.label(RichText::new(strings.ws_partial).color(muted));
+                }
+                self.messages.show(ui, (entries, 1), false, strings);
             }
         }
     }
@@ -379,6 +422,25 @@ fn filter(
 
 /// The events of the stored stream, read into `parsed` the first time they
 /// are asked for; whether the stream was longer than what was read.
+/// The entries of a stored connection's log, read once per body: whether
+/// it was longer than [`EVENTS_LIMIT`], and them.
+fn logged_entries<'a>(
+    logged: &'a mut Option<(String, Vec<WsLogEntry>, bool)>,
+    received: &Received,
+) -> (bool, &'a [WsLogEntry]) {
+    let body = &received.body;
+    if logged.as_ref().is_none_or(|(key, ..)| key != body.key()) {
+        let len = usize::try_from(body.len().min(EVENTS_LIMIT)).unwrap_or(usize::MAX);
+        let bytes = body.read(0, len).unwrap_or_default();
+        let entries = parse_ws_log(&bytes);
+        *logged = Some((body.key().to_owned(), entries, body.len() > EVENTS_LIMIT));
+    }
+    match logged {
+        Some((_, entries, partial)) => (*partial, entries),
+        None => (false, &[]),
+    }
+}
+
 fn parsed_events<'a>(
     parsed: &'a mut Option<(String, Vec<SseEvent>, bool)>,
     received: &Received,

@@ -75,6 +75,18 @@ pub struct RequestPanel {
     pub fetch_schema: bool,
     /// Where the GraphQL schema explorer is.
     pub schema_explorer: super::SchemaExplorer,
+    /// The request's WebSocket connection.
+    pub connection: Connection,
+}
+
+/// What the panel knows of a WebSocket request's connection.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Connection {
+    /// Whether it is open, so messages can be sent.
+    pub open: bool,
+    /// The message the user asked to send, once, since the last time it
+    /// was taken.
+    pub send: Option<usize>,
 }
 
 /// What the user can ask of a request's OAuth 2.0 token.
@@ -147,7 +159,8 @@ impl RequestPanel {
                         .unwrap_or_else(|| Action::FormatBody.defaults());
                     let now = std::mem::take(&mut self.format_now);
                     if let Body::WebSocket(messages) = &mut request.body {
-                        return ws_messages(ui, messages, (&shortcuts, now), hints, strings)
+                        let send = (self.connection.open, &mut self.connection.send);
+                        return ws_messages(ui, messages, (&shortcuts, now), send, hints, strings)
                             .then_some(RequestChange::Other);
                     }
                     let files = &mut self.files;
@@ -601,12 +614,23 @@ fn body(
     changed
 }
 
+/// "Send", for the message shown; enabled while `connected`. Whether it
+/// was pressed.
+fn send_button(ui: &mut egui::Ui, connected: bool, strings: &Strings) -> bool {
+    ui.add_enabled(connected, egui::Button::new(strings.ws_send))
+        .on_hover_text(strings.ws_send_hint)
+        .on_disabled_hover_text(strings.ws_send_disconnected)
+        .clicked()
+}
+
 /// The messages of a WebSocket request: which one is shown, adding and
-/// removing them, and the one shown: its name, its kind and its text.
+/// removing them, sending it while `connected`, and the one shown: its
+/// name, its kind and its text.
 fn ws_messages(
     ui: &mut egui::Ui,
     messages: &mut Vec<WsMessage>,
     (shortcuts, now): (&[egui::KeyboardShortcut], bool),
+    (connected, send): (bool, &mut Option<usize>),
     hints: &VariableHints,
     strings: &Strings,
 ) -> bool {
@@ -670,6 +694,9 @@ fn ws_messages(
                     .on_hover_text(strings.format_hint)
                     .clicked();
             }
+            *send = send_button(ui, connected, strings)
+                .then_some(shown)
+                .or(*send);
         }
     });
     ui.data_mut(|d| d.insert_temp(shown_id, shown));

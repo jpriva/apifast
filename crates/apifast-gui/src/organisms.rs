@@ -12,6 +12,7 @@ mod examples_panel;
 mod history;
 mod import_window;
 mod kv_table;
+mod message_list;
 mod oauth2_editor;
 mod palette;
 mod proxy_editor;
@@ -40,11 +41,12 @@ pub use examples_panel::examples_panel;
 pub use history::{HistoryView, ago, matches};
 pub use import_window::{ImportEvent, ImportWindow};
 pub use kv_table::{BulkRow, KvRow, KvTable, from_bulk, to_bulk};
+pub use message_list::MessageList;
 pub use oauth2_editor::oauth2_fields;
 pub use palette::{CommandPalette, PaletteItem, PaletteMode, fuzzy};
 pub use proxy_editor::proxy_fields;
 pub use reimport_window::{ReimportEvent, ReimportWindow};
-pub use request_panel::{RequestChange, RequestPanel, RequestTab, TokenAction};
+pub use request_panel::{Connection, RequestChange, RequestPanel, RequestTab, TokenAction};
 pub use response::{
     BodyMode, COPY_LIMIT, PRETTY_LIMIT, ResponseTab, ResponseView, describe, millis, size_text,
 };

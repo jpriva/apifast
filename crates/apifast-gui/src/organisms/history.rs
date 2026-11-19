@@ -2,7 +2,7 @@
 //! its response in the request's tab.
 
 use apifast_app::{HistoryEntry, HistoryOutcome};
-use apifast_domain::Method;
+use apifast_domain::{Method, RequestKind, is_websocket_handshake};
 use eframe::egui::{self, RichText};
 
 use crate::atoms::{MethodBadge, StatusBadge};
@@ -79,13 +79,30 @@ impl HistoryView {
     }
 }
 
+/// What the entry was: a WebSocket connection is told by its handshake,
+/// or, when it failed, by its URL's scheme.
+fn kind(entry: &HistoryEntry) -> RequestKind {
+    let socket = match &entry.outcome {
+        HistoryOutcome::Received { head, .. } => is_websocket_handshake(head.status, &head.headers),
+        HistoryOutcome::Failed(_) => {
+            let url = entry.url.trim_start().to_ascii_lowercase();
+            url.starts_with("ws://") || url.starts_with("wss://")
+        }
+    };
+    if socket {
+        RequestKind::WebSocket
+    } else {
+        RequestKind::Http
+    }
+}
+
 /// One entry: method, status and request, then when and how long. Returns
 /// whether it was clicked.
 fn row(ui: &mut egui::Ui, entry: &HistoryEntry, now_ms: i64, strings: &Strings) -> bool {
     let palette = theme::palette(ui);
     let mut clicked = false;
     ui.horizontal(|ui| {
-        ui.add(MethodBadge::new(&Method::parse(&entry.method)));
+        ui.add(MethodBadge::new(&Method::parse(&entry.method)).kind(kind(entry)));
         let (status, elapsed) = match &entry.outcome {
             HistoryOutcome::Received { head, .. } => {
                 ui.add(StatusBadge::new(head.status));

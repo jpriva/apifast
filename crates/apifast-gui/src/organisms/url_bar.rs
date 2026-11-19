@@ -1,4 +1,5 @@
-//! The URL bar: method, URL and the send or cancel button.
+//! The URL bar: method, URL and the send or cancel button (connect or
+//! disconnect, for a WebSocket request).
 
 use apifast_domain::{Method, RequestKind};
 use eframe::egui::{self, Align, Layout, RichText};
@@ -76,8 +77,8 @@ impl<'a> UrlBar<'a> {
         self
     }
 
-    /// While sending, an event stream is arriving: the button stops it,
-    /// keeping what arrived.
+    /// While sending, an event stream is arriving, or a WebSocket
+    /// connection is open: the button stops it, keeping what arrived.
     #[must_use]
     pub fn streaming(mut self, streaming: bool) -> Self {
         self.streaming = streaming;
@@ -112,15 +113,13 @@ impl<'a> UrlBar<'a> {
                 event = Some(UrlBarEvent::Edited);
             }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let (text, action) = if sending {
-                    let text = if streaming {
-                        strings.stop
-                    } else {
-                        strings.cancel
-                    };
-                    (text, UrlBarEvent::Cancel)
-                } else {
-                    (strings.send, UrlBarEvent::Send)
+                let socket = kind == RequestKind::WebSocket;
+                let (text, action) = match (sending, streaming, socket) {
+                    (true, true, true) => (strings.ws_disconnect, UrlBarEvent::Cancel),
+                    (true, true, false) => (strings.stop, UrlBarEvent::Cancel),
+                    (true, false, _) => (strings.cancel, UrlBarEvent::Cancel),
+                    (false, _, true) => (strings.ws_connect, UrlBarEvent::Send),
+                    (false, _, false) => (strings.send, UrlBarEvent::Send),
                 };
                 if ui.button(text).clicked() {
                     event = Some(action);
