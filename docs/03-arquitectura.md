@@ -64,7 +64,7 @@ flowchart TB
 | `apifast-vault` | Adaptador | Cifrado, claves, keyring | Aplicación, chacha20poly1305, keyring |
 | `apifast-watch` | Adaptador | Observación del sistema de archivos | Aplicación, notify |
 | `apifast-history` | Adaptador | Historial y cuerpos de respuesta en disco | Aplicación |
-| `apifast-import` | Adaptador | Importadores y exportadores. Hoy, cURL (`parse_curl` y `to_curl`) Postman (`import_postman`, `import_postman_environment`) y OpenAPI 3 (`import_openapi`, sobre un valor JSON: el YAML lo convierte `yaml_to_json` de `apifast-storage-fs`, el único que usa oneyaml): cURL (sobre una `RenderedRequest` de `render_for_copy`, el caso de uso que renderiza sin enviar); la interfaz lo usa directamente, sin puerto, porque es puro | Aplicación, serde |
+| `apifast-import` | Adaptador | Importadores y exportadores. Hoy, cURL (`parse_curl` y `to_curl`) Postman (`import_postman`, `import_postman_environment`) OpenAPI 3 (`import_openapi`, sobre un valor JSON: el YAML lo convierte `yaml_to_json` de `apifast-storage-fs`, el único que usa oneyaml) y Bruno `.bru` (`import_bruno`, que lee la carpeta): cURL (sobre una `RenderedRequest` de `render_for_copy`, el caso de uso que renderiza sin enviar); la interfaz lo usa directamente, sin puerto, porque es puro | Aplicación, serde |
 | `apifast-ws` | Adaptador | WebSocket | Aplicación, tokio-tungstenite |
 | `apifast-grpc` | Adaptador | gRPC y reflection | Aplicación, tonic, prost-reflect |
 | `apifast-script-js` | Adaptador | Motor JavaScript | Aplicación, rquickjs |

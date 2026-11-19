@@ -16,7 +16,7 @@ pub struct ImportArgs {
     #[arg(value_enum)]
     format: Format,
     /// The file: a Postman collection (v2.0 or v2.1), or an OpenAPI 3 spec
-    /// (JSON or YAML).
+    /// (JSON or YAML); for Bruno, the collection's folder.
     file: PathBuf,
     /// A Postman environment to import with it (repeatable; Postman only).
     #[arg(long = "env", value_name = "FILE")]
@@ -35,6 +35,8 @@ enum Format {
     Postman,
     /// An OpenAPI 3 spec.
     Openapi,
+    /// A Bruno collection in `.bru` files: the folder with `bruno.json`.
+    Bruno,
 }
 
 /// Imports, or prints what importing would do with `--dry-run`.
@@ -70,14 +72,17 @@ fn read(args: &ImportArgs) -> Result<ImportedCollection> {
     let read_text = |path: &PathBuf| {
         std::fs::read_to_string(path).with_context(|| format!("cannot read `{}`", path.display()))
     };
-    let text = read_text(&args.file)?;
     let context = || format!("`{}`", args.file.display());
+    if !args.environments.is_empty() && !matches!(args.format, Format::Postman) {
+        bail!("--env takes Postman environments, for a Postman collection");
+    }
     let mut imported = match args.format {
-        Format::Postman => apifast_import::import_postman(&text).with_context(context)?,
+        Format::Postman => {
+            apifast_import::import_postman(&read_text(&args.file)?).with_context(context)?
+        }
+        Format::Bruno => apifast_import::import_bruno(&args.file).with_context(context)?,
         Format::Openapi => {
-            if !args.environments.is_empty() {
-                bail!("--env takes Postman environments: an OpenAPI spec has its servers");
-            }
+            let text = read_text(&args.file)?;
             let spec = apifast_storage_fs::yaml_to_json(&text)
                 .map_err(anyhow::Error::msg)
                 .with_context(context)?;

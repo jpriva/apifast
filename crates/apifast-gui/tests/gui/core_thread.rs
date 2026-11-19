@@ -2156,3 +2156,25 @@ fn an_openapi_spec_is_recognised_and_planned() {
     let why = snapshot.import.clone().unwrap().plan.unwrap_err();
     assert!(why.contains("nor an OpenAPI 3 spec"), "{why}");
 }
+
+#[test]
+fn a_bru_folder_is_recognised_and_planned() {
+    let (core, _, _data) = start();
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("bruno.json"), r#"{"name": "Old"}"#).unwrap();
+    std::fs::write(
+        dir.path().join("ping.bru"),
+        "meta {\n  name: Ping\n}\n\nget {\n  url: http://h/ping\n}\n",
+    )
+    .unwrap();
+    core.send(Command::PlanImport {
+        collection: dir.path().to_path_buf(),
+        environments: Vec::new(),
+    });
+    let snapshot = wait(&core, "the plan", |s| s.import.is_some());
+    let plan = snapshot.import.clone().unwrap().plan.unwrap();
+    assert_eq!(
+        (plan.collection.as_str(), plan.entries[0].path.as_str()),
+        ("Old", "ping.yml")
+    );
+}

@@ -38,6 +38,7 @@ pub enum ImportEvent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Pick {
     Collection,
+    BrunoFolder,
     Environments,
     Parent,
 }
@@ -133,6 +134,13 @@ impl ImportWindow {
                         .clicked()
                     {
                         pick = Some(Pick::Collection);
+                    }
+                    if ui
+                        .add_enabled(!picking, egui::Button::new(strings.import_bruno_folder))
+                        .on_hover_text(strings.import_bruno_folder_hint)
+                        .clicked()
+                    {
+                        pick = Some(Pick::BrunoFolder);
                     }
                 });
                 ui.end_row();
@@ -323,7 +331,9 @@ impl ImportWindow {
             let picked = match pick {
                 Pick::Collection => json().pick_file().into_iter().collect(),
                 Pick::Environments => json().pick_files().unwrap_or_default(),
-                Pick::Parent => rfd::FileDialog::new().pick_folder().into_iter().collect(),
+                Pick::Parent | Pick::BrunoFolder => {
+                    rfd::FileDialog::new().pick_folder().into_iter().collect()
+                }
             };
             let _ = sender.send(picked);
             ctx.request_repaint();
@@ -344,7 +354,7 @@ impl ImportWindow {
         self.picking = None;
         let text = |p: &PathBuf| p.display().to_string();
         match pick {
-            Pick::Collection => {
+            Pick::Collection | Pick::BrunoFolder => {
                 if let Some(file) = picked.first() {
                     self.collection = text(file);
                 }

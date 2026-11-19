@@ -121,3 +121,47 @@ fn an_openapi_spec_in_yaml_becomes_a_collection_that_sends() {
     );
     assert!(!with_env.status.success());
 }
+
+#[test]
+fn a_bru_collection_becomes_a_collection_that_sends() {
+    let server = Server::start();
+    let dir = tempfile::tempdir().unwrap();
+    let data = tempfile::tempdir().unwrap();
+    let old = dir.path().join("old");
+    std::fs::create_dir_all(old.join("environments")).unwrap();
+    std::fs::write(
+        old.join("bruno.json"),
+        r#"{"version": "1", "name": "Old", "type": "collection"}"#,
+    )
+    .unwrap();
+    std::fs::write(old.join("collection.bru"), "headers {\n  x-from: bru\n}\n").unwrap();
+    std::fs::write(
+        old.join("ping.bru"),
+        "meta {\n  name: Ping\n  seq: 1\n}\n\nget {\n  url: {{host}}/ping\n  body: none\n  auth: none\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        old.join("environments/local.bru"),
+        format!("vars {{\n  host: http://127.0.0.1:{}\n}}\n", server.port),
+    )
+    .unwrap();
+
+    let out = apifast(
+        dir.path(),
+        data.path(),
+        &["import", "bruno", "old", "--out", "new"],
+    );
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let collection = dir.path().join("new");
+    let send = apifast(
+        &collection,
+        data.path(),
+        &["send", "ping.yml", "-e", "local"],
+    );
+    assert!(send.status.success(), "{}", text(&send.stderr));
+    let seen = server.seen();
+    assert!(
+        seen[0].starts_with("GET /ping ") && seen[0].contains("x-from: bru"),
+        "{seen:?}"
+    );
+}

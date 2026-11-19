@@ -462,7 +462,7 @@ docs: ''
 | Dirección | Estado |
 |---|---|
 | apifast lee una colección YAML de Bruno | Directo, sin importador |
-| apifast lee una colección `.bru` de Bruno | Mediante el importador (fase F6) |
+| apifast lee una colección `.bru` de Bruno | Mediante el importador: `apifast import bruno` o "Import…" ([docs/08](08-tests-y-runner.md#apifast-import)) |
 | Bruno lee una colección de apifast | Directo. Los secretos aparecen sin valor, como cualquier secreto de Bruno en una máquina nueva |
 | Bruno reescribe archivos de la colección | Seguro: no toca `.apifast/` y los archivos no contienen claves de apifast |
 | Bruno renombra un entorno o una variable secreta | El secreto compartido queda huérfano; apifast lo detecta y ofrece reasignarlo |

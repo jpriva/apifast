@@ -262,6 +262,10 @@ pub struct Strings {
     pub collection_key: &'static str,
     /// Action: open the collection key window.
     pub action_collection_key: &'static str,
+    /// Button: pick a Bruno collection folder to import.
+    pub import_bruno_folder: &'static str,
+    /// Hover text of that button.
+    pub import_bruno_folder_hint: &'static str,
     /// Button and action: import a collection.
     pub import_collection_action: &'static str,
     /// Title of the import window.
@@ -1033,13 +1037,15 @@ pub const EN: Strings = Strings {
     forget: "Forget",
     collection_key: "Collection key",
     action_collection_key: "Collection key",
+    import_bruno_folder: "Folder…",
+    import_bruno_folder_hint: "A Bruno collection in .bru files: the folder with bruno.json. (Bruno collections in YAML open directly.)",
     import_collection_action: "Import…",
     import_title: "Import a collection",
     import_collection_file: "Collection or spec",
     import_environments: "Postman environments",
     import_add_environments: "Add environments…",
     import_review: "Review",
-    import_hint: "Choose a Postman export (v2.0 or v2.1) or an OpenAPI 3 spec (JSON or YAML), and review what it creates before importing.",
+    import_hint: "Choose a Postman export (v2.0 or v2.1), an OpenAPI 3 spec (JSON or YAML) or a Bruno collection folder (.bru), and review what it creates before importing.",
     import_folders: "folders",
     import_requests: "requests",
     import_environments_count: "environments",

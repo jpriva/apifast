@@ -385,6 +385,7 @@ dependencies = [
  "apifast-storage-fs",
  "apifast-template",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.21",
 ]
 

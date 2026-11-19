@@ -265,6 +265,18 @@ Una especificación OpenAPI 3 (3.0 o 3.1), en JSON o YAML. Swagger 2.0 todavía 
 - Las respuestas con contenido, como ejemplos de la request.
 - Solo se siguen los `$ref` locales (`#/…`); uno externo se avisa.
 
+```
+apifast import bruno <carpeta> --out <carpeta> [--dry-run]
+```
+
+Una colección de Bruno en su formato anterior, `.bru` (la carpeta con `bruno.json`). Las colecciones de Bruno en YAML no necesitan importarse: se abren tal cual. El parser sigue la gramática de Bruno (`bruno-lang/v2/src/bruToJson.js`): bloques de pares (`headers { nombre: valor }`, `~` delante para desactivar, claves entre comillas, valores de varias líneas entre `'''`, anotaciones como `@description(…)` y los tipos `@number`, `@boolean`, `@object`), de texto (`body:json { … }`) y de lista (`vars:secret [ a, b ]`).
+
+- `bruno.json` da el nombre; `collection.bru`, los headers, la auth y las variables que todo hereda; el `folder.bru` de cada carpeta, su nombre, su posición y lo que heredan sus requests.
+- Cada request: método y URL, path params con su valor y params de query desactivados, headers, body (JSON, texto, XML, SPARQL, formulario, multipart con `@file(a|b)` y `@contentType(…)`, archivo; GraphQL como JSON con aviso), auth (basic, bearer, digest, NTLM, API key, AWS SigV4, OAuth 2.0), variables, aserciones (`res.status: eq 200`), `vars:post-response` como capturas, ajustes, tags y documentación. El orden es el `seq` de Bruno.
+- Los entornos de `environments/`: sus variables, y las de `vars:secret` declaradas secretas sin valor (Bruno guarda los valores aparte); se avisa para ponerlos en la bóveda.
+- Los scripts y los bloques `tests` se avisan (F9). Una request que no es HTTP (WebSocket, gRPC) se deja fuera con aviso, igual que un archivo que no se puede leer, con su línea.
+- Se ignoran las carpetas ocultas y `node_modules`.
+
 ### `apifast run`
 
 ```

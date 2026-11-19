@@ -80,6 +80,17 @@ fn read_postman(collection: &Path, environments: &[PathBuf]) -> Result<ImportedC
     let read = |path: &Path| {
         std::fs::read_to_string(path).map_err(|e| format!("cannot read `{}`: {e}", path.display()))
     };
+    // A folder is a Bruno collection in `.bru`.
+    if collection.is_dir() {
+        let mut imported = apifast_import::import_bruno(collection).map_err(|e| e.to_string())?;
+        if !environments.is_empty() {
+            imported.warnings.push(apifast_app::ImportWarning::new(
+                "",
+                "the Postman environments were not read: a Bruno collection has its own",
+            ));
+        }
+        return Ok(imported);
+    }
     let text = read(collection)?;
     // A Postman collection, or else an OpenAPI 3 spec, in JSON or YAML.
     let mut imported = if let Ok(imported) = apifast_import::import_postman(&text) {
