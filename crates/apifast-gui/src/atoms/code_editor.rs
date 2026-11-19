@@ -5,6 +5,10 @@
 //! kept until the text changes and texts over
 //! [`HIGHLIGHT_LIMIT`](crate::code::HIGHLIGHT_LIMIT) are edited plain.
 
+mod completion;
+
+pub use completion::Completer;
+
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -108,6 +112,7 @@ pub struct CodeEditor<'a> {
     id: Option<egui::Id>,
     rows: usize,
     name: Option<&'a str>,
+    completer: Option<Completer<'a>>,
 }
 
 impl<'a> CodeEditor<'a> {
@@ -127,7 +132,15 @@ impl<'a> CodeEditor<'a> {
             id: None,
             rows: 12,
             name: None,
+            completer: None,
         }
+    }
+
+    /// Suggests what to type at the cursor, with `completer`.
+    #[must_use]
+    pub fn completer(mut self, completer: Completer<'a>) -> Self {
+        self.completer = Some(completer);
+        self
     }
 
     /// A fixed id, so others can tell whether it has the focus.
@@ -162,8 +175,13 @@ impl<'a> CodeEditor<'a> {
             id,
             rows,
             name,
+            completer,
         } = self;
         let id = id.unwrap_or_else(|| ui.make_persistent_id("code-editor"));
+        let (picked, forced) = match completer {
+            Some(_) => completion::before(ui, id, text),
+            None => (false, false),
+        };
         let font = TextStyle::Monospace.resolve(ui.style());
         let palette = theme::palette(ui);
         let highlight = text.len() <= HIGHLIGHT_LIMIT;
@@ -222,7 +240,14 @@ impl<'a> CodeEditor<'a> {
         } else {
             edit.show(ui)
         };
-        let response = output.response.response;
+        if let Some(completer) = completer {
+            let typed = output.response.response.changed();
+            completion::after(ui, (id, &output), text, (completer, typed, forced));
+        }
+        let mut response = output.response.response;
+        if picked {
+            response.mark_changed();
+        }
         if let Some(name) = name {
             response.clone().accessible_name(name);
         }

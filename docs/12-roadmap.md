@@ -360,10 +360,10 @@ Se cumple: cada origen tiene una prueba de extremo a extremo que importa y enví
 
 ### Tareas
 
-- [ ] GraphQL: editores de query y variables, introspección en caché, explorador de esquema, autocompletado.
+- [x] GraphQL: editores de query y variables, introspección en caché, explorador de esquema, autocompletado.
   - [x] El body GraphQL (`Body::GraphQl`): se envía como JSON, con las variables validadas; editores de la operación (con resaltado propio) y de las variables ([docs/09](09-ui-ux.md#editor-de-código)). Los importadores de Postman, Insomnia y Bruno `.bru` lo conservan como GraphQL, la exportación a Postman usa su modo `graphql`, y copiar como código lo envía como JSON. Probado de extremo a extremo con `apifast send`.
   - [x] Introspección en caché y explorador de esquema ([docs/07](07-motor-de-red.md#graphql-f7), [docs/09](09-ui-ux.md#editor-de-código)): la request misma pide el esquema, que se guarda por URL y entorno en los datos locales; el explorador navega de tipo en tipo. Probado contra un servidor local: pedirlo, encontrarlo guardado en otra sesión y un servidor con la introspección desactivada.
-  - [ ] Autocompletado de la operación con el esquema.
+  - [x] Autocompletado de la operación con el esquema ([docs/09](09-ui-ux.md#editor-de-código)): campos según el tipo de la selección, argumentos, `$variables`, valores de enum y tipos, con una lectura ligera del texto hasta el cursor. Probado con casos de cada contexto y en el editor (flechas, Enter, Esc y `Ctrl+Espacio`).
 - [ ] SSE: parseo en vivo y visor de eventos.
 - [ ] `apifast-ws`: conectar, enviar, cerrar; historial de mensajes; herencia de headers y autenticación.
 - [ ] Formato de archivo para requests `graphql` y `websocket`.

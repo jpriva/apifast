@@ -499,3 +499,62 @@ fn a_graphql_body_asks_for_its_schema() {
         "asked, for the screen to send"
     );
 }
+
+#[test]
+fn the_query_is_completed_from_the_schema() {
+    use apifast_domain::{GraphQlSchema, Json};
+    use std::sync::Arc;
+
+    let answer = r#"{"data": {"__schema": {"queryType": {"name": "Query"}, "types": [
+        {"kind": "OBJECT", "name": "Query", "fields": [
+            {"name": "user", "args": [], "type": {"kind": "OBJECT", "name": "User"}},
+            {"name": "users", "args": [], "type": {"kind": "LIST", "ofType": {"kind": "OBJECT", "name": "User"}}}]},
+        {"kind": "OBJECT", "name": "User", "fields": [{"name": "id", "args": [], "type": {"kind": "SCALAR", "name": "ID"}}]}]}}}"#;
+    let schema = GraphQlSchema::from_introspection(&Json::parse(answer).unwrap()).unwrap();
+    let mut graphql = request();
+    graphql.body = Body::GraphQl {
+        query: String::new(),
+        variables: String::new(),
+    };
+    let mut harness = harness(RequestTab::Body, graphql);
+    harness.state_mut().context.schema = Some(apifast_gui::core::SchemaView {
+        schema: Some(Arc::new(schema)),
+        ..Default::default()
+    });
+    harness.set_size(egui::vec2(800.0, 1200.0));
+    harness.run();
+    harness
+        .get_by_role_and_label(Role::MultilineTextInput, EN.graphql_query)
+        .focus();
+    harness.run();
+    type_slowly(&mut harness, "{ us");
+    assert!(harness.query_by_label("users").is_some(), "suggested");
+    // The arrow moves in the list, not the cursor; Enter puts it in.
+    harness.key_press(egui::Key::ArrowDown);
+    harness.run();
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    harness.run();
+    let query = |h: &Harness<'_, State>| match &h.state().request.body {
+        Body::GraphQl { query, .. } => query.clone(),
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(query(&harness), "{ users");
+    type_slowly(&mut harness, " { i");
+    assert!(harness.query_by_label("id").is_some(), "the fields of User");
+    harness.key_press(egui::Key::Escape);
+    harness.run();
+    assert!(harness.query_by_label("id").is_none(), "closed");
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    assert_eq!(
+        query(&harness),
+        "{ users { i\n",
+        "Enter is a new line again"
+    );
+    // At the start of a line nothing opens alone; Ctrl+Space asks.
+    assert!(harness.query_by_label("id").is_none());
+    harness.key_press_modifiers(egui::Modifiers::CTRL, egui::Key::Space);
+    harness.run();
+    assert!(harness.query_by_label("id").is_some(), "asked for");
+}

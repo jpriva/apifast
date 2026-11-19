@@ -9,7 +9,7 @@ use apifast_domain::{
 use eframe::egui::{self, RichText};
 
 use crate::actions::Action;
-use crate::atoms::{CodeEditor, TemplateField, TemplateFieldTexts, VariableHints};
+use crate::atoms::{CodeEditor, Completer, TemplateField, TemplateFieldTexts, VariableHints};
 use crate::code::{self, HIGHLIGHT_LIMIT, Language};
 use crate::core::{TabContext, TokenState};
 use crate::organisms::KvTable;
@@ -135,9 +135,10 @@ impl RequestPanel {
                         .unwrap_or_else(|| Action::FormatBody.defaults());
                     let now = std::mem::take(&mut self.format_now);
                     let files = &mut self.files;
+                    let schema = (context.schema.as_ref()).and_then(|v| v.schema.as_deref());
                     let changed = body(
                         ui,
-                        &mut request.body,
+                        (&mut request.body, schema),
                         (&shortcuts, now),
                         files,
                         hints,
@@ -489,7 +490,7 @@ impl BodyKind {
 
 fn body(
     ui: &mut egui::Ui,
-    body: &mut Body,
+    (body, schema): (&mut Body, Option<&apifast_domain::GraphQlSchema>),
     (shortcuts, now): (&[egui::KeyboardShortcut], bool),
     files: &mut super::body_parts::BodyFiles,
     hints: &VariableHints,
@@ -550,24 +551,11 @@ fn body(
         Body::Json(text) | Body::Text(text) | Body::Xml(text) | Body::Sparql(text) => {
             let language = language.unwrap_or(Language::Text);
             let target = (editor, strings.body);
-            changed |= code_body(ui, text, language, target, format, hints, strings);
+            changed |= code_body(ui, text, (language, None), target, format, hints, strings);
         }
         Body::GraphQl { query, variables } => {
-            ui.label(muted(ui, strings.graphql_query));
-            let target = (editor, strings.graphql_query);
-            changed |= code_body(ui, query, Language::GraphQl, target, false, hints, strings);
-            ui.add_space(theme::space::S);
-            ui.label(muted(ui, strings.graphql_variables));
-            let target = (editor.with("variables"), strings.graphql_variables);
-            changed |= code_body(
-                ui,
-                variables,
-                Language::Json,
-                target,
-                format,
-                hints,
-                strings,
-            );
+            let texts = (query, variables);
+            changed |= graphql_editors(ui, texts, (editor, format), schema, hints, strings);
         }
         Body::FormUrlEncoded(fields) => {
             changed |= KvTable::new(
@@ -599,6 +587,43 @@ fn body(
 
 /// The editor of a text body. `format` asks to format it first. Returns
 /// whether the text changed.
+/// The editors of a GraphQL body: the operation, completed from `schema`
+/// when there is one, and its variables.
+fn graphql_editors(
+    ui: &mut egui::Ui,
+    (query, variables): (&mut String, &mut String),
+    (editor, format): (egui::Id, bool),
+    schema: Option<&apifast_domain::GraphQlSchema>,
+    hints: &VariableHints,
+    strings: &Strings,
+) -> bool {
+    let mut changed = false;
+    ui.label(muted(ui, strings.graphql_query));
+    let target = (editor, strings.graphql_query);
+    // With a schema, the operation is completed from it.
+    let complete = |text: &str, at: usize| {
+        schema.map_or_else(code::Completion::default, |s| code::complete(text, at, s))
+    };
+    let language = (
+        Language::GraphQl,
+        schema.map(|_| &complete as Completer<'_>),
+    );
+    changed |= code_body(ui, query, language, target, false, hints, strings);
+    ui.add_space(theme::space::S);
+    ui.label(muted(ui, strings.graphql_variables));
+    let target = (editor.with("variables"), strings.graphql_variables);
+    changed |= code_body(
+        ui,
+        variables,
+        (Language::Json, None),
+        target,
+        format,
+        hints,
+        strings,
+    );
+    changed
+}
+
 /// A GraphQL body from `text`: the JSON a GraphQL request sends
 /// (`{"query": …, "variables": …}`, as Postman's converted bodies are) is
 /// taken apart; any other text is the operation.
@@ -626,7 +651,7 @@ fn graphql_from(text: String) -> Body {
 fn code_body(
     ui: &mut egui::Ui,
     text: &mut String,
-    language: Language,
+    (language, completer): (Language, Option<Completer<'_>>),
     (editor, name): (egui::Id, &str),
     format: bool,
     hints: &VariableHints,
@@ -657,12 +682,14 @@ fn code_body(
     if text.len() > HIGHLIGHT_LIMIT {
         ui.label(muted(ui, strings.highlight_off));
     }
-    let edited = CodeEditor::new(text, language, hints, texts(strings))
+    let mut code_editor = CodeEditor::new(text, language, hints, texts(strings))
         .id(editor)
         .desired_rows(BODY_ROWS)
-        .accessible_name(name)
-        .show(ui)
-        .changed();
+        .accessible_name(name);
+    if let Some(completer) = completer {
+        code_editor = code_editor.completer(completer);
+    }
+    let edited = code_editor.show(ui).changed();
     if edited {
         ui.data_mut(|d| d.remove::<usize>(failed));
     }

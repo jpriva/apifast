@@ -6,9 +6,11 @@
 //! XML: a tag is kept as it is wherever it appears.
 
 mod format;
+mod graphql_complete;
 mod highlight;
 
 pub use format::{FormatError, format};
+pub use graphql_complete::{Completion, CompletionItem, complete};
 pub use highlight::{Token, TokenKind, tokens};
 
 use apifast_domain::Body;
