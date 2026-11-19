@@ -165,3 +165,38 @@ fn a_bru_collection_becomes_a_collection_that_sends() {
         "{seen:?}"
     );
 }
+
+#[test]
+fn an_insomnia_export_becomes_a_collection_that_sends() {
+    let server = Server::start();
+    let dir = tempfile::tempdir().unwrap();
+    let data = tempfile::tempdir().unwrap();
+    let export = format!(
+        r#"{{"_type": "export", "__export_format": 4, "resources": [
+            {{"_id": "wrk_1", "_type": "workspace", "name": "Ins"}},
+            {{"_id": "req_1", "_type": "request", "parentId": "wrk_1", "name": "Users", "method": "GET",
+              "url": "{{{{ _.base }}}}/users", "parameters": [{{"name": "page", "value": "2"}}]}},
+            {{"_id": "env_1", "_type": "environment", "parentId": "wrk_1", "name": "Base", "data": {{"base": "http://127.0.0.1:{}"}}}}
+        ]}}"#,
+        server.port
+    );
+    std::fs::write(dir.path().join("ins.json"), export).unwrap();
+    let out = apifast(
+        dir.path(),
+        data.path(),
+        &["import", "insomnia", "ins.json", "--out", "ins"],
+    );
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let collection = dir.path().join("ins");
+    let send = apifast(
+        &collection,
+        data.path(),
+        &["send", "users.yml", "-e", "Base"],
+    );
+    assert!(send.status.success(), "{}", text(&send.stderr));
+    assert!(
+        server.seen()[0].starts_with("GET /users?page=2 "),
+        "{:?}",
+        server.seen()
+    );
+}

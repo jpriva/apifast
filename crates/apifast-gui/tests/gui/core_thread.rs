@@ -2155,6 +2155,27 @@ fn an_openapi_spec_is_recognised_and_planned() {
     });
     let why = snapshot.import.clone().unwrap().plan.unwrap_err();
     assert!(why.contains("nor an OpenAPI 3 spec"), "{why}");
+
+    let insomnia = dir.path().join("insomnia.yaml");
+    std::fs::write(
+        &insomnia,
+        "type: collection.insomnia.rest/5.0\nname: From Insomnia\ncollection:\n  - name: Ping\n    method: GET\n    url: https://h/ping\n",
+    )
+    .unwrap();
+    core.send(Command::PlanImport {
+        collection: insomnia,
+        environments: Vec::new(),
+    });
+    let snapshot = wait(&core, "the Insomnia plan", |s| {
+        s.import
+            .as_ref()
+            .and_then(|i| i.plan.as_ref().ok())
+            .is_some_and(|p| p.collection == "From Insomnia")
+    });
+    assert_eq!(
+        snapshot.import.clone().unwrap().plan.unwrap().entries[0].path,
+        "ping.yml"
+    );
 }
 
 #[test]

@@ -277,6 +277,19 @@ Una colección de Bruno en su formato anterior, `.bru` (la carpeta con `bruno.js
 - Los scripts y los bloques `tests` se avisan (F9). Una request que no es HTTP (WebSocket, gRPC) se deja fuera con aviso, igual que un archivo que no se puede leer, con su línea.
 - Se ignoran las carpetas ocultas y `node_modules`.
 
+```
+apifast import insomnia <export.json|export.yaml> --out <carpeta> [--dry-run]
+```
+
+Una exportación de Insomnia: la v4 (JSON, una lista de recursos enlazados por `parentId`, en el orden de `metaSortKey`) o la v5 (YAML, `collection.insomnia.rest/5.x`, un árbol). Con las decisiones del importador de Bruno:
+
+- `{{ _.host }}` pasa a `{{host}}`. Las etiquetas de plantilla de Insomnia (`{% response … %}`, `{% uuid %}`…) no tienen equivalente: se avisan.
+- Los params de query, que Insomnia guarda aparte, se unen a la URL (los desactivados quedan como params desactivados); los path params conservan su valor.
+- Headers, body según su `mimeType` (JSON, XML, texto, formulario, multipart con archivos, archivo; GraphQL como JSON con aviso), auth (basic, bearer, digest, NTLM, API key, AWS IAM como SigV4, OAuth 2.0 con PKCE; una auth desactivada es ninguna; vacía, hereda), `encodeUrl` y `followRedirects`, la descripción como documentación.
+- Las carpetas conservan su auth y su entorno, como variables de la carpeta.
+- Los entornos: el base y uno por cada sub-entorno, mezclado sobre el base. Un valor anidado es una variable de tipo objeto (`{{user.name}}` lo lee), no se aplana en claves con puntos.
+- Los scripts se avisan (F9); las requests de WebSocket y gRPC se dejan fuera con aviso.
+
 ### `apifast run`
 
 ```

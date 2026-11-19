@@ -97,6 +97,10 @@ fn read_postman(collection: &Path, environments: &[PathBuf]) -> Result<ImportedC
         imported
     } else {
         let spec = apifast_storage_fs::yaml_to_json(&text).map_err(|_| not_known(collection))?;
+        if apifast_import::is_insomnia(&spec) {
+            return apifast_import::import_insomnia(&spec)
+                .map_err(|e| format!("`{}`: {e}", collection.display()));
+        }
         apifast_import::import_openapi(&spec).map_err(|e| match e {
             apifast_import::OpenApiError::Swagger2 => format!("`{}`: {e}", collection.display()),
             _ => not_known(collection),
@@ -113,7 +117,7 @@ fn read_postman(collection: &Path, environments: &[PathBuf]) -> Result<ImportedC
 
 fn not_known(file: &Path) -> String {
     format!(
-        "`{}` is not a Postman collection (v2.0 or v2.1) nor an OpenAPI 3 spec",
+        "`{}` is not a Postman collection (v2.0 or v2.1), an Insomnia export nor an OpenAPI 3 spec",
         file.display()
     )
 }

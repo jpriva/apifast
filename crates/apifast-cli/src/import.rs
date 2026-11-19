@@ -37,6 +37,8 @@ enum Format {
     Openapi,
     /// A Bruno collection in `.bru` files: the folder with `bruno.json`.
     Bruno,
+    /// An Insomnia export (v4 JSON or v5 YAML).
+    Insomnia,
 }
 
 /// Imports, or prints what importing would do with `--dry-run`.
@@ -81,12 +83,16 @@ fn read(args: &ImportArgs) -> Result<ImportedCollection> {
             apifast_import::import_postman(&read_text(&args.file)?).with_context(context)?
         }
         Format::Bruno => apifast_import::import_bruno(&args.file).with_context(context)?,
-        Format::Openapi => {
+        Format::Openapi | Format::Insomnia => {
             let text = read_text(&args.file)?;
-            let spec = apifast_storage_fs::yaml_to_json(&text)
+            let value = apifast_storage_fs::yaml_to_json(&text)
                 .map_err(anyhow::Error::msg)
                 .with_context(context)?;
-            apifast_import::import_openapi(&spec).with_context(context)?
+            if let Format::Insomnia = args.format {
+                apifast_import::import_insomnia(&value).with_context(context)?
+            } else {
+                apifast_import::import_openapi(&value).with_context(context)?
+            }
         }
     };
     for path in &args.environments {

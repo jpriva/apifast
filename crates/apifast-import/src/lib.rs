@@ -6,10 +6,12 @@
 
 mod bruno;
 mod curl;
+mod insomnia;
 mod openapi;
 mod postman;
 
 pub use bruno::{BrunoError, import_bruno};
 pub use curl::{CurlError, CurlImport, parse_curl, to_curl};
+pub use insomnia::{InsomniaError, import_insomnia, is_insomnia};
 pub use openapi::{OpenApiError, import_openapi};
 pub use postman::{PostmanError, import_postman, import_postman_environment};

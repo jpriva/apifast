@@ -325,7 +325,7 @@ impl ImportWindow {
         std::thread::spawn(move || {
             let json = || {
                 rfd::FileDialog::new()
-                    .add_filter("Postman, OpenAPI", &["json", "yaml", "yml"])
+                    .add_filter("Postman, Insomnia, OpenAPI", &["json", "yaml", "yml"])
                     .add_filter("All files", &["*"])
             };
             let picked = match pick {

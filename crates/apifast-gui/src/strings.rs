@@ -1045,7 +1045,7 @@ pub const EN: Strings = Strings {
     import_environments: "Postman environments",
     import_add_environments: "Add environments…",
     import_review: "Review",
-    import_hint: "Choose a Postman export (v2.0 or v2.1), an OpenAPI 3 spec (JSON or YAML) or a Bruno collection folder (.bru), and review what it creates before importing.",
+    import_hint: "Choose a Postman export (v2.0 or v2.1), an Insomnia export (v4 or v5), an OpenAPI 3 spec (JSON or YAML) or a Bruno collection folder (.bru), and review what it creates before importing.",
     import_folders: "folders",
     import_requests: "requests",
     import_environments_count: "environments",

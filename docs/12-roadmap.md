@@ -330,7 +330,9 @@ Los dos se cumplen: cada esquema (Digest, NTLM, AWS SigV4, OAuth 2.0 en sus tres
 
 ### Tareas
 
-- [ ] Importadores: Bruno `.bru`, Postman (colecciones y entornos), Insomnia, OpenAPI 3, cURL.
+- [x] Importadores: Bruno `.bru`, Postman (colecciones y entornos), Insomnia, OpenAPI 3, cURL.
+  - [x] Insomnia: exportaciones v4 (JSON) y v5 (YAML), en la CLI y en la interfaz, que la reconoce ([docs/08](08-tests-y-runner.md#apifast-import)). Probado con las ocho exportaciones del corpus de Bruno (las rotas a propósito se rechazan) y de extremo a extremo: importar y enviar, con el param de query unido a la URL.
+  - [x] cURL: `parse_curl` (pegar en la barra de URL); un archivo de comandos no tiene importador propio: cada comando es una request.
   - [x] Bruno `.bru`: la carpeta de la colección, con su `collection.bru`, `folder.bru` y entornos ([docs/08](08-tests-y-runner.md#apifast-import)), en la CLI y en la interfaz. Probado con la colección de pruebas de Bruno entera (247 archivos, más de 200 requests, ninguno ilegible) y de extremo a extremo: importar y enviar, con el header heredado de `collection.bru`.
   - [x] OpenAPI 3 (3.0 y 3.1), en JSON o YAML ([docs/08](08-tests-y-runner.md#apifast-import)), en la CLI y en la interfaz, que reconoce el formato. Probado con 19 especificaciones del corpus de Bruno (y dos rotas a propósito, que se rechazan) y de extremo a extremo: importar un YAML y enviar. Pendiente: Swagger 2.0 y los `$ref` externos.
   - [x] Postman: colecciones v2.0 y v2.1 y entornos ([docs/08](08-tests-y-runner.md#apifast-import)). Probado con 33 exportaciones del corpus de Bruno, que se importan sin rutas repetidas, y de extremo a extremo: importar y enviar.
