@@ -1035,6 +1035,28 @@ pub struct Strings {
     pub grpc_proto_hint: &'static str,
     /// Shown when a gRPC request has no message.
     pub grpc_no_messages: &'static str,
+    /// Button that calls a gRPC request.
+    pub grpc_call: &'static str,
+    /// Shown next to the spinner while a gRPC call is open.
+    pub grpc_calling: &'static str,
+    /// Button that loads the methods of a gRPC request.
+    pub grpc_load_methods: &'static str,
+    /// Hover of that button.
+    pub grpc_load_methods_hint: &'static str,
+    /// Shown while the methods load.
+    pub grpc_loading: &'static str,
+    /// The selector of the methods loaded.
+    pub grpc_pick_method: &'static str,
+    /// Shown when the server or the `.proto` has no method.
+    pub grpc_no_methods: &'static str,
+    /// Hover of "Send" in a gRPC call.
+    pub grpc_send_hint: &'static str,
+    /// Hover of the call's buttons while there is no call.
+    pub grpc_send_closed: &'static str,
+    /// Button that ends the client's stream of a gRPC call.
+    pub grpc_end_stream: &'static str,
+    /// Hover of that button.
+    pub grpc_end_stream_hint: &'static str,
     /// Button that formats the body.
     pub format: &'static str,
     /// Hover of the format button, with its shortcut.
@@ -1605,6 +1627,17 @@ pub const EN: Strings = Strings {
     grpc_proto: ".proto file",
     grpc_proto_hint: "Empty: ask the server (reflection)",
     grpc_no_messages: "No messages yet: add one to send it in the call.",
+    grpc_call: "Call",
+    grpc_calling: "In call",
+    grpc_load_methods: "Load methods",
+    grpc_load_methods_hint: "Read the .proto file or, without one, ask the server (reflection)",
+    grpc_loading: "Loading…",
+    grpc_pick_method: "Pick a method",
+    grpc_no_methods: "No methods found.",
+    grpc_send_hint: "Send this message in the open call",
+    grpc_send_closed: "Call first: the message shown goes first",
+    grpc_end_stream: "End stream",
+    grpc_end_stream_hint: "Send no more messages; the server then ends the call",
     format: "Format",
     format_hint: "Format (Alt+Shift+F)",
     format_failed: "Could not format: brackets or tags do not match, or something is not closed. Check line",

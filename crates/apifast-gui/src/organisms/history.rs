@@ -2,7 +2,7 @@
 //! its response in the request's tab.
 
 use apifast_app::{HistoryEntry, HistoryOutcome};
-use apifast_domain::{Method, RequestKind, is_websocket_handshake};
+use apifast_domain::{Method, RequestKind, is_grpc_response, is_websocket_handshake};
 use eframe::egui::{self, RichText};
 
 use crate::atoms::{MethodBadge, StatusBadge};
@@ -80,19 +80,23 @@ impl HistoryView {
 }
 
 /// What the entry was: a WebSocket connection is told by its handshake,
-/// or, when it failed, by its URL's scheme.
+/// a gRPC call by its content type, or, when it failed, by the URL's
+/// scheme.
 fn kind(entry: &HistoryEntry) -> RequestKind {
-    let socket = match &entry.outcome {
-        HistoryOutcome::Received { head, .. } => is_websocket_handshake(head.status, &head.headers),
-        HistoryOutcome::Failed(_) => {
-            let url = entry.url.trim_start().to_ascii_lowercase();
-            url.starts_with("ws://") || url.starts_with("wss://")
+    let url = entry.url.trim_start().to_ascii_lowercase();
+    let scheme = |schemes: &[&str]| schemes.iter().any(|s| url.starts_with(s));
+    match &entry.outcome {
+        HistoryOutcome::Received { head, .. } if is_grpc_response(&head.headers) => {
+            RequestKind::Grpc
         }
-    };
-    if socket {
-        RequestKind::WebSocket
-    } else {
-        RequestKind::Http
+        HistoryOutcome::Received { head, .. }
+            if is_websocket_handshake(head.status, &head.headers) =>
+        {
+            RequestKind::WebSocket
+        }
+        HistoryOutcome::Failed(_) if scheme(&["ws://", "wss://"]) => RequestKind::WebSocket,
+        HistoryOutcome::Failed(_) if scheme(&["grpc://", "grpcs://"]) => RequestKind::Grpc,
+        _ => RequestKind::Http,
     }
 }
 

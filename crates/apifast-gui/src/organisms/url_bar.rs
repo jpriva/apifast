@@ -119,13 +119,17 @@ impl<'a> UrlBar<'a> {
                 event = Some(UrlBarEvent::Edited);
             }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let socket = kind == RequestKind::WebSocket;
-                let (text, action) = match (sending, streaming, socket) {
-                    (true, true, true) => (strings.ws_disconnect, UrlBarEvent::Cancel),
-                    (true, true, false) => (strings.stop, UrlBarEvent::Cancel),
-                    (true, false, _) => (strings.cancel, UrlBarEvent::Cancel),
-                    (false, _, true) => (strings.ws_connect, UrlBarEvent::Send),
-                    (false, _, false) => (strings.send, UrlBarEvent::Send),
+                // What sends the request, and what stops it once it is
+                // under way.
+                let (go, stop) = match kind {
+                    RequestKind::WebSocket => (strings.ws_connect, strings.ws_disconnect),
+                    RequestKind::Grpc => (strings.grpc_call, strings.cancel),
+                    _ => (strings.send, strings.stop),
+                };
+                let (text, action) = match (sending, streaming) {
+                    (true, true) => (stop, UrlBarEvent::Cancel),
+                    (true, false) => (strings.cancel, UrlBarEvent::Cancel),
+                    (false, _) => (go, UrlBarEvent::Send),
                 };
                 if ui.button(text).clicked() {
                     event = Some(action);

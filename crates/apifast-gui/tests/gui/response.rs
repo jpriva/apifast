@@ -472,3 +472,29 @@ fn a_websocket_connection_lists_its_messages_live_and_once_closed() {
     assert!(harness.query_by_label_contains("welcome").is_none());
     harness.get_by_label_contains("is not defined");
 }
+
+#[test]
+fn a_grpc_call_lists_its_messages_and_how_it_ended() {
+    let log = concat!(
+        "{\"at\":0,\"type\":\"sent\",\"text\":\"{\\\"greeting\\\":\\\"hi\\\"}\"}\n",
+        "{\"at\":4,\"type\":\"received\",\"text\":\"{\\\"reply\\\":\\\"hello\\\"}\"}\n",
+        "{\"at\":5,\"type\":\"closed\",\"by\":\"server\",\"code\":0,\"reason\":\"OK\"}\n",
+    );
+    let mut harness = harness(received("application/grpc", log));
+    harness.run_steps(2);
+    assert_eq!(harness.state().view.tab, ResponseTab::Messages);
+    harness.get_by_label("Messages (3)");
+    harness.get_by_label_contains("{\"reply\":\"hello\"}");
+    harness.get_by_label_contains("closed by the server  0 OK");
+    assert!(!has(&harness, EN.tests));
+
+    let live = Live {
+        messages: apifast_domain::parse_ws_log(log.as_bytes()),
+        socket: true,
+        grpc: true,
+        ..Live::default()
+    };
+    harness.state_mut().response = ResponseState::Streaming(LiveStream::from(live));
+    harness.run_steps(2);
+    assert!(has(&harness, EN.grpc_calling));
+}

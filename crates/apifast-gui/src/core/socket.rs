@@ -1,15 +1,17 @@
 //! WebSocket connections (docs/07, F7): sending a WebSocket request opens a
 //! connection that stays open until either side closes it. While it is
 //! open the user sends its messages one by one, and what happens is read
-//! live into the tab, as an event stream is.
+//! live into the tab, as an event stream is. A gRPC call (F8) goes the
+//! same way: it lasts until the server ends it, and while the client
+//! streams the user sends its messages, until they end its stream.
 
 use std::sync::Arc;
 
 use apifast_app::{
     CancelToken, Clock, NoPrompter, NoSecrets, SecretStore, SendOptions, SendPorts, WsOutbox,
-    connect_request,
+    call_grpc, connect_request,
 };
-use apifast_domain::{Body, WsMessage};
+use apifast_domain::{Body, WsMessage, WsMessageKind};
 use apifast_ws::TungsteniteTransport;
 use tokio::sync::mpsc;
 
@@ -28,8 +30,9 @@ impl WsOutbox for Outbox {
 }
 
 impl State {
-    /// Connects the WebSocket request of the tab `key`, as it is on screen.
-    pub(super) fn start_connect(&mut self, key: TabKey) {
+    /// Connects the WebSocket request of the tab `key`, as it is on screen;
+    /// with `grpc`, calls its gRPC request instead.
+    pub(super) fn start_connect(&mut self, key: TabKey, grpc: bool) {
         let Some(open) = self.open.get(&key.root) else {
             return;
         };
@@ -92,17 +95,32 @@ impl State {
                 tokens: Some(tokens.as_ref()),
                 authorizer: Some(&authorizer),
             };
-            let sockets = TungsteniteTransport::new((*transport).clone());
             let at_ms = clock.unix_millis();
             let mut outbox = Outbox(receiver);
-            let result =
-                connect_request(ports, (&sockets, &mut outbox), &key.path, &options, &cancel).await;
+            let result = if grpc {
+                let calls = apifast_grpc::TonicTransport::new((*transport).clone());
+                let exchange = (&calls, &mut outbox);
+                call_grpc(ports, exchange, &key.path, &options, &cancel).await
+            } else {
+                let sockets = TungsteniteTransport::new((*transport).clone());
+                let exchange = (&sockets, &mut outbox);
+                connect_request(ports, exchange, &key.path, &options, &cancel).await
+            };
             let finished = finished(id, key, (written, at_ms), result, (&responses, &*history));
             // Gone only when the core is stopping, and then nobody waits.
             if let Some(messages) = messages.upgrade() {
                 let _ = messages.send(Message::SendFinished(Box::new(finished)));
             }
         });
+    }
+
+    /// Ends the client's stream of the active tab's call: its messages'
+    /// channel closes.
+    pub(super) fn end_stream(&mut self) {
+        let active = self.snapshot.active.clone();
+        if let Some(sending) = active.and_then(|key| self.sending.get_mut(&key)) {
+            sending.outbox = None;
+        }
     }
 
     /// Sends message number `index` of the active tab's WebSocket request,
@@ -113,6 +131,8 @@ impl State {
         };
         let message = self.tab(&key).and_then(|tab| match &tab.request().body {
             Body::WebSocket(messages) => messages.get(index).cloned(),
+            Body::Grpc(call) => (call.messages.get(index))
+                .map(|m| WsMessage::new(m.name.clone(), WsMessageKind::Json, m.data.clone())),
             _ => None,
         });
         let outbox = (self.sending.get(&key)).and_then(|sending| sending.outbox.as_ref());

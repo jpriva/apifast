@@ -284,10 +284,30 @@ impl MainScreen {
         if let Some(index) = self.request.connection.send.take() {
             commands.push(Command::SendMessage(index));
         }
+        let connection = &mut self.request.connection;
+        if std::mem::take(&mut connection.end) {
+            commands.push(Command::EndStream);
+        }
+        if std::mem::take(&mut connection.load_methods)
+            && let Some(editor) = &self.editor
+        {
+            commands.push(Command::LoadMethods(editor.key.clone()));
+        }
         match url_event {
-            Some(UrlBarEvent::Send) => commands.push(Command::Send),
+            Some(UrlBarEvent::Send) => commands.extend(self.send_commands()),
             Some(UrlBarEvent::Cancel) => commands.push(Command::Cancel),
             Some(UrlBarEvent::Edited | UrlBarEvent::PastedCurl(_)) | None => {}
+        }
+        commands
+    }
+
+    /// Sending the active request; calling a gRPC one sends the message
+    /// shown first.
+    fn send_commands(&self) -> Vec<Command> {
+        let grpc = (self.editor.as_ref()).is_some_and(|e| e.request.body.is_grpc());
+        let mut commands = vec![Command::Send];
+        if grpc {
+            commands.push(Command::SendMessage(self.request.connection.shown));
         }
         commands
     }
@@ -576,7 +596,8 @@ impl MainScreen {
             return Vec::new();
         }
         match action {
-            Action::Send => one((active.is_some() && !sending).then_some(Command::Send)),
+            Action::Send if active.is_some() && !sending => self.send_commands(),
+            Action::Send => Vec::new(),
             Action::Cancel => one(sending.then_some(Command::Cancel)),
             Action::Save => one(active.map(|tab| Command::Save(tab.key()))),
             Action::SaveAll => vec![Command::SaveAll],

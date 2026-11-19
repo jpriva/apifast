@@ -357,6 +357,7 @@ version = "0.0.0"
 dependencies = [
  "apifast-app",
  "apifast-domain",
+ "apifast-grpc",
  "apifast-history",
  "apifast-http",
  "apifast-import",
@@ -368,9 +369,15 @@ dependencies = [
  "apifast-ws",
  "eframe",
  "egui_kittest",
+ "http",
+ "prost",
  "rfd",
  "tempfile",
  "tokio",
+ "tokio-stream",
+ "tonic",
+ "tonic-prost",
+ "tower-service",
  "tungstenite",
 ]
 

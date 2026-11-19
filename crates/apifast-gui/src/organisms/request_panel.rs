@@ -79,7 +79,8 @@ pub struct RequestPanel {
     pub connection: Connection,
 }
 
-/// What the panel knows of a WebSocket request's connection.
+/// What the panel knows of a WebSocket request's connection, or a gRPC
+/// request's call, and what the user asks of it.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Connection {
     /// Whether it is open, so messages can be sent.
@@ -87,6 +88,12 @@ pub struct Connection {
     /// The message the user asked to send, once, since the last time it
     /// was taken.
     pub send: Option<usize>,
+    /// The message shown, which calling a gRPC request sends first.
+    pub shown: usize,
+    /// The user asked to end the client's stream of a gRPC call, once.
+    pub end: bool,
+    /// The user asked to load the methods of a gRPC request, once.
+    pub load_methods: bool,
 }
 
 /// What the user can ask of a request's OAuth 2.0 token.
@@ -183,8 +190,9 @@ impl RequestPanel {
                     if let Body::Grpc(call) = &mut request.body {
                         return super::grpc_editor::grpc_call(
                             ui,
-                            call,
+                            (call, context.methods.as_ref()),
                             (&shortcuts, now),
+                            &mut self.connection,
                             hints,
                             strings,
                         )

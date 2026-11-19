@@ -14,7 +14,8 @@ use apifast_app::{
     BodyWriter, ResponseHead, ResponseId, ResponseStore, StoreError, StoredBody as AppStoredBody,
 };
 use apifast_domain::{
-    SseEvent, SseParser, WsLogEntry, WsLogParser, is_event_stream, is_websocket_handshake,
+    SseEvent, SseParser, WsLogEntry, WsLogParser, is_event_stream, is_grpc_response,
+    is_websocket_handshake,
 };
 use apifast_history::FsResponseStore;
 use tokio::sync::mpsc;
@@ -34,8 +35,11 @@ pub struct Live {
     pub events: Vec<SseEvent>,
     /// The last entries of a WebSocket connection's log, oldest first.
     pub messages: Vec<WsLogEntry>,
-    /// Whether it is a WebSocket connection, not an event stream.
+    /// Whether it is a WebSocket connection or a gRPC call, not an event
+    /// stream.
     pub socket: bool,
+    /// Whether it is a gRPC call.
+    pub grpc: bool,
     /// How many events or entries left the list, to number the rest.
     pub dropped: usize,
     /// Bytes of the body so far.
@@ -158,7 +162,8 @@ pub(super) struct LiveWriter {
 
 impl BodyWriter for LiveWriter {
     fn begin(&mut self, head: &ResponseHead) {
-        let socket = is_websocket_handshake(head.status, &head.headers);
+        let grpc = is_grpc_response(&head.headers);
+        let socket = grpc || is_websocket_handshake(head.status, &head.headers);
         let stream = (head.headers.iter()).any(|(name, value)| {
             name.eq_ignore_ascii_case("content-type") && is_event_stream(value)
         });
@@ -173,6 +178,7 @@ impl BodyWriter for LiveWriter {
             *live = Live {
                 head: Some(head.clone()),
                 socket,
+                grpc,
                 ..Live::default()
             };
         });

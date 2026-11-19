@@ -66,6 +66,8 @@ pub(super) struct Open {
     /// Its GraphQL schemas, by [`apifast_app::schema_key`], as read or
     /// asked for in this session.
     pub(super) schemas: HashMap<String, super::schema::SchemaView>,
+    /// The methods of its gRPC requests, by [`super::methods::key_of`].
+    pub(super) methods: HashMap<String, super::methods::MethodsView>,
     /// Watches its folder. `None` if the system refused: changes made
     /// outside then show after loading it again.
     pub(super) _watcher: Option<FsWatcher>,
@@ -339,6 +341,7 @@ impl State {
                 parked,
                 schema_cache: Arc::new(schema_cache),
                 schemas: HashMap::new(),
+                methods: HashMap::new(),
                 _watcher: watcher,
             },
         );

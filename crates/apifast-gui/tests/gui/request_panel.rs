@@ -656,3 +656,58 @@ fn a_grpc_request_edits_its_call() {
     harness.run();
     harness.get_by_label(EN.grpc_no_messages);
 }
+
+#[test]
+fn a_grpc_request_picks_a_loaded_method_and_streams_while_called() {
+    use apifast_domain::{GrpcCall, GrpcMessage, GrpcMethod, GrpcMethodType, GrpcService};
+    use apifast_gui::core::MethodsView;
+    let mut call = HttpRequest::new("Call", Method::Get, "localhost:50051");
+    call.body = Body::Grpc(GrpcCall {
+        messages: vec![GrpcMessage::new("", "{}")],
+        ..GrpcCall::default()
+    });
+    let mut harness = harness(RequestTab::Body, call);
+    harness.get_by_label(EN.grpc_load_methods).click();
+    harness.run();
+    assert!(std::mem::take(
+        &mut harness.state_mut().panel.connection.load_methods
+    ));
+
+    harness.state_mut().context.methods = Some(MethodsView {
+        services: Some(std::sync::Arc::new(vec![GrpcService {
+            name: "hello.Greeter".into(),
+            methods: vec![GrpcMethod {
+                name: "Chat".into(),
+                path: "/hello.Greeter/Chat".into(),
+                method_type: GrpcMethodType::BidiStreaming,
+                input: "hello.Req".into(),
+                output: "hello.Rep".into(),
+            }],
+        }])),
+        ..MethodsView::default()
+    });
+    harness.run();
+    harness.get_by_label(EN.grpc_pick_method).click();
+    harness.run();
+    harness.get_by_label("/hello.Greeter/Chat").click();
+    harness.run();
+    let Body::Grpc(call) = &harness.state().request.body else {
+        panic!("{:?}", harness.state().request.body);
+    };
+    assert_eq!(call.method, "/hello.Greeter/Chat");
+    assert_eq!(call.method_type, Some(GrpcMethodType::BidiStreaming));
+
+    // A client that streams sends and ends its stream, once called.
+    harness.get_by_label(EN.grpc_end_stream).click();
+    harness.run();
+    assert!(!harness.state().panel.connection.end);
+    harness.state_mut().panel.connection.open = true;
+    harness.run();
+    harness.get_by_label(EN.ws_send).click();
+    harness.run();
+    harness.get_by_label(EN.grpc_end_stream).click();
+    harness.run();
+    let connection = harness.state().panel.connection;
+    assert_eq!(connection.send, Some(0));
+    assert!(connection.end);
+}

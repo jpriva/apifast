@@ -10,6 +10,7 @@ mod core_thread;
 mod editing;
 mod environments;
 mod flow;
+mod grpc;
 mod history;
 mod keyboard;
 mod organisms;

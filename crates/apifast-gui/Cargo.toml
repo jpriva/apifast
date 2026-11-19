@@ -17,6 +17,7 @@ apifast-template.workspace = true
 apifast-history.workspace = true
 apifast-http.workspace = true
 apifast-ws.workspace = true
+apifast-grpc.workspace = true
 apifast-import.workspace = true
 apifast-storage-fs.workspace = true
 apifast-watch.workspace = true
@@ -34,3 +35,11 @@ workspace = true
 egui_kittest = "0.37.0"
 tempfile.workspace = true
 tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }
+# A local gRPC server for the core's tests.
+tonic = { version = "0.14.9", default-features = false, features = ["server", "router"] }
+tonic-prost = "0.14.9"
+prost = { version = "0.14.6", default-features = false, features = ["std", "derive"] }
+http = "1.5.0"
+tower-service = "0.3.3"
+tokio-stream = { version = "0.1.17", default-features = false, features = ["net"] }
+tokio = { version = "1.54.1", features = ["rt", "net", "macros"] }

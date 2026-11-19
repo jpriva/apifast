@@ -117,6 +117,9 @@ La cabecera de la barra lateral tiene:
 
 - En la barra de URL, `gRPC` ocupa el lugar del selector de método, y en el árbol la request lleva `gRPC`.
 - La pestaña Body se llama `Messages (1)`: el método (`/paquete.Servicio/Metodo`), cómo transmite (unario, streaming del cliente, del servidor o bidireccional, o "Not known yet"), el archivo `.proto` (vacío: se pregunta al servidor por reflection) y los mensajes, como los de WebSocket pero siempre en JSON, con "Format" y su atajo.
+- "Load methods" lee el `.proto` o, sin uno, le pregunta al servidor (reflection), en segundo plano; "Pick a method" lista los métodos encontrados, y elegir uno pone su ruta y cómo transmite. Un error al cargarlos se muestra al lado. Los métodos se guardan mientras la colección está abierta, por URL, `.proto` y entorno.
+- **Llamar:** el botón de la barra de URL dice "Call", y llamar envía el mensaje mostrado; durante la llamada dice "Cancel", que la cancela. Si el cliente del método transmite (o no se sabe), junto al mensaje aparecen "Send", que envía el mensaje mostrado tal como está en pantalla, y "End stream", que termina el stream del cliente para que el servidor responda y cierre; sin llamada están deshabilitados y lo explican al pasar el cursor.
+- El panel de respuesta muestra "In call" y la pestaña Messages en vivo, como una conexión WebSocket; al terminar, la última entrada es el estado (`closed by the server  0 OK`). Una conexión o una llamada nueva, también desde el historial, abre en Messages. En el historial la llamada lleva `gRPC`.
 - La pestaña Headers se llama Metadata. No tiene las pestañas Params, Tests ni Examples.
 
 ### Bodies multipart y de archivo
@@ -167,7 +170,7 @@ La edición con resaltado se limita a unos 200 KB: con más texto, egui tarda de
 | Timeline | Eventos del envío con sus tiempos |
 | Tests | Aserciones (primero las que fallan, con su motivo) y capturas con su valor; la pestaña dice `Tests 2/3` en verde o en rojo |
 | Events | Solo para un `text/event-stream`: sus eventos (`Events (12)`), en vivo mientras llegan |
-| Messages | Solo para una conexión WebSocket: lo enviado y lo recibido, los errores y el cierre (`Messages (4)`), en vivo mientras está abierta. Una conexión no tiene la pestaña Tests |
+| Messages | Solo para una conexión WebSocket o una llamada gRPC: lo enviado y lo recibido, los errores y el cierre (`Messages (4)`), en vivo mientras está abierta. Una conexión no tiene la pestaña Tests |
 
 - Los cuerpos grandes se muestran por ventanas; el formateo se desactiva por encima de un umbral (2 MB) y se ofrece verlos en crudo o guardarlos. La vista "Pretty" formatea y colorea JSON y XML; si no se pueden formatear (HTML con `<br>`, JSON roto), se muestran tal cual, coloreados y con un aviso. Los bodies binarios no se dibujan: se indica su tamaño.
 - El Timeline lista, con su tiempo desde el inicio, cada request que sale y, debajo, su conexión: `DNS api.test → 10.0.0.1 (1.5 ms)`, `Connected to 10.0.0.1:443 (0.8 ms)` y `TLS handshake, TLSv1.3 (4.1 ms)`, o `Reused connection to 10.0.0.1:443`; luego cada redirección seguida, la llegada de los headers, el final del body y, si llegó comprimido, `Decompressed gzip: 3.1 KB`. Sobre las pestañas, el tamaño de un cuerpo comprimido dice los dos: `12.0 KB (3.1 KB gzip)`.

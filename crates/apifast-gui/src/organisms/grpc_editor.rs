@@ -1,13 +1,16 @@
 //! The body of a gRPC request (docs/09): the method it calls and how it
-//! streams, the `.proto` file that describes it (or none, to ask the
-//! server), and its messages, edited as JSON.
+//! streams, picked from those the server or the `.proto` offers, the
+//! `.proto` file that describes it (or none, to ask the server), and its
+//! messages, edited as JSON; while the call is open, sending them and
+//! ending the client's stream.
 
 use apifast_domain::{GrpcCall, GrpcMessage, GrpcMethodType};
-use eframe::egui;
+use eframe::egui::{self, RichText};
 
-use super::request_panel::{code_body, muted};
+use super::request_panel::{Connection, code_body, muted};
 use crate::atoms::VariableHints;
 use crate::code::Language;
+use crate::core::MethodsView;
 use crate::strings::Strings;
 use crate::theme;
 
@@ -20,12 +23,15 @@ const TYPES: [Option<GrpcMethodType>; 5] = [
     Some(GrpcMethodType::BidiStreaming),
 ];
 
-/// Draws the editor over `call`. `(shortcuts, now)` format the message
-/// shown, as the body's editor does. Returns whether anything changed.
+/// Draws the editor over `call`, offering the methods of `methods`.
+/// `(shortcuts, now)` format the message shown, as the body's editor does;
+/// `connection` is the call's, and takes what the user asks of it.
+/// Returns whether anything changed.
 pub fn grpc_call(
     ui: &mut egui::Ui,
-    call: &mut GrpcCall,
+    (call, methods): (&mut GrpcCall, Option<&MethodsView>),
     (shortcuts, now): (&[egui::KeyboardShortcut], bool),
+    connection: &mut Connection,
     hints: &VariableHints,
     strings: &Strings,
 ) -> bool {
@@ -44,6 +50,10 @@ pub fn grpc_call(
                 )
                 .accessible_name(strings.grpc_method)
                 .changed();
+            ui.end_row();
+
+            ui.label("");
+            changed |= method_picker(ui, call, methods, connection, strings);
             ui.end_row();
 
             ui.label(strings.grpc_method_type);
@@ -77,7 +87,88 @@ pub fn grpc_call(
             ui.end_row();
         });
     ui.add_space(theme::space::M);
-    changed | messages(ui, &mut call.messages, (shortcuts, now), hints, strings)
+    let streams = call.method_type.is_none_or(GrpcMethodType::client_streams);
+    let call_state = (connection, streams);
+    changed
+        | messages(
+            ui,
+            &mut call.messages,
+            (shortcuts, now),
+            call_state,
+            hints,
+            strings,
+        )
+}
+
+/// "Load methods", and the methods loaded to pick one: picking it sets the
+/// method and how it streams. Returns whether one was picked.
+fn method_picker(
+    ui: &mut egui::Ui,
+    call: &mut GrpcCall,
+    methods: Option<&MethodsView>,
+    connection: &mut Connection,
+    strings: &Strings,
+) -> bool {
+    let mut picked = false;
+    ui.horizontal(|ui| {
+        let loading = methods.is_some_and(|m| m.loading);
+        if loading {
+            ui.spinner();
+            ui.label(muted(ui, strings.grpc_loading));
+        } else if ui
+            .button(strings.grpc_load_methods)
+            .on_hover_text(strings.grpc_load_methods_hint)
+            .clicked()
+        {
+            connection.load_methods = true;
+        }
+        let services = methods.and_then(|m| m.services.as_deref());
+        if let Some(services) = services.filter(|s| !s.is_empty()) {
+            egui::ComboBox::from_id_salt("grpc-method-pick")
+                .selected_text(strings.grpc_pick_method)
+                .show_ui(ui, |ui| {
+                    for method in services.iter().flat_map(|s| &s.methods) {
+                        let chosen = call.method.trim() == method.path;
+                        let label = RichText::new(&method.path).monospace();
+                        if ui.selectable_label(chosen, label).clicked() && !chosen {
+                            call.method.clone_from(&method.path);
+                            call.method_type = Some(method.method_type);
+                            picked = true;
+                        }
+                    }
+                })
+                .response
+                .accessible_name(strings.grpc_pick_method);
+        } else if services.is_some() {
+            ui.label(muted(ui, strings.grpc_no_methods));
+        }
+        if let Some(error) = methods.and_then(|m| m.error.as_deref()) {
+            let danger = theme::palette(ui).danger;
+            ui.label(RichText::new(error).color(danger).small());
+        }
+    });
+    picked
+}
+
+/// "Send" the message shown, and "End stream", while the call is open.
+fn stream_buttons(ui: &mut egui::Ui, connection: &mut Connection, shown: usize, strings: &Strings) {
+    let open = connection.open;
+    if ui
+        .add_enabled(open, egui::Button::new(strings.ws_send))
+        .on_hover_text(strings.grpc_send_hint)
+        .on_disabled_hover_text(strings.grpc_send_closed)
+        .clicked()
+    {
+        connection.send = Some(shown);
+    }
+    if ui
+        .add_enabled(open, egui::Button::new(strings.grpc_end_stream))
+        .on_hover_text(strings.grpc_end_stream_hint)
+        .on_disabled_hover_text(strings.grpc_send_closed)
+        .clicked()
+    {
+        connection.end = true;
+    }
 }
 
 fn type_label(kind: Option<GrpcMethodType>, strings: &Strings) -> &str {
@@ -96,6 +187,7 @@ fn messages(
     ui: &mut egui::Ui,
     messages: &mut Vec<GrpcMessage>,
     (shortcuts, now): (&[egui::KeyboardShortcut], bool),
+    (connection, streams): (&mut Connection, bool),
     hints: &VariableHints,
     strings: &Strings,
 ) -> bool {
@@ -144,9 +236,14 @@ fn messages(
                 .button(strings.format)
                 .on_hover_text(strings.format_hint)
                 .clicked();
+            // A client that streams sends more while the call is open.
+            if streams {
+                stream_buttons(ui, connection, shown, strings);
+            }
         }
     });
     ui.data_mut(|d| d.insert_temp(shown_id, shown));
+    connection.shown = shown;
     let Some(message) = messages.get_mut(shown) else {
         ui.label(muted(ui, strings.grpc_no_messages));
         return changed;

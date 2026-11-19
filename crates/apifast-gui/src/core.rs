@@ -15,6 +15,7 @@ mod cookies;
 mod copy;
 mod export;
 mod import;
+mod methods;
 mod proxy;
 mod reimport;
 mod runner;
@@ -32,6 +33,7 @@ pub use cookies::{CookieCommand, CookieSlot};
 pub use copy::Copied;
 pub use export::Exported;
 pub use import::ImportView;
+pub use methods::MethodsView;
 pub use reimport::ReimportView;
 pub use schema::SchemaView;
 pub use stream::{Live, LiveStream, MAX_LIVE_EVENTS};
@@ -514,6 +516,12 @@ pub enum Command {
     /// Asks the server of the tab's GraphQL request for its schema (see
     /// [`TabContext::schema`]).
     FetchSchema(TabKey),
+    /// Loads the methods of the tab's gRPC request (see
+    /// [`TabContext::methods`]).
+    LoadMethods(TabKey),
+    /// Ends the client's stream of the active tab's gRPC call: no more
+    /// messages go.
+    EndStream,
     /// Writes the collection at `root` to `file` as Postman, with its
     /// environments next to it (see [`Snapshot::exported`]).
     ExportPostman {
@@ -696,6 +704,8 @@ pub struct TabContext {
     pub token: TokenState,
     /// Its GraphQL schema, when its body is GraphQL.
     pub schema: Option<SchemaView>,
+    /// The methods it can call, when it is a gRPC request.
+    pub methods: Option<MethodsView>,
     /// Changes whenever it is worked out again.
     pub revision: u64,
 }
@@ -729,6 +739,7 @@ impl Default for TabContext {
             inherited_settings: nothing.settings().clone(),
             token: TokenState::NotUsed,
             schema: None,
+            methods: None,
             revision: 0,
         }
     }
@@ -827,6 +838,13 @@ enum Message {
     TokenObtained(TabKey, Result<(), String>),
     /// Send number `.0` has news of its event stream.
     Streamed(u64),
+    /// The methods of collection `.0`'s gRPC request, kept by `.1`, came,
+    /// or why not.
+    MethodsLoaded(
+        PathBuf,
+        String,
+        Result<Vec<apifast_domain::GrpcService>, String>,
+    ),
     /// The schema of collection `.0`, kept by `.1`, came, or why not.
     SchemaFetched(
         PathBuf,
@@ -1037,7 +1055,11 @@ impl State {
                 Message::Command(command) => {
                     let touches_session = !matches!(
                         command,
-                        Command::Send | Command::Cancel | Command::SendMessage(_)
+                        Command::Send
+                            | Command::Cancel
+                            | Command::SendMessage(_)
+                            | Command::EndStream
+                            | Command::LoadMethods(_)
                     );
                     self.handle(command);
                     if touches_session {
@@ -1054,6 +1076,10 @@ impl State {
                 }
                 Message::TokenObtained(key, result) => {
                     self.token_obtained(&key, result);
+                    self.sync_cookies();
+                }
+                Message::MethodsLoaded(root, key, result) => {
+                    self.methods_loaded(&root, key, result);
                     self.sync_cookies();
                 }
                 Message::SchemaFetched(root, key, result) => {
@@ -1170,6 +1196,8 @@ impl State {
             Command::Cookies(command) => self.cookie_command(command),
             Command::CopyAs(key, language) => self.copy_as(&key, language),
             Command::FetchSchema(key) => self.fetch_schema(key),
+            Command::LoadMethods(key) => self.load_methods(key),
+            Command::EndStream => self.end_stream(),
             Command::ExportPostman { root, file } => self.export_postman(&root, &file),
             Command::PlanImport { .. }
             | Command::ApplyImport(_)
@@ -1461,9 +1489,12 @@ impl State {
         };
         let schema = schema::key_of(open, request)
             .map(|key| open.schemas.get(&key).cloned().unwrap_or_default());
+        let methods = methods::key_of(open, request)
+            .map(|key| open.methods.get(&key).cloned().unwrap_or_default());
         TabContext {
             token,
             schema,
+            methods,
             variables,
             folders: loaded.folders.iter().map(|f| f.name.clone()).collect(),
             inherited_headers: inherited.headers().to_vec(),
@@ -1497,8 +1528,9 @@ impl State {
         let Some(request) = self.tab(&key).map(Tab::request) else {
             return;
         };
-        if request.body.is_websocket() {
-            self.start_connect(key);
+        if request.body.is_websocket() || request.body.is_grpc() {
+            let grpc = request.body.is_grpc();
+            self.start_connect(key, grpc);
             return;
         }
         let written = (request.method.as_str().to_owned(), request.url.clone());

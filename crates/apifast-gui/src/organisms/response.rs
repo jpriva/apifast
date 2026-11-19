@@ -9,8 +9,8 @@
 
 use apifast_app::{TimelineEvent, TimelineKind};
 use apifast_domain::{
-    SseEvent, WsLogEntry, human_size, is_event_stream, is_websocket_handshake, parse_events,
-    parse_ws_log,
+    SseEvent, WsLogEntry, human_size, is_event_stream, is_grpc_response, is_websocket_handshake,
+    parse_events, parse_ws_log,
 };
 use eframe::egui::{self, RichText};
 
@@ -105,6 +105,8 @@ pub struct ResponseView {
     messages: MessageList,
     /// The entries read from a stored connection's log, as `parsed`.
     logged: Option<(String, Vec<WsLogEntry>, bool)>,
+    /// The key of the last body shown, to tell a new response.
+    last_body: String,
 }
 
 /// The result of the filter over one body.
@@ -156,10 +158,10 @@ impl ResponseView {
                     ui.add(StatusBadge::new(head.status));
                 }
                 ui.spinner();
-                let doing = if live.socket {
-                    strings.ws_connected
-                } else {
-                    strings.streaming
+                let doing = match (live.socket, live.grpc) {
+                    (_, true) => strings.grpc_calling,
+                    (true, false) => strings.ws_connected,
+                    _ => strings.streaming,
                 };
                 ui.label(RichText::new(doing).color(muted));
                 ui.label(RichText::new(human_size(live.bytes)).color(muted));
@@ -180,8 +182,17 @@ impl ResponseView {
         let stream = (received.head.headers.iter()).any(|(name, value)| {
             name.eq_ignore_ascii_case("content-type") && is_event_stream(value)
         });
-        let socket = is_websocket_handshake(received.head.status, &received.head.headers);
+        // A connection's or a call's body is its log.
+        let head_headers = &received.head.headers;
+        let socket = is_websocket_handshake(received.head.status, head_headers)
+            || is_grpc_response(head_headers);
+        // A new connection's or call's log opens on its messages.
+        let new = self.last_body != received.body.key();
+        if new {
+            received.body.key().clone_into(&mut self.last_body);
+        }
         self.tab = match self.tab {
+            ResponseTab::Body if socket && new => ResponseTab::Messages,
             ResponseTab::Events if !stream => ResponseTab::Body,
             ResponseTab::Messages if !socket => ResponseTab::Body,
             // A connection has no checks.
