@@ -2340,3 +2340,126 @@ fn a_collection_is_exported_to_postman_with_its_environments() {
     let why = snapshot.exported.clone().unwrap().result.unwrap_err();
     assert!(why.contains("cannot write"), "{why}");
 }
+
+/// A GraphQL server: the introspection query gets a small schema, unless
+/// the path is `/closed`, whose introspection is off.
+fn graphql_server() -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            std::thread::spawn(move || {
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                let mut first = String::new();
+                reader.read_line(&mut first).ok();
+                let mut length = 0;
+                let mut line = String::new();
+                while reader.read_line(&mut line).is_ok_and(|n| n > 2) {
+                    if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                        length = value.trim().parse().unwrap_or(0);
+                    }
+                    line.clear();
+                }
+                let mut body = vec![0; length];
+                std::io::Read::read_exact(&mut reader, &mut body).ok();
+                let asked = String::from_utf8_lossy(&body).contains("IntrospectionQuery");
+                let answer = if first.contains("/closed") {
+                    r#"{"errors": [{"message": "introspection is off"}]}"#
+                } else if asked {
+                    r#"{"data": {"__schema": {"queryType": {"name": "Query"}, "types": [
+                        {"kind": "OBJECT", "name": "Query", "fields": [{"name": "me", "args": [], "type": {"kind": "OBJECT", "name": "User"}}]},
+                        {"kind": "OBJECT", "name": "User", "fields": [{"name": "id", "args": [], "type": {"kind": "SCALAR", "name": "ID"}}]},
+                        {"kind": "SCALAR", "name": "ID"}]}}}"#
+                } else {
+                    "{}"
+                };
+                let mut stream = stream;
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{answer}",
+                    answer.len()
+                );
+            });
+        }
+    });
+    port
+}
+
+#[test]
+fn a_graphql_schema_is_fetched_kept_and_read_again() {
+    let port = graphql_server();
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("opencollection.yml"),
+        "opencollection: 1.0.0\ninfo:\n  name: G\n",
+    )
+    .unwrap();
+    for (name, path) in [("me", "graphql"), ("closed", "closed")] {
+        std::fs::write(
+            dir.path().join(format!("{name}.yml")),
+            format!("info:\n  name: {name}\n  type: graphql\ngraphql:\n  url: http://127.0.0.1:{port}/{path}\n  body:\n    query: '{{ me {{ id }} }}'\n    variables: ''\n"),
+        )
+        .unwrap();
+    }
+    let (core, _, data) = start();
+    open(&core, dir.path());
+    let key = at(&core, "me.yml");
+    core.send(Command::OpenRequest(key.clone()));
+    let snapshot = wait(&core, "the tab", |s| s.active.as_ref() == Some(&key));
+    let view = active_tab(&snapshot).context.schema.clone().unwrap();
+    assert!(view.schema.is_none() && !view.fetching);
+
+    core.send(Command::FetchSchema(key.clone()));
+    let snapshot = wait(&core, "the schema", |s| {
+        s.active_tab()
+            .and_then(|t| t.context.schema.as_ref())
+            .is_some_and(|v| v.schema.is_some())
+    });
+    let view = active_tab(&snapshot).context.schema.clone().unwrap();
+    let schema = view.schema.unwrap();
+    assert_eq!(schema.query.as_deref(), Some("Query"));
+    assert_eq!(schema.type_named("User").unwrap().fields[0].name, "id");
+    assert_eq!(view.error, None);
+    assert!(data.path().join("schemas").exists(), "kept on disk");
+    drop(core);
+
+    // Another session finds it without asking.
+    let core = Core::start_with(data.path().to_path_buf(), SystemKeyring::off(), || {});
+    open(&core, dir.path());
+    let key = at(&core, "me.yml");
+    core.send(Command::OpenRequest(key.clone()));
+    let snapshot = wait(&core, "the kept schema", |s| {
+        s.active_tab()
+            .and_then(|t| t.context.schema.as_ref())
+            .is_some_and(|v| v.schema.is_some())
+    });
+    assert!(
+        !active_tab(&snapshot)
+            .context
+            .schema
+            .as_ref()
+            .unwrap()
+            .fetching
+    );
+
+    // A server with introspection off says so.
+    let closed = at(&core, "closed.yml");
+    core.send(Command::OpenRequest(closed.clone()));
+    wait(&core, "the closed tab", |s| {
+        s.active.as_ref() == Some(&closed)
+    });
+    core.send(Command::FetchSchema(closed));
+    let snapshot = wait(&core, "the refusal", |s| {
+        s.active_tab()
+            .and_then(|t| t.context.schema.as_ref())
+            .is_some_and(|v| v.error.is_some())
+    });
+    let why = active_tab(&snapshot)
+        .context
+        .schema
+        .clone()
+        .unwrap()
+        .error
+        .unwrap();
+    assert!(why.contains("introspection is off"), "{why}");
+}

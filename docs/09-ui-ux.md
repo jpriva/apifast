@@ -132,6 +132,8 @@ La cabecera de la barra lateral tiene:
 
 - Resaltado para JSON, XML, SPARQL, GraphQL y texto con plantillas.
 - El body GraphQL tiene dos editores: la operación ("Query", con palabras clave, `$variables`, argumentos, strings y comentarios resaltados) y sus variables en JSON. Elegir GraphQL sobre un JSON que ya es `{"query": …, "variables": …}` (como los que dejaban otros importadores) lo separa; volver a texto conserva la operación.
+- Debajo, la sección **Schema**: "Fetch schema" (o "Fetch again") le pide el esquema al servidor en segundo plano, con un indicador mientras tanto, y dice cuántos tipos tiene o por qué falló. Si falla, el esquema anterior se sigue mostrando.
+- El **explorador** muestra los tipos raíz (`Query`, `Mutation`, `Subscription`) y todos los tipos con su clase, filtrables por nombre. En un tipo: sus interfaces, su descripción y sus campos con argumentos (y sus valores por defecto) y el tipo que devuelven (`[User!]!`), los valores de un enum, los campos de un input y los tipos de una unión. Cada nombre de tipo es un enlace; "Back" vuelve y la ruta recorrida se muestra arriba. Lo obsoleto aparece tachado y marcado.
 - Formatear (`Alt+Shift+F` o el botón Format) JSON y XML, con dos espacios de sangría. El formateador solo mueve espacios, así que acepta `{{variables}}` donde va un valor (`"id": {{id}}`). Si los corchetes o las etiquetas no cuadran, o algo queda sin cerrar, no cambia nada y dice en qué línea está el problema.
 - Buscar y reemplazar (pendiente).
 - Las variables se resaltan: las que se resuelven, sobre un tinte de su color; las que no existen, en otro color y subrayadas, para que el color no sea la única señal; las que se generan al enviar (`{{$...}}`, `{{?...}}`, `process.env`, funciones), en un tercer color.

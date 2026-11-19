@@ -476,3 +476,26 @@ fn a_graphql_body_has_a_query_and_its_variables() {
         Body::Text("{ me { id } }".into())
     );
 }
+
+#[test]
+fn a_graphql_body_asks_for_its_schema() {
+    let mut graphql = request();
+    graphql.body = Body::GraphQl {
+        query: "{ me }".into(),
+        variables: String::new(),
+    };
+    let mut harness = harness(RequestTab::Body, graphql);
+    // Without a schema in the context (not worked out yet), no section.
+    assert!(harness.query_by_label(EN.schema_fetch).is_none());
+    harness.state_mut().context.schema = Some(apifast_gui::core::SchemaView::default());
+    // Tall enough for both editors and the section.
+    harness.set_size(egui::vec2(800.0, 1200.0));
+    harness.run();
+    assert!(harness.query_by_label(EN.schema_none).is_some());
+    harness.get_by_label(EN.schema_fetch).click();
+    harness.run();
+    assert!(
+        harness.state().panel.fetch_schema,
+        "asked, for the screen to send"
+    );
+}

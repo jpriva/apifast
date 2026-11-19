@@ -490,3 +490,54 @@ fn the_reimport_window_proposes_the_source_and_applies_what_is_chosen() {
     );
     assert!(!harness.state().window.open);
 }
+
+#[test]
+fn the_schema_explorer_goes_from_type_to_type_and_back() {
+    use apifast_domain::{GraphQlSchema, Json};
+    use apifast_gui::organisms::SchemaExplorer;
+
+    let answer = r#"{"data": {"__schema": {"queryType": {"name": "Query"}, "types": [
+        {"kind": "OBJECT", "name": "Query", "fields": [{"name": "users", "description": "Every user.",
+            "args": [{"name": "first", "defaultValue": "10", "type": {"kind": "SCALAR", "name": "Int"}}],
+            "type": {"kind": "NON_NULL", "ofType": {"kind": "LIST", "ofType": {"kind": "OBJECT", "name": "User"}}}}]},
+        {"kind": "OBJECT", "name": "User", "fields": [
+            {"name": "id", "args": [], "type": {"kind": "SCALAR", "name": "ID"}},
+            {"name": "login", "args": [], "isDeprecated": true, "type": {"kind": "SCALAR", "name": "String"}}]},
+        {"kind": "ENUM", "name": "Role", "enumValues": [{"name": "ADMIN"}]},
+        {"kind": "SCALAR", "name": "ID"}, {"kind": "SCALAR", "name": "Int"}, {"kind": "SCALAR", "name": "String"}]}}}"#;
+    let schema = GraphQlSchema::from_introspection(&Json::parse(answer).unwrap()).unwrap();
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(700.0, 600.0))
+        .build_ui_state(
+            move |ui, explorer: &mut SchemaExplorer| explorer.show(ui, &schema, &EN),
+            SchemaExplorer::default(),
+        );
+    harness.run();
+    assert!(harness.query_by_label(EN.schema_roots).is_some());
+    // The root type, then the type a field returns.
+    harness.get_all_by_label("Query").next().unwrap().click();
+    harness.run();
+    assert_eq!(harness.state().current(), Some("Query"));
+    assert!(harness.query_by_label("Every user.").is_some());
+    assert!(
+        harness.query_by_label("= 10").is_some(),
+        "the argument's default"
+    );
+    harness.get_by_label("[User]!").click();
+    harness.run();
+    assert_eq!(harness.state().current(), Some("User"));
+    assert!(harness.query_by_label(EN.schema_deprecated).is_some());
+    harness.get_by_label(EN.schema_back).click();
+    harness.run();
+    harness.get_by_label(EN.schema_back).click();
+    harness.run();
+    assert_eq!(harness.state().current(), None);
+
+    // The list of types filters by name.
+    harness.get_by_label(EN.schema_filter).focus();
+    harness.run();
+    harness.get_by_label(EN.schema_filter).type_text("rol");
+    harness.run();
+    assert!(harness.query_by_label("Role").is_some());
+    assert!(harness.query_by_label("User").is_none());
+}

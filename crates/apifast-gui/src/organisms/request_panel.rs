@@ -70,6 +70,11 @@ pub struct RequestPanel {
     /// A note over the tabs, such as the options of a pasted cURL that
     /// were not kept. Gone with the next edit of the URL.
     pub note: Option<String>,
+    /// Whether the user asked for the GraphQL schema, once, since the last
+    /// time it was taken.
+    pub fetch_schema: bool,
+    /// Where the GraphQL schema explorer is.
+    pub schema_explorer: super::SchemaExplorer,
 }
 
 /// What the user can ask of a request's OAuth 2.0 token.
@@ -130,15 +135,20 @@ impl RequestPanel {
                         .unwrap_or_else(|| Action::FormatBody.defaults());
                     let now = std::mem::take(&mut self.format_now);
                     let files = &mut self.files;
-                    body(
+                    let changed = body(
                         ui,
                         &mut request.body,
                         (&shortcuts, now),
                         files,
                         hints,
                         strings,
-                    )
-                    .then_some(RequestChange::Other)
+                    );
+                    if let (Body::GraphQl { .. }, Some(view)) = (&request.body, &context.schema) {
+                        ui.add_space(theme::space::M);
+                        let explorer = &mut self.schema_explorer;
+                        self.fetch_schema |= schema_section(ui, view, explorer, strings);
+                    }
+                    changed.then_some(RequestChange::Other)
                 }
                 RequestTab::Auth => {
                     let changed = auth(ui, &mut request.auth, context, hints, strings);
@@ -160,6 +170,48 @@ impl RequestPanel {
             })
             .inner
     }
+}
+
+/// The GraphQL schema: how it stands, a button to fetch it, and the
+/// explorer. Whether the button was pressed.
+fn schema_section(
+    ui: &mut egui::Ui,
+    view: &crate::core::SchemaView,
+    explorer: &mut super::SchemaExplorer,
+    strings: &Strings,
+) -> bool {
+    let palette = theme::palette(ui);
+    let mut fetch = false;
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(strings.schema_explorer).strong());
+        let label = if view.schema.is_some() {
+            strings.schema_fetch_again
+        } else {
+            strings.schema_fetch
+        };
+        fetch = ui
+            .add_enabled(!view.fetching, egui::Button::new(label))
+            .clicked();
+        if view.fetching {
+            ui.spinner();
+            ui.label(muted(ui, strings.schema_fetching));
+        } else if let Some(schema) = &view.schema {
+            let count = schema.user_types().count();
+            ui.label(muted(ui, &format!("{count} {}", strings.schema_types)));
+        }
+    });
+    if let Some(why) = &view.error {
+        let text = format!("{} {why}", strings.schema_failed);
+        ui.label(RichText::new(text).color(palette.danger).small());
+    }
+    match &view.schema {
+        Some(schema) => explorer.show(ui, schema, strings),
+        None if !view.fetching => {
+            ui.label(muted(ui, strings.schema_none));
+        }
+        None => {}
+    }
+    fetch
 }
 
 /// The stored OAuth 2.0 token: when it expires, and buttons to get a new

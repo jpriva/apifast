@@ -244,6 +244,11 @@ impl MainScreen {
             collection,
             active,
         );
+        if std::mem::take(&mut self.request.fetch_schema)
+            && let Some(tab) = active
+        {
+            commands.push(Command::FetchSchema(tab.key()));
+        }
         if edit_environments {
             self.environments.open = !self.environments.open;
         }

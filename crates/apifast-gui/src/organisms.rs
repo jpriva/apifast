@@ -19,6 +19,7 @@ mod request_panel;
 mod response;
 mod response_cookies;
 mod runner_window;
+mod schema_explorer;
 mod settings_window;
 mod shortcuts;
 mod tabs;
@@ -47,6 +48,7 @@ pub use response::{
 };
 pub use response_cookies::set_by as cookies_set_by;
 pub use runner_window::{RunnerEvent, RunnerWindow};
+pub use schema_explorer::SchemaExplorer;
 pub use settings_window::SettingsWindow;
 pub use shortcuts::{ShortcutEditor, shortcut_of};
 pub use tabs::{TabBar, TabEvent};

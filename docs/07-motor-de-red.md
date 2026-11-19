@@ -272,7 +272,8 @@ Probado con un servidor que mantiene la conexión (el primer envío a `localhost
 ### GraphQL (F7)
 
 - Es una request HTTP con body especial: editor de `query` y de `variables`. Se envía como `{"query": …, "variables": …}` con `Content-Type: application/json`; el formato de archivo es el de Bruno ([docs/04](04-formato-de-archivos.md#requests-graphql)).
-- Introspección del esquema bajo demanda, guardada en caché local, para autocompletar y explorar tipos.
+- Introspección del esquema bajo demanda (`fetch_schema`), para autocompletar y explorar tipos. Se envía la request misma con la query de introspección estándar como body (la de GraphiQL, con referencias de tipo de siete niveles) y sin sus aserciones ni capturas, así que usa su entorno, sus headers heredados, su auth (OAuth 2.0 incluido), su proxy y sus certificados. Una respuesta que no es 2xx, que no es JSON o que no trae `__schema` da un error con el motivo; si el servidor la rechaza (introspección desactivada), el mensaje es el suyo.
+- La respuesta se guarda tal cual en los datos locales de la colección (`schemas/<colección>/`, un archivo por clave), con la URL de la request tal como está escrita y el entorno como clave: cada entorno puede apuntar a otro servidor. En la siguiente sesión el esquema está sin preguntar; uno que ya no se lee como esquema cuenta como ausente. Pedirlo otra vez reemplaza el guardado; si falla, el anterior sigue.
 
 ### Server-Sent Events (F7)
 

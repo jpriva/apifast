@@ -18,6 +18,7 @@ mod import;
 mod proxy;
 mod reimport;
 mod runner;
+mod schema;
 mod tokens;
 mod vault;
 mod workspace;
@@ -30,6 +31,7 @@ pub use copy::Copied;
 pub use export::Exported;
 pub use import::ImportView;
 pub use reimport::ReimportView;
+pub use schema::SchemaView;
 pub use vault::{Revealed, SHOWN_FOR, SecretState, SecretStatus, VaultCommand, VaultView};
 
 use std::collections::{BTreeMap, HashMap};
@@ -112,6 +114,9 @@ fn stores(
         data_dir,
         keyring,
     );
+    let schemas = apifast_history::FsSchemaCache::new(apifast_history::dirs::schemas_dir_in(
+        data_dir, root, id,
+    ));
     Ok(Stores {
         responses,
         sessions,
@@ -119,6 +124,7 @@ fn stores(
         vault: secrets,
         tokens: Arc::new(tokens),
         cookies: Arc::new(cookies),
+        schemas,
     })
 }
 
@@ -130,6 +136,7 @@ struct Stores {
     vault: Option<Arc<VaultSecrets>>,
     tokens: Arc<dyn TokenStore>,
     cookies: Arc<dyn apifast_app::CookieStore>,
+    schemas: apifast_history::FsSchemaCache,
 }
 
 /// A response whose body is in `store`.
@@ -443,6 +450,9 @@ pub enum Command {
     ApplyReimport(Vec<String>),
     /// Forgets the reimport being reviewed.
     CloseReimport,
+    /// Asks the server of the tab's GraphQL request for its schema (see
+    /// [`TabContext::schema`]).
+    FetchSchema(TabKey),
     /// Writes the collection at `root` to `file` as Postman, with its
     /// environments next to it (see [`Snapshot::exported`]).
     ExportPostman {
@@ -623,6 +633,8 @@ pub struct TabContext {
     pub inherited_settings: ResolvedSettings,
     /// The OAuth 2.0 token stored for the request, when it uses OAuth 2.0.
     pub token: TokenState,
+    /// Its GraphQL schema, when its body is GraphQL.
+    pub schema: Option<SchemaView>,
     /// Changes whenever it is worked out again.
     pub revision: u64,
 }
@@ -655,6 +667,7 @@ impl Default for TabContext {
             inherited_auth: Resolved::new(AuthScheme::None, Origin::Default),
             inherited_settings: nothing.settings().clone(),
             token: TokenState::NotUsed,
+            schema: None,
             revision: 0,
         }
     }
@@ -741,6 +754,12 @@ enum Message {
     Run(u64, runner::RunMessage),
     /// The token for the tab was obtained, or why not.
     TokenObtained(TabKey, Result<(), String>),
+    /// The schema of collection `.0`, kept by `.1`, came, or why not.
+    SchemaFetched(
+        PathBuf,
+        String,
+        Result<apifast_domain::GraphQlSchema, String>,
+    ),
 }
 
 /// How a send ended: its number, its collection, its result and its
@@ -949,6 +968,10 @@ impl State {
                     self.token_obtained(&key, result);
                     self.sync_cookies();
                 }
+                Message::SchemaFetched(root, key, result) => {
+                    self.schema_fetched(&root, key, result);
+                    self.sync_cookies();
+                }
                 Message::HistoryLoaded(opened, entries) => self.history_loaded(opened, entries),
                 Message::HideShown(shown) => self.hide_shown(shown),
                 Message::External(opened, changes) => {
@@ -1056,6 +1079,7 @@ impl State {
             Command::Vault(command) => self.vault_command(command),
             Command::Cookies(command) => self.cookie_command(command),
             Command::CopyAs(key, language) => self.copy_as(&key, language),
+            Command::FetchSchema(key) => self.fetch_schema(key),
             Command::ExportPostman { root, file } => self.export_postman(&root, &file),
             Command::PlanImport { .. }
             | Command::ApplyImport(_)
@@ -1279,6 +1303,13 @@ impl State {
 
     /// Works out again the context of the tab at `only`, or of every tab.
     fn refresh_variables(&mut self, only: Option<&TabKey>) {
+        let keys: Vec<TabKey> = (self.snapshot.tabs.iter())
+            .filter(|tab| only.is_none_or(|key| tab.is(key)))
+            .map(Tab::key)
+            .collect();
+        for key in &keys {
+            self.load_schema(key);
+        }
         for index in 0..self.snapshot.tabs.len() {
             let tab = &self.snapshot.tabs[index];
             if only.is_some_and(|key| !tab.is(key)) {
@@ -1338,8 +1369,11 @@ impl State {
         } else {
             TokenState::NotUsed
         };
+        let schema = schema::key_of(open, request)
+            .map(|key| open.schemas.get(&key).cloned().unwrap_or_default());
         TabContext {
             token,
+            schema,
             variables,
             folders: loaded.folders.iter().map(|f| f.name.clone()).collect(),
             inherited_headers: inherited.headers().to_vec(),

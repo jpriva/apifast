@@ -895,6 +895,38 @@ pub struct Strings {
     pub graphql_query: &'static str,
     /// Editor of a GraphQL body: its variables.
     pub graphql_variables: &'static str,
+    /// Button: ask the server for its GraphQL schema.
+    pub schema_fetch: &'static str,
+    /// Button: ask for the schema again.
+    pub schema_fetch_again: &'static str,
+    /// While the schema is being asked for.
+    pub schema_fetching: &'static str,
+    /// When no schema is known yet.
+    pub schema_none: &'static str,
+    /// Before why fetching the schema failed.
+    pub schema_failed: &'static str,
+    /// Heading of the schema explorer.
+    pub schema_explorer: &'static str,
+    /// After a count: types of a schema.
+    pub schema_types: &'static str,
+    /// Button: back to the previous type.
+    pub schema_back: &'static str,
+    /// Field: filter the schema's types.
+    pub schema_filter: &'static str,
+    /// Heading: the schema's root types.
+    pub schema_roots: &'static str,
+    /// Heading: every type of the schema.
+    pub schema_all_types: &'static str,
+    /// Heading: a type's fields.
+    pub schema_fields: &'static str,
+    /// Heading: an enum's values.
+    pub schema_values: &'static str,
+    /// Heading: a union's or interface's types.
+    pub schema_possible: &'static str,
+    /// Mark of a deprecated field or value.
+    pub schema_deprecated: &'static str,
+    /// Before the interfaces a type implements.
+    pub schema_implements: &'static str,
     /// Body type: URL-encoded form.
     pub body_form: &'static str,
     /// Body type: multipart.
@@ -1403,6 +1435,22 @@ pub const EN: Strings = Strings {
     body_graphql: "GraphQL",
     graphql_query: "Query",
     graphql_variables: "Variables (JSON)",
+    schema_fetch: "Fetch schema",
+    schema_fetch_again: "Fetch again",
+    schema_fetching: "Fetching the schema…",
+    schema_none: "No schema yet: fetch it to explore its types.",
+    schema_failed: "Cannot fetch the schema:",
+    schema_explorer: "Schema",
+    schema_types: "types",
+    schema_back: "Back",
+    schema_filter: "Filter types",
+    schema_roots: "Root types",
+    schema_all_types: "All types",
+    schema_fields: "Fields",
+    schema_values: "Values",
+    schema_possible: "Possible types",
+    schema_deprecated: "deprecated",
+    schema_implements: "implements",
     body_form: "Form (URL-encoded)",
     body_multipart: "Multipart form",
     body_file: "File",

@@ -5,7 +5,7 @@
 
 ## Contexto
 
-Además de la colección, la aplicación guarda datos que no deben versionarse: historial de ejecuciones, cuerpos de respuesta, cookies, secretos solo locales, claves envueltas y estado de la interfaz. Yaak usa SQLite para todo esto (más una segunda base para cuerpos); Bruno combina archivos JSON con SQLite.
+Además de la colección, la aplicación guarda datos que no deben versionarse: historial de ejecuciones, cuerpos de respuesta, cookies, secretos solo locales, claves envueltas, esquemas GraphQL obtenidos por introspección y estado de la interfaz. Yaak usa SQLite para todo esto (más una segunda base para cuerpos); Bruno combina archivos JSON con SQLite.
 
 ## Decisión
 

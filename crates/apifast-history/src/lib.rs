@@ -10,8 +10,10 @@
 
 pub mod dirs;
 mod history;
+mod schemas;
 
 pub use history::FsHistoryStore;
+pub use schemas::FsSchemaCache;
 
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};

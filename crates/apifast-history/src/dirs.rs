@@ -103,8 +103,16 @@ pub fn cookies_file_in(data_dir: &Path, root: &Path, collection_id: Option<&str>
         .join(format!("{}.jar", collection_key(root, collection_id)))
 }
 
+/// Folder with the GraphQL schemas of the collection at `root`, under
+/// `data_dir`, keyed like [`responses_dir`].
+pub fn schemas_dir_in(data_dir: &Path, root: &Path, collection_id: Option<&str>) -> PathBuf {
+    data_dir
+        .join("schemas")
+        .join(collection_key(root, collection_id))
+}
+
 /// Moves what apifast keeps of the collection at `root` under `data_dir`
-/// (responses, session, history, tokens and cookies) from its path's hash to `id`, when the
+/// (responses, session, history, tokens, cookies and schemas) from its path's hash to `id`, when the
 /// collection gets an id. What is already under `id` is left alone.
 ///
 /// # Errors
@@ -131,6 +139,10 @@ pub fn move_to_id(data_dir: &Path, root: &Path, id: &str) -> std::io::Result<()>
         (
             cookies_file_in(data_dir, root, None),
             cookies_file_in(data_dir, root, Some(id)),
+        ),
+        (
+            schemas_dir_in(data_dir, root, None),
+            schemas_dir_in(data_dir, root, Some(id)),
         ),
     ];
     for (from, to) in moves {
@@ -185,7 +197,7 @@ fn user_config_dir() -> Option<PathBuf> {
 }
 
 /// FNV-1a: a stable hash (unlike the standard library's, which is seeded).
-fn fnv1a(bytes: &[u8]) -> u64 {
+pub(crate) fn fnv1a(bytes: &[u8]) -> u64 {
     bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &b| {
         (hash ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3)
     })

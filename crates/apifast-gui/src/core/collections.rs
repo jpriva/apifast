@@ -61,6 +61,11 @@ pub(super) struct Open {
     /// Unsaved changes of requests without a tab, kept until the request
     /// is opened again.
     pub(super) parked: HashMap<RequestPath, HttpRequest>,
+    /// Where its GraphQL schemas are kept between sessions.
+    pub(super) schema_cache: Arc<apifast_history::FsSchemaCache>,
+    /// Its GraphQL schemas, by [`apifast_app::schema_key`], as read or
+    /// asked for in this session.
+    pub(super) schemas: HashMap<String, super::schema::SchemaView>,
     /// Watches its folder. `None` if the system refused: changes made
     /// outside then show after loading it again.
     pub(super) _watcher: Option<FsWatcher>,
@@ -280,6 +285,7 @@ impl State {
             vault,
             tokens,
             cookies: cookie_store,
+            schemas: schema_cache,
         } = stores(&self.data_dir, root, id, (shared, self.keyring))?;
         let (cookies, cookie_error) = super::cookies::load_jar(&*cookie_store);
         cookies.set_policy(self.cookie_policy.0, self.cookie_policy.1);
@@ -331,6 +337,8 @@ impl State {
                 entries: Arc::default(),
                 vault_view: VaultView::default(),
                 parked,
+                schema_cache: Arc::new(schema_cache),
+                schemas: HashMap::new(),
                 _watcher: watcher,
             },
         );
