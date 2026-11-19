@@ -237,7 +237,7 @@ apifast vault <subcomando>
 apifast import postman <colección.json> [--env <entorno.json>]... --out <carpeta> [--dry-run]
 ```
 
-Crea una colección nueva en `--out` a partir de una exportación de Postman (colección v2.0 o v2.1, también envuelta en `{"collection": …}` como la da su API) y, con `--env`, de sus entornos. Antes de escribir imprime el plan: cada carpeta y request con la ruta que tendrá, los entornos, y lo que no se conservó, con dónde estaba (`Users / Get user: a \`test\` script is not imported…`). Con `--dry-run` se queda ahí. Nunca escribe sobre una carpeta que ya tiene una colección.
+Crea una colección nueva en `--out` a partir de una exportación de Postman (colección v2.0 o v2.1, también envuelta en `{"collection": …}` como la da su API) y, con `--env`, de sus entornos. Antes de escribir imprime el plan: cada carpeta y request con la ruta que tendrá, los entornos, y lo que no se conservó, con dónde estaba (`Users / Get user: a \`test\` script is not imported…`). Con `--dry-run` se queda ahí. Sobre una carpeta que ya tiene una colección solo escribe si salió de una importación, y entonces la actualiza ([Importar otra vez](#importar-otra-vez)).
 
 Lo que se traduce de Postman (con las decisiones del importador de Bruno):
 
@@ -289,6 +289,30 @@ Una exportación de Insomnia: la v4 (JSON, una lista de recursos enlazados por `
 - Las carpetas conservan su auth y su entorno, como variables de la carpeta.
 - Los entornos: el base y uno por cada sub-entorno, mezclado sobre el base. Un valor anidado es una variable de tipo objeto (`{{user.name}}` lo lee), no se aplana en claves con puntos.
 - Los scripts se avisan (F9); las requests de WebSocket y gRPC se dejan fuera con aviso.
+
+#### Importar otra vez
+
+```
+apifast import <formato> <archivo> --out <colección importada> [--dry-run] [--overwrite] [--prune]
+```
+
+Si `--out` es una colección que salió de una importación, la actualiza en lugar de negarse ([ADR 0010](adr/0010-reimportacion.md)). Cada importación deja en `.apifast/import.yml` qué escribió; la siguiente compara cada request como vino entonces, como está ahora y como la trae la fuente, y lo imprime:
+
+```
+Updating pets (last imported from openapi pets.yaml): 1 new, 2 changed, 5 unchanged
+  pets/list-pets.yml: changed in the source
+  pets/get-pet.yml: changed in the source and here [skip]
+  pets/adopt.yml: new
+  (--overwrite takes the source's version of what was edited or deleted here)
+```
+
+- Lo nuevo se crea y lo que cambió solo en la fuente se actualiza, conservando su posición.
+- Lo que cambió también aquí, y lo que se borró aquí, se salta; `--overwrite` toma la versión de la fuente.
+- Lo que la fuente ya no tiene se conserva; `--prune` lo borra.
+- Lo saltado se vuelve a mostrar en la siguiente reimportación.
+- Los entornos solo se añaden.
+
+Una carpeta con una colección que no se importó (sin `.apifast/import.yml`) se rechaza.
 
 ### `apifast run`
 

@@ -400,6 +400,16 @@ dns:
 | `vault.challenge` | Texto cifrado con la clave de la colección; permite detectar una clave incorrecta |
 | `dns` | Sobrescrituras de DNS de la colección ([docs/07](07-motor-de-red.md#dns)): `host` (con `*` como comodín), `address` (una IP) y `enabled` (por defecto `true`; solo se escribe `false`). Sin entradas, la clave no aparece |
 
+`.apifast/import.yml`, si la colección salió de una importación ([ADR 0010](adr/0010-reimportacion.md)): la fuente y, por cada request escrita, su clave en la fuente, su archivo y la huella de cómo vino. Permite importar otra vez sin pisar las ediciones.
+
+```yaml
+source: openapi pets.yaml
+requests:
+  - key: listPets
+    path: pets/list-pets.yml
+    hash: 81ff5d9b29cae323
+```
+
 `.apifast/secrets/produccion.yml`:
 
 ```yaml

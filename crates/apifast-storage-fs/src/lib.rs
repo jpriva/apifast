@@ -920,6 +920,16 @@ impl apifast_app::ImportRecords for FsCollection {
             ("source", Some(yaml::string(record.source.clone()))),
             ("requests", Some(Value::from(requests))),
         ]);
+        // Like every file of `.apifast/`, hidden from Bruno.
+        if let Some(mut collection) = self.read_value(COLLECTION_FILE)? {
+            let before = collection.clone();
+            write::add_ignore(&mut collection, APIFAST_DIR);
+            if collection != before {
+                let text = write::to_text(&collection).map_err(|e| invalid(COLLECTION_FILE, &e))?;
+                fs::write_atomic(&self.root.join(COLLECTION_FILE), text.as_bytes())
+                    .map_err(|e| io_error(COLLECTION_FILE, &e))?;
+            }
+        }
         let text = write::to_text(&doc).map_err(|e| invalid(IMPORT_FILE, &e))?;
         let path = self.root.join(IMPORT_FILE);
         if let Some(dir) = path.parent() {

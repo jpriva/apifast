@@ -106,6 +106,9 @@ pub struct ReimportEntry {
     pub action: ReimportAction,
     /// Whether it happens. `Unchanged` ones are never written.
     pub selected: bool,
+    /// Its fingerprint in the last import's record, kept when it is not
+    /// written, so it is offered again next time.
+    pub previous_hash: Option<String>,
 }
 
 /// What importing again would do.
@@ -169,6 +172,7 @@ pub fn plan_reimport(
                 path,
                 action,
                 selected: matches!(action, ReimportAction::Create | ReimportAction::Update),
+                previous_hash: recorded.map(|r| r.hash.clone()),
             }),
             Err(e) => failure = Some(e),
         }
@@ -189,6 +193,7 @@ pub fn plan_reimport(
                 path: recorded.path.clone(),
                 action: ReimportAction::Removed,
                 selected: false,
+                previous_hash: Some(recorded.hash.clone()),
             });
         }
     }
@@ -296,12 +301,19 @@ pub fn apply_reimport(
                 }
             }
         }
-        // What the source has is recorded as seen, written or not.
-        if let (Some(new), false) = (new, entry.action == ReimportAction::Removed) {
+        // What was written, or is the same, is recorded as the source has
+        // it; what was left out keeps its last record, to be offered again.
+        let written = entry.selected || entry.action == ReimportAction::Unchanged;
+        let hash = match (written, entry.action, new) {
+            (true, ReimportAction::Removed, _) => None,
+            (true, _, Some(new)) => Some(request_hash(new)),
+            _ => entry.previous_hash.clone(),
+        };
+        if let Some(hash) = hash {
             record.requests.push(RecordedRequest {
                 key: entry.key.clone(),
                 path: entry.path.clone(),
-                hash: request_hash(new),
+                hash,
             });
         }
     }
@@ -445,17 +457,17 @@ mod tests {
             "not recreated unless chosen"
         );
 
-        // The same source again: nothing to do, the edit stays.
+        // The same source again: what was left out is offered again.
         let record = collections.import_record().unwrap().unwrap();
         let again = plan_reimport(&collections, &record, &second).unwrap();
-        assert!(
-            again.entries.iter().all(|e| matches!(
-                e.action,
-                ReimportAction::Unchanged | ReimportAction::Deleted
-            )),
-            "{:#?}",
-            again.entries
+        assert_eq!(
+            action(&again, "changes"),
+            (ReimportAction::Unchanged, false)
         );
+        assert_eq!(action(&again, "new"), (ReimportAction::Unchanged, false));
+        assert_eq!(action(&again, "edited"), (ReimportAction::Conflict, false));
+        assert_eq!(action(&again, "deleted"), (ReimportAction::Deleted, false));
+        assert_eq!(action(&again, "removed"), (ReimportAction::Removed, false));
     }
 
     #[test]

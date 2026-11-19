@@ -69,10 +69,14 @@ fn a_postman_export_becomes_a_collection_that_sends() {
     assert!(seen[0].starts_with("GET /users "), "{seen:?}");
     assert!(seen[0].contains("x-trace: 1"), "{seen:?}");
 
-    // Never over a collection.
+    // Again, the same export: nothing changes.
     let again = apifast(dir.path(), data.path(), &args[..7]);
-    assert!(!again.status.success());
-    assert!(text(&again.stderr).contains("already holds a collection"));
+    assert!(again.status.success(), "{}", text(&again.stderr));
+    assert!(
+        text(&again.stdout).contains("0 new, 0 changed, 1 unchanged"),
+        "{}",
+        text(&again.stdout)
+    );
 }
 
 #[test]
@@ -198,5 +202,79 @@ fn an_insomnia_export_becomes_a_collection_that_sends() {
         server.seen()[0].starts_with("GET /users?page=2 "),
         "{:?}",
         server.seen()
+    );
+}
+
+#[test]
+fn importing_again_updates_and_keeps_edits() {
+    let dir = tempfile::tempdir().unwrap();
+    let data = tempfile::tempdir().unwrap();
+    let spec = |version: &str| {
+        format!(
+            "openapi: 3.0.0\ninfo: {{title: Pets, version: '1'}}\npaths:\n  /pets:\n    get: {{operationId: listPets, summary: List pets, parameters: [{{name: v, in: query, schema: {{type: string, example: '{version}'}}}}]}}\n  /pets/{{id}}:\n    get: {{operationId: getPet, summary: Get pet, parameters: [{{name: v, in: query, schema: {{type: string, example: '{version}'}}}}]}}\n"
+        )
+    };
+    std::fs::write(dir.path().join("pets.yaml"), spec("1")).unwrap();
+    let import = |extra: &[&str]| {
+        let mut args = vec!["import", "openapi", "pets.yaml", "--out", "pets"];
+        args.extend_from_slice(extra);
+        apifast(dir.path(), data.path(), &args)
+    };
+    let out = import(&[]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert!(dir.path().join("pets/.apifast/import.yml").exists());
+    let collection = std::fs::read_to_string(dir.path().join("pets/opencollection.yml")).unwrap();
+    assert!(
+        collection.contains(".apifast"),
+        "hidden from Bruno: {collection}"
+    );
+
+    // The user edits one request; the spec changes both.
+    let edited = dir.path().join("pets/get-pet.yml");
+    let mine = std::fs::read_to_string(&edited)
+        .unwrap()
+        .replace("Get pet", "My pet");
+    std::fs::write(&edited, &mine).unwrap();
+    std::fs::write(dir.path().join("pets.yaml"), spec("2")).unwrap();
+
+    let dry = import(&["--dry-run"]);
+    let plan = text(&dry.stdout);
+    assert!(
+        plan.contains("list-pets.yml: changed in the source\n"),
+        "{plan}"
+    );
+    assert!(
+        plan.contains("get-pet.yml: changed in the source and here [skip]"),
+        "{plan}"
+    );
+    assert!(plan.contains("--overwrite"), "{plan}");
+
+    let out = import(&[]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let list = std::fs::read_to_string(dir.path().join("pets/list-pets.yml")).unwrap();
+    assert!(list.contains("value: \"2\""), "{list}");
+    assert_eq!(
+        std::fs::read_to_string(&edited).unwrap(),
+        mine,
+        "the edit is kept"
+    );
+
+    let out = import(&["--overwrite"]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let get = std::fs::read_to_string(&edited).unwrap();
+    assert!(
+        get.contains("value: \"2\"") && !get.contains("My pet"),
+        "{get}"
+    );
+
+    // A collection made by hand is not imported into.
+    let other = dir.path().join("pets/.apifast/import.yml");
+    std::fs::remove_file(other).unwrap();
+    let out = import(&[]);
+    assert!(!out.status.success());
+    assert!(
+        text(&out.stderr).contains("not imported"),
+        "{}",
+        text(&out.stderr)
     );
 }

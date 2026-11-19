@@ -166,7 +166,8 @@ Cada tipo solo se construye a partir del anterior (`resolve` en el dominio, `ren
 | `RunCollection` | Ejecuta varias requests en orden y agrega resultados |
 | `UnlockVault` | Obtiene la clave maestra y la clave de la colección |
 | `SetSecret` | Cifra y guarda un secreto compartido o local |
-| `ImportCollection` | Genera un plan de importación y lo aplica: `plan_import` (qué carpetas, requests y entornos se crearían, con su ruta, y los avisos) y `apply_import` (los escribe con los puertos de colección y entornos, en el mismo orden). Cada importador traduce su formato a `ImportedCollection` |
+| `ImportCollection` | Genera un plan de importación y lo aplica: `plan_import` (qué carpetas, requests y entornos se crearían, con su ruta, y los avisos) y `apply_import` (los escribe con los puertos de colección y entornos, en el mismo orden). Cada importador traduce su formato a `ImportedCollection`, con una clave estable por request |
+| `ReimportCollection` | Importa otra vez en una colección importada ([ADR 0010](adr/0010-reimportacion.md)): `plan_reimport` compara cada request como vino, como está y como la trae la fuente, y `apply_reimport` aplica lo elegido. El registro de la última importación se lee y escribe con el puerto `ImportRecords` (`.apifast/import.yml` en `apifast-storage-fs`) |
 | `ApplyExternalChange` | Reconcilia un cambio detectado por el watcher |
 
 ### Flujo de `SendRequest`

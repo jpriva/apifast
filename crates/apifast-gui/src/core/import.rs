@@ -56,7 +56,10 @@ impl State {
         let Some(imported) = self.importing.take() else {
             return;
         };
-        match write(target, &imported) {
+        let source = (self.snapshot.import.as_ref())
+            .and_then(|view| view.files.first())
+            .map_or_else(String::new, |file| file.display().to_string());
+        match write(target, &imported, &source) {
             Ok(()) => {
                 self.snapshot.import = None;
                 self.open_or_report(target);
@@ -122,9 +125,9 @@ fn not_known(file: &Path) -> String {
     )
 }
 
-fn write(target: &Path, imported: &ImportedCollection) -> Result<(), String> {
+fn write(target: &Path, imported: &ImportedCollection, source: &str) -> Result<(), String> {
     let repo = FsCollection::create(target, &Collection::new(imported.name.clone()))
         .map_err(|e| format!("cannot import into `{}`: {e}", target.display()))?;
-    apply_import((&repo, &repo), imported, &imported.name).map_err(|e| e.to_string())?;
+    apply_import((&repo, &repo), imported, source).map_err(|e| e.to_string())?;
     Ok(())
 }
