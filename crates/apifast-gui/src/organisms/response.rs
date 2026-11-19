@@ -78,6 +78,11 @@ pub struct ResponseView {
     pub pretty_limit: Option<u64>,
     /// The JSONPath or XPath that filters the body; empty shows it all.
     pub filter: String,
+    /// "Save as example" was pressed; taken by the screen, which adds the
+    /// example to the request.
+    pub example_requested: bool,
+    /// What saving an example said: done, or why not.
+    pub example_note: Option<String>,
     viewer: BodyViewer,
     prepared: Option<Prepared>,
     /// What the filter selected, for the body and expression it ran on.
@@ -181,7 +186,17 @@ impl ResponseView {
                 ui.ctx()
                     .copy_text(String::from_utf8_lossy(&bytes).into_owned());
             }
+            if ui
+                .button(strings.save_as_example)
+                .on_hover_text(strings.save_as_example_hint)
+                .clicked()
+            {
+                self.example_requested = true;
+            }
         });
+        if let Some(note) = &self.example_note {
+            ui.label(RichText::new(note.as_str()).color(muted).small());
+        }
         if language.is_some() && !can_pretty {
             ui.label(RichText::new(strings.pretty_off).color(muted));
         }

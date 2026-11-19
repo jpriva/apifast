@@ -262,6 +262,26 @@ pub struct Strings {
     pub collection_key: &'static str,
     /// Action: open the collection key window.
     pub action_collection_key: &'static str,
+    /// Request tab: saved examples.
+    pub examples: &'static str,
+    /// Examples tab without examples.
+    pub examples_empty: &'static str,
+    /// Field: an example's name.
+    pub example_name: &'static str,
+    /// Field: an example's description.
+    pub example_description: &'static str,
+    /// Button: delete an example.
+    pub example_delete: &'static str,
+    /// Accessible name of an example's body.
+    pub example_body: &'static str,
+    /// An example whose response had no body.
+    pub example_no_body: &'static str,
+    /// Response button: keep it as an example of the request.
+    pub save_as_example: &'static str,
+    /// Hover text of that button.
+    pub save_as_example_hint: &'static str,
+    /// After saving an example; its name follows.
+    pub example_saved: &'static str,
     /// Heading of a collection's DNS overrides.
     pub dns_overrides: &'static str,
     /// Field: the host a DNS override is for.
@@ -971,6 +991,16 @@ pub const EN: Strings = Strings {
     forget: "Forget",
     collection_key: "Collection key",
     action_collection_key: "Collection key",
+    examples: "Examples",
+    examples_empty: "No examples yet. Send the request and press “Save as example” on its response.",
+    example_name: "Example name",
+    example_description: "Description",
+    example_delete: "Delete example",
+    example_body: "Example body",
+    example_no_body: "No body.",
+    save_as_example: "Save as example",
+    save_as_example_hint: "Keep this response in the request's file, with the request as written. Saved with the request (Ctrl+S).",
+    example_saved: "Added the example, saved with the request:",
     dns_overrides: "DNS overrides",
     dns_host: "Host",
     dns_address: "IP address",

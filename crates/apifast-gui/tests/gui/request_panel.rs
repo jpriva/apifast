@@ -396,3 +396,47 @@ fn picked_files_are_kept_relative_inside_the_collection() {
     );
     assert_eq!(written_path(Path::new("/tmp/b.png"), None), "/tmp/b.png");
 }
+
+#[test]
+fn examples_are_listed_renamed_and_deleted() {
+    use apifast_domain::{Example, ExampleBody, ExampleResponse};
+    let example = |name: &str, status| Example {
+        name: name.into(),
+        description: None,
+        request: None,
+        response: Some(ExampleResponse {
+            status: Some(status),
+            body: Some(ExampleBody {
+                kind: "json".into(),
+                data: "{}".into(),
+            }),
+            ..ExampleResponse::default()
+        }),
+    };
+    let mut with = request();
+    with.examples = vec![example("Found", 200), example("Missing", 404)];
+    let mut harness = harness(RequestTab::Examples, with);
+    harness.get_by_label("Examples (2)");
+    harness
+        .get_all_by_label(EN.example_delete)
+        .next()
+        .unwrap()
+        .click();
+    harness.run();
+    let names: Vec<String> = (harness.state().request.examples.iter())
+        .map(|e| e.name.clone())
+        .collect();
+    assert_eq!(names, ["Missing"]);
+    harness
+        .get_by_role_and_label(Role::TextInput, EN.example_name)
+        .focus();
+    harness.run();
+    harness.key_press(egui::Key::End);
+    type_slowly(&mut harness, " user");
+    assert_eq!(harness.state().request.examples[0].name, "Missing user");
+    assert_eq!(harness.state().changes.last(), Some(&RequestChange::Other));
+
+    let mut empty = self::harness(RequestTab::Examples, request());
+    empty.run();
+    assert!(empty.query_by_label(EN.examples_empty).is_some());
+}

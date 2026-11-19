@@ -14,6 +14,7 @@ mod cookies;
 mod data;
 mod environments;
 mod error;
+mod examples;
 mod functions;
 mod history;
 mod host;
@@ -35,6 +36,7 @@ pub use environments::{
     create_environment, delete_environment, rename_environment, save_environment,
 };
 pub use error::{AppError, RepositoryError, StoreError, TransportError};
+pub use examples::{EXAMPLE_LIMIT, ExampleError, example_from, example_name};
 pub use history::{
     HIDDEN, HistoryEntry, HistoryLimits, HistoryOutcome, HistoryStore, hide_query, within_limits,
 };

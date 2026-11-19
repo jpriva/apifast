@@ -11,6 +11,7 @@
 //! unchanged request leaves its file byte for byte the same.
 
 mod diff;
+mod examples;
 mod fs;
 mod keymap;
 mod read;

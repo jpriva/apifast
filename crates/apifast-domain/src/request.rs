@@ -39,6 +39,8 @@ pub struct HttpRequest {
     pub settings: Settings,
     /// Markdown documentation.
     pub docs: Option<String>,
+    /// Saved examples of its responses.
+    pub examples: Vec<crate::Example>,
 }
 
 impl HttpRequest {
@@ -59,6 +61,7 @@ impl HttpRequest {
             captures: Vec::new(),
             settings: Settings::default(),
             docs: None,
+            examples: Vec::new(),
         }
     }
 }

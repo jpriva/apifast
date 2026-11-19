@@ -76,6 +76,7 @@ fn http_request(doc: &Value, name: String, seq: Option<u32>) -> HttpRequest {
             .collect(),
         settings: settings(get(doc, "settings")),
         docs: text(get(doc, "docs")),
+        examples: crate::examples::read_examples(doc),
     }
 }
 
@@ -105,7 +106,7 @@ pub(crate) fn capture(item: &Value) -> Capture {
     }
 }
 
-fn param(item: &Value) -> Param {
+pub(crate) fn param(item: &Value) -> Param {
     Param {
         name: text_or_empty(get(item, "name")),
         value: text_or_empty(get(item, "value")),
@@ -247,7 +248,7 @@ fn oauth2(value: &Value) -> OAuth2Auth {
     }
 }
 
-fn body(value: Option<&Value>) -> Body {
+pub(crate) fn body(value: Option<&Value>) -> Body {
     let Some(value) = value.filter(|v| !v.is_null()) else {
         return Body::None;
     };

@@ -36,6 +36,8 @@ pub enum RequestTab {
     Tests,
     /// Send settings.
     Settings,
+    /// Saved examples of the response.
+    Examples,
 }
 
 /// What the user changed.
@@ -99,6 +101,10 @@ impl RequestPanel {
                 (RequestTab::Auth, strings.auth.to_owned()),
                 (RequestTab::Tests, counted(strings.tests, tests)),
                 (RequestTab::Settings, strings.settings.to_owned()),
+                (
+                    RequestTab::Examples,
+                    counted(strings.examples, request.examples.len()),
+                ),
             ] {
                 ui.selectable_value(&mut self.tab, tab, label);
             }
@@ -142,6 +148,8 @@ impl RequestPanel {
                 RequestTab::Settings => {
                     settings(ui, request, context, strings).then_some(RequestChange::Other)
                 }
+                RequestTab::Examples => super::examples_panel(ui, &mut request.examples, strings)
+                    .then_some(RequestChange::Other),
             })
             .inner
     }

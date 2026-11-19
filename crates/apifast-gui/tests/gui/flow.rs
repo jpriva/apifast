@@ -486,3 +486,49 @@ fn two_collections_and_a_second_workspace() {
             .is_some()
     );
 }
+
+#[test]
+fn a_response_is_saved_as_an_example_of_its_request() {
+    let dir = collection(server());
+    let data = tempfile::tempdir().unwrap();
+    let file = dir.path().join("health.yml");
+    let mut harness = open_app(dir.path(), data.path());
+    harness.get_by_label("Environment").click();
+    wait_for(&mut harness, "local");
+    harness.get_by_label("local").click();
+    harness.step();
+    harness
+        .get_by_role_and_label(Role::TreeItem, "Health")
+        .click();
+    wait_for(&mut harness, "Send");
+    harness.get_by_label("Send").click();
+    wait_for(&mut harness, "200 OK");
+
+    harness.get_by_label(EN.save_as_example).click();
+    wait_for(&mut harness, EN.unsaved);
+    assert!(!std::fs::read_to_string(&file).unwrap().contains("examples"));
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::S);
+    wait_until(&mut harness, "the save", || {
+        std::fs::read_to_string(&file)
+            .unwrap()
+            .contains("examples:")
+    });
+    let text = std::fs::read_to_string(&file).unwrap();
+    assert!(text.contains("name: 200 OK"), "{text}");
+    assert!(text.contains("url: \"{{host}}/health\""), "{text}");
+    assert!(text.contains("type: json"), "{text}");
+    assert!(
+        text.contains(r#"{"ok":true}"#) || text.contains(r#"{\"ok\":true}"#),
+        "{text}"
+    );
+
+    harness.get_by_label("Examples (1)").click();
+    harness.run_steps(2);
+    assert_eq!(
+        harness
+            .get_by_role_and_label(Role::TextInput, EN.example_name)
+            .value()
+            .as_deref(),
+        Some("200 OK")
+    );
+}

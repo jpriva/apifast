@@ -97,20 +97,7 @@ pub(crate) fn new_request(request: &HttpRequest) -> Value {
 pub(crate) fn update_request(doc: &mut Value, old: &HttpRequest, new: &HttpRequest) {
     // Containers are only touched (or created) when something in them changes,
     // so saving an unchanged request never alters its file.
-    if (&old.name, old.seq, &old.tags) != (&new.name, new.seq, &new.tags) {
-        let info = child_mut(doc, "info");
-        if old.name != new.name {
-            set(info, "name", string(&new.name));
-        }
-        if old.seq != new.seq {
-            set_or_remove(info, "seq", new.seq.map(number));
-        }
-        if old.tags != new.tags {
-            let tags = (!new.tags.is_empty())
-                .then(|| new.tags.iter().map(string).collect::<Vec<_>>().into());
-            set_or_remove(info, "tags", tags);
-        }
-    }
+    update_info(doc, old, new);
 
     let http_changed = (
         &old.method,
@@ -202,6 +189,34 @@ pub(crate) fn update_request(doc: &mut Value, old: &HttpRequest, new: &HttpReque
     if old.docs != new.docs {
         set_or_remove(doc, "docs", new.docs.as_deref().map(string));
     }
+
+    if old.examples != new.examples {
+        crate::examples::update_examples(doc, &old.examples, &new.examples);
+    }
+}
+
+/// A list of `items` as values, or `None` when empty.
+pub(crate) fn list_value<T>(items: &[T], value: impl Fn(&T) -> Value) -> Option<Value> {
+    (!items.is_empty()).then(|| items.iter().map(value).collect::<Vec<_>>().into())
+}
+
+/// The `info` block: name, position and tags.
+fn update_info(doc: &mut Value, old: &HttpRequest, new: &HttpRequest) {
+    if (&old.name, old.seq, &old.tags) == (&new.name, new.seq, &new.tags) {
+        return;
+    }
+    let info = child_mut(doc, "info");
+    if old.name != new.name {
+        set(info, "name", string(&new.name));
+    }
+    if old.seq != new.seq {
+        set_or_remove(info, "seq", new.seq.map(number));
+    }
+    if old.tags != new.tags {
+        let tags = (!new.tags.is_empty())
+            .then(|| new.tags.iter().map(string).collect::<Vec<_>>().into());
+        set_or_remove(info, "tags", tags);
+    }
 }
 
 fn update_settings(doc: &mut Value, old: &HttpRequest, new: &HttpRequest) {
@@ -256,7 +271,7 @@ fn update_settings(doc: &mut Value, old: &HttpRequest, new: &HttpRequest) {
     }
 }
 
-fn header_value(header: &Header) -> Value {
+pub(crate) fn header_value(header: &Header) -> Value {
     mapping([
         ("name", Some(string(&header.name))),
         ("value", Some(string(&header.value))),
@@ -292,7 +307,7 @@ fn param_kind(kind: ParamKind) -> Value {
     })
 }
 
-fn param_value(param: &Param) -> Value {
+pub(crate) fn param_value(param: &Param) -> Value {
     mapping([
         ("name", Some(string(&param.name))),
         ("value", Some(string(&param.value))),
@@ -894,7 +909,7 @@ fn update_body(http: &mut Value, old: &Body, new: &Body) {
     set_or_remove(http, "body", body_value(new));
 }
 
-fn body_value(body: &Body) -> Option<Value> {
+pub(crate) fn body_value(body: &Body) -> Option<Value> {
     let s = |v: &str| Some(string(v));
     if let Some((kind, data)) = text_kind(body) {
         return Some(mapping([("type", s(kind)), ("data", s(data))]));

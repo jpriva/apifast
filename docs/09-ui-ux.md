@@ -91,6 +91,7 @@ La cabecera de la barra lateral tiene:
 | Tests | Aserciones (expresión, operador, valor esperado) y capturas (expresión, variable, ámbito) |
 | Docs | Markdown con vista previa |
 | Ajustes | Timeout, redirecciones, TLS; cada uno con "heredar" |
+| Examples | Ejemplos guardados (`Examples (2)`): cada uno plegado con su estado, nombre editable y botón para borrarlo; al abrirlo, la descripción editable, la request enviada, los headers y el body de la respuesta, de solo lectura |
 
 ### Bodies multipart y de archivo
 
@@ -141,6 +142,7 @@ La edición con resaltado se limita a unos 200 KB: con más texto, egui tarda de
 - La pestaña Tests enmascara el valor de una captura secreta. Una respuesta abierta desde el historial no tiene resultados: no se guardan en él.
 - **Capturas para el entorno:** las de ámbito `environment` se usan enseguida como variables de runtime, y un aviso sobre el editor dice cuáles se capturaron para el entorno activo, con "Save to environment" y "Discard". Al guardar, cada valor se escribe en el archivo del entorno, conservando su tipo; si la variable es secreta, va a la bóveda (local), nunca al archivo. Las capturas de envíos seguidos se acumulan en el mismo aviso. Sin entorno activo no hay aviso.
 - Acciones: copiar, guardar a archivo, guardar como ejemplo, "guardar como variable" desde un valor seleccionado.
+- **Guardar como ejemplo** ("Save as example", junto a "Copy"): añade la respuesta a los ejemplos de la request como un cambio más, con un nombre según su estado (`200 OK`, `200 OK (2)`…). La request queda con cambios sin guardar y el ejemplo llega al archivo con `Ctrl+S`, como cualquier edición; así nunca pisa un borrador. Se guarda la request tal como está escrita y la respuesta sin sus `Set-Cookie` (son sesiones, y el archivo va a git). Un body binario o de más de 1 MB no se guarda, y el aviso dice por qué.
 - Selector de respuestas anteriores de la misma request.
 
 ## Entornos y variables

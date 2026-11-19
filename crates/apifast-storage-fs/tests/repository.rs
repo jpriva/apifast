@@ -1077,3 +1077,46 @@ fn dns_overrides_live_in_the_apifast_folder_and_keep_the_id() {
     plain_repo.save_collection(&collection).unwrap();
     assert!(!plain.path().join(".apifast").exists());
 }
+
+#[test]
+fn examples_are_read_as_bruno_writes_them_and_edited_one_by_one() {
+    let file = "info:\n  name: Get user\n  type: http\n\nhttp:\n  method: GET\n  url: \"{{host}}/users/1\"\n\nexamples:\n  - name: Found\n    description: A user that exists\n    request:\n      url: \"{{host}}/users/1\"\n      method: GET\n      headers:\n        - name: accept\n          value: application/json\n    response:\n      status: 200\n      statusText: OK\n      headers:\n        - name: content-type\n          value: application/json\n      body:\n        type: json\n        data: |-\n          {\n            \"id\": 1\n          }\n  - name: Missing   # kept as written\n    response:\n      status: 404\n";
+    let (dir, repo) = setup(&[("users/get.yml", file)]);
+    let path = RequestPath::new("users/get.yml");
+    let mut request = repo.request(&path).unwrap().request;
+    assert_eq!(request.examples.len(), 2);
+    let found = &request.examples[0];
+    assert_eq!(found.description.as_deref(), Some("A user that exists"));
+    let sent = found.request.as_ref().unwrap();
+    assert_eq!(sent.headers[0].name, "accept");
+    let response = found.response.as_ref().unwrap();
+    assert_eq!(
+        (response.status, response.status_text.as_deref()),
+        (Some(200), Some("OK"))
+    );
+    let body = response.body.as_ref().unwrap();
+    assert_eq!(
+        (body.kind.as_str(), body.data.as_str()),
+        ("json", "{\n  \"id\": 1\n}")
+    );
+    assert_eq!(
+        request.examples[1].response.as_ref().unwrap().status,
+        Some(404)
+    );
+
+    // Saving it unchanged leaves the file as it was.
+    repo.save_request(&path, &request).unwrap();
+    assert_eq!(read(&dir, "users/get.yml"), file);
+    // Renaming one example touches only its name.
+    request.examples[0].name = "Exists".into();
+    repo.save_request(&path, &request).unwrap();
+    assert_eq!(
+        read(&dir, "users/get.yml"),
+        file.replace("  - name: Found\n", "  - name: Exists\n")
+    );
+    // Removing the last one drops the key.
+    request.examples.clear();
+    repo.save_request(&path, &request).unwrap();
+    assert!(!read(&dir, "users/get.yml").contains("examples"));
+    assert_eq!(repo.request(&path).unwrap().request.examples, []);
+}

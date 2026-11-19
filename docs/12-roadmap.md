@@ -313,12 +313,14 @@ Siguiente, fuera de esta sección: los entornos globales del workspace (`environ
 - [x] Descompresión manual, para registrar el tamaño comprimido y el descomprimido (en F1 la hace reqwest). gzip, deflate, brotli y zstd con decodificadores de escritura, en streaming hacia el almacén; el tamaño en la red va en el evento `decompressed` y la interfaz muestra los dos ([docs/07](07-motor-de-red.md#respuesta)).
 - [x] `encodeUrl` como en Bruno. La tarea decía "respetar `encodeUrl: false`", pero al revisar Bruno resultó al revés: desactivado, Bruno (axios) solo normaliza la URL con WHATWG, como ya hacía apifast; activado (el valor por defecto), además aplica `encodeURIComponent` a cada segmento de la ruta y a cada nombre y valor de la query. Ahora apifast hace lo mismo al renderizar ([docs/07](07-motor-de-red.md#codificación-de-la-url-encodeurl)), y el enmascarado de secretos reconoce cualquier mezcla de bytes tal cual y `%XX`.
 - [x] Multipart y cuerpos de archivo en streaming. El envío en streaming ya estaba desde F1 (reqwest lee las partes y el archivo del disco por trozos); faltaba editarlos, que F2 había dejado fuera: la interfaz edita partes de texto y de archivos, y el archivo de un body, con el diálogo del sistema y rutas relativas a la colección ([docs/09](09-ui-ux.md#bodies-multipart-y-de-archivo)). Un body de archivo sin tipo va como `application/octet-stream`, como en Bruno.
-- [ ] Ejemplos de respuesta guardados.
+- [x] Ejemplos de respuesta guardados. Con el formato de Bruno (`examples` en el archivo de la request, [docs/04](04-formato-de-archivos.md#ejemplos)); "Save as example" en la respuesta los añade como una edición de la request, y la pestaña Examples los muestra, renombra y borra ([docs/09](09-ui-ux.md#panel-de-request)). Sirven después para el servidor de mocks.
 
 ### Criterio de salida
 
 - Cada tipo de autenticación tiene una prueba de integración contra un servidor local.
 - El timeline muestra tiempos de DNS, conexión y TLS con el pool de conexiones activo.
+
+Los dos se cumplen: cada esquema (Digest, NTLM, AWS SigV4, OAuth 2.0 en sus tres flujos) se prueba contra un servidor local, y el timeline muestra DNS, conexión y TLS con el pool activo, marcando las conexiones reutilizadas. Quedan pendientes menores anotados en cada tarea: la suite y el certificado en el evento TLS, el evento de proxy, `{{variables}}` en el proxy y en las sobrescrituras de DNS, la configuración de proxy del escritorio, PKCS#12 y claves cifradas, y la lista de sufijos públicos de las cookies.
 
 ---
 

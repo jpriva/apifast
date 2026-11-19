@@ -11,7 +11,9 @@ use eframe::egui::{self, RichText};
 use crate::actions::{ALL, Action, Keymap};
 
 use crate::atoms::{ColorSwatch, HintsCache, VariableHint, VariableHints};
-use crate::core::{Command, ResponseState, Snapshot, Tab, TabContext, TabKey, VaultCommand};
+use crate::core::{
+    Command, Received, ResponseState, Snapshot, Tab, TabContext, TabKey, VaultCommand,
+};
 use crate::layout;
 use crate::molecules::EnvironmentSelector;
 use crate::organisms::{
@@ -693,7 +695,33 @@ fn editor_area(
         None => {}
     }
     response.show(ui, &tab.response, strings);
+    if std::mem::take(&mut response.example_requested)
+        && let ResponseState::Received(received) = &tab.response
+    {
+        response.example_note = Some(match save_example(request, received) {
+            Ok(name) => {
+                edited = true;
+                format!("{} “{name}”", strings.example_saved)
+            }
+            Err(why) => why,
+        });
+    }
     (event, edited)
+}
+
+/// Adds the response `received` to `request` as an example. Returns its
+/// name, or why it cannot be one.
+fn save_example(request: &mut HttpRequest, received: &Received) -> Result<String, String> {
+    let body = &received.body;
+    if body.len() > apifast_app::EXAMPLE_LIMIT as u64 {
+        return Err(apifast_app::ExampleError::TooLarge.to_string());
+    }
+    let bytes = body.read(0, usize::try_from(body.len()).unwrap_or(usize::MAX))?;
+    let name = apifast_app::example_name(received.head.status, &request.examples);
+    let example = apifast_app::example_from(&name, request, &received.head, &bytes)
+        .map_err(|e| e.to_string())?;
+    request.examples.push(example);
+    Ok(name)
 }
 
 /// What the fields show about each variable: its value (hidden if secret)

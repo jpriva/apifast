@@ -159,11 +159,42 @@ docs: |-
 | `http` | `method`, `url`, `params`, `headers`, `body`, `auth` |
 | `runtime` | `variables`, `assertions`, `actions` (capturas), `scripts` |
 | `settings` | `timeout`, `followRedirects`, `maxRedirects`, `encodeUrl` |
+| `examples` | Respuestas guardadas como ejemplo (ver abajo) |
 | `docs` | Documentación en Markdown |
 
 Cualquier entrada de lista (`params`, `headers`, variables, aserciones) admite `disabled: true`.
 
 Los parámetros de query se envían desde la URL. Bruno los duplica en `http.params` para su interfaz; apifast nunca los envía dos veces, y el editor de F2 mantendrá sincronizadas la URL y la lista, como Bruno. Los parámetros de ruta (`type: path`) sustituyen los segmentos `:nombre` de la URL.
+
+### Ejemplos
+
+Como los escribe Bruno (`bruno-filestore/src/formats/yml/items/stringifyHttpRequest.ts`):
+
+```yaml
+examples:
+  - name: 200 OK
+    description: Un usuario que existe       # opcional
+    request:
+      url: "{{host}}/users/1"
+      method: GET
+      headers:
+        - name: accept
+          value: application/json
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: content-type
+          value: application/json
+      body:
+        type: json                           # json, text, xml, html o binary
+        data: |-
+          {"id": 1}
+```
+
+- `request` usa los mismos `headers`, `params` y `body` que `http`, y guarda la request **tal como está escrita**, con sus `{{variables}}`: nunca la renderizada, que puede llevar secretos.
+- `response.body.type` se conserva tal cual aunque apifast no lo conozca. Un ejemplo sin `name` se lee como `Untitled Example`, como en Bruno.
+- Al guardar, solo se reescribe el ejemplo que cambió; uno que solo cambia de nombre conserva el resto como estaba.
 
 ### Tipos de body
 

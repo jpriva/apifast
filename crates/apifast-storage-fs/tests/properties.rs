@@ -217,6 +217,56 @@ fn capture() -> impl Strategy<Value = Capture> {
         })
 }
 
+fn example() -> BoxedStrategy<apifast_domain::Example> {
+    use apifast_domain::{Example, ExampleBody, ExampleRequest, ExampleResponse};
+    let request = (
+        text(),
+        prop::collection::vec(header(), 0..3),
+        prop::collection::vec(param(), 0..2),
+        body(),
+    )
+        .prop_map(|(url, headers, params, body)| ExampleRequest {
+            method: Method::Post,
+            url,
+            headers,
+            params,
+            body,
+        })
+        .boxed();
+    let response = (
+        prop::option::of(100u16..600),
+        prop::option::of("[A-Za-z ]{1,10}"),
+        prop::collection::vec(header(), 0..3),
+        prop::option::of((
+            prop::sample::select(vec!["json", "text", "xml", "html", "yaml"]),
+            text(),
+        )),
+    )
+        .prop_map(|(status, status_text, headers, body)| ExampleResponse {
+            status,
+            status_text,
+            headers,
+            body: body.map(|(kind, data)| ExampleBody {
+                kind: kind.to_owned(),
+                data,
+            }),
+        })
+        .boxed();
+    (
+        "[A-Za-z ]{1,10}",
+        prop::option::of("[A-Za-z]{1,10}"),
+        prop::option::of(request),
+        prop::option::of(response),
+    )
+        .prop_map(|(name, description, request, response)| Example {
+            name,
+            description,
+            request,
+            response,
+        })
+        .boxed()
+}
+
 /// A random request. The parts are boxed in groups: one tuple of fifteen
 /// strategies builds a type too big for a test thread's stack in debug builds.
 fn request() -> BoxedStrategy<HttpRequest> {
@@ -243,6 +293,7 @@ fn request() -> BoxedStrategy<HttpRequest> {
     let checks = (
         prop::collection::vec(assertion(), 0..3),
         prop::collection::vec(capture(), 0..3),
+        prop::collection::vec(example(), 0..3),
     )
         .boxed();
     let settings = (
@@ -258,7 +309,7 @@ fn request() -> BoxedStrategy<HttpRequest> {
             |(
                 (name, seq, tags, method, url),
                 (params, headers, body, auth, variables),
-                (assertions, captures),
+                (assertions, captures, examples),
                 (timeout, follow, max, encode, docs),
             )| {
                 HttpRequest {
@@ -281,6 +332,7 @@ fn request() -> BoxedStrategy<HttpRequest> {
                         encode_url: encode,
                     },
                     docs,
+                    examples,
                 }
             },
         )

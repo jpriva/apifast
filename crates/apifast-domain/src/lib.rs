@@ -20,6 +20,7 @@ mod collection;
 mod cookie;
 mod dns;
 mod environment;
+mod example;
 mod json;
 mod origin;
 mod proxy;
@@ -47,6 +48,7 @@ pub use cookie::{
 };
 pub use dns::{DnsOverride, overridden_addresses};
 pub use environment::{Environment, EnvironmentError, environment_chain};
+pub use example::{Example, ExampleBody, ExampleRequest, ExampleResponse};
 pub use json::{Json, JsonError, MAX_DEPTH as MAX_JSON_DEPTH, PathError};
 pub use origin::Origin;
 pub use proxy::{CollectionProxy, ProxyChoice, ProxyConfig, ProxyMode, ProxyProtocol};
