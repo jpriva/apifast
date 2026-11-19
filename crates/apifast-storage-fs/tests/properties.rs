@@ -154,6 +154,8 @@ fn body() -> impl Strategy<Value = Body> {
             prop::option::of(Just("application/pdf".to_owned()))
         )
             .prop_map(|(path, content_type)| Body::File { path, content_type }),
+        // A GraphQL body moves the request to the `graphql` block, and back.
+        (text(), text()).prop_map(|(query, variables)| Body::GraphQl { query, variables }),
     ]
 }
 

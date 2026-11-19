@@ -271,7 +271,7 @@ Probado con un servidor que mantiene la conexión (el primer envío a `localhost
 
 ### GraphQL (F7)
 
-- Es una request HTTP con body especial: editor de `query` y de `variables`.
+- Es una request HTTP con body especial: editor de `query` y de `variables`. Se envía como `{"query": …, "variables": …}` con `Content-Type: application/json`; el formato de archivo es el de Bruno ([docs/04](04-formato-de-archivos.md#requests-graphql)).
 - Introspección del esquema bajo demanda, guardada en caché local, para autocompletar y explorar tipos.
 
 ### Server-Sent Events (F7)

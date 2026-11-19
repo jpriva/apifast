@@ -21,7 +21,8 @@ use oneyaml::Value;
 use crate::diff::{Step, align};
 use crate::read;
 use crate::yaml::{
-    child_mut, get, items, mapping, number, prune_empty, remove, set, set_or_remove, string,
+    child_mut, get, items, mapping, number, prune_empty, remove, rename_key, set, set_or_remove,
+    string,
 };
 
 /// Top-level keys Bruno separates with a blank line.
@@ -70,25 +71,68 @@ pub(crate) fn to_text(doc: &Value) -> Result<String, oneyaml::Error> {
 
 // --- Requests ---------------------------------------------------------------
 
+/// The file's block, and `info.type`, of `request`: `graphql` for a
+/// GraphQL body, as Bruno writes it, `http` for any other.
+pub(crate) fn block_of(request: &HttpRequest) -> &'static str {
+    if matches!(request.body, Body::GraphQl { .. }) {
+        "graphql"
+    } else {
+        "http"
+    }
+}
+
+/// `text` with its request block, and `info.type`, renamed to `block`
+/// (`http` or `graphql`) where they are, if the file has the other one.
+/// Only top-level `http:`/`graphql:` lines and the `type:` line under
+/// `info:` are touched.
+pub(crate) fn retype_request_text(text: String, block: &str) -> String {
+    let other = if block == "graphql" {
+        "http"
+    } else {
+        "graphql"
+    };
+    let key = format!("{other}:");
+    if !text.lines().any(|line| line.trim_end() == key) {
+        return text;
+    }
+    let mut in_info = false;
+    let mut out = String::with_capacity(text.len());
+    for line in text.split_inclusive('\n') {
+        let bare = line.trim_end();
+        if !line.starts_with([' ', '\t', '#']) && !bare.is_empty() {
+            in_info = bare == "info:";
+        }
+        let the_type = in_info && bare.trim_start() == format!("type: {other}");
+        if bare == key || the_type {
+            out.push_str(&line.replacen(other, block, 1));
+        } else {
+            out.push_str(line);
+        }
+    }
+    out
+}
+
 pub(crate) fn new_request(request: &HttpRequest) -> Value {
+    let block = block_of(request);
+    let method = if block == "graphql" { "POST" } else { "GET" };
     let mut doc = mapping([
         (
             "info",
             Some(mapping([
                 ("name", Some(string(&request.name))),
-                ("type", Some(string("http"))),
+                ("type", Some(string(block))),
             ])),
         ),
         (
-            "http",
+            block,
             Some(mapping([
-                ("method", Some(string("GET"))),
+                ("method", Some(string(method))),
                 ("url", Some(string(""))),
             ])),
         ),
     ]);
     let read::Item::Http(blank) = read::item(&doc) else {
-        unreachable!("the document has `type: http`")
+        unreachable!("the document has `type: http` or `type: graphql`")
     };
     update_request(&mut doc, &blank, request);
     doc
@@ -98,6 +142,13 @@ pub(crate) fn update_request(doc: &mut Value, old: &HttpRequest, new: &HttpReque
     // Containers are only touched (or created) when something in them changes,
     // so saving an unchanged request never alters its file.
     update_info(doc, old, new);
+    // A body that becomes or stops being GraphQL moves the request to the
+    // other block, in its place.
+    let (old_block, block) = (block_of(old), block_of(new));
+    if old_block != block {
+        rename_key(doc, old_block, block);
+        set(child_mut(doc, "info"), "type", string(block));
+    }
 
     let http_changed = (
         &old.method,
@@ -115,7 +166,7 @@ pub(crate) fn update_request(doc: &mut Value, old: &HttpRequest, new: &HttpReque
         &new.auth,
     );
     if http_changed {
-        let http = child_mut(doc, "http");
+        let http = child_mut(doc, block);
         if old.method != new.method {
             set(http, "method", string(new.method.as_str()));
         }
@@ -900,13 +951,33 @@ fn update_body(http: &mut Value, old: &Body, new: &Body) {
                 update_file_body(body, path, content_type.as_deref());
                 true
             }
+            (Body::GraphQl { .. }, Body::GraphQl { query, variables }) => {
+                // An HTTP body renamed into the `graphql` block leaves its own.
+                remove(body, "type");
+                remove(body, "data");
+                set(body, "query", string(query));
+                set(body, "variables", string(variables));
+                true
+            }
             _ => false,
         };
         if handled {
             return;
         }
     }
-    set_or_remove(http, "body", body_value(new));
+    set_or_remove(http, "body", request_body_value(new));
+}
+
+/// A request's body: a GraphQL one as Bruno writes it in the `graphql`
+/// block, `query` and `variables` (both, even empty) without a `type`.
+fn request_body_value(body: &Body) -> Option<Value> {
+    match body {
+        Body::GraphQl { query, variables } => Some(mapping([
+            ("query", Some(string(query))),
+            ("variables", Some(string(variables))),
+        ])),
+        other => body_value(other),
+    }
 }
 
 pub(crate) fn body_value(body: &Body) -> Option<Value> {
@@ -923,6 +994,13 @@ pub(crate) fn body_value(body: &Body) -> Option<Value> {
         Body::Multipart(parts) => mapping([
             ("type", s("multipart-form")),
             ("data", list(parts.iter().map(multipart_value).collect())),
+        ]),
+        // Where a body says its kind, as in an example; a request's
+        // `graphql` block has it without (see `request_body_value`).
+        Body::GraphQl { query, variables } => mapping([
+            ("type", s("graphql")),
+            ("query", s(query)),
+            ("variables", s(variables)),
         ]),
         Body::File { path, content_type } => mapping([
             ("type", s("file")),

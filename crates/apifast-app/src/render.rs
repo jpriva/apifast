@@ -505,6 +505,13 @@ impl Renderer<'_, '_> {
                 // The transport adds the header, since it needs the boundary.
                 (RenderedBody::Multipart(out), None)
             }
+            Body::GraphQl { query, variables } => {
+                let json = graphql_json(&self.text(query)?, &self.text(variables)?)?;
+                (
+                    RenderedBody::Text(json),
+                    Some("application/json".to_owned()),
+                )
+            }
             Body::File { path, content_type } => {
                 // Bruno's default for a file without its type.
                 let content_type = (content_type.clone())
@@ -519,6 +526,29 @@ impl Renderer<'_, '_> {
             }
         })
     }
+}
+
+/// The JSON a GraphQL server takes: `{"query": …, "variables": …}`,
+/// without `variables` when they are blank.
+///
+/// # Errors
+///
+/// If the variables are not a JSON object.
+fn graphql_json(query: &str, variables: &str) -> Result<String, AppError> {
+    // `Display` writes JSON; `to_text` would give a string unquoted.
+    let query = apifast_domain::Json::String(query.to_owned()).to_string();
+    if variables.trim().is_empty() {
+        return Ok(format!("{{\"query\":{query}}}"));
+    }
+    let parsed = apifast_domain::Json::parse(variables).map_err(|e| {
+        AppError::Validation(format!("the GraphQL variables are not valid JSON: {e}"))
+    })?;
+    if !matches!(parsed, apifast_domain::Json::Object(_)) {
+        return Err(AppError::Validation(
+            "the GraphQL variables must be a JSON object".into(),
+        ));
+    }
+    Ok(format!("{{\"query\":{query},\"variables\":{parsed}}}"))
 }
 
 fn has_header(headers: &[(String, String)], name: &str) -> bool {

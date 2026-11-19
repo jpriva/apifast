@@ -889,6 +889,12 @@ pub struct Strings {
     pub body_xml: &'static str,
     /// Body type: SPARQL.
     pub body_sparql: &'static str,
+    /// Body kind: a GraphQL operation.
+    pub body_graphql: &'static str,
+    /// Editor of a GraphQL body: the operation.
+    pub graphql_query: &'static str,
+    /// Editor of a GraphQL body: its variables.
+    pub graphql_variables: &'static str,
     /// Body type: URL-encoded form.
     pub body_form: &'static str,
     /// Body type: multipart.
@@ -1394,6 +1400,9 @@ pub const EN: Strings = Strings {
     body_text: "Text",
     body_xml: "XML",
     body_sparql: "SPARQL",
+    body_graphql: "GraphQL",
+    graphql_query: "Query",
+    graphql_variables: "Variables (JSON)",
     body_form: "Form (URL-encoded)",
     body_multipart: "Multipart form",
     body_file: "File",

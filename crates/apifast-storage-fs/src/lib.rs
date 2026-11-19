@@ -391,12 +391,19 @@ impl CollectionRepository for FsCollection {
             });
         }
         let relative = path.as_str();
-        self.save_document(
+        // A request that changes between HTTP and GraphQL keeps its block
+        // where it is: a patch would add the renamed key at the end.
+        let block = write::block_of(request);
+        save_document_prepared(
+            &self.root,
             relative,
             request,
-            |doc| http_only(relative, doc),
-            write::update_request,
-            write::new_request,
+            (
+                |doc: &Value| http_only(relative, doc),
+                write::update_request,
+                write::new_request,
+            ),
+            |text| write::retype_request_text(text, block),
         )
     }
 
@@ -800,14 +807,31 @@ pub(crate) fn save_document_in<T: PartialEq + Debug>(
     root: &Path,
     relative: &str,
     new: &T,
-    (read, update, create): (
+    functions: (
         impl Fn(&Value) -> Result<T, RepositoryError>,
         impl Fn(&mut Value, &T, &T),
         impl Fn(&T) -> Value,
     ),
 ) -> Result<(), RepositoryError> {
+    save_document_prepared(root, relative, new, functions, |text| text)
+}
+
+/// [`save_document_in`], with the file's text first passed through
+/// `prepare` (in memory: the file is only written at the end, checked).
+fn save_document_prepared<T: PartialEq + Debug>(
+    root: &Path,
+    relative: &str,
+    new: &T,
+    (read, update, create): (
+        impl Fn(&Value) -> Result<T, RepositoryError>,
+        impl Fn(&mut Value, &T, &T),
+        impl Fn(&T) -> Value,
+    ),
+    prepare: impl Fn(String) -> String,
+) -> Result<(), RepositoryError> {
     let path = root.join(relative);
-    let (text, expected) = if let Some(original_text) = read_text_in(root, relative)? {
+    let original = read_text_in(root, relative)?.map(prepare);
+    let (text, expected) = if let Some(original_text) = original {
         let original = parse(relative, &original_text)?;
         let old = read(&original)?;
         let mut updated = original.clone();

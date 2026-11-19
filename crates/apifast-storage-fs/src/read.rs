@@ -34,9 +34,11 @@ pub(crate) fn item(doc: &Value) -> Item {
     let seq = info.and_then(|i| unsigned(get(i, "seq")));
     let kind = text(info.and_then(|i| get(i, "type")));
     match kind.as_deref() {
-        Some("http") => Item::Http(http_request(doc, name, seq)),
+        Some("http") => Item::Http(http_request(doc, name, seq, "http")),
+        // A GraphQL request is HTTP with its query as the body.
+        Some("graphql") => Item::Http(http_request(doc, name, seq, "graphql")),
         // Without a type, a file with an `http` block is still an HTTP request.
-        None if get(doc, "http").is_some() => Item::Http(http_request(doc, name, seq)),
+        None if get(doc, "http").is_some() => Item::Http(http_request(doc, name, seq, "http")),
         _ => Item::Other {
             name,
             kind: kind.unwrap_or_else(|| "unknown".into()),
@@ -45,8 +47,11 @@ pub(crate) fn item(doc: &Value) -> Item {
     }
 }
 
-fn http_request(doc: &Value, name: String, seq: Option<u32>) -> HttpRequest {
-    let http = get(doc, "http");
+/// The request in the block `block` of `doc`: `http`, or `graphql`, whose
+/// body is the query and its variables.
+fn http_request(doc: &Value, name: String, seq: Option<u32>, block: &str) -> HttpRequest {
+    let http = get(doc, block);
+    let graphql = block == "graphql";
     let field = |key| http.and_then(|h| get(h, key));
     // Files from OpenCollection v3 rc1 keep the auth in `runtime.auth`.
     let auth = field("auth").or_else(|| get_in(doc, &["runtime", "auth"]));
@@ -58,11 +63,17 @@ fn http_request(doc: &Value, name: String, seq: Option<u32>) -> HttpRequest {
             .iter()
             .filter_map(|t| text(Some(t)))
             .collect(),
-        method: Method::parse(&text(field("method")).unwrap_or_else(|| "GET".into())),
+        method: Method::parse(
+            &text(field("method")).unwrap_or_else(|| if graphql { "POST" } else { "GET" }.into()),
+        ),
         url: text_or_empty(field("url")),
         params: items(field("params")).iter().map(param).collect(),
         headers: headers(field("headers")),
-        body: body(field("body")),
+        body: if graphql {
+            graphql_body(field("body"))
+        } else {
+            body(field("body"))
+        },
         auth: self::auth(auth),
         variables: variables(get_in(doc, &["runtime", "variables"])),
         assertions: items(get_in(doc, &["runtime", "assertions"]))
@@ -248,6 +259,15 @@ fn oauth2(value: &Value) -> OAuth2Auth {
     }
 }
 
+/// The body of a `graphql` block: `query` and `variables`, both text.
+fn graphql_body(value: Option<&Value>) -> Body {
+    let field = |key| value.and_then(|b| get(b, key));
+    Body::GraphQl {
+        query: text_or_empty(field("query")),
+        variables: text_or_empty(field("variables")),
+    }
+}
+
 pub(crate) fn body(value: Option<&Value>) -> Body {
     let Some(value) = value.filter(|v| !v.is_null()) else {
         return Body::None;
@@ -285,6 +305,9 @@ pub(crate) fn body(value: Option<&Value>) -> Body {
                     .filter(|c| !c.is_empty()),
             }
         }
+        // apifast's, for an example's body (a request keeps it in its
+        // `graphql` block, without a type).
+        Some("graphql") => graphql_body(Some(value)),
         // Bruno sends no body for kinds it does not know, and neither do we.
         _ => Body::None,
     }
@@ -696,18 +719,43 @@ mod tests {
                 content_type: Some("application/pdf".into())
             }
         );
-        assert_eq!(body("    type: graphql\n    data: x\n"), Body::None);
+        assert_eq!(body("    type: grpc\n    data: x\n"), Body::None);
+        assert_eq!(
+            body("    type: graphql\n    query: q\n"),
+            Body::GraphQl {
+                query: "q".into(),
+                variables: String::new()
+            }
+        );
+    }
+
+    #[test]
+    fn graphql_requests_are_http_with_their_query_as_the_body() {
+        let Item::Http(request) = item(&yaml(
+            "info: {name: Q, type: graphql, seq: 3}\ngraphql:\n  url: https://h/graphql\n  body:\n    query: '{ users { id } }'\n    variables: '{\"a\": 1}'\n",
+        )) else {
+            panic!("not read as a request");
+        };
+        assert_eq!(request.method, Method::Post, "Bruno's default");
+        assert_eq!(request.url, "https://h/graphql");
+        assert_eq!(
+            request.body,
+            Body::GraphQl {
+                query: "{ users { id } }".into(),
+                variables: "{\"a\": 1}".into()
+            }
+        );
     }
 
     #[test]
     fn other_request_kinds_are_listed_not_parsed() {
         assert_eq!(
             item(&yaml(
-                "info: {name: Q, type: graphql, seq: 3}\ngraphql: {url: x}\n"
+                "info: {name: Q, type: websocket, seq: 3}\nwebsocket: {url: x}\n"
             )),
             Item::Other {
                 name: "Q".into(),
-                kind: "graphql".into(),
+                kind: "websocket".into(),
                 seq: Some(3)
             }
         );

@@ -116,7 +116,7 @@ pub fn collection(port: u16) -> tempfile::TempDir {
             "users/ask.yml",
             "info:\n  name: Ask\n  type: http\nhttp:\n  method: GET\n  url: \"{{host}}/ask/{{?Code}}\"\n",
         ),
-        ("graphql.yml", "info:\n  name: Q\n  type: graphql\n"),
+        ("socket.yml", "info:\n  name: Q\n  type: websocket\n"),
         (
             "environments/local.yml",
             &format!(

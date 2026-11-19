@@ -18,7 +18,7 @@ pub enum TokenKind {
     Number,
     /// `true`, `false`, `null`, an XML tag name or a SPARQL keyword.
     Keyword,
-    /// A SPARQL `?variable`.
+    /// A SPARQL `?variable` or a GraphQL `$variable`.
     Variable,
     /// A comment.
     Comment,
@@ -43,6 +43,7 @@ pub fn tokens(text: &str, language: Language) -> Vec<Token> {
         Language::Json => json(text, &mut out),
         Language::Xml => xml(text, &mut out),
         Language::Sparql => sparql(text, &mut out),
+        Language::GraphQl => graphql(text, &mut out),
         Language::Text => out.push(0..text.len(), TokenKind::Plain),
     }
     out.0
@@ -323,9 +324,101 @@ fn sparql(text: &str, out: &mut Tokens) {
     }
 }
 
+/// GraphQL's keywords, and the values written as words.
+const GRAPHQL_KEYWORDS: &[&str] = &[
+    "query",
+    "mutation",
+    "subscription",
+    "fragment",
+    "on",
+    "type",
+    "input",
+    "enum",
+    "interface",
+    "union",
+    "scalar",
+    "schema",
+    "extend",
+    "directive",
+    "implements",
+    "true",
+    "false",
+    "null",
+];
+
+fn graphql(text: &str, out: &mut Tokens) {
+    let mut at = 0;
+    while at < text.len() {
+        let rest = &text[at..];
+        let c = rest.as_bytes()[0];
+        let (len, kind) = if let Some(len) = tag_len(rest) {
+            (len, TokenKind::Plain)
+        } else {
+            match c {
+                b'#' => (rest.find('\n').unwrap_or(rest.len()), TokenKind::Comment),
+                // A block string runs to its closing `"""`.
+                b'"' if rest.starts_with("\"\"\"") => (
+                    rest[3..].find("\"\"\"").map_or(rest.len(), |end| end + 6),
+                    TokenKind::String,
+                ),
+                b'"' => (string_len(rest), TokenKind::String),
+                b'$' => (
+                    1 + run_len(&rest[1..], |c| c.is_alphanumeric() || c == '_'),
+                    TokenKind::Variable,
+                ),
+                b'-' | b'0'..=b'9' => (
+                    1 + run_len(&rest[1..], |c| {
+                        c.is_ascii_digit() || matches!(c, '.' | 'e' | 'E')
+                    }),
+                    TokenKind::Number,
+                ),
+                b'{' | b'}' | b'(' | b')' | b'[' | b']' | b':' | b'!' | b'=' | b'@' | b'|'
+                | b'&' | b',' => (1, TokenKind::Punctuation),
+                b'.' if rest.starts_with("...") => (3, TokenKind::Punctuation),
+                _ if c.is_ascii_alphabetic() || c == b'_' => {
+                    let len = run_len(rest, |c| c.is_alphanumeric() || c == '_');
+                    let word = &rest[..len];
+                    // An argument or an alias is a name followed by `:`.
+                    let keyed = rest[len..].trim_start().starts_with(':');
+                    let kind = if GRAPHQL_KEYWORDS.contains(&word) && !keyed {
+                        TokenKind::Keyword
+                    } else if keyed {
+                        TokenKind::Key
+                    } else {
+                        TokenKind::Plain
+                    };
+                    (len, kind)
+                }
+                _ => (char_len(rest), TokenKind::Plain),
+            }
+        };
+        out.push(at..at + len, kind);
+        at += len;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn graphql_keywords_variables_strings_and_arguments() {
+        let text = "query Users($first: Int = 10) {\n  # c\n  users(first: $first, name: \"a\") { ...F id }\n}";
+        let found = kinds(text, Language::GraphQl);
+        assert!(found.contains(&("query", TokenKind::Keyword)));
+        assert!(found.contains(&("$first", TokenKind::Variable)));
+        assert!(found.contains(&("first", TokenKind::Key)), "{found:?}");
+        assert!(found.contains(&("\"a\"", TokenKind::String)));
+        assert!(found.contains(&("10", TokenKind::Number)));
+        assert!(found.contains(&("# c", TokenKind::Comment)));
+        assert!(
+            found
+                .iter()
+                .any(|(t, k)| t.contains("...") && *k == TokenKind::Punctuation)
+        );
+        let block = kinds("\"\"\"doc \" here\"\"\" x", Language::GraphQl);
+        assert_eq!(block[0], ("\"\"\"doc \" here\"\"\"", TokenKind::String));
+    }
 
     fn kinds(text: &str, language: Language) -> Vec<(&str, TokenKind)> {
         tokens(text, language)

@@ -185,3 +185,19 @@ fn other_documents_are_refused() {
         "a {{b}} {{c}} {{d.e}} {{"
     );
 }
+
+#[test]
+fn a_graphql_body_is_kept_as_graphql() {
+    let export = json!({
+        "type": "collection.insomnia.rest/5.0",
+        "name": "G",
+        "collection": [{"name": "Q", "method": "POST", "url": "https://h/graphql",
+            "body": {"mimeType": "application/graphql", "text": "{\"query\":\"{ me { id } }\",\"variables\":{\"a\":\"{{ _.x }}\"}}"}}]
+    });
+    let collection = import_insomnia(&export).unwrap();
+    let Body::GraphQl { query, variables } = &find(&collection.items, "Q").body else {
+        panic!("{:?}", find(&collection.items, "Q").body);
+    };
+    assert_eq!(query, "{ me { id } }");
+    assert!(variables.contains("\"a\": \"{{x}}\""), "{variables}");
+}

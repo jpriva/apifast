@@ -229,14 +229,17 @@ fn bodies_settings_scripts_and_dynamic_variables() {
     );
 
     let query = find(&collection.items, "Query");
-    let Body::Json(graphql) = &query.body else {
-        panic!("{:?}", query.body)
-    };
-    assert!(
-        graphql.contains("\"query\": \"{ me { id } }\""),
-        "{graphql}"
+    assert_eq!(
+        query.body,
+        Body::GraphQl {
+            query: "{ me { id } }".into(),
+            variables: "{\"a\": 1}".into()
+        }
     );
-    assert!(warned(&collection, "Query", "GraphQL"));
+    assert!(
+        !warned(&collection, "Query", "GraphQL"),
+        "a GraphQL body is kept"
+    );
 }
 
 #[test]

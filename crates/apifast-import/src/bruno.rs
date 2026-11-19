@@ -375,16 +375,10 @@ fn body(file: &BruFile, mode: &str, at: &str, warnings: &mut Vec<ImportWarning>)
                 None => Body::None,
             }
         }
-        "graphql" => {
-            warnings.push(ImportWarning::new(
-                at,
-                "a GraphQL body: imported as JSON with `query` and `variables`",
-            ));
-            let variables = serde_json::from_str::<serde_json::Value>(&text("body:graphql:vars"))
-                .unwrap_or(serde_json::Value::Null);
-            let json = serde_json::json!({"query": text("body:graphql"), "variables": variables});
-            Body::Json(serde_json::to_string_pretty(&json).unwrap_or_default())
-        }
+        "graphql" => Body::GraphQl {
+            query: text("body:graphql"),
+            variables: text("body:graphql:vars"),
+        },
         other => {
             warnings.push(ImportWarning::new(
                 at,

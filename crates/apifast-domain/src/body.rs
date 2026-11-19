@@ -17,6 +17,14 @@ pub enum Body {
     FormUrlEncoded(Vec<FormField>),
     /// `multipart/form-data`.
     Multipart(Vec<MultipartPart>),
+    /// A GraphQL operation, sent as JSON (`{"query": …, "variables": …}`).
+    /// A request with it is a `graphql` request in its file.
+    GraphQl {
+        /// The query, mutation or subscription (template).
+        query: String,
+        /// Its variables, as JSON text (template); may be empty.
+        variables: String,
+    },
     /// Contents of a file.
     File {
         /// Path relative to the collection.

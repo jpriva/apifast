@@ -37,7 +37,7 @@ pub fn format(text: &str, language: Language) -> Result<String, FormatError> {
     match language {
         Language::Json => json(text),
         Language::Xml => xml(text),
-        Language::Sparql | Language::Text => Ok(text.to_owned()),
+        Language::Sparql | Language::GraphQl | Language::Text => Ok(text.to_owned()),
     }
 }
 

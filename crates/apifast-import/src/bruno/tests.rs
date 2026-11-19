@@ -181,3 +181,33 @@ fn a_folder_without_bruno_json_is_refused() {
         Err(BrunoError::NotCollection(_))
     ));
 }
+
+#[test]
+fn a_graphql_request_keeps_its_query_and_variables() {
+    let dir = tempfile::tempdir().unwrap();
+    write(
+        dir.path(),
+        &[
+            (
+                "bruno.json",
+                r#"{"version": "1", "name": "G", "type": "collection"}"#,
+            ),
+            (
+                "me.bru",
+                "meta {\n  name: Me\n  type: graphql\n}\n\npost {\n  url: https://h/graphql\n  body: graphql\n  auth: none\n}\n\nbody:graphql {\n  { me { id } }\n}\n\nbody:graphql:vars {\n  {\"a\": 1}\n}\n",
+            ),
+        ],
+    );
+    let collection = import_bruno(dir.path()).unwrap();
+    let ImportedItem::Request { request, .. } = &collection.items[0] else {
+        panic!("{:?}", collection.items);
+    };
+    assert_eq!(
+        request.body,
+        Body::GraphQl {
+            query: "{ me { id } }".into(),
+            variables: "{\"a\": 1}".into()
+        }
+    );
+    assert_eq!(collection.warnings, Vec::new());
+}

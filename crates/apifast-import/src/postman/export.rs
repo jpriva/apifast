@@ -390,6 +390,10 @@ impl Exporter {
                 }).collect::<Vec<_>>(),
             }),
             Body::File { path, .. } => json!({"mode": "file", "file": {"src": path}}),
+            Body::GraphQl { query, variables } => json!({
+                "mode": "graphql",
+                "graphql": {"query": query, "variables": variables},
+            }),
             _ => {
                 self.warn(at, "its body cannot be exported yet: left out");
                 return None;

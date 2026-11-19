@@ -26,6 +26,8 @@ pub enum Language {
     Xml,
     /// SPARQL queries.
     Sparql,
+    /// GraphQL operations.
+    GraphQl,
     /// Plain text: only variables are highlighted.
     Text,
 }
@@ -37,6 +39,7 @@ impl Language {
             Body::Json(_) => Some(Self::Json),
             Body::Xml(_) => Some(Self::Xml),
             Body::Sparql(_) => Some(Self::Sparql),
+            Body::GraphQl { .. } => Some(Self::GraphQl),
             Body::Text(_) => Some(Self::Text),
             _ => None,
         }
@@ -66,6 +69,9 @@ pub fn detect(content_type: Option<&str>, start: &[u8]) -> Option<Language> {
         }
         if essence == "application/sparql-query" {
             return Some(Language::Sparql);
+        }
+        if essence == "application/graphql" {
+            return Some(Language::GraphQl);
         }
         if essence.starts_with("text/") {
             return None;

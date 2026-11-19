@@ -1,7 +1,7 @@
 //! Postman collections (v2.0 and v2.1) and environments as apifast's,
 //! with the same choices as Bruno's importer
 //! (`bruno-converters/src/postman/postman-to-bruno.js`). What has no place
-//! in apifast (scripts, some auth types, GraphQL bodies…) is listed as a
+//! in apifast (scripts, some auth types…) is listed as a
 //! warning where it was, never dropped silently.
 
 mod auth;
@@ -366,21 +366,17 @@ fn body(
             content_type: None,
         },
         "graphql" => {
-            warnings.push(ImportWarning::new(
-                at,
-                "a GraphQL body: imported as JSON with `query` and `variables`",
-            ));
             let graphql = value.get("graphql").cloned().unwrap_or(Value::Null);
+            // Postman keeps the variables as text, or as an object in old exports.
             let variables = match graphql.get("variables") {
-                Some(Value::String(text)) => {
-                    serde_json::from_str(text).unwrap_or(Value::String(text.clone()))
-                }
-                Some(other) => other.clone(),
-                None => Value::Null,
+                Some(Value::String(text)) => text.clone(),
+                Some(Value::Null) | None => String::new(),
+                Some(other) => serde_json::to_string_pretty(other).unwrap_or_default(),
             };
-            let query = graphql.get("query").cloned().unwrap_or(Value::Null);
-            let json = serde_json::json!({"query": query, "variables": variables});
-            Body::Json(serde_json::to_string_pretty(&json).unwrap_or_default())
+            Body::GraphQl {
+                query: text(&graphql, "query"),
+                variables,
+            }
         }
         "" => Body::None,
         other => {

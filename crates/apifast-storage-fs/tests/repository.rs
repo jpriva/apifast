@@ -535,7 +535,7 @@ fn paths_cannot_escape_the_collection() {
 
 #[test]
 fn missing_and_unsupported_requests() {
-    let (_dir, repo) = setup(&[("q.yml", "info:\n  name: Q\n  type: graphql\n")]);
+    let (_dir, repo) = setup(&[("q.yml", "info:\n  name: Q\n  type: websocket\n")]);
     assert_eq!(
         repo.request(&path("nope.yml")),
         Err(RepositoryError::NotFound("nope.yml".into()))
@@ -574,7 +574,7 @@ fn the_tree_lists_sorted_items_and_skips_ignored_ones() {
     let (_dir, repo) = setup(&[
         ("b.yml", "info:\n  name: B\n  type: http\n  seq: 2\n"),
         ("a.yml", "info:\n  name: A\n  type: http\n  seq: 1\n"),
-        ("q.yml", "info:\n  name: Q\n  type: graphql\n"),
+        ("q.yml", "info:\n  name: Q\n  type: websocket\n"),
         ("broken.yml", "info: [unclosed\n"),
         ("notes.txt", "not yaml"),
         (
@@ -603,7 +603,7 @@ fn the_tree_lists_sorted_items_and_skips_ignored_ones() {
         TreeItem::Invalid { path, .. } => format!("!{path}"),
     };
     let names: Vec<_> = tree.items.iter().map(describe).collect();
-    assert_eq!(names, ["A", "Users/1", "B", "Q:graphql", "!broken.yml"]);
+    assert_eq!(names, ["A", "Users/1", "B", "Q:websocket", "!broken.yml"]);
 }
 
 #[test]
@@ -1119,4 +1119,58 @@ fn examples_are_read_as_bruno_writes_them_and_edited_one_by_one() {
     repo.save_request(&path, &request).unwrap();
     assert!(!read(&dir, "users/get.yml").contains("examples"));
     assert_eq!(repo.request(&path).unwrap().request.examples, []);
+}
+
+/// Bruno's own GraphQL file (its `tests/graphql` fixtures).
+const GRAPHQL: &str = "info:\n  name: users\n  type: graphql\n  seq: 2\n\ngraphql:\n  method: POST\n  url: http://localhost:8081/graphql\n  body:\n    query: |-\n      { users { id } }\n    variables: |-\n      {}\n  auth: inherit\n\nsettings:\n  encodeUrl: true\n  timeout: 0\n  followRedirects: true\n  maxRedirects: 5\n";
+
+#[test]
+fn a_graphql_request_edits_in_place_and_changes_kind_in_place() {
+    let (dir, repo) = setup(&[("q.yml", GRAPHQL)]);
+    let mut request = load(&repo, "q.yml");
+    assert_eq!(
+        request.body,
+        Body::GraphQl {
+            query: "{ users { id } }".into(),
+            variables: "{}".into()
+        }
+    );
+    request.body = Body::GraphQl {
+        query: "{ users { id name } }".into(),
+        variables: "{}".into(),
+    };
+    repo.save_request(&path("q.yml"), &request).unwrap();
+    let edited = read(&dir, "q.yml");
+    assert_eq!(
+        edited,
+        GRAPHQL.replace("{ users { id } }", "{ users { id name } }")
+    );
+
+    // As JSON it is an HTTP request: the block is renamed where it was.
+    request.body = Body::Json("{}".into());
+    repo.save_request(&path("q.yml"), &request).unwrap();
+    let http = read(&dir, "q.yml");
+    assert!(
+        http.starts_with("info:\n  name: users\n  type: http\n  seq: 2\n\nhttp:\n  method: POST\n"),
+        "{http}"
+    );
+    assert!(http.contains("type: json"), "{http}");
+    assert!(http.ends_with("settings:\n  encodeUrl: true\n  timeout: 0\n  followRedirects: true\n  maxRedirects: 5\n"), "{http}");
+    assert_eq!(load(&repo, "q.yml").body, Body::Json("{}".into()));
+
+    // A new GraphQL request is written as Bruno writes one.
+    let mut new = HttpRequest::new("new", Method::Post, "https://h/graphql");
+    new.body = Body::GraphQl {
+        query: "{ a }".into(),
+        variables: String::new(),
+    };
+    repo.save_request(&path("new.yml"), &new).unwrap();
+    let text = read(&dir, "new.yml");
+    assert!(text.contains("  type: graphql\n"), "{text}");
+    assert!(text.contains("graphql:\n  method: POST\n"), "{text}");
+    assert!(
+        !text.contains("type: graphql\n    "),
+        "no type in the block's body: {text}"
+    );
+    assert_eq!(load(&repo, "new.yml"), new);
 }

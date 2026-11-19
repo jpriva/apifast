@@ -267,8 +267,8 @@ fn errors_are_one_clear_line() {
             "error: environment `staging` does not exist\n",
         ),
         (
-            &["send", "graphql.yml"],
-            "error: `graphql.yml`: `graphql` requests is not supported yet\n",
+            &["send", "socket.yml"],
+            "error: `socket.yml`: `websocket` requests is not supported yet\n",
         ),
         (&["send", "nope.yml"], "error: cannot open `nope.yml`"),
         (
@@ -335,5 +335,53 @@ fn usage_errors_exit_with_3_and_version_works() {
     assert_eq!(
         text(&out.stdout),
         format!("apifast {}\n", env!("CARGO_PKG_VERSION"))
+    );
+}
+
+#[test]
+fn a_graphql_request_sends_its_query_and_variables_as_json() {
+    let server = Server::start();
+    let dir = collection(server.port);
+    let data = tempfile::tempdir().unwrap();
+    // As Bruno writes it.
+    std::fs::write(
+        dir.path().join("me.yml"),
+        "info:\n  name: Me\n  type: graphql\n\ngraphql:\n  method: POST\n  url: \"{{host}}/graphql\"\n  body:\n    query: |-\n      query($id: ID!) { user(id: $id) { name } }\n    variables: |-\n      {\"id\": \"{{user_id}}\"}\n  auth: none\n",
+    )
+    .unwrap();
+    let out = apifast(
+        dir.path(),
+        data.path(),
+        &["send", "me.yml", "--env", "local"],
+    );
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let request = &server.seen()[0];
+    assert!(request.starts_with("POST /graphql HTTP/1.1"), "{request}");
+    assert!(
+        request.contains("content-type: application/json"),
+        "{request}"
+    );
+    assert!(
+        request.ends_with(
+            r#"{"query":"query($id: ID!) { user(id: $id) { name } }","variables":{"id":"7"}}"#
+        ),
+        "{request}"
+    );
+
+    std::fs::write(
+        dir.path().join("bad.yml"),
+        "info:\n  name: Bad\n  type: graphql\ngraphql:\n  url: \"{{host}}/graphql\"\n  body:\n    query: \"{ a }\"\n    variables: \"[1]\"\n",
+    )
+    .unwrap();
+    let out = apifast(
+        dir.path(),
+        data.path(),
+        &["send", "bad.yml", "--env", "local"],
+    );
+    assert!(!out.status.success());
+    assert!(
+        text(&out.stderr).contains("must be a JSON object"),
+        "{}",
+        text(&out.stderr)
     );
 }

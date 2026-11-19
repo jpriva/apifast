@@ -336,6 +336,7 @@ enum BodyKind {
     Text,
     Xml,
     Sparql,
+    GraphQl,
     Form,
     Multipart,
     File,
@@ -343,11 +344,12 @@ enum BodyKind {
 
 impl BodyKind {
     /// Kinds that can be picked. SPARQL is shown when a file has it.
-    const EDITABLE: [Self; 7] = [
+    const EDITABLE: [Self; 8] = [
         Self::None,
         Self::Json,
         Self::Text,
         Self::Xml,
+        Self::GraphQl,
         Self::Form,
         Self::Multipart,
         Self::File,
@@ -359,6 +361,7 @@ impl BodyKind {
             Body::Text(_) => Self::Text,
             Body::Xml(_) => Self::Xml,
             Body::Sparql(_) => Self::Sparql,
+            Body::GraphQl { .. } => Self::GraphQl,
             Body::FormUrlEncoded(_) => Self::Form,
             Body::Multipart(_) => Self::Multipart,
             Body::File { .. } => Self::File,
@@ -374,6 +377,7 @@ impl BodyKind {
             Self::Text => strings.body_text,
             Self::Xml => strings.body_xml,
             Self::Sparql => strings.body_sparql,
+            Self::GraphQl => strings.body_graphql,
             Self::Form => strings.body_form,
             Self::Multipart => strings.body_multipart,
             Self::File => strings.body_file,
@@ -400,6 +404,8 @@ impl BodyKind {
         };
         let text = match old {
             Body::Json(t) | Body::Text(t) | Body::Xml(t) | Body::Sparql(t) => t,
+            // The operation is the text a GraphQL body has.
+            Body::GraphQl { query, .. } => query,
             _ => String::new(),
         };
         *body = match self {
@@ -408,6 +414,7 @@ impl BodyKind {
             Self::Text => Body::Text(text),
             Self::Xml => Body::Xml(text),
             Self::Sparql => Body::Sparql(text),
+            Self::GraphQl => graphql_from(text),
             Self::Form => Body::FormUrlEncoded(fields),
             Self::Multipart => Body::Multipart(
                 fields
@@ -490,7 +497,25 @@ fn body(
         Body::None => {}
         Body::Json(text) | Body::Text(text) | Body::Xml(text) | Body::Sparql(text) => {
             let language = language.unwrap_or(Language::Text);
-            changed |= code_body(ui, text, language, editor, format, hints, strings);
+            let target = (editor, strings.body);
+            changed |= code_body(ui, text, language, target, format, hints, strings);
+        }
+        Body::GraphQl { query, variables } => {
+            ui.label(muted(ui, strings.graphql_query));
+            let target = (editor, strings.graphql_query);
+            changed |= code_body(ui, query, Language::GraphQl, target, false, hints, strings);
+            ui.add_space(theme::space::S);
+            ui.label(muted(ui, strings.graphql_variables));
+            let target = (editor.with("variables"), strings.graphql_variables);
+            changed |= code_body(
+                ui,
+                variables,
+                Language::Json,
+                target,
+                format,
+                hints,
+                strings,
+            );
         }
         Body::FormUrlEncoded(fields) => {
             changed |= KvTable::new(
@@ -522,11 +547,35 @@ fn body(
 
 /// The editor of a text body. `format` asks to format it first. Returns
 /// whether the text changed.
+/// A GraphQL body from `text`: the JSON a GraphQL request sends
+/// (`{"query": …, "variables": …}`, as Postman's converted bodies are) is
+/// taken apart; any other text is the operation.
+fn graphql_from(text: String) -> Body {
+    use apifast_domain::Json;
+    if let Ok(Json::Object(fields)) = Json::parse(&text)
+        && let Some((_, Json::String(query))) = fields.iter().find(|(k, _)| k == "query")
+    {
+        let variables = (fields.iter())
+            .find(|(k, _)| k == "variables")
+            .map(|(_, v)| v)
+            .filter(|v| !matches!(v, Json::Null))
+            .map_or_else(String::new, Json::to_text);
+        return Body::GraphQl {
+            query: query.clone(),
+            variables,
+        };
+    }
+    Body::GraphQl {
+        query: text,
+        variables: String::new(),
+    }
+}
+
 fn code_body(
     ui: &mut egui::Ui,
     text: &mut String,
     language: Language,
-    editor: egui::Id,
+    (editor, name): (egui::Id, &str),
     format: bool,
     hints: &VariableHints,
     strings: &Strings,
@@ -559,7 +608,7 @@ fn code_body(
     let edited = CodeEditor::new(text, language, hints, texts(strings))
         .id(editor)
         .desired_rows(BODY_ROWS)
-        .accessible_name(strings.body)
+        .accessible_name(name)
         .show(ui)
         .changed();
     if edited {

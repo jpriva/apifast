@@ -361,9 +361,13 @@ Se cumple: cada origen tiene una prueba de extremo a extremo que importa y enví
 ### Tareas
 
 - [ ] GraphQL: editores de query y variables, introspección en caché, explorador de esquema, autocompletado.
+  - [x] El body GraphQL (`Body::GraphQl`): se envía como JSON, con las variables validadas; editores de la operación (con resaltado propio) y de las variables ([docs/09](09-ui-ux.md#editor-de-código)). Los importadores de Postman, Insomnia y Bruno `.bru` lo conservan como GraphQL, la exportación a Postman usa su modo `graphql`, y copiar como código lo envía como JSON. Probado de extremo a extremo con `apifast send`.
+  - [ ] Introspección en caché, explorador de esquema y autocompletado.
 - [ ] SSE: parseo en vivo y visor de eventos.
 - [ ] `apifast-ws`: conectar, enviar, cerrar; historial de mensajes; herencia de headers y autenticación.
 - [ ] Formato de archivo para requests `graphql` y `websocket`.
+  - [x] `graphql`, el de Bruno ([docs/04](04-formato-de-archivos.md#requests-graphql)): sus archivos del corpus se guardan byte a byte y pasan las ediciones; cambiar el body a GraphQL o desde él renombra el bloque en su lugar. Probado también con las pruebas de propiedades.
+  - [ ] `websocket`, con `apifast-ws`.
 
 ### Criterio de salida
 

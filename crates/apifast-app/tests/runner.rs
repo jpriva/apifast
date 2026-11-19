@@ -306,7 +306,7 @@ fn requests_that_cannot_run_are_skipped() {
         TreeItem::Other {
             path: RequestPath::new("gql.yml"),
             name: "Query".into(),
-            kind: "graphql".into(),
+            kind: "websocket".into(),
             seq: None,
         },
         TreeItem::Invalid {
@@ -324,7 +324,7 @@ fn requests_that_cannot_run_are_skipped() {
     assert_eq!(
         reasons,
         [
-            ("Query", "graphql requests cannot run yet"),
+            ("Query", "websocket requests cannot run yet"),
             ("broken.yml", "bad YAML")
         ]
     );
@@ -374,7 +374,7 @@ mod reports {
         report.skipped.push(apifast_app::Skipped {
             path: RequestPath::new("gql.yml"),
             name: "Query <&>".into(),
-            reason: "graphql requests cannot run yet".into(),
+            reason: "websocket requests cannot run yet".into(),
         });
         let meta = ReportMeta {
             collection: "Shop & Co".into(),
@@ -418,7 +418,7 @@ mod reports {
         assert_eq!(at("$.results[3].assertions[0].expected"), ["204"]);
         assert_eq!(
             at("$.skipped[0].reason"),
-            ["graphql requests cannot run yet"]
+            ["websocket requests cannot run yet"]
         );
     }
 
@@ -440,7 +440,7 @@ mod reports {
         );
         assert_eq!(
             xpath("//testsuite[@name='skipped']//skipped/@message", &xml),
-            ["graphql requests cannot run yet"]
+            ["websocket requests cannot run yet"]
         );
     }
 

@@ -130,7 +130,8 @@ La cabecera de la barra lateral tiene:
 
 ### Editor de código
 
-- Resaltado para JSON, XML, SPARQL y texto con plantillas; GraphQL, cuando exista ese tipo de body.
+- Resaltado para JSON, XML, SPARQL, GraphQL y texto con plantillas.
+- El body GraphQL tiene dos editores: la operación ("Query", con palabras clave, `$variables`, argumentos, strings y comentarios resaltados) y sus variables en JSON. Elegir GraphQL sobre un JSON que ya es `{"query": …, "variables": …}` (como los que dejaban otros importadores) lo separa; volver a texto conserva la operación.
 - Formatear (`Alt+Shift+F` o el botón Format) JSON y XML, con dos espacios de sangría. El formateador solo mueve espacios, así que acepta `{{variables}}` donde va un valor (`"id": {{id}}`). Si los corchetes o las etiquetas no cuadran, o algo queda sin cerrar, no cambia nada y dice en qué línea está el problema.
 - Buscar y reemplazar (pendiente).
 - Las variables se resaltan: las que se resuelven, sobre un tinte de su color; las que no existen, en otro color y subrayadas, para que el color no sea la única señal; las que se generan al enviar (`{{$...}}`, `{{?...}}`, `process.env`, funciones), en un tercer color.

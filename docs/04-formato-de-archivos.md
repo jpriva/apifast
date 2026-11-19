@@ -157,6 +157,7 @@ docs: |-
 |---|---|
 | `info` | `name`, `type` (`http`, `graphql`, `websocket`, `grpc`), `seq`, `tags`, `description` |
 | `http` | `method`, `url`, `params`, `headers`, `body`, `auth` |
+| `graphql` | Lo mismo que `http`, en una request `type: graphql`; su `body` es `query` y `variables` (ver abajo) |
 | `runtime` | `variables`, `assertions`, `actions` (capturas), `scripts` |
 | `settings` | `timeout`, `followRedirects`, `maxRedirects`, `encodeUrl` |
 | `examples` | Respuestas guardadas como ejemplo (ver abajo) |
@@ -204,6 +205,31 @@ examples:
 | `form-urlencoded` | Lista de `name` / `value` |
 | `multipart-form` | Lista de partes; cada parte es texto o archivo con `contentType` |
 | `file` | Ruta relativa a la colección y `contentType` |
+
+### Requests GraphQL
+
+Como las escribe Bruno (`stringifyGraphQLRequest.ts`): `info.type: graphql` y el bloque `graphql` en lugar de `http`, con los mismos campos. Su `body` no lleva `type`: es la operación y sus variables, las dos como texto (Bruno escribe las dos, aunque estén vacías). Sin `method`, es `POST`.
+
+```yaml
+info:
+  name: Usuario
+  type: graphql
+  seq: 2
+
+graphql:
+  method: POST
+  url: "{{host}}/graphql"
+  body:
+    query: |-
+      query($id: ID!) { user(id: $id) { name } }
+    variables: |-
+      {"id": "{{user_id}}"}
+  auth: inherit
+```
+
+- En apifast es una request HTTP con un body GraphQL: hereda, se autentica, se prueba y corre en el runner igual. Se envía como JSON (`{"query": …, "variables": …}`, con `Content-Type: application/json`); unas variables vacías no se envían, y unas que no son un objeto JSON dan un error antes de enviar.
+- Cambiar el body de una request a GraphQL, o de GraphQL a otro tipo, renombra el bloque y `info.type` donde están, sin mover nada del archivo.
+- En un ejemplo guardado, que no tiene bloque propio, el body es `{type: graphql, query, variables}`.
 
 ### Tipos de auth
 
@@ -319,7 +345,7 @@ Los campos sensibles de auth **no guardan el secreto**: referencian una variable
 | `settings` con `timeout: 0` | Sin límite de tiempo |
 | `settings` con `timeout: inherit` | Se hereda |
 | `settings` sin `timeout` | 0 (sin límite), como en Bruno |
-| Request `graphql`, `grpc` o `websocket` | Aparece en el árbol; abrirla da "no soportado todavía" |
+| Request `grpc` o `websocket` | Aparece en el árbol; abrirla da "no soportado todavía" |
 | Archivo YAML inválido | Aparece en el árbol como inválido; no impide abrir el resto |
 
 OpenCollection no tiene ajustes de envío en carpetas ni en la colección, así que en archivos de Bruno solo la request los define. Sin bloque `settings`, apifast usa su valor por defecto de 30 s; Bruno usa su preferencia global (0, sin límite).

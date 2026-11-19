@@ -440,3 +440,39 @@ fn examples_are_listed_renamed_and_deleted() {
     empty.run();
     assert!(empty.query_by_label(EN.examples_empty).is_some());
 }
+
+#[test]
+fn a_graphql_body_has_a_query_and_its_variables() {
+    let mut json = request();
+    // Postman's converted bodies are the JSON GraphQL sends.
+    json.body = Body::Json(r#"{"query": "{ me { id } }", "variables": {"a": 1}}"#.into());
+    let mut harness = harness(RequestTab::Body, json);
+    pick_body(&mut harness, EN.body_graphql);
+    assert_eq!(
+        harness.state().request.body,
+        Body::GraphQl {
+            query: "{ me { id } }".into(),
+            variables: r#"{"a":1}"#.into()
+        },
+        "taken apart"
+    );
+    harness.get_by_role_and_label(Role::MultilineTextInput, EN.graphql_query);
+    harness
+        .get_by_role_and_label(Role::MultilineTextInput, EN.graphql_variables)
+        .focus();
+    harness.run();
+    harness.key_press(egui::Key::End);
+    harness.run();
+    type_slowly(&mut harness, " ");
+    let Body::GraphQl { variables, .. } = &harness.state().request.body else {
+        panic!("{:?}", harness.state().request.body);
+    };
+    assert!(variables.ends_with(' '), "{variables:?}");
+
+    // Back to text, the query is what it keeps.
+    pick_body(&mut harness, EN.body_text);
+    assert_eq!(
+        harness.state().request.body,
+        Body::Text("{ me { id } }".into())
+    );
+}

@@ -327,17 +327,30 @@ fn body(value: Option<&Value>, at: &str, warnings: &mut Vec<ImportWarning>) -> B
             path: text(body, "fileName"),
             content_type: None,
         },
-        "application/graphql" => {
+        // Insomnia keeps it as the JSON it sends.
+        "application/graphql" => graphql_body(&content).unwrap_or_else(|| {
             warnings.push(ImportWarning::new(
                 at,
-                "a GraphQL body: imported as JSON with `query` and `variables`",
+                "a GraphQL body that is not `{\"query\": …}`: imported as JSON",
             ));
             Body::Json(content)
-        }
+        }),
         m if m.contains("json") => Body::Json(content),
         m if m.contains("xml") => Body::Xml(content),
         _ => Body::Text(content),
     }
+}
+
+/// `{"query": …, "variables": …}` as a GraphQL body.
+fn graphql_body(json: &str) -> Option<Body> {
+    let value: Value = serde_json::from_str(json).ok()?;
+    let query = value.get("query")?.as_str()?.to_owned();
+    let variables = match value.get("variables") {
+        Some(Value::String(text)) => text.clone(),
+        Some(Value::Null) | None => String::new(),
+        Some(other) => serde_json::to_string_pretty(other).unwrap_or_default(),
+    };
+    Some(Body::GraphQl { query, variables })
 }
 
 fn auth(value: Option<&Value>, at: &str, warnings: &mut Vec<ImportWarning>) -> Auth {

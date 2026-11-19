@@ -91,6 +91,23 @@ pub(crate) fn set(value: &mut Value, key: &str, new: Value) {
     }
 }
 
+/// Renames the key `from` of the mapping `value` to `to`, keeping its
+/// place, so the file reads as before.
+pub(crate) fn rename_key(value: &mut Value, from: &str, to: &str) {
+    let Some(map) = value.as_mapping_mut() else {
+        return;
+    };
+    let from = string(from);
+    if !map.contains_key(&from) {
+        return;
+    }
+    let old = std::mem::take(map);
+    *map = old
+        .into_iter()
+        .map(|(k, v)| if k == from { (string(to), v) } else { (k, v) })
+        .collect();
+}
+
 /// Removes `value[key]`, if present.
 pub(crate) fn remove(value: &mut Value, key: &str) {
     if let Some(map) = value.as_mapping_mut() {

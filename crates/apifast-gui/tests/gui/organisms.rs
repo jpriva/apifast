@@ -38,7 +38,7 @@ fn tree() -> CollectionTree {
             TreeItem::Other {
                 path: RequestPath::new("query.yml"),
                 name: "Query".into(),
-                kind: "graphql".into(),
+                kind: "websocket".into(),
                 seq: None,
             },
             TreeItem::Invalid {
@@ -62,7 +62,7 @@ fn the_tree_lists_every_item_and_opens_folders_on_click() {
         TreeView::default(),
     );
     harness.run();
-    for label in ["Users", "Login", "POST", "Query (graphql)", "broken.yml"] {
+    for label in ["Users", "Login", "POST", "Query (websocket)", "broken.yml"] {
         harness.get_by_label(label);
     }
     assert!(harness.query_by_label("List users").is_none());

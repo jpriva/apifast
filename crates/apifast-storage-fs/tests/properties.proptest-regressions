@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 33e850b91cac081400071b37e5eb8d560261b02ded3540620520903560b5f7c7 # shrinks to request = HttpRequest { name: "A", seq: None, tags: [], method: Get, url: "", params: [], headers: [], body: None, auth: Inherit, variables: [], assertions: [], captures: [], settings: Settings { timeout_ms: Inherit, follow_redirects: Inherit, max_redirects: Inherit, encode_url: Inherit }, docs: None, examples: [Example { name: "A", description: None, request: Some(ExampleRequest { method: Post, url: "", headers: [], params: [], body: GraphQl { query: "", variables: "" } }), response: None }] }
+cc 03b303970b4c4463149c9908d4a0c4ed97efae82b6e42ba93bc51ab790a4e4c8 # shrinks to first = HttpRequest { name: "A", seq: None, tags: [], method: Get, url: "", params: [], headers: [], body: None, auth: Inherit, variables: [], assertions: [], captures: [], settings: Settings { timeout_ms: Inherit, follow_redirects: Inherit, max_redirects: Inherit, encode_url: Inherit }, docs: None, examples: [Example { name: "A", description: None, request: Some(ExampleRequest { method: Post, url: "", headers: [], params: [], body: GraphQl { query: "", variables: "" } }), response: None }] }, second = HttpRequest { name: "A", seq: None, tags: [], method: Get, url: "", params: [], headers: [], body: None, auth: Inherit, variables: [], assertions: [], captures: [], settings: Settings { timeout_ms: Inherit, follow_redirects: Inherit, max_redirects: Inherit, encode_url: Inherit }, docs: None, examples: [] }

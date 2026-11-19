@@ -189,7 +189,7 @@ El caso de uso `run_collection` (`apifast-app`) es el mismo para la CLI y la int
 
 - **Selección:** la colección entera o una carpeta (`folder`), con sus subcarpetas o sin ellas (`recursive`), en el orden del árbol: por `seq`, luego por nombre, y cada carpeta en su lugar. Una carpeta que no existe es un error antes de enviar nada.
 - **Tags:** con `tags`, solo corren las requests que tienen al menos uno; con `exclude_tags`, no corre ninguna que tenga alguno. Sin distinguir mayúsculas.
-- **Omitidas:** las requests filtradas por tags, las de tipos que aún no se pueden enviar (GraphQL…) y los archivos ilegibles no corren y quedan en el informe con su motivo.
+- **Omitidas:** las requests filtradas por tags, las de tipos que aún no se pueden enviar (WebSocket, gRPC) y los archivos ilegibles no corren y quedan en el informe con su motivo.
 - **Variables:** cada request ve lo que capturaron las anteriores, también entre iteraciones. El informe devuelve los valores finales.
 - **Errores:** una request que no se puede enviar (variable sin resolver, red…) queda en el informe con su error y la ejecución sigue.
 - **`bail`:** detiene la ejecución tras la primera request con un error o una aserción fallida.
@@ -245,7 +245,7 @@ Lo que se traduce de Postman (con las decisiones del importador de Bruno):
 - Carpetas y requests en su orden (`seq`), con nombres de archivo sacados del nombre y únicos entre hermanos.
 - Auth de colección, carpeta y request: basic, bearer, digest, NTLM, API key, AWS SigV4 y OAuth 2.0 (sus cuatro flujos, PKCE, dónde va el token y los parámetros adicionales). Sin `auth`, hereda; `noauth`, ninguna. Las demás (OAuth 1, Hawk, EdgeGrid…) quedan sin auth y con aviso.
 - URL como texto o por partes, path params con su valor, params de query desactivados, headers (también desactivados), descripción como documentación.
-- Bodies: raw según su lenguaje o el `Content-Type` (JSON, XML o texto), urlencoded, form-data (texto y archivos), archivo. GraphQL pasa a un JSON con `query` y `variables`, con aviso.
+- Bodies: raw según su lenguaje o el `Content-Type` (JSON, XML o texto), urlencoded, form-data (texto y archivos), archivo, GraphQL (su operación y sus variables).
 - `protocolProfileBehavior`: `followRedirects`, `maxRedirects` y `disableUrlEncoding` (como `encodeUrl: false`); los demás, con aviso.
 - Las respuestas guardadas, como ejemplos de la request.
 - Variables de colección. `{{$guid}}` pasa a `{{$randomUUID}}`; una variable dinámica que apifast no genera se avisa.
@@ -273,7 +273,7 @@ apifast import bruno <carpeta> --out <carpeta> [--dry-run]
 Una colección de Bruno en su formato anterior, `.bru` (la carpeta con `bruno.json`). Las colecciones de Bruno en YAML no necesitan importarse: se abren tal cual. El parser sigue la gramática de Bruno (`bruno-lang/v2/src/bruToJson.js`): bloques de pares (`headers { nombre: valor }`, `~` delante para desactivar, claves entre comillas, valores de varias líneas entre `'''`, anotaciones como `@description(…)` y los tipos `@number`, `@boolean`, `@object`), de texto (`body:json { … }`) y de lista (`vars:secret [ a, b ]`).
 
 - `bruno.json` da el nombre; `collection.bru`, los headers, la auth y las variables que todo hereda; el `folder.bru` de cada carpeta, su nombre, su posición y lo que heredan sus requests.
-- Cada request: método y URL, path params con su valor y params de query desactivados, headers, body (JSON, texto, XML, SPARQL, formulario, multipart con `@file(a|b)` y `@contentType(…)`, archivo; GraphQL como JSON con aviso), auth (basic, bearer, digest, NTLM, API key, AWS SigV4, OAuth 2.0), variables, aserciones (`res.status: eq 200`), `vars:post-response` como capturas, ajustes, tags y documentación. El orden es el `seq` de Bruno.
+- Cada request: método y URL, path params con su valor y params de query desactivados, headers, body (JSON, texto, XML, SPARQL, formulario, multipart con `@file(a|b)` y `@contentType(…)`, archivo, GraphQL), auth (basic, bearer, digest, NTLM, API key, AWS SigV4, OAuth 2.0), variables, aserciones (`res.status: eq 200`), `vars:post-response` como capturas, ajustes, tags y documentación. El orden es el `seq` de Bruno.
 - Los entornos de `environments/`: sus variables, y las de `vars:secret` declaradas secretas sin valor (Bruno guarda los valores aparte); se avisa para ponerlos en la bóveda.
 - Los scripts y los bloques `tests` se avisan (F9). Una request que no es HTTP (WebSocket, gRPC) se deja fuera con aviso, igual que un archivo que no se puede leer, con su línea.
 - Se ignoran las carpetas ocultas y `node_modules`.
@@ -286,7 +286,7 @@ Una exportación de Insomnia: la v4 (JSON, una lista de recursos enlazados por `
 
 - `{{ _.host }}` pasa a `{{host}}`. Las etiquetas de plantilla de Insomnia (`{% response … %}`, `{% uuid %}`…) no tienen equivalente: se avisan.
 - Los params de query, que Insomnia guarda aparte, se unen a la URL (los desactivados quedan como params desactivados); los path params conservan su valor.
-- Headers, body según su `mimeType` (JSON, XML, texto, formulario, multipart con archivos, archivo; GraphQL como JSON con aviso), auth (basic, bearer, digest, NTLM, API key, AWS IAM como SigV4, OAuth 2.0 con PKCE; una auth desactivada es ninguna; vacía, hereda), `encodeUrl` y `followRedirects`, la descripción como documentación.
+- Headers, body según su `mimeType` (JSON, XML, texto, formulario, multipart con archivos, archivo, GraphQL; uno que no es `{"query": …}` queda como JSON con aviso), auth (basic, bearer, digest, NTLM, API key, AWS IAM como SigV4, OAuth 2.0 con PKCE; una auth desactivada es ninguna; vacía, hereda), `encodeUrl` y `followRedirects`, la descripción como documentación.
 - Las carpetas conservan su auth y su entorno, como variables de la carpeta.
 - Los entornos: el base y uno por cada sub-entorno, mezclado sobre el base. Un valor anidado es una variable de tipo objeto (`{{user.name}}` lo lee), no se aplana en claves con puntos.
 - Los scripts se avisan (F9); las requests de WebSocket y gRPC se dejan fuera con aviso.
@@ -330,7 +330,7 @@ Es el camino inverso del importador, así que lo exportado se vuelve a importar 
 - `followRedirects`, `maxRedirects` y `encodeUrl` como `protocolProfileBehavior`; el timeout no tiene equivalente por request y se avisa.
 - Postman no hereda headers ni tiene variables de carpeta: los headers de la colección y de las carpetas se copian en cada request, y las variables de carpeta pasan a la colección (si el nombre ya existe, se avisa y no se exporta).
 - Un entorno que extiende a otro se exporta con las variables de los dos mezcladas. Los secretos van sin valor, de tipo `secret`.
-- Se avisan las aserciones, las capturas, las variables de request y las etiquetas, que Postman no tiene fuera de los scripts; las requests de otro tipo (GraphQL) se dejan fuera.
+- Se avisan las aserciones, las capturas, las variables de request y las etiquetas, que Postman no tiene fuera de los scripts; las de WebSocket y gRPC se dejan fuera. GraphQL va con el modo `graphql` de Postman.
 
 ### `apifast run`
 
@@ -369,7 +369,7 @@ FAIL  Missing users/missing.yml · 4 ms · 404
       ✗ res.status eq 200: expected eq 200, got 404
 ERROR Create users/create.yml · 0 ms
       variable `name` is not defined
-SKIP  graphql.yml · graphql requests cannot run yet
+SKIP  socket.yml · websocket requests cannot run yet
 3 requests: 1 passed, 1 failed, 1 with errors, 1 skipped · 1/2 assertions · 16 ms
 ```
 
