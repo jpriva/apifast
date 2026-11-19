@@ -16,6 +16,8 @@ use crate::system::{SystemClock, SystemRandom};
 pub struct Copied {
     /// Increases with every copy, so each is put in the clipboard once.
     pub id: u64,
+    /// The language it is in.
+    pub language: apifast_import::CodeLanguage,
     /// The text.
     pub text: String,
     /// What it could not fill in, or why there is nothing to copy.
@@ -23,8 +25,9 @@ pub struct Copied {
 }
 
 impl State {
-    /// Renders the request `key` (with its tab's draft, if open) as cURL.
-    pub(super) fn copy_as_curl(&mut self, key: &TabKey) {
+    /// Renders the request `key` (with its tab's draft, if open) as code in
+    /// `language`.
+    pub(super) fn copy_as(&mut self, key: &TabKey, language: apifast_import::CodeLanguage) {
         let id = self.next_revision();
         let Some(open) = self.open.get(&key.root) else {
             return;
@@ -55,13 +58,18 @@ impl State {
             authorizer: None,
         };
         let copied = match render_for_copy(&ports, &key.path, &options) {
-            Ok(copied) => Copied {
-                id,
-                text: apifast_import::to_curl(&copied.request, Some(&key.root)),
-                note: note(&copied),
-            },
+            Ok(copied) => {
+                let code = apifast_import::to_code(language, &copied.request, Some(&key.root));
+                Copied {
+                    id,
+                    language,
+                    text: code.text,
+                    note: note(&copied, code.notes),
+                }
+            }
             Err(e) => Copied {
                 id,
+                language,
                 text: String::new(),
                 note: Some(e.to_string()),
             },
@@ -70,9 +78,11 @@ impl State {
     }
 }
 
-/// What a copied request could not fill in.
-fn note(copied: &CopiedRequest) -> Option<String> {
+/// What a copied request could not fill in, and what its code leaves to
+/// the user.
+fn note(copied: &CopiedRequest, code: Vec<String>) -> Option<String> {
     let mut missing: Vec<String> = copied.problems.iter().map(ToString::to_string).collect();
+    missing.extend(code);
     if copied.missing_token {
         missing.push("no OAuth 2.0 token stored yet".into());
     }

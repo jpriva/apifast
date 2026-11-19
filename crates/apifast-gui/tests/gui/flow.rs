@@ -573,7 +573,9 @@ fn the_tree_copies_a_request_as_curl() {
     let dir = collection(server());
     let data = tempfile::tempdir().unwrap();
     let mut harness = open_app(dir.path(), data.path());
-    menu(&mut harness, "Health", EN.copy_as_curl);
+    menu(&mut harness, "Health", EN.copy_as);
+    harness.get_by_label("cURL").click();
+    harness.run_steps(2);
     // No environment: `host` is missing, and the notice says so.
     let start = Instant::now();
     loop {

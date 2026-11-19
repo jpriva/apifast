@@ -354,7 +354,9 @@ impl MainScreen {
                 self.export_dialog = Some((root, save_dialog(&name)));
                 vec![focus]
             }
-            TreeEvent::CopyAsCurl(path) => vec![Command::CopyAsCurl(TabKey::new(root, path))],
+            TreeEvent::CopyAs(path, language) => {
+                vec![Command::CopyAs(TabKey::new(root, path), language)]
+            }
             TreeEvent::Close => vec![Command::CloseCollection(root)],
             TreeEvent::Remove => vec![Command::RemoveCollection(root)],
             TreeEvent::Settings => {
@@ -616,7 +618,10 @@ impl MainScreen {
                 self.request.format_now = true;
                 Vec::new()
             }
-            Action::CopyAsCurl => one(snapshot.active.clone().map(Command::CopyAsCurl)),
+            Action::CopyAsCurl
+            | Action::CopyAsJavaScript
+            | Action::CopyAsPython
+            | Action::CopyAsGo => copy_as(action, snapshot),
             // Opened by `open_window`.
             Action::Shortcuts | Action::CollectionKey | Action::Cookies | Action::Settings => {
                 Vec::new()
@@ -768,6 +773,17 @@ fn editor_area(
     (event, edited)
 }
 
+/// Copies the active request in the language of the "copy as" `action`.
+fn copy_as(action: Action, snapshot: &Snapshot) -> Vec<Command> {
+    let language = action
+        .code_language()
+        .unwrap_or(apifast_import::CodeLanguage::Curl);
+    (snapshot.active.clone())
+        .map(|key| Command::CopyAs(key, language))
+        .into_iter()
+        .collect()
+}
+
 /// Opens the system's save dialog for a Postman export of the collection
 /// `name`, off the interface's thread.
 fn save_dialog(name: &str) -> std::sync::mpsc::Receiver<Option<PathBuf>> {
@@ -823,8 +839,13 @@ impl MainScreen {
         } else {
             ctx.copy_text(copied.text.clone());
             match &copied.note {
-                Some(missing) => format!("{} {missing}", strings.copied_missing),
-                None => strings.copied_as_curl.to_owned(),
+                Some(missing) => format!(
+                    "{} {}, {} {missing}",
+                    strings.copied_as,
+                    copied.language.label(),
+                    strings.copied_missing
+                ),
+                None => format!("{} {}.", strings.copied_as, copied.language.label()),
             }
         });
     }

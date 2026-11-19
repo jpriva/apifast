@@ -346,11 +346,13 @@ Los dos se cumplen: cada esquema (Digest, NTLM, AWS SigV4, OAuth 2.0 en sus tres
 - [x] Pegar un comando cURL en la barra de URL crea la request. `parse_curl` en `apifast-import`: palabras como las separa un shell POSIX (comillas, `\`, `$'…'`, continuaciones de línea) y las opciones de Bruno y alguna más (`-X`, `-H`, `-A`, `-e`, `-b`, `-u` con `--digest`/`--ntlm`, `--oauth2-bearer`, `-d` y sus variantes juntadas con `&`, `--json`, `-F`/`--form-string`, `@archivo` como body de archivo, `-G`, `-I`, opciones cortas juntas como `-sSL` o `-XPOST`). Las que no cambian la request se saltan con su valor; las demás se listan, nunca se pierden en silencio. Es también la base del importador de cURL.
 - [x] Copiar como cURL. `render_for_copy` en `apifast-app` renderiza la request como la enviaría un envío, pero sin red: token OAuth 2.0 solo si está guardado, `response(...)` sin enviar, y en modo tolerante, con lo que falta listado. `to_curl` en `apifast-import` la escribe con opciones largas y comillas de shell; probado de ida y vuelta con `parse_curl` y con el curl real. En el menú de cada request del árbol y en la paleta ([docs/09](09-ui-ux.md#layout-principal)).
 - [x] Exportar a Postman: colección v2.1 y entornos, con `apifast export postman` ([docs/08](08-tests-y-runner.md#apifast-export)) y "Export to Postman…" en el menú de la colección ([docs/09](09-ui-ux.md#exportar-a-postman)). Probado de ida y vuelta con las 33 colecciones del corpus de Postman y de extremo a extremo.
-- [ ] Generación de código para los lenguajes más usados (a decidir según demanda).
+- [x] Generación de código para los lenguajes más usados: JavaScript (`fetch`), Python (`requests`) y Go (`net/http`), además de cURL. `to_code` en `apifast-import`, sobre el mismo renderizado que copiar como cURL; en el submenú "Copy as" de cada request y en la paleta ([docs/09](09-ui-ux.md#layout-principal)). Lo que el cliente de un lenguaje no hace se avisa. Probado ejecutando el código de Python y Go contra un servidor. Otros lenguajes, según demanda.
 
 ### Criterio de salida
 
 Una colección real de cada origen se importa y sus requests se envían correctamente; lo no soportado se informa de forma explícita.
+
+Se cumple: cada origen tiene una prueba de extremo a extremo que importa y envía (Postman, OpenAPI, Bruno `.bru` e Insomnia con `apifast import` y `apifast send`; un comando cURL pegado en la barra de URL), y los corpus de Bruno (33 colecciones de Postman, 19 especificaciones OpenAPI, su colección de pruebas `.bru` entera y 8 exportaciones de Insomnia) se importan sin errores. Lo que no tiene lugar en apifast se lista con dónde estaba, en el plan de la CLI y en el diálogo. Quedan pendientes anotados: Swagger 2.0 y los `$ref` externos de OpenAPI.
 
 ---
 

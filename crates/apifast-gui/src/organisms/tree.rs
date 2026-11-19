@@ -52,7 +52,7 @@ pub enum TreeEvent {
     /// The user clicked a request.
     RequestSelected(RequestPath),
     /// Copy a request as a cURL command.
-    CopyAsCurl(RequestPath),
+    CopyAs(RequestPath, apifast_import::CodeLanguage),
     /// Create a request called `name` in `folder` (`""` for the root).
     CreateRequest {
         /// Where.
@@ -587,13 +587,15 @@ fn context_menu(ui: &mut egui::Ui, row: &Row, strings: &Strings) -> Option<RowAc
         }
         ui.separator();
     }
-    if let ItemPath::Request(path) = &row.item
-        && ui.button(strings.copy_as_curl).clicked()
-    {
-        action = Some(RowAction::Event(
-            row.root.clone(),
-            TreeEvent::CopyAsCurl(path.clone()),
-        ));
+    if let ItemPath::Request(path) = &row.item {
+        ui.menu_button(strings.copy_as, |ui| {
+            for language in apifast_import::CodeLanguage::ALL {
+                if ui.button(language.label()).clicked() {
+                    let event = TreeEvent::CopyAs(path.clone(), language);
+                    action = Some(RowAction::Event(row.root.clone(), event));
+                }
+            }
+        });
     }
     if matches!(row.kind, RowKind::Folder { .. } | RowKind::Request { .. })
         && ui.button(strings.rename).clicked()

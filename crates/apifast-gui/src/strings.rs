@@ -334,11 +334,19 @@ pub struct Strings {
     pub reimport_apply: &'static str,
     /// Menu and action: copy a request as a cURL command.
     pub copy_as_curl: &'static str,
-    /// After copying a request as cURL.
-    pub copied_as_curl: &'static str,
-    /// After copying, when something rendered empty; what follows.
+    /// Menu and action: copy a request as JavaScript.
+    pub copy_as_javascript: &'static str,
+    /// Menu and action: copy a request as Python.
+    pub copy_as_python: &'static str,
+    /// Menu and action: copy a request as Go.
+    pub copy_as_go: &'static str,
+    /// Submenu: copy a request as code.
+    pub copy_as: &'static str,
+    /// Before the language a request was copied as.
+    pub copied_as: &'static str,
+    /// After it, before what could not be filled in.
     pub copied_missing: &'static str,
-    /// When a request cannot be copied; why follows.
+    /// Before why a request could not be copied.
     pub copy_failed: &'static str,
     /// Note after pasting a cURL: options follow.
     pub curl_ignored: &'static str,
@@ -1109,9 +1117,13 @@ pub const EN: Strings = Strings {
     reimport_nothing: "Nothing changed in the source.",
     reimport_apply: "Apply",
     copy_as_curl: "Copy as cURL",
-    copied_as_curl: "Copied as cURL.",
-    copied_missing: "Copied as cURL, with something missing:",
-    copy_failed: "Cannot copy as cURL:",
+    copy_as_javascript: "Copy as JavaScript (fetch)",
+    copy_as_python: "Copy as Python (requests)",
+    copy_as_go: "Copy as Go (net/http)",
+    copy_as: "Copy as",
+    copied_as: "Copied as",
+    copied_missing: "with something missing:",
+    copy_failed: "Cannot copy:",
     curl_ignored: "Pasted the cURL command. Not kept:",
     curl_failed: "The pasted cURL command cannot be read",
     examples: "Examples",

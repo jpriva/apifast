@@ -63,6 +63,12 @@ pub enum Action {
     Cookies,
     /// Copy the active request as a cURL command.
     CopyAsCurl,
+    /// Copy the active request as JavaScript (`fetch`).
+    CopyAsJavaScript,
+    /// Copy the active request as Python (`requests`).
+    CopyAsPython,
+    /// Copy the active request as Go (`net/http`).
+    CopyAsGo,
     /// Open a collection folder.
     OpenCollection,
     /// Create a collection.
@@ -106,6 +112,9 @@ pub const ALL: &[Action] = &[
     Action::CollectionKey,
     Action::Cookies,
     Action::CopyAsCurl,
+    Action::CopyAsJavaScript,
+    Action::CopyAsPython,
+    Action::CopyAsGo,
     Action::OpenCollection,
     Action::NewCollection,
     Action::ImportCollection,
@@ -147,6 +156,9 @@ impl Action {
             Self::CollectionKey => "collection_key".into(),
             Self::Cookies => "cookies".into(),
             Self::CopyAsCurl => "copy_as_curl".into(),
+            Self::CopyAsJavaScript => "copy_as_javascript".into(),
+            Self::CopyAsPython => "copy_as_python".into(),
+            Self::CopyAsGo => "copy_as_go".into(),
             Self::OpenCollection => "open_collection".into(),
             Self::NewCollection => "new_collection".into(),
             Self::ImportCollection => "import_collection".into(),
@@ -186,6 +198,9 @@ impl Action {
             Self::CollectionKey => strings.action_collection_key,
             Self::Cookies => strings.action_cookies,
             Self::CopyAsCurl => strings.copy_as_curl,
+            Self::CopyAsJavaScript => strings.copy_as_javascript,
+            Self::CopyAsPython => strings.copy_as_python,
+            Self::CopyAsGo => strings.copy_as_go,
             Self::OpenCollection => strings.open_collection,
             Self::NewCollection => strings.new_collection,
             Self::ImportCollection => strings.import_collection_action,
@@ -236,6 +251,9 @@ impl Action {
             | Self::CollectionKey
             | Self::Cookies
             | Self::CopyAsCurl
+            | Self::CopyAsJavaScript
+            | Self::CopyAsPython
+            | Self::CopyAsGo
             | Self::NewCollection
             | Self::ImportCollection => Vec::new(),
         }
@@ -395,6 +413,20 @@ impl Keymap {
             }
         }
         pressed
+    }
+}
+
+impl Action {
+    /// The language a "copy as" action writes the request in.
+    pub fn code_language(self) -> Option<apifast_import::CodeLanguage> {
+        use apifast_import::CodeLanguage;
+        match self {
+            Self::CopyAsCurl => Some(CodeLanguage::Curl),
+            Self::CopyAsJavaScript => Some(CodeLanguage::JavaScript),
+            Self::CopyAsPython => Some(CodeLanguage::Python),
+            Self::CopyAsGo => Some(CodeLanguage::Go),
+            _ => None,
+        }
     }
 }
 

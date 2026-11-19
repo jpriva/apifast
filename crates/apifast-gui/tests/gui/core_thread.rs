@@ -2034,7 +2034,10 @@ fn a_request_is_copied_as_curl_with_its_environment_and_draft() {
     open(&core, dir.path());
     core.send(Command::SelectEnvironment(Some("local".into())));
     let key = at(&core, "users/get.yml");
-    core.send(Command::CopyAsCurl(key.clone()));
+    core.send(Command::CopyAs(
+        key.clone(),
+        apifast_import::CodeLanguage::Curl,
+    ));
     let snapshot = wait(&core, "the copy", |s| s.copied.is_some());
     let copied = snapshot.copied.clone().unwrap();
     assert!(
@@ -2058,13 +2061,28 @@ fn a_request_is_copied_as_curl_with_its_environment_and_draft() {
         tab: key.clone(),
         request: Box::new(draft),
     });
-    core.send(Command::CopyAsCurl(key));
+    core.send(Command::CopyAs(key, apifast_import::CodeLanguage::Curl));
     let snapshot = wait(&core, "the second copy", |s| {
         s.copied.as_ref().is_some_and(|c| c.id != copied.id)
     });
     let second = snapshot.copied.clone().unwrap();
     assert!(second.text.contains("/users/'"), "{}", second.text);
-    assert!(second.note.unwrap().contains("missing"));
+    assert!(second.note.clone().unwrap().contains("missing"));
+
+    // The same request as Python.
+    let key = at(&core, "users/get.yml");
+    core.send(Command::CopyAs(key, apifast_import::CodeLanguage::Python));
+    let snapshot = wait(&core, "the Python copy", |s| {
+        s.copied.as_ref().is_some_and(|c| c.id != second.id)
+    });
+    let python = snapshot.copied.clone().unwrap();
+    assert_eq!(python.language, apifast_import::CodeLanguage::Python);
+    assert!(
+        python.text.starts_with("import requests\n"),
+        "{}",
+        python.text
+    );
+    assert!(python.text.contains("\"GET\""), "{}", python.text);
 }
 
 const POSTMAN: &str = r#"{

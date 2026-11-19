@@ -420,7 +420,7 @@ pub enum Command {
     Cookies(CookieCommand),
     /// Renders the request as cURL, for the clipboard (see
     /// [`Snapshot::copied`]).
-    CopyAsCurl(TabKey),
+    CopyAs(TabKey, apifast_import::CodeLanguage),
     /// Reads a Postman collection and its environments and makes the plan
     /// of importing them (see [`Snapshot::import`]).
     PlanImport {
@@ -1055,7 +1055,7 @@ impl State {
             | Command::SaveCollectionSettings { .. } => self.handle_settings(command),
             Command::Vault(command) => self.vault_command(command),
             Command::Cookies(command) => self.cookie_command(command),
-            Command::CopyAsCurl(key) => self.copy_as_curl(&key),
+            Command::CopyAs(key, language) => self.copy_as(&key, language),
             Command::ExportPostman { root, file } => self.export_postman(&root, &file),
             Command::PlanImport { .. }
             | Command::ApplyImport(_)
