@@ -150,6 +150,9 @@ fn request_json(request: &ScriptRequest) -> Json {
         "timeout_ms": request.timeout_ms,
         "tags": request.tags,
         "path_params": request.path_params,
+        "disabled_headers": request.disabled_headers,
+        "form": request.form,
+        "in_run": request.in_run,
     })
 }
 
@@ -207,6 +210,9 @@ fn request(json: &Json) -> Option<ScriptRequest> {
         timeout_ms: json.get("timeout_ms").and_then(Json::as_u64),
         tags,
         path_params: pairs("path_params"),
+        disabled_headers: pairs("disabled_headers"),
+        form: json.get("form").and_then(Json::as_bool).unwrap_or(false),
+        in_run: json.get("in_run").and_then(Json::as_bool).unwrap_or(false),
     })
 }
 

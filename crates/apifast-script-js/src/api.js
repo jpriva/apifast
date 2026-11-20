@@ -125,9 +125,20 @@
         return { host, pathname, queryString };
     };
 
+    // A form's text, as Bruno encodes it: an object's keys (an array
+    // repeats its key), or a list of `{name, value}`.
+    const formText = (body) => {
+        const pairs = Array.isArray(body)
+            ? body.map((field) => [field?.name ?? '', field?.value])
+            : Object.entries(body).flatMap(([k, v]) => (Array.isArray(v) ? v.map((item) => [k, item]) : [[k, v]]));
+        const encode = (value) => encodeURIComponent(value === undefined || value === null ? '' : String(value));
+        return pairs.map(([k, v]) => `${encode(k)}=${encode(v)}`).join('&');
+    };
+
     // `req`: the request, before templates are rendered.
     const request = input.request;
     const touch = () => { out.request = request; };
+    const isForm = () => request.form || /x-www-form-urlencoded/i.test(findHeader(request.headers, 'content-type') ?? '');
     const req = {
         getName: () => request.name,
         getUrl: () => request.url,
@@ -153,8 +164,17 @@
         deleteHeaders(names) {
             for (const name of names) req.deleteHeader(name);
         },
-        getBody: () => parsed(request.body, request.headers),
-        setBody(body) { request.body = body === undefined || body === null ? null : text(body); touch(); },
+        getBody: () => (isForm() ? request.body ?? undefined : parsed(request.body, request.headers)),
+        setBody(body) {
+            if (body === undefined || body === null) {
+                request.body = null;
+            } else if (typeof body !== 'string' && isForm()) {
+                request.body = formText(body);
+            } else {
+                request.body = text(body);
+            }
+            touch();
+        },
         getHost: () => urlParts(request.url).host,
         getPath() {
             const params = new Map(request.path_params ?? []);
@@ -169,10 +189,20 @@
         getQueryString: () => urlParts(request.url).queryString,
         getPathParams: () => (request.path_params ?? []).map(([name, value]) => ({ name, value, type: 'path' })),
         getTags: () => [...(request.tags ?? [])],
+        getExecutionMode: () => (request.in_run ? 'runner' : 'standalone'),
         getTimeout: () => request.timeout_ms ?? undefined,
         setTimeout(ms) { request.timeout_ms = Math.max(0, Math.floor(Number(ms))); touch(); },
     };
-    req.headerList = headerList(() => request.headers, (pairs) => { request.headers = pairs; touch(); });
+    // The headers turned off show too, first and `disabled`, as in Bruno.
+    let disabledHeaders = request.disabled_headers ?? [];
+    req.headerList = headerList(
+        () => request.headers,
+        (pairs) => { request.headers = pairs; touch(); },
+        () => disabledHeaders,
+        (gone) => {
+            disabledHeaders = disabledHeaders.filter(([key, value]) => !gone({ key, value, disabled: true }));
+        },
+    );
     for (const [name, get, set] of [
         ['url', req.getUrl, req.setUrl],
         ['method', req.getMethod, req.setMethod],

@@ -52,6 +52,7 @@ pub fn run(args: &DescribeArgs) -> Result<ExitCode> {
         allow_unresolved: args.allow_unresolved,
         draft: None,
         script_changes: Vec::new(),
+        in_run: false,
     };
     let tokens = apifast_app::memory::MemoryTokens::default();
     let authorizer = terminal_authorizer();

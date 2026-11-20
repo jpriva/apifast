@@ -571,3 +571,76 @@ async fn the_next_requests_scripts_read_what_earlier_ones_changed_by_scope() {
         ]
     );
 }
+
+#[tokio::test]
+async fn a_form_set_by_a_script_goes_as_written_and_headers_off_are_listed() {
+    use apifast_domain::{Body, FormField};
+    let field = |name: &str, value: &str| FormField {
+        name: name.into(),
+        value: value.into(),
+        enabled: true,
+    };
+    let mut request = HttpRequest::new("Post", Method::Post, "{{host}}/form");
+    request.body = Body::FormUrlEncoded(vec![field("a b", "{{host}}"), field("c", "1")]);
+    request.headers = vec![Header {
+        enabled: false,
+        ..Header::new("x-off", "request")
+    }];
+    request.scripts = vec![script(
+        ScriptKind::BeforeRequest,
+        r"
+        console.log(req.getBody(), JSON.stringify(req.headerList.filter((h) => h.disabled)));
+        req.setBody({ key: 'value with spaces', list: ['x', 'y'] });
+        ",
+    )];
+    let mut folder = Folder::new("F");
+    folder.defaults.headers = vec![
+        Header {
+            enabled: false,
+            ..Header::new("X-Off", "folder")
+        },
+        Header {
+            enabled: false,
+            ..Header::new("x-folder", "only")
+        },
+    ];
+    let collections = MemoryCollections::new(Collection::new("C"))
+        .with_folder("f", folder)
+        .with_request("f/post.yml", request);
+    let world = World::new(collections);
+    let outcome = world.send("f/post.yml").await.unwrap();
+    assert_eq!(
+        logged(&outcome),
+        [
+            r#"a%20b={{host}}&c=1 [{"key":"x-folder","value":"only","disabled":true},{"key":"x-off","value":"request","disabled":true}]"#
+        ]
+    );
+    let sent = world.transport.sent().pop().unwrap();
+    assert_eq!(
+        sent.body(),
+        &apifast_app::RenderedBody::Text("key=value%20with%20spaces&list=x&list=y".into())
+    );
+    let content_type: Vec<_> = (sent.headers().iter())
+        .filter(|(n, _)| n.eq_ignore_ascii_case("content-type"))
+        .map(|(_, v)| v.as_str())
+        .collect();
+    assert_eq!(content_type, ["application/x-www-form-urlencoded"]);
+}
+
+#[tokio::test]
+async fn scripts_know_whether_a_run_sends_their_request() {
+    let mut request = HttpRequest::new("Get", Method::Get, "{{host}}/a");
+    request.scripts = vec![script(
+        ScriptKind::BeforeRequest,
+        "console.log(req.getExecutionMode())",
+    )];
+    let world =
+        World::new(MemoryCollections::new(Collection::new("C")).with_request("get.yml", request));
+    let sent = world.send("get.yml").await.unwrap();
+    let report = world.run().await;
+    let ran = report.steps[0].outcome.as_ref().unwrap();
+    assert_eq!(
+        (logged(&sent), logged(ran)),
+        (vec!["standalone".to_owned()], vec!["runner".to_owned()])
+    );
+}

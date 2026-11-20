@@ -10,7 +10,7 @@
 //! the response run before the captures and assertions, which see the
 //! variables they set; the tests scripts run last.
 
-use std::fmt;
+use std::fmt::{self, Write as _};
 
 use apifast_domain::{
     Body, Collection, Folder, Header, HttpRequest, Method, Origin, ParamKind, Resolved,
@@ -148,6 +148,8 @@ pub(crate) struct Scopes<'a> {
     pub(crate) runtime: &'a [Variable],
     /// What scripts of earlier requests changed, by scope.
     pub(crate) changed: &'a [VariableChange],
+    /// Whether a collection run sends the request.
+    pub(crate) in_run: bool,
     pub(crate) variables: &'a ResolvedVariables,
 }
 
@@ -218,6 +220,12 @@ impl SendScripts {
                 request: ScriptRequest {
                     name: request.name.clone(),
                     tags: apifast_domain::effective_tags(&request.tags, folders),
+                    in_run: scopes.in_run,
+                    disabled_headers: disabled_headers(
+                        (scopes.collection.defaults.headers.iter())
+                            .chain(folders.iter().flat_map(|f| &f.defaults.headers))
+                            .chain(&request.headers),
+                    ),
                     ..ScriptRequest::default()
                 },
                 response: None,
@@ -380,6 +388,9 @@ fn script_request(known: &ScriptRequest, resolved: &ResolvedRequest) -> ScriptRe
     ScriptRequest {
         name: known.name.clone(),
         tags: known.tags.clone(),
+        disabled_headers: known.disabled_headers.clone(),
+        in_run: known.in_run,
+        form: matches!(resolved.body(), Body::FormUrlEncoded(_)),
         path_params,
         method: resolved.method().as_str().to_owned(),
         url: resolved.url().to_owned(),
@@ -391,14 +402,51 @@ fn script_request(known: &ScriptRequest, resolved: &ResolvedRequest) -> ScriptRe
     }
 }
 
-/// The text of a body a script can read and change.
+/// The text of a body a script can read and change; a form's, as it goes.
 fn body_text(body: &Body) -> Option<String> {
     match body {
         Body::Json(text) | Body::Text(text) | Body::Xml(text) | Body::Sparql(text) => {
             Some(text.clone())
         }
+        Body::FormUrlEncoded(fields) => Some(form_text(fields)),
         _ => None,
     }
+}
+
+/// A form's enabled fields, URL-encoded as `encodeURIComponent` does,
+/// templates (`{{…}}`) left as they are to be rendered later.
+fn form_text(fields: &[apifast_domain::FormField]) -> String {
+    let encode = |text: &str| -> String {
+        let mut out = String::with_capacity(text.len());
+        for byte in text.bytes() {
+            if byte.is_ascii_alphanumeric() || b"-_.!~*'(){}".contains(&byte) {
+                out.push(char::from(byte));
+            } else {
+                // Writing to a String cannot fail.
+                let _ = write!(out, "%{byte:02X}");
+            }
+        }
+        out
+    };
+    (fields.iter().filter(|f| f.enabled))
+        .map(|f| format!("{}={}", encode(&f.name), encode(&f.value)))
+        .collect::<Vec<_>>()
+        .join("&")
+}
+
+/// The headers turned off in `headers` (from the outermost level), as
+/// [`ScriptRequest::disabled_headers`] keeps them.
+fn disabled_headers<'h>(headers: impl Iterator<Item = &'h Header>) -> Vec<(String, String)> {
+    let headers: Vec<&Header> = headers.collect();
+    let mut off: Vec<(String, String)> = Vec::new();
+    for header in headers.iter().filter(|h| !h.enabled) {
+        off.retain(|(name, _)| !name.eq_ignore_ascii_case(&header.name));
+        off.push((header.name.clone(), header.value.clone()));
+    }
+    off.retain(|(name, _)| {
+        !(headers.iter()).any(|h| h.enabled && h.name.eq_ignore_ascii_case(name))
+    });
+    off
 }
 
 /// `resolved`, changed as `request` says. A header keeps where it came
@@ -418,6 +466,18 @@ fn apply_request(resolved: &mut ResolvedRequest, request: &ScriptRequest) {
     if body_text(resolved.body()) != request.body {
         let body = match (resolved.body(), request.body.clone()) {
             (_, None) => Body::None,
+            // A form as the script wrote it goes as is, still a form.
+            (Body::FormUrlEncoded(_), Some(text)) => {
+                if !(request.headers.iter()).any(|(n, _)| n.eq_ignore_ascii_case("content-type")) {
+                    let mut headers = resolved.headers().to_vec();
+                    headers.push(Resolved::new(
+                        Header::new("Content-Type", "application/x-www-form-urlencoded"),
+                        Origin::Request,
+                    ));
+                    resolved.set_headers(headers);
+                }
+                Body::Text(text)
+            }
             (Body::Json(_), Some(text)) => Body::Json(text),
             (Body::Text(_), Some(text)) => Body::Text(text),
             (Body::Xml(_), Some(text)) => Body::Xml(text),

@@ -132,6 +132,15 @@ pub struct ScriptRequest {
     pub tags: Vec<String>,
     /// Its enabled path parameters (`:name` in the URL), in order.
     pub path_params: Vec<(String, String)>,
+    /// The headers turned off in it, its folders and the collection, one
+    /// per name (the innermost), and none that is also on: what
+    /// `req.headerList` shows as `disabled`.
+    pub disabled_headers: Vec<(String, String)>,
+    /// Whether its body is a URL-encoded form: `body` is then the form as
+    /// it goes, and `req.setBody` encodes an object or a list of fields.
+    pub form: bool,
+    /// Whether a collection run sends it (`req.getExecutionMode()`).
+    pub in_run: bool,
 }
 
 /// A response as a script sees it (`res`).

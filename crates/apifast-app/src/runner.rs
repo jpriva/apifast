@@ -343,6 +343,7 @@ where
     } = select(ports.collections, options)?;
 
     let mut send = options.send.clone();
+    send.in_run = true;
     send.draft = None;
     let mut report = RunReport {
         steps: Vec::new(),

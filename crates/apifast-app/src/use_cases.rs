@@ -150,6 +150,9 @@ pub struct SendOptions {
     /// collection and the globals: the scripts of this one read it over
     /// the files. Kept with [`keep_script_changes`](crate::keep_script_changes).
     pub script_changes: Vec<crate::VariableChange>,
+    /// Whether a collection run sends it: its scripts see `runner` as
+    /// `req.getExecutionMode()`, else `standalone`.
+    pub in_run: bool,
 }
 
 /// Result of [`send_request`].
@@ -554,6 +557,7 @@ where
         environment: (options.environment.as_deref(), &environment),
         runtime: &options.runtime,
         changed: &options.script_changes,
+        in_run: options.in_run,
         variables,
     };
     let Some(mut scripts) = SendScripts::of(&loaded.request, &loaded.folders, &scopes) else {
@@ -654,6 +658,7 @@ where
         allow_unresolved: options.allow_unresolved,
         draft: None,
         script_changes: options.script_changes.clone(),
+        in_run: options.in_run,
     };
     let outcome = send_in_chain(ports, dependency, &dependency_options, cancel, context)
         .await

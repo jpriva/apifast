@@ -33,6 +33,9 @@ fn input() -> ScriptInput {
             timeout_ms: None,
             tags: vec!["smoke".into()],
             path_params: vec![("id".into(), "7".into())],
+            disabled_headers: vec![("X-Off".into(), "hidden".into())],
+            form: false,
+            in_run: false,
         },
         response: Some(ScriptResponse {
             status: 201,
@@ -206,6 +209,9 @@ async fn req_changes_the_request() {
             timeout_ms: Some(5000),
             tags: vec!["smoke".into()],
             path_params: vec![("id".into(), "7".into())],
+            disabled_headers: vec![("X-Off".into(), "hidden".into())],
+            form: false,
+            in_run: false,
         })
     );
 }
@@ -664,10 +670,11 @@ async fn the_header_lists_read_and_write_headers_in_any_case() {
     assert_eq!(
         logged(&outcome),
         [
-            "application/json 1 true",
-            r#"{"key":"Content-Type","value":"application/json"} 0"#,
+            // The header turned off counts, first.
+            "application/json 2 true",
+            r#"{"key":"Content-Type","value":"application/json"} 1"#,
             "true false 2",
-            r#"{"x-trace":"2","Accept":"*/*"} {"x-trace":"2","Accept":"*/*"}"#,
+            r#"{"X-Off":"hidden","x-trace":"2","Accept":"*/*"} {"x-trace":"2","Accept":"*/*"}"#,
             r#"[{"key":"Content-Type","value":"application/json"}]"#,
             "HeaderList is read-only (response headers cannot be modified)",
         ]
@@ -867,9 +874,64 @@ async fn awaiting_a_test_waits_for_it_to_end() {
         await test('first', async () => { await bru.sleep(20); order.push('first'); });
         await test('second', () => { order.push('second'); });
         const failed = await test('failed', async () => { throw new Error('no'); });
-        console.log(order.join(), failed, req.tags);
+        console.log(order.join(), failed, req.tags, req.getExecutionMode());
     ")
     .await;
-    assert_eq!(logged(&outcome), [r#"first,second undefined ["smoke"]"#]);
+    assert_eq!(
+        logged(&outcome),
+        [r#"first,second undefined ["smoke"] standalone"#]
+    );
     assert_eq!(outcome.tests[2].error.as_deref(), Some("no"));
+}
+
+#[tokio::test]
+async fn the_header_list_shows_the_headers_turned_off() {
+    let outcome = run(r"
+        const list = req.headerList;
+        console.log(list.count(), JSON.stringify(list.find((h) => h.disabled)), list.get('x-off'));
+        console.log(JSON.stringify(list.toObject(true)), list.filter((h) => !h.disabled).length);
+        console.log(JSON.stringify(req.getHeaders()));
+        list.remove('X-OFF');
+        console.log(list.has('x-off'));
+    ")
+    .await;
+    assert_eq!(
+        logged(&outcome),
+        [
+            r#"2 {"key":"X-Off","value":"hidden","disabled":true} hidden"#,
+            r#"{"Content-Type":"application/json"} 1"#,
+            r#"{"Content-Type":"application/json"}"#,
+            "false",
+        ]
+    );
+}
+
+#[tokio::test]
+async fn a_form_body_is_set_encoded_as_in_bruno() {
+    let mut input = input();
+    input.request.form = true;
+    input.request.body = Some("a=1".into());
+    let outcome = run_with(
+        r"
+        console.log(req.getBody());
+        req.setBody({ key: 'value with spaces', name: 'bruno', array: ['test', 'value'] });
+        console.log(req.getBody());
+        req.setBody([{ name: 'empty', value: '' }, { name: 'null', value: null }, { name: 'undefined' }, { name: '', value: 'k' }, { name: 'zero', value: 0 }]);
+        console.log(req.getBody());
+        req.setBody('raw=1');
+        console.log(req.getBody());
+    ",
+        &input,
+    )
+    .await;
+    assert_eq!(outcome.error, None);
+    assert_eq!(
+        logged(&outcome),
+        [
+            "a=1",
+            "key=value%20with%20spaces&name=bruno&array=test&array=value",
+            "empty=&null=&undefined=&=k&zero=0",
+            "raw=1",
+        ]
+    );
 }
