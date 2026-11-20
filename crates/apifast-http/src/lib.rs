@@ -397,6 +397,10 @@ impl ReqwestTransport {
 }
 
 impl HttpTransport for ReqwestTransport {
+    fn cookies(&self) -> Option<&Cookies> {
+        self.cookies.as_deref()
+    }
+
     async fn send<W: BodyWriter + Send>(
         &self,
         request: &RenderedRequest,

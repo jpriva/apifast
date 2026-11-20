@@ -61,6 +61,7 @@ fn input() -> ScriptInput {
                 Variable::secret("hidden"),
             ],
         },
+        cookies: Vec::new(),
     }
 }
 
@@ -131,6 +132,17 @@ impl ScriptHost for FakeHost {
                 }],
             })
         })
+    }
+
+    fn cookies(&self) -> Vec<apifast_domain::Cookie> {
+        Vec::new()
+    }
+
+    fn change_cookies(
+        &self,
+        _: apifast_app::CookieChange,
+    ) -> Result<Vec<apifast_domain::Cookie>, String> {
+        Err("there is no cookie jar here".to_owned())
     }
 }
 

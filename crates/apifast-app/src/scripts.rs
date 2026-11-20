@@ -9,7 +9,7 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use apifast_domain::{Variable, VariableValue};
+use apifast_domain::{Cookie, CookieSpec, Variable, VariableValue};
 
 use crate::CancelToken;
 
@@ -183,6 +183,9 @@ pub struct ScriptInput {
     pub response: Option<ScriptResponse>,
     /// The variables.
     pub variables: ScriptVariables,
+    /// The cookies in the collection's jar, which scripts read
+    /// (`bru.cookies`); they change it through the [`ScriptHost`].
+    pub cookies: Vec<Cookie>,
 }
 
 /// Where a variable a script changed lives.
@@ -311,6 +314,40 @@ pub trait ScriptHost: Sync {
     /// root, with or without the file's extension), its scripts and all
     /// (`bru.runRequest`).
     fn run_request<'a>(&'a self, path: &'a str) -> HostFuture<'a, RanRequest>;
+
+    /// The cookies in the jar, for the next script to read.
+    fn cookies(&self) -> Vec<Cookie>;
+
+    /// Changes the jar as `change` asks, and gives the cookies in it then.
+    ///
+    /// # Errors
+    ///
+    /// A message, when there is no jar or `change` names no valid URL.
+    fn change_cookies(&self, change: CookieChange) -> Result<Vec<Cookie>, String>;
+}
+
+/// A change a script makes to the cookie jar.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CookieChange {
+    /// Sets a cookie for `url` (`jar.setCookie`, `bru.cookies.upsert`). A
+    /// cookie a `Set-Cookie` from it could not set is left out.
+    Set {
+        /// Where it comes from.
+        url: String,
+        /// The cookie.
+        cookie: CookieSpec,
+    },
+    /// Deletes the cookies that go to `url`: those called `name`, or all.
+    /// Of several called `name`, the one at the URL's path goes, or else
+    /// the first, as in Bruno.
+    Delete {
+        /// Where they go.
+        url: String,
+        /// Which.
+        name: Option<String>,
+    },
+    /// Empties the jar.
+    Clear,
 }
 
 /// A host for scripts that can ask the application nothing.
@@ -328,6 +365,14 @@ impl ScriptHost for NoScriptHost {
         Box::pin(std::future::ready(Err(
             "scripts cannot run requests here".to_owned()
         )))
+    }
+
+    fn cookies(&self) -> Vec<Cookie> {
+        Vec::new()
+    }
+
+    fn change_cookies(&self, _: CookieChange) -> Result<Vec<Cookie>, String> {
+        Err("there is no cookie jar here".to_owned())
     }
 }
 

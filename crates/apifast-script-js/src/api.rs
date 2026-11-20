@@ -1,5 +1,6 @@
 //! The API scripts see (`req`, `res`, `bru`, `test`, `expect`), written in
-//! JavaScript (`api.js`, `expect.js`, `schema.js`, `header_list.js`): it is given the input as JSON, and
+//! JavaScript (`api.js`, `expect.js`, `schema.js`, `header_list.js`,
+//! `cookies.js`): it is given the input as JSON, and
 //! what the script changed is read back as JSON.
 
 use std::time::Duration;
@@ -8,7 +9,7 @@ use apifast_app::{
     RunnerRequest, ScriptInput, ScriptOutcome, ScriptRequest, TestOutcome, VariableChange,
     VariableScope,
 };
-use apifast_domain::{ValueKind, Variable, VariableValue};
+use apifast_domain::{Cookie, SameSite, ValueKind, Variable, VariableValue};
 use rquickjs::prelude::Async;
 use rquickjs::{Ctx, Function, Promise};
 use serde_json::{Value as Json, json};
@@ -18,6 +19,7 @@ use crate::host::{self, Calls};
 const SCHEMA: &str = include_str!("schema.js");
 const EXPECT: &str = include_str!("expect.js");
 const HEADER_LIST: &str = include_str!("header_list.js");
+const COOKIES: &str = include_str!("cookies.js");
 const API: &str = include_str!("api.js");
 
 /// Gives the script of `ctx` the API, over `input`.
@@ -46,6 +48,7 @@ pub(crate) fn install(ctx: &Ctx<'_>, input: &ScriptInput, calls: Calls) -> rquic
     ctx.eval::<(), _>(SCHEMA)?;
     ctx.eval::<(), _>(EXPECT)?;
     ctx.eval::<(), _>(HEADER_LIST)?;
+    ctx.eval::<(), _>(COOKIES)?;
     ctx.eval::<(), _>(API)
 }
 
@@ -132,6 +135,7 @@ fn to_json(input: &ScriptInput) -> Json {
             "request": variables_json(&variables.request),
             "runtime": variables_json(&variables.runtime),
         },
+        "cookies": input.cookies.iter().map(cookie_json).collect::<Vec<_>>(),
     })
 }
 
@@ -202,6 +206,22 @@ fn request(json: &Json) -> Option<ScriptRequest> {
         timeout_ms: json.get("timeout_ms").and_then(Json::as_u64),
         tags,
         path_params: pairs("path_params"),
+    })
+}
+
+/// A cookie of the jar, for a script to read.
+pub(crate) fn cookie_json(cookie: &Cookie) -> Json {
+    json!({
+        "name": cookie.name,
+        "value": cookie.value,
+        "domain": cookie.domain,
+        "host_only": cookie.host_only,
+        "path": cookie.path,
+        "secure": cookie.secure,
+        "http_only": cookie.http_only,
+        "same_site": cookie.same_site.map(SameSite::as_str),
+        "expires_ms": cookie.expires_ms,
+        "created_ms": cookie.created_ms,
     })
 }
 

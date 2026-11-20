@@ -117,6 +117,99 @@ impl<'a> CookieTarget<'a> {
     }
 }
 
+impl<'a> CookieTarget<'a> {
+    /// A request to `url` (`scheme://[user@]host[:port]/path?query`), or
+    /// `None` if it has no scheme or host.
+    pub fn from_url(url: &'a str) -> Option<Self> {
+        let (scheme, rest) = url.trim().split_once("://")?;
+        let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+        let (authority, tail) = rest.split_at(end);
+        let host_port = authority.rsplit_once('@').map_or(authority, |(_, h)| h);
+        let host = if host_port.starts_with('[') {
+            host_port.split_inclusive(']').next().unwrap_or(host_port)
+        } else {
+            host_port.split(':').next().unwrap_or(host_port)
+        };
+        if scheme.is_empty() || host.is_empty() {
+            return None;
+        }
+        let path_end = tail.find(['?', '#']).unwrap_or(tail.len());
+        Some(Self::new(scheme, host, &tail[..path_end]))
+    }
+
+    /// Its host, in lowercase.
+    pub fn host(&self) -> &str {
+        &self.host
+    }
+
+    /// Its path, without the query.
+    pub fn path(&self) -> &str {
+        self.path
+    }
+}
+
+/// A cookie as a script sets it (`bru.cookies.jar().setCookie(url, …)`):
+/// what it leaves out is taken from the URL, as a `Set-Cookie` would.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CookieSpec {
+    /// Name.
+    pub name: String,
+    /// Value.
+    pub value: String,
+    /// Its domain: `None` for the URL's host alone.
+    pub domain: Option<String>,
+    /// Its path: `None` for the URL's, up to its last `/`.
+    pub path: Option<String>,
+    /// Sent only over a secure connection.
+    pub secure: bool,
+    /// Not for scripts.
+    pub http_only: bool,
+    /// `SameSite`.
+    pub same_site: Option<SameSite>,
+    /// When it expires, in milliseconds since the Unix epoch; `None` for a
+    /// session cookie.
+    pub expires_ms: Option<i64>,
+}
+
+/// The cookie `spec` sets from `target` at `now_ms`, or `None` if a
+/// `Set-Cookie` with it would be ignored: no name, or a domain the host is
+/// not in (RFC 6265, 5.3).
+pub fn cookie_from_spec(
+    spec: CookieSpec,
+    target: &CookieTarget<'_>,
+    now_ms: i64,
+) -> Option<Cookie> {
+    if spec.name.is_empty() {
+        return None;
+    }
+    let (domain, host_only) = match spec.domain.as_deref().map(|d| d.trim_start_matches('.')) {
+        Some(domain) if !domain.is_empty() => {
+            let domain = domain.to_ascii_lowercase();
+            if !domain_matches(&target.host, &domain) {
+                return None;
+            }
+            (domain, false)
+        }
+        _ => (target.host.clone(), true),
+    };
+    let path = match spec.path {
+        Some(path) if path.starts_with('/') => path,
+        _ => default_path(target.path),
+    };
+    Some(Cookie {
+        name: spec.name,
+        value: spec.value,
+        domain,
+        host_only,
+        path,
+        secure: spec.secure,
+        http_only: spec.http_only,
+        same_site: spec.same_site,
+        expires_ms: spec.expires_ms,
+        created_ms: now_ms,
+    })
+}
+
 /// The machine itself: secure enough for `Secure` cookies.
 fn is_local(host: &str) -> bool {
     host == "localhost"
@@ -297,18 +390,25 @@ impl CookieJar {
     /// The `Cookie` header for a request to `target` at `now_ms`, if any
     /// cookie goes with it: longer paths first, then the older ones.
     pub fn header_for(&self, target: &CookieTarget<'_>, now_ms: i64) -> Option<String> {
-        let mut going: Vec<&Cookie> = (self.cookies.iter())
-            .filter(|c| !c.is_expired(now_ms) && c.goes_to(target))
-            .collect();
+        let going = self.going_to(target, now_ms);
         if going.is_empty() {
             return None;
         }
-        going.sort_by_key(|c| (std::cmp::Reverse(c.path.len()), c.created_ms));
         let pairs: Vec<String> = going
             .iter()
             .map(|c| format!("{}={}", c.name, c.value))
             .collect();
         Some(pairs.join("; "))
+    }
+
+    /// The cookies that go with a request to `target` at `now_ms`, in the
+    /// order they go: longer paths first, then the older ones.
+    pub fn going_to(&self, target: &CookieTarget<'_>, now_ms: i64) -> Vec<&Cookie> {
+        let mut going: Vec<&Cookie> = (self.cookies.iter())
+            .filter(|c| !c.is_expired(now_ms) && c.goes_to(target))
+            .collect();
+        going.sort_by_key(|c| (std::cmp::Reverse(c.path.len()), c.created_ms));
+        going
     }
 
     /// Removes the cookie `name` of `domain` at `path`. Returns whether it

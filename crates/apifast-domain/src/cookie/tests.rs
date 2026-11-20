@@ -221,3 +221,46 @@ fn the_request_header_is_merged_with_the_jar_as_in_bruno() {
     assert_eq!(merge_cookie_header("", "c=3"), "c=3");
     assert_eq!(merge_cookie_header(" flag ;x=1", "y=2"), "flag=; x=1; y=2");
 }
+
+#[test]
+fn a_target_is_read_from_a_url_and_a_script_cookie_takes_what_it_leaves_out() {
+    let target = CookieTarget::from_url("https://u:p@API.test:8443/v1/users?x=1#f").unwrap();
+    assert_eq!(
+        (target.host(), target.path(), target.secure),
+        ("api.test", "/v1/users", true)
+    );
+    let bare = CookieTarget::from_url("http://[::1]:80").unwrap();
+    assert_eq!((bare.host(), bare.path()), ("::1", ""));
+    assert!(CookieTarget::from_url("api.test/x").is_none());
+
+    let spec = |domain: Option<&str>, path: Option<&str>| CookieSpec {
+        name: "sid".into(),
+        value: "1".into(),
+        domain: domain.map(str::to_owned),
+        path: path.map(str::to_owned),
+        ..CookieSpec::default()
+    };
+    let own = cookie_from_spec(spec(None, None), &target, 5).unwrap();
+    assert_eq!(
+        (own.domain.as_str(), own.host_only, own.path.as_str()),
+        ("api.test", true, "/v1")
+    );
+    let parent = cookie_from_spec(spec(Some(".Test"), Some("/")), &target, 5).unwrap();
+    assert_eq!(
+        (
+            parent.domain.as_str(),
+            parent.host_only,
+            parent.path.as_str()
+        ),
+        ("test", false, "/")
+    );
+    assert!(cookie_from_spec(spec(Some("other.test"), None), &target, 5).is_none());
+
+    let mut jar = CookieJar::new();
+    jar.set(own, 5);
+    jar.set(parent, 6);
+    let paths: Vec<_> = (jar.going_to(&target, 7).iter())
+        .map(|c| c.path.as_str())
+        .collect();
+    assert_eq!(paths, ["/v1", "/"]);
+}

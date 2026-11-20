@@ -300,6 +300,7 @@ pub struct MemoryTransport {
     head: ResponseHead,
     body: Vec<u8>,
     sent: Mutex<Vec<RenderedRequest>>,
+    cookies: Option<std::sync::Arc<crate::Cookies>>,
 }
 
 impl MemoryTransport {
@@ -317,7 +318,16 @@ impl MemoryTransport {
             },
             body: body.into(),
             sent: Mutex::new(Vec::new()),
+            cookies: None,
         }
+    }
+
+    /// With `cookies` as its jar, which scripts read and change; it sends
+    /// none and keeps none itself.
+    #[must_use]
+    pub fn with_cookies(mut self, cookies: std::sync::Arc<crate::Cookies>) -> Self {
+        self.cookies = Some(cookies);
+        self
     }
 
     /// The requests received so far.
@@ -350,6 +360,10 @@ impl MemoryTransport {
 }
 
 impl HttpTransport for MemoryTransport {
+    fn cookies(&self) -> Option<&crate::Cookies> {
+        self.cookies.as_deref()
+    }
+
     fn send<W: BodyWriter + Send>(
         &self,
         request: &RenderedRequest,

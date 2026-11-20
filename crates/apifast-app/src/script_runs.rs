@@ -186,6 +186,8 @@ impl SendScripts {
                 },
                 response: None,
                 variables,
+                // Read anew before each script.
+                cookies: Vec::new(),
             },
             report: ScriptReport::default(),
         })
@@ -284,6 +286,8 @@ impl SendScripts {
     ) -> Option<ScriptRequest> {
         let name = source.to_string();
         let script = Script { name: &name, code };
+        // What scripts before it, and the response, set.
+        self.input.cookies = host.cookies();
         let outcome = engine.run(script, &self.input, host, cancel).await;
         for change in &outcome.variables {
             self.keep(change, variables);

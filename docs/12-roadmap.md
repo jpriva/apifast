@@ -414,19 +414,19 @@ Se cumple: los cuatro modos funcionan contra un servidor local (con `.proto` y p
   - [x] API barata y errores: `req.getHost`, `getPath`, `getQueryString`, `getPathParams` y `getTags`; variables de colección (`setCollectionVar` y compañía), `getAllEnvVars` y `deleteAllEnvVars`, `isSafeMode`; temporizadores (`setTimeout`, `setInterval`); variables dinámicas en `bru.interpolate`. Después de la respuesta, `req` es la request enviada, ya renderizada.
   - [x] `req.headerList` y `res.headerList`; los plugins de chai `jsonBody` y `jsonSchema` (este con un validador draft-07 propio, en lugar de ajv). Faltan las cabeceras desactivadas en `req.headerList`.
   - [x] `bru.sendRequest` y `bru.runRequest`, por un puerto nuevo, `ScriptHost`: el motor atiende las llamadas del script por un canal mientras corre.
-  - [ ] Cookies (`bru.cookies`).
+  - [x] Cookies (`bru.cookies` y `bru.cookies.jar()`), sobre el tarro de la colección que el transporte expone.
   - [ ] En una ejecución, que `bru.getEnvVar` y `bru.getCollectionVar` vean lo que cambiaron los scripts de requests anteriores. Las etiquetas de carpeta, las variables globales y `req.setBody` en formularios.
 
 ### Criterio de salida
 
 Las colecciones de prueba de Bruno con scripts se ejecutan con los mismos resultados, y una colección sin scripts no carga el motor.
 
-Estado: la segunda mitad se cumple. La primera todavía no. La colección `bruno-tests` se importó y se corrió con `apifast run --allow-unresolved` contra un servidor local que imita `/ping` y `/api/echo/json` (sin Node no se puede levantar el de Bruno). En `scripting/api` y `scripting/js` pasaban 54 de 235 tests; tras la primera parte de la compatibilidad pasaban 74 de 246 (corren más tests, porque menos scripts fallan antes de llegar a ellos), tras la segunda pasaban 219 de 258 (el servidor local envía ahora `X-Powered-By: Express`, como el de Bruno), y tras la tercera pasan 229 de 261. Lo que todavía falla, por causa:
+Estado: la segunda mitad se cumple. La primera todavía no. La colección `bruno-tests` se importó y se corrió con `apifast run --allow-unresolved` contra un servidor local que imita `/ping` y `/api/echo/json` (sin Node no se puede levantar el de Bruno). En `scripting/api` y `scripting/js` pasaban 54 de 235 tests; tras la primera parte de la compatibilidad pasaban 74 de 246 (corren más tests, porque menos scripts fallan antes de llegar a ellos), tras la segunda pasaban 219 de 258 (el servidor local envía ahora `X-Powered-By: Express`, como el de Bruno), tras la tercera pasaban 229 de 261, y tras las cookies pasan 288 de 320. Lo que todavía falla, por causa:
 
-- API de Bruno que falta: `bru.cookies`, variables globales (por ellas fallan también `runRequest-1` y `runRequest-2`), las cabeceras desactivadas en `req.headerList`, las etiquetas heredadas de las carpetas, y `req.setBody` en cuerpos form-urlencoded.
+- API de Bruno que falta: variables globales (por ellas fallan también `runRequest-1` y `runRequest-2`), las cabeceras desactivadas en `req.headerList`, las etiquetas heredadas de las carpetas, y `req.setBody` en cuerpos form-urlencoded.
 - Diferencias pequeñas: `res.getResponseTime()` da 0 en un servidor local (se mide en milisegundos enteros); `res.setBody` con arrays que llevan `undefined`, y con `undefined` (el propio Bruno avisa que ahí sus modos difieren); `req.getHeader` no distingue mayúsculas.
 - Aserciones sobre `req.body.*`.
-- Diferencias de entorno, no de apifast: tests que esperan el entorno Prod (su host y su nombre) o el tamaño exacto de las respuestas de Express.
+- Diferencias de entorno, no de apifast: tests que esperan el entorno Prod (su host y su nombre), el tamaño exacto de las respuestas de Express o endpoints que el servidor local no imita (`/api/mix`, en `Redirect Cookie Save`).
 
 ---
 

@@ -459,3 +459,74 @@ async fn scripts_send_requests_and_run_others_of_the_collection() {
         "the variables of the request it ran reach the run"
     );
 }
+
+#[tokio::test]
+async fn scripts_read_and_change_the_cookie_jar() {
+    let mut request = HttpRequest::new("Get", Method::Get, "{{host}}/users");
+    request.scripts = vec![
+        script(
+            ScriptKind::BeforeRequest,
+            r"
+            const jar = bru.cookies.jar();
+            await jar.setCookie('{{host}}', { key: 'sid', value: '1', path: '/' });
+            await jar.setCookies('https://other.test', [{ key: 'o', value: '2' }]);
+            await jar.setCookie('https://api.test', { key: 'bad', value: 'x', domain: 'other.test' });
+            const other = await jar.getCookies('https://other.test');
+            console.log(bru.cookies.get('sid'), bru.cookies.has('o'), bru.cookies.has('bad'), other.map((c) => c.key).join());
+            await bru.cookies.upsert({ key: 'lang', value: 'en' });
+            try { await jar.getCookies('nope'); } catch (e) { console.log(e.message); }
+            await new Promise((done) => jar.getCookie('https://api.test/users', 'sid', (error, cookie) => {
+                console.log(error, cookie.value, cookie.domain, cookie.path, cookie.expires);
+                done();
+            }));
+            ",
+        ),
+        script(
+            ScriptKind::Tests,
+            r"
+            const jar = bru.cookies.jar();
+            console.log(bru.cookies.all().map((c) => c.key).sort().join(), bru.cookies.count());
+            await bru.cookies.remove('lang');
+            await jar.deleteCookies('https://other.test');
+            console.log(bru.cookies.toString(), (await jar.getCookies('https://other.test')).length);
+            ",
+        ),
+    ];
+    let mut world =
+        World::new(MemoryCollections::new(Collection::new("C")).with_request("get.yml", request));
+    let cookies = std::sync::Arc::new(apifast_app::Cookies::new());
+    world.transport = MemoryTransport::new(200, "{}").with_cookies(cookies.clone());
+    let outcome = world.send("get.yml").await.unwrap();
+    assert_eq!(
+        logged(&outcome),
+        [
+            "1 false false o",
+            "`nope` is not a URL with a scheme and a host",
+            "null 1 api.test / Infinity",
+            "lang,sid 2",
+            "sid=1 0",
+        ]
+    );
+    let left: Vec<_> = (cookies.jar().cookies().iter())
+        .map(|c| format!("{}={}", c.name, c.value))
+        .collect();
+    assert_eq!(left, ["sid=1"]);
+}
+
+#[tokio::test]
+async fn a_cookie_set_without_await_is_set_before_the_script_ends() {
+    let mut request = HttpRequest::new("Get", Method::Get, "{{host}}/users");
+    request.scripts = vec![
+        script(
+            ScriptKind::BeforeRequest,
+            "bru.cookies.jar().setCookie('https://api.test', 'sid', '1')",
+        ),
+        script(ScriptKind::Tests, "console.log(bru.cookies.get('sid'))"),
+    ];
+    let mut world =
+        World::new(MemoryCollections::new(Collection::new("C")).with_request("get.yml", request));
+    let cookies = std::sync::Arc::new(apifast_app::Cookies::new());
+    world.transport = MemoryTransport::new(200, "{}").with_cookies(cookies);
+    let outcome = world.send("get.yml").await.unwrap();
+    assert_eq!(logged(&outcome), ["1"]);
+}

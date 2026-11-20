@@ -51,8 +51,8 @@ pub use body::{
 pub use certificates::{ClientCertificate, ClientCertificateKind, TlsTrust};
 pub use collection::{Collection, CollectionId, Folder, RequestDefaults};
 pub use cookie::{
-    Cookie, CookieJar, CookieTarget, SameSite, format_expiry, merge_cookie_header, parse_expiry,
-    parse_set_cookie,
+    Cookie, CookieJar, CookieSpec, CookieTarget, SameSite, cookie_from_spec, format_expiry,
+    merge_cookie_header, parse_expiry, parse_set_cookie,
 };
 pub use dns::{DnsOverride, overridden_addresses};
 pub use environment::{Environment, EnvironmentError, environment_chain};

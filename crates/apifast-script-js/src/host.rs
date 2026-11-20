@@ -1,9 +1,10 @@
 //! What a script asks of the application (`bru.sendRequest`,
-//! `bru.runRequest`). The script's runtime holds no reference to the
+//! `bru.runRequest`, changes to `bru.cookies`). The script's runtime holds no reference to the
 //! application: it sends each call down a channel, and the engine serves
 //! them with the [`ScriptHost`] while the script runs, answering in JSON.
 
-use apifast_app::{RanRequest, ScriptHost, ScriptHttpRequest, ScriptHttpResponse};
+use apifast_app::{CookieChange, RanRequest, ScriptHost, ScriptHttpRequest, ScriptHttpResponse};
+use apifast_domain::{CookieSpec, SameSite};
 use serde_json::{Value as Json, json};
 use tokio::sync::{mpsc, oneshot};
 
@@ -19,6 +20,7 @@ pub(crate) struct Call {
 enum Ask {
     Send(ScriptHttpRequest),
     Run(String),
+    Cookies(CookieChange),
 }
 
 /// Where a script sends its calls.
@@ -34,6 +36,10 @@ pub(crate) async fn ask(calls: &Calls, kind: &str, payload: &str) -> String {
     let ask = match kind {
         "send" => Ask::Send(http_request(&payload)),
         "run" => Ask::Run(payload.as_str().unwrap_or_default().to_owned()),
+        "cookies" => match cookie_change(&payload) {
+            Some(change) => Ask::Cookies(change),
+            None => return failed("the cookie change is not valid"),
+        },
         _ => return failed("unknown call"),
     };
     let (reply, answer) = oneshot::channel();
@@ -54,6 +60,8 @@ pub(crate) async fn serve(host: &dyn ScriptHost, call: Call) {
             .await
             .map(|response| http_response(&response)),
         Ask::Run(path) => host.run_request(&path).await.map(|ran| ran_json(&ran)),
+        Ask::Cookies(change) => (host.change_cookies(change))
+            .map(|jar| Json::Array(jar.iter().map(api::cookie_json).collect())),
     };
     let text = match answer {
         Ok(value) => json!({ "ok": value }),
@@ -83,6 +91,40 @@ fn http_request(json: &Json) -> ScriptHttpRequest {
         headers,
         body: text("body"),
         timeout_ms: json.get("timeout_ms").and_then(Json::as_u64),
+    }
+}
+
+fn cookie_change(json: &Json) -> Option<CookieChange> {
+    let text = |json: &Json, key: &str| json.get(key).and_then(Json::as_str).map(str::to_owned);
+    match json.get("op")?.as_str()? {
+        "set" => {
+            let cookie = json.get("cookie")?;
+            Some(CookieChange::Set {
+                url: text(json, "url")?,
+                cookie: CookieSpec {
+                    name: text(cookie, "name")?,
+                    value: text(cookie, "value").unwrap_or_default(),
+                    domain: text(cookie, "domain"),
+                    path: text(cookie, "path"),
+                    secure: cookie
+                        .get("secure")
+                        .and_then(Json::as_bool)
+                        .unwrap_or(false),
+                    http_only: cookie
+                        .get("http_only")
+                        .and_then(Json::as_bool)
+                        .unwrap_or(false),
+                    same_site: text(cookie, "same_site").and_then(|s| SameSite::parse(&s)),
+                    expires_ms: cookie.get("expires_ms").and_then(Json::as_i64),
+                },
+            })
+        }
+        "delete" => Some(CookieChange::Delete {
+            url: text(json, "url")?,
+            name: text(json, "name"),
+        }),
+        "clear" => Some(CookieChange::Clear),
+        _ => None,
     }
 }
 

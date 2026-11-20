@@ -10,12 +10,14 @@
     const dynamicValue = globalThis.__apifast_dynamic;
     const headerList = globalThis.__apifast_header_list;
     const nativeHost = globalThis.__apifast_host;
+    const cookieList = globalThis.__apifast_cookies;
     delete globalThis.__apifast_input;
     delete globalThis.__apifast_sleep;
     delete globalThis.__apifast_process_env;
     delete globalThis.__apifast_dynamic;
     delete globalThis.__apifast_header_list;
     delete globalThis.__apifast_host;
+    delete globalThis.__apifast_cookies;
     delete globalThis.__apifast_schema;
 
     const out = { request: null, responseBody: null, variables: [], tests: [], runner: null };
@@ -226,11 +228,20 @@
         }
     }
 
-    // Calls to the application: their answer, or the error they gave.
-    const hostCall = async (kind, payload) => {
-        const answer = JSON.parse(await nativeHost(kind, JSON.stringify(payload)));
-        if (answer.error !== undefined) throw new Error(answer.error);
-        return answer.ok;
+    // Calls to the application: their answer, or the error they gave. The
+    // script waits for those it did not await before it ends, as Node
+    // does: `jar.setCookie(…)` without `await` still sets it.
+    const inFlight = new Set();
+    const hostCall = (kind, payload) => {
+        const call = (async () => {
+            const answer = JSON.parse(await nativeHost(kind, JSON.stringify(payload)));
+            if (answer.error !== undefined) throw new Error(answer.error);
+            return answer.ok;
+        })();
+        const settled = call.then(() => {}, () => {});
+        inFlight.add(settled);
+        settled.then(() => inFlight.delete(settled));
+        return call;
     };
     // A response as axios gives it, which is what Bruno's scripts read.
     const axiosResponse = (raw) => {
@@ -363,6 +374,12 @@
         sleep: (ms) => nativeSleep(Math.max(0, Math.floor(Number(ms) || 0))),
         sendRequest,
         runRequest,
+        cookies: cookieList(
+            input.cookies,
+            (change) => hostCall('cookies', change),
+            () => request.url,
+            (url) => interpolate(String(url)),
+        ),
         setNextRequest: runner.setNextRequest,
         runner,
     };
@@ -421,8 +438,15 @@
     if (res) globalThis.res = res;
 
     globalThis.__apifast_settle = async () => {
-        await timeouts();
-        await Promise.all(pending);
+        // What is still waiting can start more: until nothing is.
+        for (;;) {
+            const tests = pending.length;
+            await timeouts();
+            await Promise.all([...inFlight]);
+            await Promise.all(pending);
+            const idle = inFlight.size === 0 && ![...timers.values()].some(Boolean);
+            if (idle && pending.length === tests) break;
+        }
     };
     globalThis.__apifast_output = () => JSON.stringify(out);
 })();

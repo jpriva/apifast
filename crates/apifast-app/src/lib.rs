@@ -88,10 +88,10 @@ pub use runner::{
 };
 pub use script_runs::{ScriptReport, ScriptRun, ScriptSource, apply_script_variables};
 pub use scripts::{
-    ConsoleLevel, ConsoleLine, HostFuture, NoScriptHost, RanRequest, RunnerRequest, Script,
-    ScriptEngine, ScriptError, ScriptFuture, ScriptHost, ScriptHttpRequest, ScriptHttpResponse,
-    ScriptInput, ScriptLimits, ScriptOutcome, ScriptRequest, ScriptResponse, ScriptVariables,
-    TestOutcome, VariableChange, VariableScope,
+    ConsoleLevel, ConsoleLine, CookieChange, HostFuture, NoScriptHost, RanRequest, RunnerRequest,
+    Script, ScriptEngine, ScriptError, ScriptFuture, ScriptHost, ScriptHttpRequest,
+    ScriptHttpResponse, ScriptInput, ScriptLimits, ScriptOutcome, ScriptRequest, ScriptResponse,
+    ScriptVariables, TestOutcome, VariableChange, VariableScope,
 };
 pub use use_cases::{
     SendOptions, SendOutcome, SendPorts, load_request, open_collection, resolve_request_variables,

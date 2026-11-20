@@ -2,14 +2,15 @@
 //! (docs/08, F9): `bru.sendRequest`, a request as the script wrote it, and
 //! `bru.runRequest`, a request of the collection with its scripts.
 
-use apifast_domain::Method;
+use apifast_domain::{Cookie, CookieJar, CookieTarget, Method, cookie_from_spec};
 
 use crate::ports::{BodyWriter, CollectionRepository, TreeItem};
 use crate::use_cases::{ChainContext, send_in_chain};
 use crate::{
-    CancelToken, EnvironmentRepository, HostFuture, HttpTransport, RanRequest, RenderedBody,
-    RenderedRequest, RequestPath, ResponseHead, ResponseStore, ScriptHost, ScriptHttpRequest,
-    ScriptHttpResponse, SendOptions, SendPorts, StoreError, StoredBody, reason_phrase,
+    CancelToken, CookieChange, EnvironmentRepository, HostFuture, HttpTransport, RanRequest,
+    RenderedBody, RenderedRequest, RequestPath, ResponseHead, ResponseStore, ScriptHost,
+    ScriptHttpRequest, ScriptHttpResponse, SendOptions, SendPorts, StoreError, StoredBody,
+    reason_phrase,
 };
 
 /// The most of a body a script reads back: as for checks.
@@ -92,6 +93,53 @@ where
                 variables: outcome.scripts.variables,
             })
         })
+    }
+
+    fn cookies(&self) -> Vec<Cookie> {
+        (self.ports.transport.cookies()).map_or_else(Vec::new, |c| c.jar().cookies().to_vec())
+    }
+
+    fn change_cookies(&self, change: CookieChange) -> Result<Vec<Cookie>, String> {
+        let cookies = (self.ports.transport.cookies()).ok_or("there is no cookie jar here")?;
+        let now = self.ports.clock.unix_millis();
+        let target = |url: &str| -> Result<(), String> {
+            CookieTarget::from_url(url)
+                .map(drop)
+                .ok_or_else(|| format!("`{url}` is not a URL with a scheme and a host"))
+        };
+        match change {
+            CookieChange::Set { url, cookie } => {
+                target(&url)?;
+                cookies.edit(|jar| {
+                    let at = CookieTarget::from_url(&url);
+                    if let Some(cookie) = at.and_then(|at| cookie_from_spec(cookie, &at, now)) {
+                        jar.set(cookie, now);
+                    }
+                });
+            }
+            CookieChange::Delete { url, name } => {
+                target(&url)?;
+                cookies.edit(|jar| {
+                    let Some(at) = CookieTarget::from_url(&url) else {
+                        return;
+                    };
+                    let mut going: Vec<Cookie> = (jar.going_to(&at, now).into_iter())
+                        .filter(|c| name.as_ref().is_none_or(|n| c.name == *n))
+                        .cloned()
+                        .collect();
+                    if name.is_some() && going.len() > 1 {
+                        let path = if at.path().is_empty() { "/" } else { at.path() };
+                        let pick = going.iter().position(|c| c.path == path).unwrap_or(0);
+                        going = vec![going.swap_remove(pick)];
+                    }
+                    for cookie in going {
+                        jar.remove(&cookie.domain, &cookie.path, &cookie.name);
+                    }
+                });
+            }
+            CookieChange::Clear => cookies.edit(CookieJar::clear),
+        }
+        Ok(cookies.jar().cookies().to_vec())
     }
 }
 

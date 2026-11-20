@@ -473,6 +473,12 @@ pub trait HttpTransport {
         body: &mut W,
         cancel: &CancelToken,
     ) -> impl Future<Output = Result<ResponseHead, TransportError>> + Send;
+
+    /// The cookie jar it sends from and keeps in, if it has one: scripts
+    /// read and change it (`bru.cookies`).
+    fn cookies(&self) -> Option<&crate::Cookies> {
+        None
+    }
 }
 
 /// Identifier of a stored response body.
