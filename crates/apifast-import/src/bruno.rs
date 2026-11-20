@@ -2,7 +2,7 @@
 //! apifast collection: `bruno.json` gives its name, `collection.bru` what
 //! every request inherits, each folder's `folder.bru` its name and
 //! defaults, each other `.bru` file a request, and `environments/*.bru`
-//! the environments. Scripts and tests wait for the JavaScript engine (F9)
+//! the environments. Scripts and tests keep their code: it is Bruno's API
 //! and are listed, as is any file that cannot be read.
 
 mod parse;
@@ -14,8 +14,8 @@ use apifast_domain::{
     ApiKeyAuth, ApiKeyPlacement, Assertion, Auth, AuthScheme, AwsV4Auth, BasicAuth, BearerAuth,
     Body, Capture, CaptureScope, CredentialsPlacement, DigestAuth, Environment, Folder, FormField,
     Header, HttpRequest, Method, MultipartPart, MultipartValue, NtlmAuth, OAuth2Auth, OAuth2Flow,
-    Operator, Param, ParamKind, RequestDefaults, Setting, TokenPlacement, ValueKind, Variable,
-    VariableValue, sync_params_from_url,
+    Operator, Param, ParamKind, RequestDefaults, ScriptBlock, ScriptKind, Setting, TokenPlacement,
+    ValueKind, Variable, VariableValue, sync_params_from_url,
 };
 
 use parse::{BruFile, Pair, parse};
@@ -186,12 +186,12 @@ fn folder_items(
 
 /// What a collection or folder file gives its requests.
 fn defaults(file: &BruFile, at: &str, warnings: &mut Vec<ImportWarning>) -> RequestDefaults {
-    scripts(file, at, warnings);
     let mode = file.get("auth", "mode").unwrap_or("inherit");
     RequestDefaults {
         headers: headers(file.pairs("headers")),
         auth: auth(file, mode, at, warnings),
         variables: variables(file.pairs("vars:pre-request")),
+        scripts: scripts(file),
         ..RequestDefaults::default()
     }
 }
@@ -202,7 +202,6 @@ fn request(
     at: &str,
     warnings: &mut Vec<ImportWarning>,
 ) -> HttpRequest {
-    scripts(file, at, warnings);
     let (block, http) = METHODS
         .iter()
         .find_map(|m| file.block(m).map(|_| (*m, file.pairs(m))))
@@ -235,6 +234,7 @@ fn request(
         warnings,
     );
     request.variables = variables(file.pairs("vars:pre-request"));
+    request.scripts = scripts(file);
     request.captures = (file.pairs("vars:post-response").iter())
         .map(|p| Capture {
             enabled: p.enabled,
@@ -532,20 +532,19 @@ fn oauth2(get: &dyn Fn(&str) -> String) -> Result<OAuth2Auth, String> {
     })
 }
 
-/// A warning for each script and tests block with code.
-fn scripts(file: &BruFile, at: &str, warnings: &mut Vec<ImportWarning>) {
-    for (name, label) in [
-        ("script:pre-request", "pre-request script"),
-        ("script:post-response", "post-response script"),
-        ("tests", "tests block"),
-    ] {
-        if file.text(name).is_some_and(|code| !code.trim().is_empty()) {
-            warnings.push(ImportWarning::new(
-                at,
-                format!("a {label} is not imported: scripts arrive with the JavaScript engine"),
-            ));
-        }
-    }
+/// The scripts and the tests block, already in Bruno's API.
+fn scripts(file: &BruFile) -> Vec<ScriptBlock> {
+    [
+        ("script:pre-request", ScriptKind::BeforeRequest),
+        ("script:post-response", ScriptKind::AfterResponse),
+        ("tests", ScriptKind::Tests),
+    ]
+    .into_iter()
+    .filter_map(|(name, kind)| {
+        let code = file.text(name).filter(|code| !code.trim().is_empty())?;
+        Some(ScriptBlock::new(kind, code))
+    })
+    .collect()
 }
 
 /// The environments in `dir`: `vars` with their values; `vars:secret`

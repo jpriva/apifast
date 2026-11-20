@@ -2242,7 +2242,7 @@ fn a_request_is_copied_as_curl_with_its_environment_and_draft() {
 
 const POSTMAN: &str = r#"{
   "info": {"name": "Imported Shop", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
-  "item": [{"name": "Users", "item": [{"name": "List", "event": [{"listen": "test", "script": {"exec": ["x"]}}], "request": {"method": "GET", "url": "{{host}}/users"}}]}]
+  "item": [{"name": "Users", "item": [{"name": "List", "event": [{"listen": "test", "script": {"exec": ["pm.sendRequest('x')"]}}], "request": {"method": "GET", "url": "{{host}}/users"}}]}]
 }"#;
 
 #[test]

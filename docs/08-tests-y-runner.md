@@ -284,7 +284,7 @@ Lo que se traduce de Postman (con las decisiones del importador de Bruno):
 - Las respuestas guardadas, como ejemplos de la request.
 - Variables de colección. `{{$guid}}` pasa a `{{$randomUUID}}`; una variable dinámica que apifast no genera se avisa.
 - Entornos: sus variables; las de tipo `secret` se declaran secretas sin valor (el valor nunca va a un archivo) y se avisa para ponerlo en la bóveda.
-- Los scripts no se importan todavía: cada uno se avisa. Su traducción a la API de Bruno es una tarea de F9.
+- Los scripts `prerequest` y `test` se traducen a la API de Bruno, como lo hace su importador: `pm.environment.get` → `bru.getEnvVar`, `pm.collectionVariables.set` → `bru.setVar`, `pm.test` → `test`, `pm.expect` → `expect`, `pm.response.json()` → `res.getBody()`, `pm.response.to.have.status(…)` → `expect(res.getStatus()).to.equal(…)`, `pm.execution.skipRequest()` → `bru.runner.skipRequest()`, el antiguo `tests["…"] = …` como un `test`, y el resto de la tabla de Bruno. Una línea que sigue usando `pm` o `postman` (como `pm.sendRequest`) queda comentada, para que el script corra y la línea no se pierda, y se avisa cuántas. Los scripts de otros eventos se avisan.
 
 ```
 apifast import openapi <spec.yaml|spec.json> --out <carpeta> [--dry-run]
@@ -309,7 +309,7 @@ Una colección de Bruno en su formato anterior, `.bru` (la carpeta con `bruno.js
 - `bruno.json` da el nombre; `collection.bru`, los headers, la auth y las variables que todo hereda; el `folder.bru` de cada carpeta, su nombre, su posición y lo que heredan sus requests.
 - Cada request: método y URL, path params con su valor y params de query desactivados, headers, body (JSON, texto, XML, SPARQL, formulario, multipart con `@file(a|b)` y `@contentType(…)`, archivo, GraphQL), auth (basic, bearer, digest, NTLM, API key, AWS SigV4, OAuth 2.0), variables, aserciones (`res.status: eq 200`), `vars:post-response` como capturas, ajustes, tags y documentación. El orden es el `seq` de Bruno.
 - Los entornos de `environments/`: sus variables, y las de `vars:secret` declaradas secretas sin valor (Bruno guarda los valores aparte); se avisa para ponerlos en la bóveda.
-- Los scripts y los bloques `tests` se avisan: el importador todavía no los traslada. Una request que no es HTTP (WebSocket, gRPC) se deja fuera con aviso, igual que un archivo que no se puede leer, con su línea.
+- Los scripts (`script:pre-request`, `script:post-response`) y los bloques `tests` se importan tal cual: ya usan la API de Bruno. Una request que no es HTTP (WebSocket, gRPC) se deja fuera con aviso, igual que un archivo que no se puede leer, con su línea.
 - Se ignoran las carpetas ocultas y `node_modules`.
 
 ```
@@ -364,7 +364,7 @@ Es el camino inverso del importador, así que lo exportado se vuelve a importar 
 - `followRedirects`, `maxRedirects` y `encodeUrl` como `protocolProfileBehavior`; el timeout no tiene equivalente por request y se avisa.
 - Postman no hereda headers ni tiene variables de carpeta: los headers de la colección y de las carpetas se copian en cada request, y las variables de carpeta pasan a la colección (si el nombre ya existe, se avisa y no se exporta).
 - Un entorno que extiende a otro se exporta con las variables de los dos mezcladas. Los secretos van sin valor, de tipo `secret`.
-- Se avisan las aserciones, las capturas, las variables de request y las etiquetas, que Postman no tiene fuera de los scripts; las de WebSocket y gRPC se dejan fuera. GraphQL va con el modo `graphql` de Postman.
+- Se avisan las aserciones, las capturas, las variables de request y las etiquetas, que Postman no tiene fuera de los scripts, y los scripts, que usan la API de Bruno y no se traducen de vuelta; las de WebSocket y gRPC se dejan fuera. GraphQL va con el modo `graphql` de Postman.
 
 ### `apifast run`
 

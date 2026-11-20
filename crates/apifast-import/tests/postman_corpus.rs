@@ -49,10 +49,17 @@ fn every_collection_of_the_corpus_survives_an_export() {
         for item in items {
             match item {
                 ImportedItem::Folder { folder, items } => {
+                    let mut folder = folder.clone();
+                    folder.defaults.scripts.clear();
                     out.push(format!("{folder:?}"));
                     flat(items, out);
                 }
-                ImportedItem::Request { request, .. } => out.push(format!("{request:?}")),
+                // Scripts are not exported: they use Bruno's API.
+                ImportedItem::Request { request, .. } => {
+                    let mut request = request.clone();
+                    request.scripts.clear();
+                    out.push(format!("{request:?}"));
+                }
             }
         }
     }

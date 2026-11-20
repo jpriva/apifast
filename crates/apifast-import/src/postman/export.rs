@@ -285,6 +285,12 @@ impl Exporter {
         if let Some(behavior) = self.behavior(&defaults.settings, at) {
             node.insert("protocolProfileBehavior".into(), behavior);
         }
+        if !defaults.scripts.is_empty() {
+            self.warn(
+                at,
+                "its scripts are not exported: they use Bruno's API, not Postman's",
+            );
+        }
     }
 
     fn request(&mut self, request: &HttpRequest, inherited: &[Header], at: &str) -> Value {
@@ -344,6 +350,10 @@ impl Exporter {
                 "its variables are not exported: Postman requests have none",
             ),
             (!request.tags.is_empty(), "its tags are not exported"),
+            (
+                !request.scripts.is_empty(),
+                "its scripts are not exported: they use Bruno's API, not Postman's",
+            ),
         ];
         for (_, message) in lost.into_iter().filter(|(lost, _)| *lost) {
             self.warn(at, message);

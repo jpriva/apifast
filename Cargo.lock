@@ -433,6 +433,7 @@ dependencies = [
  "apifast-domain",
  "apifast-storage-fs",
  "apifast-template",
+ "regex",
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",

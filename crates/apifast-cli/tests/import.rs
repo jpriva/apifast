@@ -11,7 +11,7 @@ const POSTMAN: &str = r#"{
   "info": {"name": "Shop", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
   "item": [
     {"name": "Users", "item": [
-      {"name": "List users", "event": [{"listen": "test", "script": {"exec": ["pm.test('x')"]}}],
+      {"name": "List users", "event": [{"listen": "test", "script": {"exec": ["pm.test('ok', () => pm.response.to.have.status(200));", "pm.sendRequest('x');"]}}],
        "request": {"method": "GET", "header": [{"key": "X-Trace", "value": "1"}], "url": "{{host}}/users"}}
     ]}
   ]
@@ -45,7 +45,7 @@ fn a_postman_export_becomes_a_collection_that_sends() {
     assert!(printed.starts_with("Would create `Shop`"), "{printed}");
     assert!(printed.contains("users/list-users.yml"), "{printed}");
     assert!(
-        printed.contains("Users / List users: a `test` script"),
+        printed.contains("Users / List users: 1 line of the `test` script"),
         "{printed}"
     );
     assert!(
@@ -58,6 +58,8 @@ fn a_postman_export_becomes_a_collection_that_sends() {
     let collection = dir.path().join("shop");
     assert!(collection.join("users/list-users.yml").exists());
     assert!(collection.join("environments/local.yml").exists());
+    let request = std::fs::read_to_string(collection.join("users/list-users.yml")).unwrap();
+    assert!(request.contains("// pm.sendRequest('x');"), "{request}");
 
     let send = apifast(
         &collection,
@@ -65,6 +67,12 @@ fn a_postman_export_becomes_a_collection_that_sends() {
         &["send", "users/list-users.yml", "-e", "local"],
     );
     assert!(send.status.success(), "{}", text(&send.stderr));
+    // Its test, translated to Bruno's API, ran.
+    assert!(
+        text(&send.stderr).contains("pass  test: ok"),
+        "{}",
+        text(&send.stderr)
+    );
     let seen = server.seen();
     assert!(seen[0].starts_with("GET /users "), "{seen:?}");
     assert!(seen[0].contains("x-trace: 1"), "{seen:?}");

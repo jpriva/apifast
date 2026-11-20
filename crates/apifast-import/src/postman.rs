@@ -1,11 +1,12 @@
 //! Postman collections (v2.0 and v2.1) and environments as apifast's,
 //! with the same choices as Bruno's importer
 //! (`bruno-converters/src/postman/postman-to-bruno.js`). What has no place
-//! in apifast (scripts, some auth types…) is listed as a
+//! in apifast (some auth types, scripts' calls with no counterpart…) is listed as a
 //! warning where it was, never dropped silently.
 
 mod auth;
 mod export;
+mod scripts;
 
 pub use export::{
     ExportError, PostmanFiles, export_postman, export_postman_environment, write_postman,
@@ -17,7 +18,7 @@ use apifast_app::{ImportWarning, ImportedCollection, ImportedItem};
 use apifast_domain::{
     AuthScheme, Body, Environment, Example, ExampleBody, ExampleRequest, ExampleResponse,
     FormField, Header, HttpRequest, Method, MultipartPart, MultipartValue, Param, ParamKind,
-    RequestDefaults, Setting, Variable, sync_params_from_url,
+    RequestDefaults, ScriptBlock, ScriptKind, Setting, Variable, sync_params_from_url,
 };
 use serde_json::Value;
 
@@ -112,8 +113,8 @@ pub fn import_postman_environment(
 
 /// What a collection or folder gives its requests: auth and variables.
 fn defaults(node: &Value, at: &str, warnings: &mut Vec<ImportWarning>) -> RequestDefaults {
-    scripts(node, at, warnings);
     RequestDefaults {
+        scripts: scripts(node, at, warnings),
         auth: auth_of(node.get("auth"), at, warnings),
         variables: (node.get("variable").and_then(Value::as_array))
             .map(|list| {
@@ -163,7 +164,7 @@ fn items(node: &Value, path: &[String], warnings: &mut Vec<ImportWarning>) -> Ve
 }
 
 fn request(item: &Value, name: String, at: &str, warnings: &mut Vec<ImportWarning>) -> HttpRequest {
-    scripts(item, at, warnings);
+    let scripts = scripts(item, at, warnings);
     let empty = Value::Null;
     let source = item.get("request").unwrap_or(&empty);
     let (method, url, params) = method_and_url(source);
@@ -177,6 +178,7 @@ fn request(item: &Value, name: String, at: &str, warnings: &mut Vec<ImportWarnin
     request.examples = (item.get("response").and_then(Value::as_array))
         .map(|list| list.iter().map(example).collect())
         .unwrap_or_default();
+    request.scripts = scripts;
     sync_params_from_url(&mut request);
     request
 }
@@ -441,32 +443,53 @@ fn behavior(item: &Value, request: &mut HttpRequest, at: &str, warnings: &mut Ve
     }
 }
 
-/// A warning for scripts: they wait for the JavaScript engine (F9).
-fn scripts(node: &Value, at: &str, warnings: &mut Vec<ImportWarning>) {
+/// The scripts of `node`'s events, translated to Bruno's API: `prerequest`
+/// runs before the request and `test` after it, as tests. Lines left in
+/// Postman's API are commented out, with a warning.
+fn scripts(node: &Value, at: &str, warnings: &mut Vec<ImportWarning>) -> Vec<ScriptBlock> {
     let events = node
         .get("event")
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
+    let mut scripts = Vec::new();
     for event in events {
-        let lines = event.pointer("/script/exec");
-        let has_code = match lines {
-            Some(Value::Array(lines)) => lines
-                .iter()
-                .any(|l| l.as_str().is_some_and(|l| !l.trim().is_empty())),
-            Some(Value::String(code)) => !code.trim().is_empty(),
-            _ => false,
+        let code = match event.pointer("/script/exec") {
+            Some(Value::Array(lines)) => (lines.iter())
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>()
+                .join("\n"),
+            Some(Value::String(code)) => code.clone(),
+            _ => String::new(),
         };
-        if has_code {
-            let listen = text(&event, "listen");
+        if code.trim().is_empty() {
+            continue;
+        }
+        let listen = text(&event, "listen");
+        let kind = match listen.as_str() {
+            "prerequest" => ScriptKind::BeforeRequest,
+            "test" => ScriptKind::Tests,
+            _ => {
+                warnings.push(ImportWarning::new(
+                    at,
+                    format!("a `{listen}` script is not imported: apifast does not run it"),
+                ));
+                continue;
+            }
+        };
+        let (code, commented) = scripts::translate(&code);
+        if commented > 0 {
+            let lines = if commented == 1 { "line" } else { "lines" };
             warnings.push(ImportWarning::new(
                 at,
                 format!(
-                    "a `{listen}` script is not imported: scripts arrive with the JavaScript engine"
+                    "{commented} {lines} of the `{listen}` script use Postman's API that has no counterpart: they are commented out"
                 ),
             ));
         }
+        scripts.push(ScriptBlock::new(kind, code));
     }
+    scripts
 }
 
 /// A saved response as an example.

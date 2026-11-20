@@ -76,7 +76,13 @@ fn the_collection_and_its_folders_give_their_defaults() {
             .kind,
         ValueKind::Number
     );
-    assert!(warned(&collection, "", "pre-request script"));
+    assert_eq!(
+        collection.defaults.scripts,
+        [apifast_domain::ScriptBlock::new(
+            apifast_domain::ScriptKind::BeforeRequest,
+            "bru.setVar('a', 1);"
+        )]
+    );
     let ImportedItem::Folder { folder, items } = &collection.items[0] else {
         panic!("{:?}", collection.items[0])
     };
@@ -128,7 +134,13 @@ fn a_request_keeps_its_url_params_body_checks_and_settings() {
     assert_eq!(create.settings.follow_redirects, Setting::Set(false));
     assert_eq!(create.settings.timeout_ms, Setting::Inherit, "0 is not set");
     assert_eq!(create.docs.as_deref(), Some("Creates a user."));
-    assert!(warned(&collection, "Users / Create user", "tests block"));
+    assert_eq!(
+        create.scripts,
+        [apifast_domain::ScriptBlock::new(
+            apifast_domain::ScriptKind::Tests,
+            "test('ok', () => {});"
+        )]
+    );
     let ImportedItem::Request { request: list, .. } = &items[0] else {
         unreachable!()
     };

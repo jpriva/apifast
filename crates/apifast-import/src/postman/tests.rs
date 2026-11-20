@@ -1,4 +1,6 @@
-use apifast_domain::{ApiKeyAuth, ApiKeyPlacement, BasicAuth, OAuth2Flow, TokenPlacement};
+use apifast_domain::{
+    ApiKeyAuth, ApiKeyPlacement, BasicAuth, OAuth2Flow, ScriptBlock, ScriptKind, TokenPlacement,
+};
 
 use super::*;
 
@@ -146,7 +148,44 @@ fn the_collection_gives_its_name_auth_and_variables() {
     let variables = &collection.defaults.variables;
     assert_eq!(variables[0].name, "host");
     assert!(!variables[1].enabled);
-    assert!(warned(&collection, "", "prerequest"));
+    assert_eq!(
+        collection.defaults.scripts,
+        [ScriptBlock::new(
+            ScriptKind::BeforeRequest,
+            "console.log('hi')"
+        )]
+    );
+    assert!(!warned(&collection, "", "prerequest"));
+}
+
+#[test]
+fn scripts_are_translated_and_what_has_no_counterpart_is_commented_out() {
+    let json = r#"{
+      "info": {"name": "S", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+      "item": [{
+        "name": "Get",
+        "event": [
+          {"listen": "test", "script": {"exec": ["pm.test('ok', () => pm.response.to.have.status(200));", "pm.sendRequest('http://x');"]}},
+          {"listen": "unknown", "script": {"exec": ["x()"]}}
+        ],
+        "request": {"method": "GET", "url": "http://x"}
+      }]
+    }"#;
+    let collection = import_postman(json).unwrap();
+    let get = find(&collection.items, "Get");
+    assert_eq!(
+        get.scripts,
+        [ScriptBlock::new(
+            ScriptKind::Tests,
+            "test('ok', () => expect(res.getStatus()).to.equal(200));\n// pm.sendRequest('http://x');"
+        )]
+    );
+    assert!(warned(&collection, "Get", "1 line of the `test` script"));
+    assert!(warned(
+        &collection,
+        "Get",
+        "a `unknown` script is not imported"
+    ));
 }
 
 #[test]
@@ -197,7 +236,10 @@ fn bodies_settings_scripts_and_dynamic_variables() {
     );
     assert_eq!(create.settings.follow_redirects, Setting::Set(false));
     assert_eq!(create.settings.encode_url, Setting::Set(false));
-    assert!(warned(&collection, "Users / Create user", "`test` script"));
+    assert_eq!(
+        create.scripts,
+        [ScriptBlock::new(ScriptKind::Tests, "test('ok')")]
+    );
     assert!(warned(&collection, "Users / Create user", "strictSSL"));
     assert!(warned(&collection, "", "randomCompanyName"));
     assert!(!warned(&collection, "", "isoTimestamp"));
