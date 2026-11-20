@@ -127,6 +127,10 @@ pub struct ScriptRequest {
     pub body: Option<String>,
     /// Its timeout, in milliseconds, when set.
     pub timeout_ms: Option<u64>,
+    /// Its tags (`req.getTags()`).
+    pub tags: Vec<String>,
+    /// Its enabled path parameters (`:name` in the URL), in order.
+    pub path_params: Vec<(String, String)>,
 }
 
 /// A response as a script sees it (`res`).
@@ -187,6 +191,9 @@ pub enum VariableScope {
     Runtime,
     /// The active environment (`bru.setEnvVar`).
     Environment,
+    /// The collection (`bru.setCollectionVar`), for this run: the
+    /// collection file is not changed.
+    Collection,
 }
 
 /// A variable a script set or deleted.

@@ -7,9 +7,11 @@
     const input = JSON.parse(globalThis.__apifast_input);
     const nativeSleep = globalThis.__apifast_sleep;
     const processEnv = globalThis.__apifast_process_env;
+    const dynamicValue = globalThis.__apifast_dynamic;
     delete globalThis.__apifast_input;
     delete globalThis.__apifast_sleep;
     delete globalThis.__apifast_process_env;
+    delete globalThis.__apifast_dynamic;
 
     const out = { request: null, responseBody: null, variables: [], tests: [], runner: null };
     const pending = [];
@@ -66,6 +68,7 @@
         if (typeof value !== 'string') return value;
         return value.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (whole, name) => {
             if (name.startsWith('process.env.')) return processEnv(name.slice(12)) ?? whole;
+            if (name.startsWith('$')) return dynamicValue(name) ?? whole;
             const found = lookup(name);
             if (found === undefined) return whole;
             return typeof found.value === 'object' ? JSON.stringify(found.value) : String(found.value);
@@ -90,6 +93,29 @@
         return text;
     };
     const text = (value) => (typeof value === 'string' ? value : JSON.stringify(value));
+
+    // A URL's parts as Bruno reads them (`bruno-js/src/utils/url.js`):
+    // kept as written, templates and all.
+    const urlParts = (raw) => {
+        if (!raw) return { host: '', pathname: '', queryString: '' };
+        let rest = String(raw);
+        const scheme = /^([^/?#]*):\/\//.exec(rest)?.[1]?.toLowerCase();
+        rest = rest.replace(/^[^/?#]*:\/\//, '');
+        if (rest.includes('#')) rest = rest.slice(0, rest.indexOf('#'));
+        const cut = rest.search(/[/?]/);
+        const authority = cut < 0 ? rest : rest.slice(0, cut);
+        const after = cut < 0 ? '' : rest.slice(cut);
+        let host = authority.slice(authority.lastIndexOf('@') + 1);
+        const query = after.indexOf('?');
+        let pathname = query < 0 ? after : after.slice(0, query);
+        const queryString = query < 0 ? '' : after.slice(query + 1);
+        // What `new URL()` would do for a URL without templates.
+        if (scheme && !String(raw).includes('{{')) {
+            host = host.toLowerCase().replace(scheme === 'https' ? /:443$/ : /:80$/, '');
+            if (pathname === '') pathname = '/';
+        }
+        return { host, pathname, queryString };
+    };
 
     // `req`: the request, before templates are rendered.
     const request = input.request;
@@ -121,6 +147,20 @@
         },
         getBody: () => parsed(request.body, request.headers),
         setBody(body) { request.body = body === undefined || body === null ? null : text(body); touch(); },
+        getHost: () => urlParts(request.url).host,
+        getPath() {
+            const params = new Map(request.path_params ?? []);
+            return urlParts(request.url).pathname
+                .split('/')
+                .map((segment) => {
+                    const value = segment.startsWith(':') ? params.get(segment.slice(1)) : undefined;
+                    return value === undefined || value.trim() === '' ? segment : value;
+                })
+                .join('/');
+        },
+        getQueryString: () => urlParts(request.url).queryString,
+        getPathParams: () => (request.path_params ?? []).map(([name, value]) => ({ name, value, type: 'path' })),
+        getTags: () => [...(request.tags ?? [])],
         getTimeout: () => request.timeout_ms ?? undefined,
         setTimeout(ms) { request.timeout_ms = Math.max(0, Math.floor(Number(ms))); touch(); },
     };
@@ -217,11 +257,62 @@
         getRequestVar: (name) => scopes.request.get(name),
         getFolderVar: (name) => scopes.folders.get(name),
         getCollectionVar: (name) => scopes.collection.get(name),
+        hasCollectionVar: (name) => scopes.collection.has(name),
+        setCollectionVar(name, value) {
+            validName(name);
+            scopes.collection.set(name, value);
+            change('collection', name, value, false);
+        },
+        deleteCollectionVar(name) {
+            scopes.collection.delete(name);
+            change('collection', name, undefined, false);
+        },
+        getAllCollectionVars: () => Object.fromEntries(scopes.collection),
+        deleteAllCollectionVars() {
+            for (const name of [...scopes.collection.keys()]) bru.deleteCollectionVar(name);
+        },
+        getAllEnvVars: () => Object.fromEntries(scopes.environment),
+        deleteAllEnvVars() {
+            for (const name of [...scopes.environment.keys()]) bru.deleteEnvVar(name);
+        },
+        // Scripts reach neither files nor the network: always safe mode.
+        isSafeMode: () => true,
         getProcessEnv: (name) => processEnv(String(name)) ?? undefined,
         interpolate,
         sleep: (ms) => nativeSleep(Math.max(0, Math.floor(Number(ms) || 0))),
         setNextRequest: runner.setNextRequest,
         runner,
+    };
+
+    // Timers. A pending timeout keeps the script running until it fires
+    // (within the time limit), as in Node; an interval does not.
+    const timers = new Map();
+    let lastTimer = 0;
+    const delay = (ms) => nativeSleep(Math.max(0, Math.floor(Number(ms) || 0)));
+    const call = (fn, args) => { if (typeof fn === 'function') fn(...args); };
+    const setTimeout = (fn, ms, ...args) => {
+        const id = ++lastTimer;
+        const fired = delay(ms).then(() => {
+            if (timers.delete(id)) call(fn, args);
+        });
+        timers.set(id, fired);
+        return id;
+    };
+    const setInterval = (fn, ms, ...args) => {
+        const id = ++lastTimer;
+        timers.set(id, null);
+        (async () => {
+            while (timers.has(id)) {
+                await delay(ms);
+                if (timers.has(id)) call(fn, args);
+            }
+        })();
+        return id;
+    };
+    const clearTimer = (id) => { timers.delete(id); };
+    const timeouts = async () => {
+        let waiting;
+        while ((waiting = [...timers.values()].filter(Boolean)).length > 0) await Promise.all(waiting);
     };
 
     // `test`: each one passes unless its function throws or rejects.
@@ -239,10 +330,16 @@
         }
     };
 
-    Object.assign(globalThis, { req, bru, test, expect: globalThis.__apifast_expect });
+    Object.assign(globalThis, {
+        req, bru, test, expect: globalThis.__apifast_expect,
+        setTimeout, setInterval, clearTimeout: clearTimer, clearInterval: clearTimer,
+    });
     delete globalThis.__apifast_expect;
     if (res) globalThis.res = res;
 
-    globalThis.__apifast_settle = () => Promise.all(pending);
+    globalThis.__apifast_settle = async () => {
+        await timeouts();
+        await Promise.all(pending);
+    };
     globalThis.__apifast_output = () => JSON.stringify(out);
 })();

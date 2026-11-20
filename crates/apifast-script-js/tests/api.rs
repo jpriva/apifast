@@ -30,6 +30,8 @@ fn input() -> ScriptInput {
             headers: vec![("Content-Type".into(), "application/json".into())],
             body: Some(r#"{"name": "Ana"}"#.into()),
             timeout_ms: None,
+            tags: vec!["smoke".into()],
+            path_params: vec![("id".into(), "7".into())],
         },
         response: Some(ScriptResponse {
             status: 201,
@@ -132,6 +134,8 @@ async fn req_changes_the_request() {
             ],
             body: Some(r#"{"name":"Ana","age":30}"#.into()),
             timeout_ms: Some(5000),
+            tags: vec!["smoke".into()],
+            path_params: vec![("id".into(), "7".into())],
         })
     );
 }
@@ -464,4 +468,111 @@ async fn a_bruno_script_runs_as_written() {
     .await;
     assert_eq!(outcome.tests, [passed("created"), passed("fast")]);
     assert_eq!(outcome.variables[0].name, "userId");
+}
+
+#[tokio::test]
+async fn req_reads_the_parts_of_its_url_tags_and_path_params() {
+    let mut input = input();
+    input.request.url = "{{host}}/users/:id?page=2#top".into();
+    let outcome = run_with(
+        r"
+        console.log(req.getHost(), req.getPath(), req.getQueryString());
+        console.log(JSON.stringify(req.getPathParams()), req.getTags());
+        req.setUrl('https://User:pw@API.Test:443');
+        console.log(req.getHost(), req.getPath(), req.getQueryString() === '');
+    ",
+        &input,
+    )
+    .await;
+    assert_eq!(outcome.error, None);
+    assert_eq!(
+        logged(&outcome),
+        [
+            "{{host}} /users/7 page=2",
+            r#"[{"name":"id","value":"7","type":"path"}] ["smoke"]"#,
+            "api.test / true",
+        ]
+    );
+}
+
+#[tokio::test]
+async fn bru_sets_collection_variables_and_reads_every_environment_variable() {
+    let outcome = run(r"
+        bru.setCollectionVar('id', 9);
+        console.log(bru.getCollectionVar('id'), bru.hasCollectionVar('id'), bru.hasCollectionVar('nope'));
+        const all = bru.getAllCollectionVars();
+        all.id = 'mutated';
+        console.log(bru.getAllCollectionVars().id, Object.keys(bru.getAllEnvVars()).join());
+        bru.deleteAllEnvVars();
+        bru.deleteCollectionVar('id');
+        console.log(bru.getEnvVar('token'), bru.getCollectionVar('id'), bru.isSafeMode());
+    ")
+    .await;
+    assert_eq!(
+        logged(&outcome),
+        [
+            "9 true false",
+            "9 token,retries",
+            "undefined undefined true"
+        ]
+    );
+    let collection: Vec<_> = (outcome.variables.iter())
+        .filter(|c| c.scope == VariableScope::Collection)
+        .map(|c| (c.name.as_str(), c.value.is_some()))
+        .collect();
+    assert_eq!(collection, [("id", true), ("id", false)]);
+    let deleted: Vec<_> = (outcome.variables.iter())
+        .filter(|c| c.scope == Environment && c.value.is_none())
+        .map(|c| c.name.as_str())
+        .collect();
+    assert_eq!(deleted, ["token", "retries"]);
+}
+
+#[tokio::test]
+async fn timers_fire_and_a_pending_timeout_is_waited_for() {
+    let outcome = run(r"
+        await new Promise((resolve) => setTimeout(() => { console.log('awaited'); resolve(); }, 10));
+        setTimeout((what) => bru.setVar('late', what), 20, 'fired');
+        const cleared = setTimeout(() => console.log('never'), 5);
+        clearTimeout(cleared);
+        let ticks = 0;
+        const interval = setInterval(() => { ticks += 1; if (ticks === 3) { clearInterval(interval); console.log('ticked', ticks); } }, 1);
+    ")
+    .await;
+    assert_eq!(logged(&outcome), ["awaited", "ticked 3"]);
+    let late = outcome.variables.iter().find(|c| c.name == "late");
+    assert_eq!(
+        late.and_then(|c| c.value.as_ref()).map(|v| v.data.as_str()),
+        Some("fired")
+    );
+}
+
+#[tokio::test]
+async fn a_failing_timeout_is_the_scripts_error_and_keeps_its_changes() {
+    let outcome = run_with(
+        r"
+        bru.setVar('kept', 1);
+        setTimeout(() => { throw new Error('boom'); }, 1);
+    ",
+        &input(),
+    )
+    .await;
+    assert!(
+        matches!(&outcome.error, Some(ScriptError::Thrown { message, .. }) if message.contains("boom")),
+        "{:?}",
+        outcome.error
+    );
+    assert_eq!(outcome.variables.len(), 1);
+}
+
+#[tokio::test]
+async fn bru_interpolate_generates_dynamic_variables() {
+    let outcome = run(r"
+        const a = bru.interpolate('{{$randomInt}}');
+        const b = bru.interpolate({ at: '{{$timestamp}}', id: '{{$randomUUID}}' });
+        console.log(/^\d+$/.test(a), /^\d{10}$/.test(b.at), /^[0-9a-f-]{36}$/.test(b.id));
+        console.log(bru.interpolate('{{$nope}}'));
+    ")
+    .await;
+    assert_eq!(logged(&outcome), ["true true true", "{{$nope}}"]);
 }

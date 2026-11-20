@@ -141,10 +141,17 @@ async fn run(
             if let Some(stopped) = outcome.error.as_ref().filter(|e| stopped(e)) {
                 return Err(stopped.clone());
             }
-            // Its tests may still be waiting.
             let settled = api::settle(&ctx).catch(&ctx).map_err(|_| ());
+            // Its tests and timeouts may still be waiting; one that fails
+            // is the script's error, and what it changed is kept.
             if let Ok(settled) = settled {
-                wait(&ctx, settled, &stop).await?;
+                match wait(&ctx, settled, &stop).await {
+                    Err(error) if stopped(&error) => return Err(error),
+                    Err(error) => {
+                        outcome.error.get_or_insert(error);
+                    }
+                    Ok(()) => {}
+                }
             }
             api::read_output(&ctx, &mut outcome)
                 .map_err(|e| stop.reason().unwrap_or_else(|| engine(e)))?;

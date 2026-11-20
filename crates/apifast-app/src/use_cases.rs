@@ -287,8 +287,11 @@ where
         .await?;
     let body = writer.finish()?;
 
-    let text = match (&scripts, ports.scripts) {
-        (Some(_), Some(_)) => body_text(ports.responses, &body)?,
+    let text = match (&mut scripts, ports.scripts) {
+        (Some(scripts), Some(_)) => {
+            scripts.sent(&rendered.request);
+            body_text(ports.responses, &body)?
+        }
         _ => None,
     };
     if let (Some(scripts), Some(engine)) = (&mut scripts, ports.scripts) {

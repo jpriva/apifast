@@ -13,14 +13,14 @@
 use std::fmt;
 
 use apifast_domain::{
-    Body, Collection, Folder, Header, HttpRequest, Method, Origin, Resolved, ResolvedRequest,
-    ResolvedVariables, ScriptBlock, ScriptKind, Variable, script_of,
+    Body, Collection, Folder, Header, HttpRequest, Method, Origin, ParamKind, Resolved,
+    ResolvedRequest, ResolvedVariables, ScriptBlock, ScriptKind, Variable, script_of,
 };
 
 use crate::{
-    AppError, CancelToken, ConsoleLine, ResponseHead, RunnerRequest, Script, ScriptEngine,
-    ScriptError, ScriptInput, ScriptRequest, ScriptResponse, ScriptVariables, TestOutcome,
-    VariableChange, VariableScope, reason_phrase,
+    AppError, CancelToken, ConsoleLine, RenderedRequest, ResponseHead, RunnerRequest, Script,
+    ScriptEngine, ScriptError, ScriptInput, ScriptRequest, ScriptResponse, ScriptVariables,
+    TestOutcome, VariableChange, VariableScope, reason_phrase,
 };
 
 /// Where a script comes from.
@@ -178,6 +178,7 @@ impl SendScripts {
             input: ScriptInput {
                 request: ScriptRequest {
                     name: request.name.clone(),
+                    tags: request.tags.clone(),
                     ..ScriptRequest::default()
                 },
                 response: None,
@@ -200,7 +201,7 @@ impl SendScripts {
         variables: &mut ResolvedVariables,
         cancel: &CancelToken,
     ) -> Result<(), AppError> {
-        self.input.request = script_request(&self.input.request.name, resolved);
+        self.input.request = script_request(&self.input.request, resolved);
         for (source, code) in self.scripts(&ScriptKind::BeforeRequest) {
             let script = (&ScriptKind::BeforeRequest, &source, code.as_str());
             let outcome = self.run(engine, script, variables, cancel).await;
@@ -219,6 +220,15 @@ impl SendScripts {
             return Err(AppError::Skipped("a script skipped the request".into()));
         }
         Ok(())
+    }
+
+    /// The request as it was sent: what the scripts after the response
+    /// read (its templates rendered), as in Bruno.
+    pub(crate) fn sent(&mut self, rendered: &RenderedRequest) {
+        let request = &mut self.input.request;
+        rendered.method().as_str().clone_into(&mut request.method);
+        rendered.url().clone_into(&mut request.url);
+        request.headers = rendered.headers().to_vec();
     }
 
     /// Runs the scripts of `kind` after the response (`head` and the text
@@ -298,6 +308,7 @@ impl SendScripts {
         let list = match change.scope {
             VariableScope::Runtime => &mut self.input.variables.runtime,
             VariableScope::Environment => &mut self.input.variables.environment,
+            VariableScope::Collection => &mut self.input.variables.collection,
         };
         list.retain(|v| v.name != change.name);
         match &change.value {
@@ -315,10 +326,17 @@ impl SendScripts {
     }
 }
 
-/// `resolved` as a script sees it.
-fn script_request(name: &str, resolved: &ResolvedRequest) -> ScriptRequest {
+/// `resolved` as a script sees it; `known` gives what `resolved` does not
+/// have (its name and tags).
+fn script_request(known: &ScriptRequest, resolved: &ResolvedRequest) -> ScriptRequest {
+    let path_params = (resolved.params().iter())
+        .filter(|p| p.enabled && p.kind == ParamKind::Path)
+        .map(|p| (p.name.clone(), p.value.clone()))
+        .collect();
     ScriptRequest {
-        name: name.to_owned(),
+        name: known.name.clone(),
+        tags: known.tags.clone(),
+        path_params,
         method: resolved.method().as_str().to_owned(),
         url: resolved.url().to_owned(),
         headers: (resolved.headers().iter())

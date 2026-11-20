@@ -10,6 +10,7 @@ publish.workspace = true
 [dependencies]
 apifast-domain.workspace = true
 apifast-app.workspace = true
+apifast-template.workspace = true
 serde_json.workspace = true
 # `futures`: scripts may await; `parallel`: its runtime is `Send`, so a
 # script runs on any tokio thread.

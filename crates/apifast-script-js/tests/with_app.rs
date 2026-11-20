@@ -374,3 +374,35 @@ async fn scripts_steer_a_run() {
     assert_eq!(skipped, [("C", "a script skipped the request")]);
     assert!(report.stopped);
 }
+
+#[tokio::test]
+async fn scripts_after_the_response_read_the_request_as_sent() {
+    let mut request = HttpRequest::new("Get", Method::Get, "{{host}}/users/:id");
+    request.tags = vec!["smoke".into()];
+    request.params = vec![apifast_domain::Param {
+        name: "id".into(),
+        value: "7".into(),
+        kind: apifast_domain::ParamKind::Path,
+        enabled: true,
+    }];
+    request.scripts = vec![
+        script(
+            ScriptKind::BeforeRequest,
+            "console.log(req.getUrl(), req.getPath(), req.getTags()); bru.setCollectionVar('seen', 1);",
+        ),
+        script(
+            ScriptKind::Tests,
+            "console.log(req.getUrl(), req.getHost(), req.getTags(), bru.getCollectionVar('seen'))",
+        ),
+    ];
+    let world =
+        World::new(MemoryCollections::new(Collection::new("C")).with_request("get.yml", request));
+    let outcome = world.send("get.yml").await.unwrap();
+    assert_eq!(
+        logged(&outcome),
+        [
+            r#"{{host}}/users/:id /users/7 ["smoke"]"#,
+            r#"https://api.test/users/7 api.test ["smoke"] 1"#,
+        ]
+    );
+}

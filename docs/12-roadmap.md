@@ -410,12 +410,17 @@ Se cumple: los cuatro modos funcionan contra un servidor local (con `.proto` y p
 - [x] Editor de scripts con resaltado. Pestaña Scripts en la request y ventana "Scripts…" para carpetas y colección, con un editor por tipo y resaltado de JavaScript.
 - [x] Traducción de scripts de Postman en el importador, con la tabla de reemplazos de Bruno; lo que no tiene equivalente queda comentado y avisado. El importador de `.bru` trae los scripts tal cual. Pendientes: los scripts de Insomnia y la traducción inversa al exportar a Postman.
 - [x] Carga del motor solo al ejecutar el primer script. No hay estado global: el runtime se crea al empezar cada script, y una request sin scripts (o solo con scripts de tipos que apifast no ejecuta) no llama al motor. Medido con la CLI: unos 2 MB más de memoria máxima, solo cuando corre un script.
+- [ ] Compatibilidad con las colecciones de prueba de Bruno (`bruno-tests`), por partes:
+  - [x] API barata y errores: `req.getHost`, `getPath`, `getQueryString`, `getPathParams` y `getTags`; variables de colección (`setCollectionVar` y compañía), `getAllEnvVars` y `deleteAllEnvVars`, `isSafeMode`; temporizadores (`setTimeout`, `setInterval`); variables dinámicas en `bru.interpolate`. Después de la respuesta, `req` es la request enviada, ya renderizada.
+  - [ ] `req.headerList` y `res.headerList`; los plugins de chai `jsonBody` y `jsonSchema`.
+  - [ ] Cookies (`bru.cookies`), `bru.sendRequest` y `bru.runRequest`.
+  - [ ] En una ejecución, que `bru.getEnvVar` y `bru.getCollectionVar` vean lo que cambiaron los scripts de requests anteriores. Las etiquetas de carpeta, las variables globales y `req.setBody` en formularios.
 
 ### Criterio de salida
 
 Las colecciones de prueba de Bruno con scripts se ejecutan con los mismos resultados, y una colección sin scripts no carga el motor.
 
-Estado: la segunda mitad se cumple. La primera todavía no. La colección `bruno-tests` se importó y se corrió con `apifast run --allow-unresolved` contra un servidor local que imita `/ping` y `/api/echo/json` (sin Node no se puede levantar el de Bruno). En `scripting/api` y `scripting/js` pasan 54 de 235 tests. El orden en sándwich, las variables por ámbito, `req` y `res` básicos, `bru.runner` y `expect` funcionan. Lo que falla, por causa:
+Estado: la segunda mitad se cumple. La primera todavía no. La colección `bruno-tests` se importó y se corrió con `apifast run --allow-unresolved` contra un servidor local que imita `/ping` y `/api/echo/json` (sin Node no se puede levantar el de Bruno). En `scripting/api` y `scripting/js` pasaban 54 de 235 tests; tras la primera parte de la compatibilidad pasan 74 de 246 (ahora corren más tests, porque menos scripts fallan antes de llegar a ellos). El orden en sándwich, las variables por ámbito, `req` y `res` básicos, `bru.runner` y `expect` funcionan. Lo que falla, por causa:
 
 - API de Bruno que falta: `bru.cookies`, `bru.sendRequest` y `bru.runRequest`, variables globales, `getAllEnvVars` y `deleteAllEnvVars`, variables de colección (`setCollectionVar` y compañía), `isSafeMode`, `req.getHost`, `getPath`, `getPathParams`, `getQueryString` y `getTags`, `req.headerList` y `res.headerList`, `setTimeout`, y `req.setBody` en cuerpos form-urlencoded.
 - Plugins de chai de Bruno: `jsonBody` y `jsonSchema` (este con ajv).

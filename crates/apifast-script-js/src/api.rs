@@ -27,8 +27,45 @@ pub(crate) fn install(ctx: &Ctx<'_>, input: &ScriptInput) -> rquickjs::Result<()
     globals.set("__apifast_sleep", sleep)?;
     let process_env = Function::new(ctx.clone(), |name: String| std::env::var(name).ok())?;
     globals.set("__apifast_process_env", process_env)?;
+    globals.set(
+        "__apifast_dynamic",
+        Function::new(ctx.clone(), |name: String| dynamic(&name))?,
+    )?;
     ctx.eval::<(), _>(EXPECT)?;
     ctx.eval::<(), _>(API)
+}
+
+/// The value of dynamic variable `name` (`$randomInt`…), generated as
+/// templates generate it; `None` when there is no such variable.
+fn dynamic(name: &str) -> Option<String> {
+    let bare = name.strip_prefix('$')?;
+    if !apifast_template::DYNAMIC_VARIABLES.contains(&bare) {
+        return None;
+    }
+    let variables = apifast_domain::ResolvedVariables::default();
+    let template = format!("{{{{{name}}}}}");
+    let mode = apifast_template::Mode::Lenient;
+    let rendered = apifast_template::render(&template, &variables, &mut SystemHost, mode).ok()?;
+    Some(rendered.text.into_owned())
+}
+
+/// Time and randomness for dynamic variables: the system's.
+struct SystemHost;
+
+impl apifast_template::Host for SystemHost {
+    fn unix_millis(&mut self) -> i64 {
+        let since = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
+        since.map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
+    }
+
+    fn random_u64(&mut self) -> u64 {
+        // Each `RandomState` is seeded anew: enough for test data, not
+        // for secrets.
+        use std::hash::{BuildHasher, Hasher};
+        std::collections::hash_map::RandomState::new()
+            .build_hasher()
+            .finish()
+    }
 }
 
 /// The promise of the tests the script started, all settled.
@@ -92,6 +129,8 @@ fn request_json(request: &ScriptRequest) -> Json {
         "headers": request.headers,
         "body": request.body,
         "timeout_ms": request.timeout_ms,
+        "tags": request.tags,
+        "path_params": request.path_params,
     })
 }
 
@@ -127,27 +166,35 @@ fn text(json: &Json, key: &str) -> Option<String> {
 }
 
 fn request(json: &Json) -> Option<ScriptRequest> {
-    let headers = items(json, "headers")
-        .filter_map(|pair| {
-            Some((
-                pair.get(0)?.as_str()?.to_owned(),
-                pair.get(1)?.as_str()?.to_owned(),
-            ))
-        })
+    let pairs = |key| {
+        items(json, key)
+            .filter_map(|pair| {
+                Some((
+                    pair.get(0)?.as_str()?.to_owned(),
+                    pair.get(1)?.as_str()?.to_owned(),
+                ))
+            })
+            .collect()
+    };
+    let tags = (items(json, "tags").filter_map(Json::as_str))
+        .map(str::to_owned)
         .collect();
     Some(ScriptRequest {
         name: text(json, "name")?,
         method: text(json, "method")?,
         url: text(json, "url")?,
-        headers,
+        headers: pairs("headers"),
         body: text(json, "body"),
         timeout_ms: json.get("timeout_ms").and_then(Json::as_u64),
+        tags,
+        path_params: pairs("path_params"),
     })
 }
 
 fn change(json: &Json) -> Option<VariableChange> {
     let scope = match json.get("scope")?.as_str()? {
         "environment" => VariableScope::Environment,
+        "collection" => VariableScope::Collection,
         _ => VariableScope::Runtime,
     };
     let value = json
