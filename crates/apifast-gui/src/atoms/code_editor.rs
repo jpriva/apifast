@@ -30,6 +30,9 @@ pub fn code_layout(
     palette: &theme::Palette,
     text_color: egui::Color32,
 ) -> LayoutJob {
+    if language == Language::JavaScript {
+        return syntax_layout(text, language, font, palette, text_color);
+    }
     let syntax = tokens(text, language);
     let variables = spans(text, hints);
     let mut job = LayoutJob::default();
@@ -251,7 +254,10 @@ impl<'a> CodeEditor<'a> {
         if let Some(name) = name {
             response.clone().accessible_name(name);
         }
-        if highlight && let Some(pointer) = response.hover_pos() {
+        if highlight
+            && language != Language::JavaScript
+            && let Some(pointer) = response.hover_pos()
+        {
             let index = output
                 .galley
                 .cursor_from_pos(pointer - output.galley_pos)

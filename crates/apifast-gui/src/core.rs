@@ -458,6 +458,15 @@ pub enum Command {
     GetToken(TabKey),
     /// Forgets the OAuth 2.0 token stored for the request of the tab.
     ForgetToken(TabKey),
+    /// Saves the scripts of a folder, or of the collection at `root`.
+    SaveScripts {
+        /// The collection.
+        root: PathBuf,
+        /// The folder, relative to it; `None` for the collection.
+        folder: Option<String>,
+        /// Its scripts.
+        scripts: Vec<apifast_domain::ScriptBlock>,
+    },
     /// Saves the proxy, the client certificates and the DNS overrides of
     /// the collection at `root` into its files, and sends with them from
     /// then on.
@@ -1189,7 +1198,8 @@ impl State {
             | Command::CreateFolder { .. }
             | Command::Rename { .. }
             | Command::Delete { .. }
-            | Command::Move { .. } => self.handle_tree(command),
+            | Command::Move { .. }
+            | Command::SaveScripts { .. } => self.handle_tree(command),
             Command::OpenHistory(index) => self.open_history(index),
             Command::Configure { .. }
             | Command::SetProxyPassword(_)
@@ -1285,6 +1295,11 @@ impl State {
             Command::CreateFolder { root, parent, name } => {
                 self.organize(&root, |repo| create_folder(repo, &parent, &name));
             }
+            Command::SaveScripts {
+                root,
+                folder,
+                scripts,
+            } => self.save_scripts(&root, folder.as_deref(), scripts),
             Command::Rename { root, item, name } => {
                 if let Some(new) = self.organize(&root, |repo| rename_item(repo, &item, &name)) {
                     self.follow_move(&root, &item, &new);

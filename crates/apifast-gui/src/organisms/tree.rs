@@ -38,6 +38,13 @@ pub enum TreeEvent {
     Remove,
     /// Edit the collection's settings, such as its proxy.
     Settings,
+    /// Edit the scripts of a folder, or of the collection.
+    Scripts {
+        /// The folder; `None` for the collection.
+        folder: Option<String>,
+        /// How the window names it.
+        label: String,
+    },
     /// Import a new version of the collection's source.
     Reimport,
     /// Export the collection to Postman.
@@ -589,6 +596,15 @@ fn context_menu(ui: &mut egui::Ui, row: &Row, strings: &Strings) -> Option<RowAc
                 },
             ));
         }
+        if ui.button(strings.scripts_menu).clicked() {
+            action = Some(RowAction::Event(
+                row.root.clone(),
+                TreeEvent::Scripts {
+                    folder: Some(folder.to_owned()),
+                    label: row.label.clone(),
+                },
+            ));
+        }
         ui.separator();
     }
     if let ItemPath::Request(path) = &row.item {
@@ -664,6 +680,13 @@ fn collection_menu(
     }
     if ui.button(strings.run_menu).clicked() {
         let event = TreeEvent::Run {
+            folder: None,
+            label: row.label.clone(),
+        };
+        action = Some(RowAction::Event(root(), event));
+    }
+    if loaded && ui.button(strings.scripts_menu).clicked() {
+        let event = TreeEvent::Scripts {
             folder: None,
             label: row.label.clone(),
         };

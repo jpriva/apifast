@@ -775,6 +775,21 @@ pub struct Strings {
     pub captured_as: &'static str,
     /// Response tab: heading of the tests of the scripts.
     pub script_tests: &'static str,
+    /// Request tab and window title: the scripts.
+    pub scripts: &'static str,
+    /// Menu of a folder or the collection: edit its scripts.
+    pub scripts_menu: &'static str,
+    /// Above the scripts: what they are and what they see.
+    pub scripts_hint: &'static str,
+    /// When a file has several scripts of one kind: only the first is
+    /// edited.
+    pub scripts_more: &'static str,
+    /// The script that runs before the request.
+    pub script_before_request: &'static str,
+    /// The script that runs after the response.
+    pub script_after_response: &'static str,
+    /// The tests script.
+    pub script_tests_kind: &'static str,
     /// Response tab: heading of what the scripts wrote to the console.
     pub script_console: &'static str,
     /// Timeline event: a redirect was followed.
@@ -1501,6 +1516,13 @@ pub const EN: Strings = Strings {
     tests_none: "No assertions, captures or scripts ran. Responses from the history do not keep their results.",
     captured_as: "=",
     script_tests: "Script tests",
+    scripts: "Scripts",
+    scripts_menu: "Scripts…",
+    scripts_hint: "JavaScript, with Bruno's API: req, res, bru, test, expect. Before the request: collection, folders, request; after it, the other way round.",
+    scripts_more: "The file has several scripts of this kind: they run one after the other, and only the first is edited here.",
+    script_before_request: "Before request",
+    script_after_response: "After response",
+    script_tests_kind: "Test script",
     script_console: "Console",
     event_redirect: "Redirect",
     event_dns_override: "DNS override",

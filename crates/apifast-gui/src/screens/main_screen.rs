@@ -99,6 +99,8 @@ pub struct MainScreen {
     pub runner: RunnerWindow,
     /// A collection's settings.
     pub collection_settings: crate::organisms::CollectionSettingsWindow,
+    /// The scripts of a folder or a collection.
+    pub scripts_window: crate::organisms::ScriptsWindow,
     /// The collections and their proxies at the last frame, for the
     /// settings window to start from.
     last_collections: Vec<CollectionProxyEntry>,
@@ -114,13 +116,30 @@ struct CollectionProxyEntry {
     root: PathBuf,
     name: String,
     settings: crate::organisms::CollectionSettings,
+    /// Its tree, for the scripts of the collection and its folders.
+    tree: std::sync::Arc<apifast_app::CollectionTree>,
+}
+
+/// The scripts of the folder at `path` in `items`.
+fn folder_scripts(
+    items: &[apifast_app::TreeItem],
+    path: &str,
+) -> Option<Vec<apifast_domain::ScriptBlock>> {
+    items.iter().find_map(|item| match item {
+        apifast_app::TreeItem::Folder {
+            path: p, folder, ..
+        } if p == path => Some(folder.defaults.scripts.clone()),
+        apifast_app::TreeItem::Folder { children, .. } => folder_scripts(children, path),
+        _ => None,
+    })
 }
 
 /// The settings of each loaded collection, for the settings window.
 fn collection_settings_of(snapshot: &Snapshot) -> Vec<CollectionProxyEntry> {
     (snapshot.collections.iter())
         .filter_map(|c| {
-            let collection = &c.tree.as_ref()?.collection;
+            let tree = c.tree.clone()?;
+            let collection = &tree.collection;
             Some(CollectionProxyEntry {
                 root: c.root.clone(),
                 name: c.name.clone(),
@@ -129,6 +148,7 @@ fn collection_settings_of(snapshot: &Snapshot) -> Vec<CollectionProxyEntry> {
                     client_certificates: collection.client_certificates.clone(),
                     dns_overrides: collection.dns_overrides.clone(),
                 },
+                tree: tree.clone(),
             })
         })
         .collect()
@@ -399,6 +419,22 @@ impl MainScreen {
                 }
                 vec![focus]
             }
+            TreeEvent::Scripts { folder, label } => {
+                if let Some(entry) = self.last_collections.iter().find(|c| c.root == root) {
+                    let scripts = match &folder {
+                        None => Some(entry.tree.collection.defaults.scripts.clone()),
+                        Some(path) => folder_scripts(&entry.tree.items, path),
+                    };
+                    if let Some(scripts) = scripts {
+                        let target = crate::organisms::ScriptsTarget {
+                            root: root.clone(),
+                            folder,
+                        };
+                        self.scripts_window.open_for(target, label, scripts);
+                    }
+                }
+                vec![focus]
+            }
             TreeEvent::Run { folder, label } => {
                 self.runner.open_for(root.clone(), folder, label);
                 vec![focus]
@@ -525,6 +561,13 @@ impl MainScreen {
             crate::organisms::ReimportEvent::Apply(keys) => Command::ApplyReimport(keys),
             crate::organisms::ReimportEvent::Close => Command::CloseReimport,
         }));
+        if let Some((target, scripts)) = self.scripts_window.show(&ctx, strings) {
+            commands.push(Command::SaveScripts {
+                root: target.root,
+                folder: target.folder,
+                scripts,
+            });
+        }
         if let Some((root, settings)) = self.collection_settings.show(&ctx, strings) {
             commands.push(Command::SaveCollectionSettings {
                 root,

@@ -789,3 +789,54 @@ fn a_grpc_message_is_completed_from_its_methods_type() {
         "the enum's values"
     );
 }
+
+#[test]
+fn scripts_are_written_in_their_tab_one_kind_at_a_time() {
+    use apifast_domain::{ScriptBlock, ScriptKind};
+    let mut harness = harness(RequestTab::Scripts, request());
+    harness
+        .get_by_role_and_label(Role::MultilineTextInput, EN.script_before_request)
+        .focus();
+    harness.run();
+    type_slowly(&mut harness, "bru.setVar('a', 1)");
+    assert_eq!(
+        harness.state().request.scripts,
+        [ScriptBlock::new(
+            ScriptKind::BeforeRequest,
+            "bru.setVar('a', 1)"
+        )]
+    );
+    harness
+        .get_by_role_and_label(Role::Button, EN.script_tests_kind)
+        .click();
+    harness.run();
+    harness
+        .get_by_role_and_label(Role::MultilineTextInput, EN.script_tests_kind)
+        .focus();
+    harness.run();
+    type_slowly(&mut harness, "test('x', () => {})");
+    let kinds: Vec<ScriptKind> = (harness.state().request.scripts.iter())
+        .map(|s| s.kind.clone())
+        .collect();
+    assert_eq!(kinds, [ScriptKind::BeforeRequest, ScriptKind::Tests]);
+    // The tab counts the kinds that have a script.
+    assert!(
+        harness
+            .query_by_label(&format!("{} (2)", EN.scripts))
+            .is_some()
+    );
+}
+
+#[test]
+fn a_websocket_request_only_has_scripts_before_its_handshake() {
+    let mut request = request();
+    request.body = apifast_domain::Body::WebSocket(Vec::new());
+    let harness = harness(RequestTab::Scripts, request);
+    // No kinds to pick from: only the editor before the handshake.
+    assert!(harness.query_by_label(EN.script_after_response).is_none());
+    assert!(
+        harness
+            .query_by_role_and_label(Role::MultilineTextInput, EN.script_before_request)
+            .is_some()
+    );
+}

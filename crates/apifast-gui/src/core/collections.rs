@@ -458,6 +458,35 @@ impl State {
         self.refresh_vault_of(root);
     }
 
+    /// Saves `scripts` as those of `folder`, or of the collection at
+    /// `root`, keeping the rest of its file.
+    pub(super) fn save_scripts(
+        &mut self,
+        root: &Path,
+        folder: Option<&str>,
+        scripts: Vec<apifast_domain::ScriptBlock>,
+    ) {
+        let found = (self.open.get(root)).and_then(|open| match folder {
+            None => Some(None),
+            Some(path) => find_folder(&open.tree.items, path).map(Some),
+        });
+        let Some(found) = found else {
+            return;
+        };
+        self.organize(root, |repo| {
+            use apifast_app::CollectionRepository as _;
+            if let (Some(path), Some(mut saved)) = (folder, found) {
+                saved.defaults.scripts = scripts;
+                repo.save_folder(path, &saved)?;
+            } else {
+                let mut collection = repo.collection()?;
+                collection.defaults.scripts = scripts;
+                repo.save_collection(&collection)?;
+            }
+            Ok(())
+        });
+    }
+
     pub(super) fn reload_tree(&mut self, root: &Path) {
         let Some(open) = self.open.get_mut(root) else {
             return;
@@ -622,4 +651,15 @@ impl State {
         tab.saved = request;
         self.refresh_variables(Some(key));
     }
+}
+
+/// The folder at `path` in `items`, as the tree read it.
+fn find_folder(items: &[apifast_app::TreeItem], path: &str) -> Option<apifast_domain::Folder> {
+    items.iter().find_map(|item| match item {
+        apifast_app::TreeItem::Folder {
+            path: p, folder, ..
+        } if p == path => Some(folder.clone()),
+        apifast_app::TreeItem::Folder { children, .. } => find_folder(children, path),
+        _ => None,
+    })
 }

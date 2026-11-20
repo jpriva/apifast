@@ -34,6 +34,9 @@ pub enum Language {
     GraphQl,
     /// Plain text: only variables are highlighted.
     Text,
+    /// JavaScript, for scripts: templates are not rendered in them, so
+    /// `{{…}}` is not highlighted as a variable.
+    JavaScript,
 }
 
 impl Language {

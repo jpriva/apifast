@@ -101,6 +101,7 @@ La cabecera de la barra lateral tiene:
 | Auth | Selector de tipo y sus campos; "heredada" muestra de quién. Con OAuth 2.0 (propia o heredada), el estado del token guardado ("valid for 52 min", "expired", ninguno) y los botones "Get new token" y "Forget token" |
 | Vars | Variables de la request y capturas |
 | Tests | Aserciones (expresión, operador, valor esperado) y capturas (expresión, variable, ámbito) |
+| Scripts | Un editor de JavaScript por tipo: Before request, After response y Test script (`Scripts (2)`: cuántos tipos tienen código). Los de una carpeta o de la colección, en la ventana "Scripts…" del menú del árbol |
 | Docs | Markdown con vista previa |
 | Ajustes | Timeout, redirecciones, TLS; cada uno con "heredar" |
 | Examples | Ejemplos guardados (`Examples (2)`): cada uno plegado con su estado, nombre editable y botón para borrarlo; al abrirlo, la descripción editable, la request enviada, los headers y el body de la respuesta, de solo lectura |
@@ -109,7 +110,7 @@ La cabecera de la barra lateral tiene:
 
 - En la barra de URL, `WS` ocupa el lugar del selector de método, y en el árbol la request lleva `WS` en vez de su método.
 - La pestaña Body se llama `Messages (2)`: un selector del mensaje que se muestra, "Add message" (con el tipo del mensaje mostrado) y "Remove"; del mensaje mostrado, su tipo (JSON, XML o Text, con "Format" para los dos primeros y su atajo), su nombre (opcional si es el único) y su texto con las variables resaltadas. Mostrar un mensaje no lo marca como `selected`: ver no ensucia la request.
-- No tiene las pestañas Tests ni Examples: una conexión no tiene una respuesta que comprobar o guardar.
+- No tiene las pestañas Tests ni Examples: una conexión no tiene una respuesta que comprobar o guardar. Su pestaña Scripts solo tiene el previo, que corre antes del handshake.
 - **Conectar:** el botón de la barra de URL dice "Connect" y, con la conexión abierta, "Disconnect", que la cierra normalmente (código 1000). Junto al mensaje mostrado, "Send" lo envía tal como está en pantalla (con su borrador), renderizado con las variables; sin conexión está deshabilitado y lo explica al pasar el cursor.
 - En el historial, la conexión lleva `WS`, como en el árbol.
 
@@ -121,7 +122,7 @@ La cabecera de la barra lateral tiene:
 - **Mensajes con esquema:** con los métodos cargados y el método elegido entre ellos, el editor de mensajes completa según su tipo de entrada, como el de GraphQL (flechas, Enter o Tab, Esc y `Ctrl+Espacio`): los campos del objeto abierto que faltan (con su nombre en JSON, `userId`, y su tipo al lado), también los de los mensajes anidados, en listas y en los valores de un mapa; los valores de un enum; y `true` o `false`. Fuera de una cadena pone la clave con sus comillas y `: `; dentro, solo el nombre. Donde no puede saberlo (dentro de un `{{template}}`, en las claves de un mapa) no sugiere nada.
 - **Llamar:** el botón de la barra de URL dice "Call", y llamar envía el mensaje mostrado; durante la llamada dice "Cancel", que la cancela. Si el cliente del método transmite (o no se sabe), junto al mensaje aparecen "Send", que envía el mensaje mostrado tal como está en pantalla, y "End stream", que termina el stream del cliente para que el servidor responda y cierre; sin llamada están deshabilitados y lo explican al pasar el cursor.
 - El panel de respuesta muestra "In call" y la pestaña Messages en vivo, como una conexión WebSocket; al terminar, la última entrada es el estado (`closed by the server  0 OK`). Una conexión o una llamada nueva, también desde el historial, abre en Messages. En el historial la llamada lleva `gRPC`.
-- La pestaña Headers se llama Metadata. No tiene las pestañas Params, Tests ni Examples.
+- La pestaña Headers se llama Metadata. No tiene las pestañas Params, Tests, Scripts ni Examples.
 
 ### Bodies multipart y de archivo
 
@@ -169,7 +170,7 @@ La edición con resaltado se limita a unos 200 KB: con más texto, egui tarda de
 | Headers | Tabla de headers recibidos |
 | Cookies | Cookies que fija la respuesta (`Cookies (2)`), leídas como las lee el tarro: nombre, valor, dominio, ruta, caducidad y atributos. Las respuestas abiertas desde el historial no tienen: los `Set-Cookie` se guardan ocultos |
 | Timeline | Eventos del envío con sus tiempos |
-| Tests | Aserciones (primero las que fallan, con su motivo) y capturas con su valor; la pestaña dice `Tests 2/3` en verde o en rojo |
+| Tests | Tests de los scripts, sus errores y su consola; aserciones (primero las que fallan, con su motivo) y capturas con su valor; la pestaña dice `Tests 2/3` (aserciones y tests de scripts) en verde o en rojo |
 | Events | Solo para un `text/event-stream`: sus eventos (`Events (12)`), en vivo mientras llegan |
 | Messages | Solo para una conexión WebSocket o una llamada gRPC: lo enviado y lo recibido, los errores y el cierre (`Messages (4)`), en vivo mientras está abierta. Una conexión no tiene la pestaña Tests |
 

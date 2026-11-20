@@ -407,7 +407,7 @@ Se cumple: los cuatro modos funcionan contra un servidor local (con `.proto` y p
 - [x] `apifast-script-js` con QuickJS, límites de tiempo y memoria. Puerto `ScriptEngine` en `apifast-app`, con `CannedScripts` en memoria; `QuickJs` crea un runtime por script, con límite de tiempo (esperas incluidas), de memoria y de pila, y guarda la consola.
 - [x] API `req`, `res`, `bru`, `test` y `expect`. En JavaScript sobre los datos que da el motor (`ScriptInput`), devolviendo la request cambiada, las variables, los tests y lo pedido al runner (`ScriptOutcome`). Pendientes: `bru.sendRequest`/`runRequest`, `require` de librerías, cookies y cuerpos que no son texto.
 - [x] Scripts de colección, carpeta y request con orden "sándwich". Se leen y se escriben en los archivos; los previos cambian la request resuelta antes de renderizarla, y los posteriores y de tests corren después de la respuesta. El runner aplica sus variables y respeta `skipRequest`, `stopExecution` y `setNextRequest`, y sus tests cuentan en la CLI, los reportes y la pestaña Tests. Pendiente: los scripts de gRPC.
-- [ ] Editor de scripts con resaltado.
+- [x] Editor de scripts con resaltado. Pestaña Scripts en la request y ventana "Scripts…" para carpetas y colección, con un editor por tipo y resaltado de JavaScript.
 - [ ] Traducción de scripts de Postman en el importador.
 - [ ] Carga del motor solo al ejecutar el primer script.
 

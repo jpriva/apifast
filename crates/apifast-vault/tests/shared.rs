@@ -76,15 +76,17 @@ impl Machine {
 
 #[test]
 fn sharing_makes_the_collection_key_and_its_challenge_once() {
+    // Long enough that the random envelope cannot contain it by chance.
+    const SECRET: &str = "t0k-plain-secret-value";
     let collection = Arc::new(MemorySharedSecrets::default());
     let alice = machine(&collection);
-    alice.secrets.set_local("prod", "token", "t0k").unwrap();
-    alice.secrets.share("prod", "token", "t0k").unwrap();
+    alice.secrets.set_local("prod", "token", SECRET).unwrap();
+    alice.secrets.share("prod", "token", SECRET).unwrap();
     alice.secrets.share("prod", "key", "k3y").unwrap();
 
     let challenge = collection.vault_challenge().unwrap().unwrap();
     let envelope = collection.shared_secret("prod", "token").unwrap().unwrap();
-    assert!(envelope.starts_with("enc:v1:") && !envelope.contains("t0k"));
+    assert!(envelope.starts_with("enc:v1:") && !envelope.contains(SECRET));
     assert!(
         alice.secrets.local().entries().unwrap().is_empty(),
         "moved, not copied"
@@ -96,7 +98,7 @@ fn sharing_makes_the_collection_key_and_its_challenge_once() {
             .unwrap()
             .as_ref()
             .map(Secret::expose),
-        Some("t0k")
+        Some(SECRET)
     );
     // Sharing again keeps the same key and challenge.
     assert_eq!(collection.vault_challenge().unwrap().unwrap(), challenge);

@@ -2618,3 +2618,66 @@ fn a_graphql_schema_is_fetched_kept_and_read_again() {
         .unwrap();
     assert!(why.contains("introspection is off"), "{why}");
 }
+
+#[test]
+fn folder_scripts_are_saved_and_run_when_sending() {
+    use apifast_domain::{ScriptBlock, ScriptKind};
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    let snapshot = open(&core, dir.path());
+    core.send(Command::SaveScripts {
+        root: root(&core),
+        folder: Some("users".into()),
+        scripts: vec![
+            ScriptBlock::new(ScriptKind::BeforeRequest, "req.setUrl(req.getUrl() + '?from=folder')"),
+            ScriptBlock::new(
+                ScriptKind::Tests,
+                "test('the folder changed the URL', () => expect(res.body).to.contain('from=folder'))",
+            ),
+        ],
+    });
+    next(&core, snapshot.version);
+    let file = std::fs::read_to_string(dir.path().join("users/folder.yml")).unwrap();
+    assert!(file.contains("type: before-request"), "{file}");
+    assert!(file.contains("seq: 1"), "{file}");
+
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    core.send(Command::OpenRequest(at(&core, "users/get.yml")));
+    wait(&core, "the request", |s| s.active_tab().is_some());
+    core.send(Command::Send);
+    let snapshot = wait(&core, "the response", |s| {
+        matches!(
+            response(s),
+            ResponseState::Received(_) | ResponseState::Failed(_)
+        )
+    });
+    let received = received(&snapshot);
+    assert_eq!(
+        received.body.read(0, 100).unwrap(),
+        b"GET /users/1?from=folder HTTP/1.1"
+    );
+    let tests: Vec<_> = received.checks.scripts.tests().cloned().collect();
+    assert_eq!(tests.len(), 1);
+    assert_eq!(tests[0].error, None, "{tests:?}");
+}
+
+#[test]
+fn collection_scripts_are_saved_in_its_file() {
+    use apifast_domain::{ScriptBlock, ScriptKind};
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    let snapshot = open(&core, dir.path());
+    core.send(Command::SaveScripts {
+        root: root(&core),
+        folder: None,
+        scripts: vec![ScriptBlock::new(
+            ScriptKind::AfterResponse,
+            "console.log(1)",
+        )],
+    });
+    let snapshot = next(&core, snapshot.version);
+    let tree = &snapshot.collection.as_ref().unwrap().tree;
+    assert_eq!(tree.collection.defaults.scripts.len(), 1);
+    let file = std::fs::read_to_string(dir.path().join("opencollection.yml")).unwrap();
+    assert!(file.contains("console.log(1)"), "{file}");
+}

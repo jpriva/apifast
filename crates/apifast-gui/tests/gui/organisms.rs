@@ -270,6 +270,67 @@ fn collection_settings_mark_an_override_that_is_not_an_ip_and_save_them() {
 }
 
 #[test]
+fn the_scripts_window_edits_a_folders_scripts_and_saves_them() {
+    use apifast_domain::{ScriptBlock, ScriptKind};
+    use apifast_gui::organisms::{ScriptsTarget, ScriptsWindow};
+    struct State {
+        window: ScriptsWindow,
+        saved: Option<(ScriptsTarget, Vec<ScriptBlock>)>,
+    }
+    let target = ScriptsTarget {
+        root: "/shop".into(),
+        folder: Some("users".into()),
+    };
+    let mut window = ScriptsWindow::default();
+    let kept = ScriptBlock::new(ScriptKind::Other("grpc:after-call-end".into()), "kept()");
+    let before = ScriptBlock::new(ScriptKind::BeforeRequest, "a()");
+    window.open_for(target.clone(), "Users".into(), vec![kept.clone(), before]);
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(800.0, 700.0))
+        .build_ui_state(
+            |ui, state: &mut State| {
+                let ctx = ui.ctx().clone();
+                if let Some(saved) = state.window.show(&ctx, &EN) {
+                    state.saved = Some(saved);
+                }
+            },
+            State {
+                window,
+                saved: None,
+            },
+        );
+    harness.run();
+    assert!(
+        harness
+            .query_by_label(&format!("{} •", EN.script_before_request))
+            .is_some()
+    );
+    harness
+        .get_by_role_and_label(
+            egui::accesskit::Role::MultilineTextInput,
+            EN.script_before_request,
+        )
+        .focus();
+    harness.run();
+    harness.key_press(egui::Key::End);
+    harness.run();
+    harness
+        .input_mut()
+        .events
+        .push(egui::Event::Text(";".into()));
+    harness.run();
+    harness.get_by_label(EN.save).click();
+    harness.run();
+    let (saved_target, scripts) = harness.state().saved.clone().unwrap();
+    assert_eq!(saved_target, target);
+    assert_eq!(
+        scripts,
+        [kept, ScriptBlock::new(ScriptKind::BeforeRequest, "a();")]
+    );
+    assert!(!harness.state().window.is_open());
+}
+
+#[test]
 fn pasting_a_curl_command_into_the_url_is_an_event_and_not_text() {
     let mut events = Vec::new();
     let (mut method, mut url) = (Method::Get, String::new());

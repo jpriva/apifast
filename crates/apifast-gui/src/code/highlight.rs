@@ -44,6 +44,7 @@ pub fn tokens(text: &str, language: Language) -> Vec<Token> {
         Language::Xml => xml(text, &mut out),
         Language::Sparql => sparql(text, &mut out),
         Language::GraphQl => graphql(text, &mut out),
+        Language::JavaScript => javascript(text, &mut out),
         Language::Text => out.push(0..text.len(), TokenKind::Plain),
     }
     out.0
@@ -397,9 +398,135 @@ fn graphql(text: &str, out: &mut Tokens) {
     }
 }
 
+const JS_KEYWORDS: &[&str] = &[
+    "async",
+    "await",
+    "break",
+    "case",
+    "catch",
+    "class",
+    "const",
+    "continue",
+    "debugger",
+    "default",
+    "delete",
+    "do",
+    "else",
+    "export",
+    "extends",
+    "false",
+    "finally",
+    "for",
+    "function",
+    "if",
+    "import",
+    "in",
+    "instanceof",
+    "let",
+    "new",
+    "null",
+    "of",
+    "return",
+    "static",
+    "super",
+    "switch",
+    "this",
+    "throw",
+    "true",
+    "try",
+    "typeof",
+    "undefined",
+    "var",
+    "void",
+    "while",
+    "yield",
+];
+
+/// The globals scripts are given, colored as variables.
+const JS_GLOBALS: &[&str] = &["req", "res", "bru", "test", "expect", "console"];
+
+fn javascript(text: &str, out: &mut Tokens) {
+    let mut at = 0;
+    while at < text.len() {
+        let rest = &text[at..];
+        let c = rest.as_bytes()[0];
+        let (len, kind) = match c {
+            b'/' if rest.starts_with("//") => {
+                (rest.find('\n').unwrap_or(rest.len()), TokenKind::Comment)
+            }
+            b'/' if rest.starts_with("/*") => (
+                rest[2..].find("*/").map_or(rest.len(), |end| end + 4),
+                TokenKind::Comment,
+            ),
+            // A template literal may span lines; what is inside `${…}`
+            // stays a string.
+            b'`' => (
+                rest[1..].find('`').map_or(rest.len(), |end| end + 2),
+                TokenKind::String,
+            ),
+            b'"' | b'\'' => (string_len(rest), TokenKind::String),
+            b'0'..=b'9' => (
+                1 + run_len(&rest[1..], |c| {
+                    c.is_ascii_alphanumeric() || matches!(c, '.' | '_')
+                }),
+                TokenKind::Number,
+            ),
+            _ if c.is_ascii_alphabetic() || c == b'_' || c == b'$' => {
+                let len = run_len(rest, |c| c.is_alphanumeric() || c == '_' || c == '$');
+                let word = &rest[..len];
+                // A name after `.` is a property, whatever its name.
+                let property = text[..at].ends_with('.');
+                let kind = if property {
+                    TokenKind::Plain
+                } else if JS_KEYWORDS.contains(&word) {
+                    TokenKind::Keyword
+                } else if JS_GLOBALS.contains(&word) {
+                    TokenKind::Variable
+                } else if rest[len..].trim_start().starts_with(':') {
+                    TokenKind::Key
+                } else {
+                    TokenKind::Plain
+                };
+                (len, kind)
+            }
+            b'{' | b'}' | b'(' | b')' | b'[' | b']' | b';' | b',' | b'.' | b':' | b'=' | b'+'
+            | b'-' | b'*' | b'/' | b'%' | b'!' | b'<' | b'>' | b'&' | b'|' | b'?' | b'^' | b'~' => {
+                (1, TokenKind::Punctuation)
+            }
+            _ => (char_len(rest), TokenKind::Plain),
+        };
+        out.push(at..at + len, kind);
+        at += len;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn javascript_keywords_globals_strings_and_comments() {
+        let text = "// set\nconst id = res.body.id; /* x */\nbru.setVar(`id-${id}`, 'a\\'b');\ntest(\"ok\", async () => { await 1.5e3 });\n({ key: true, req: 1 })";
+        let found = kinds(text, Language::JavaScript);
+        assert!(found.contains(&("// set", TokenKind::Comment)), "{found:?}");
+        assert!(found.contains(&("/* x */", TokenKind::Comment)));
+        assert!(found.contains(&("const", TokenKind::Keyword)));
+        assert!(found.contains(&("res", TokenKind::Variable)));
+        assert!(found.contains(&("bru", TokenKind::Variable)));
+        // Properties are plain, whatever their name.
+        assert!(
+            found.contains(&("body", TokenKind::Plain))
+                || found
+                    .iter()
+                    .any(|(t, k)| t.contains("body") && *k == TokenKind::Plain)
+        );
+        assert!(found.contains(&("`id-${id}`", TokenKind::String)));
+        assert!(found.contains(&("'a\\'b'", TokenKind::String)));
+        assert!(found.contains(&("\"ok\"", TokenKind::String)));
+        assert!(found.contains(&("1.5e3", TokenKind::Number)));
+        assert!(found.contains(&("key", TokenKind::Key)));
+        assert!(found.contains(&("true", TokenKind::Keyword)));
+    }
 
     #[test]
     fn graphql_keywords_variables_strings_and_arguments() {
@@ -436,6 +563,7 @@ mod tests {
             ("hola {{x}}", Language::Text),
             ("\"unclosed\n{{open\n<", Language::Json),
             ("<a b=\"unclosed\n<c", Language::Xml),
+            ("const a = `open\n/* open\n'x", Language::JavaScript),
         ] {
             let mut at = 0;
             for token in tokens(text, language) {

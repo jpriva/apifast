@@ -34,6 +34,8 @@ pub enum RequestTab {
     Auth,
     /// Assertions and captures.
     Tests,
+    /// JavaScript scripts.
+    Scripts,
     /// Send settings.
     Settings,
     /// Saved examples of the response.
@@ -112,9 +114,10 @@ impl RequestPanel {
         let (websocket, grpc) = (request.body.is_websocket(), request.body.is_grpc());
         // A connection or a call has no response to check or keep, and a
         // call has no parameters.
+        // Nor scripts run for a call yet.
         let hidden = |tab: RequestTab| {
             ((websocket || grpc) && matches!(tab, RequestTab::Tests | RequestTab::Examples))
-                || (grpc && tab == RequestTab::Params)
+                || (grpc && matches!(tab, RequestTab::Params | RequestTab::Scripts))
         };
         if hidden(self.tab) {
             self.tab = if grpc {
@@ -145,6 +148,10 @@ impl RequestPanel {
                 (RequestTab::Body, body),
                 (RequestTab::Auth, strings.auth.to_owned()),
                 (RequestTab::Tests, counted(strings.tests, tests)),
+                (
+                    RequestTab::Scripts,
+                    counted(strings.scripts, super::script_count(&request.scripts)),
+                ),
                 (RequestTab::Settings, strings.settings.to_owned()),
                 (
                     RequestTab::Examples,
@@ -232,6 +239,17 @@ impl RequestPanel {
                 }
                 RequestTab::Tests => crate::organisms::tests_panel(ui, request, hints, strings)
                     .then_some(RequestChange::Other),
+                RequestTab::Scripts => {
+                    // A connection only runs those before its handshake.
+                    let kinds: &[_] = if request.body.is_websocket() {
+                        &super::ALL_KINDS[..1]
+                    } else {
+                        &super::ALL_KINDS
+                    };
+                    let id = ui.make_persistent_id("request-scripts");
+                    super::scripts_editor(ui, &mut request.scripts, kinds, id, strings)
+                        .then_some(RequestChange::Other)
+                }
                 RequestTab::Settings => {
                     settings(ui, request, context, strings).then_some(RequestChange::Other)
                 }
