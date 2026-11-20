@@ -129,6 +129,7 @@ Definidos como traits en `apifast-app`:
 | `WorkspaceRepository` | Leer y editar `workspace.yml`: nombre y colecciones del workspace | `apifast-storage-fs` |
 | `FsWatcher` | Notificar cambios externos en la colección, agrupados en lotes de rutas relativas. No implementa un puerto: el driver lo arranca al abrir la colección y reconcilia cada lote (`ApplyExternalChange`) | `apifast-watch` |
 | `ScriptEngine` | Ejecutar un script de usuario con límites de tiempo y memoria, y devolver lo que escribió en la consola y por qué falló | `apifast-script-js` |
+| `ScriptHost` | Lo que un script pide a la aplicación mientras corre: enviar una request suelta (`bru.sendRequest`) o una de la colección (`bru.runRequest`) | `apifast-app` (el envío en curso) |
 | `Clock` | Hora actual y medición de tiempos | Sistema, o falso en tests |
 | `Pause` | Esperar entre las requests de una ejecución del runner | tokio, o una que no espera en tests |
 | `Prompter` | Pedir un valor al usuario (`{{?Texto}}`) | GUI o terminal |

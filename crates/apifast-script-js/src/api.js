@@ -9,11 +9,13 @@
     const processEnv = globalThis.__apifast_process_env;
     const dynamicValue = globalThis.__apifast_dynamic;
     const headerList = globalThis.__apifast_header_list;
+    const nativeHost = globalThis.__apifast_host;
     delete globalThis.__apifast_input;
     delete globalThis.__apifast_sleep;
     delete globalThis.__apifast_process_env;
     delete globalThis.__apifast_dynamic;
     delete globalThis.__apifast_header_list;
+    delete globalThis.__apifast_host;
     delete globalThis.__apifast_schema;
 
     const out = { request: null, responseBody: null, variables: [], tests: [], runner: null };
@@ -224,6 +226,80 @@
         }
     }
 
+    // Calls to the application: their answer, or the error they gave.
+    const hostCall = async (kind, payload) => {
+        const answer = JSON.parse(await nativeHost(kind, JSON.stringify(payload)));
+        if (answer.error !== undefined) throw new Error(answer.error);
+        return answer.ok;
+    };
+    // A response as axios gives it, which is what Bruno's scripts read.
+    const axiosResponse = (raw) => {
+        const headers = {};
+        for (const [name, value] of raw.headers) headers[name.toLowerCase()] = value;
+        const data = parsed(raw.body, raw.headers);
+        return {
+            status: raw.status, statusText: raw.status_text, headers,
+            data: data === undefined ? '' : data, duration: raw.time_ms, url: raw.url,
+        };
+    };
+    // `bru.sendRequest(urlOrOptions, callback?)`: axios' options (`url`,
+    // `method`, `headers`, `params`, `data`, `timeout`). A status out of
+    // 2xx rejects, with `status` and `response`, as in axios.
+    const sendRequest = (options, callback) => {
+        const config = typeof options === 'string' ? { url: options } : { ...(options ?? {}) };
+        let url = String(config.url ?? '');
+        const params = config.params && typeof config.params === 'object'
+            ? Object.entries(config.params).filter(([, v]) => v !== undefined && v !== null)
+            : [];
+        if (params.length > 0) {
+            const query = params.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join('&');
+            url += (url.includes('?') ? '&' : '?') + query;
+        }
+        const headers = Object.entries(config.headers ?? {}).map(([n, v]) => [n, String(v)]);
+        let body = null;
+        if (config.data !== undefined && config.data !== null) {
+            if (typeof config.data === 'string') {
+                body = config.data;
+            } else {
+                body = JSON.stringify(config.data);
+                if (!headers.some(([n]) => same(n, 'content-type'))) headers.push(['Content-Type', 'application/json']);
+            }
+        }
+        const timeout = Number(config.timeout);
+        const promise = hostCall('send', {
+            method: String(config.method ?? 'GET').toUpperCase(),
+            url,
+            headers,
+            body,
+            timeout_ms: Number.isFinite(timeout) && timeout > 0 ? Math.floor(timeout) : null,
+        }).then((raw) => {
+            const response = axiosResponse(raw);
+            if (response.status < 200 || response.status >= 300) {
+                const error = new Error(`Request failed with status code ${response.status}`);
+                Object.assign(error, { status: response.status, response });
+                throw error;
+            }
+            return response;
+        });
+        if (typeof callback === 'function') {
+            return promise.then((response) => callback(null, response), (error) => callback(error, null));
+        }
+        return promise;
+    };
+    // `bru.runRequest(path)`: a request of the collection, sent with its
+    // scripts; what they set is seen here, as in Bruno.
+    const runRequest = async (path) => {
+        const ran = await hostCall('run', String(path));
+        for (const changed of ran.variables) {
+            const values = scopes[changed.scope];
+            if (values) {
+                if (changed.value === null) values.delete(changed.name); else values.set(changed.name, decode(changed.value));
+            }
+            out.variables.push(changed);
+        }
+        return axiosResponse(ran.response);
+    };
+
     // `bru`: variables, and the run.
     const runner = {
         setNextRequest(name) { out.runner = { next: String(name) }; },
@@ -285,6 +361,8 @@
         getProcessEnv: (name) => processEnv(String(name)) ?? undefined,
         interpolate,
         sleep: (ms) => nativeSleep(Math.max(0, Math.floor(Number(ms) || 0))),
+        sendRequest,
+        runRequest,
         setNextRequest: runner.setNextRequest,
         runner,
     };

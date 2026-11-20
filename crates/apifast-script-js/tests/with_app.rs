@@ -406,3 +406,56 @@ async fn scripts_after_the_response_read_the_request_as_sent() {
         ]
     );
 }
+
+#[tokio::test]
+async fn scripts_send_requests_and_run_others_of_the_collection() {
+    let mut login = HttpRequest::new("Login", Method::Post, "{{host}}/login");
+    login.scripts = vec![script(
+        ScriptKind::AfterResponse,
+        "bru.setVar('token', 't0k')",
+    )];
+    let mut request = HttpRequest::new("Get", Method::Get, "{{host}}/users");
+    request.scripts = vec![
+        script(
+            ScriptKind::BeforeRequest,
+            r"
+            const ran = await bru.runRequest('login');
+            console.log(ran.status, ran.data.name, bru.getVar('token'));
+            const sent = await bru.sendRequest({ url: 'https://other.test/x', method: 'PUT', data: 'hi' });
+            console.log(sent.status, sent.data.id);
+            try { await bru.runRequest('users/get'); } catch (e) { console.log(e.message); }
+            ",
+        ),
+        script(ScriptKind::Tests, "console.log(bru.getVar('token'))"),
+    ];
+    let collections = MemoryCollections::new(Collection::new("C"))
+        .with_request("login.yml", login)
+        .with_request("users/get.yml", request);
+    let world = World::new(collections);
+    let outcome = world.send("users/get.yml").await.unwrap();
+    assert_eq!(
+        logged(&outcome),
+        [
+            "200 Ana t0k",
+            "200 7",
+            "requests depend on each other: users/get.yml → users/get.yml",
+            "t0k",
+        ]
+    );
+    let sent: Vec<_> = (world.transport.sent().iter())
+        .map(|r| format!("{} {}", r.method().as_str(), r.url()))
+        .collect();
+    assert_eq!(
+        sent,
+        [
+            "POST https://api.test/login",
+            "PUT https://other.test/x",
+            "GET https://api.test/users",
+        ]
+    );
+    let token = outcome.scripts.variables.iter().find(|c| c.name == "token");
+    assert!(
+        token.is_some(),
+        "the variables of the request it ran reach the run"
+    );
+}

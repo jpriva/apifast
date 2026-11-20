@@ -13,13 +13,15 @@ use rquickjs::prelude::Async;
 use rquickjs::{Ctx, Function, Promise};
 use serde_json::{Value as Json, json};
 
+use crate::host::{self, Calls};
+
 const SCHEMA: &str = include_str!("schema.js");
 const EXPECT: &str = include_str!("expect.js");
 const HEADER_LIST: &str = include_str!("header_list.js");
 const API: &str = include_str!("api.js");
 
 /// Gives the script of `ctx` the API, over `input`.
-pub(crate) fn install(ctx: &Ctx<'_>, input: &ScriptInput) -> rquickjs::Result<()> {
+pub(crate) fn install(ctx: &Ctx<'_>, input: &ScriptInput, calls: Calls) -> rquickjs::Result<()> {
     let globals = ctx.globals();
     globals.set("__apifast_input", to_json(input).to_string())?;
     let sleep = Function::new(
@@ -33,6 +35,14 @@ pub(crate) fn install(ctx: &Ctx<'_>, input: &ScriptInput) -> rquickjs::Result<()
         "__apifast_dynamic",
         Function::new(ctx.clone(), |name: String| dynamic(&name))?,
     )?;
+    let host = Function::new(
+        ctx.clone(),
+        Async(move |kind: String, payload: String| {
+            let calls = calls.clone();
+            async move { host::ask(&calls, &kind, &payload).await }
+        }),
+    )?;
+    globals.set("__apifast_host", host)?;
     ctx.eval::<(), _>(SCHEMA)?;
     ctx.eval::<(), _>(EXPECT)?;
     ctx.eval::<(), _>(HEADER_LIST)?;
@@ -193,6 +203,18 @@ fn request(json: &Json) -> Option<ScriptRequest> {
         tags,
         path_params: pairs("path_params"),
     })
+}
+
+/// `change` as the script's output gives it, for a script to apply.
+pub(crate) fn change_json(change: &VariableChange) -> Json {
+    let scope = match change.scope {
+        VariableScope::Runtime => "runtime",
+        VariableScope::Environment => "environment",
+        VariableScope::Collection => "collection",
+    };
+    let value = (change.value.as_ref())
+        .map(|value| json!({"kind": kind_name(value.kind), "data": value.data}));
+    json!({"scope": scope, "name": change.name, "value": value, "persist": change.persist})
 }
 
 fn change(json: &Json) -> Option<VariableChange> {

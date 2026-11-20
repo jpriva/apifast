@@ -5,8 +5,8 @@
 use std::time::{Duration, Instant};
 
 use apifast_app::{
-    CancelToken, ConsoleLevel, ConsoleLine, Script, ScriptEngine, ScriptError, ScriptInput,
-    ScriptLimits, ScriptOutcome,
+    CancelToken, ConsoleLevel, ConsoleLine, NoScriptHost, Script, ScriptEngine, ScriptError,
+    ScriptInput, ScriptLimits, ScriptOutcome,
 };
 use apifast_script_js::QuickJs;
 
@@ -21,7 +21,12 @@ async fn run(code: &str) -> ScriptOutcome {
         code,
     };
     QuickJs::new(LIMITS)
-        .run(script, &ScriptInput::default(), &CancelToken::new())
+        .run(
+            script,
+            &ScriptInput::default(),
+            &NoScriptHost,
+            &CancelToken::new(),
+        )
         .await
 }
 
@@ -191,13 +196,17 @@ async fn cancelling_stops_a_running_script() {
         name: "request",
         code: "while (true) {}",
     };
-    let outcome = engine.run(spin, &ScriptInput::default(), &cancel).await;
+    let outcome = engine
+        .run(spin, &ScriptInput::default(), &NoScriptHost, &cancel)
+        .await;
     assert_eq!(outcome.error, Some(ScriptError::Cancelled));
     let waiting = Script {
         name: "request",
         code: "await new Promise(() => {})",
     };
-    let outcome = engine.run(waiting, &ScriptInput::default(), &cancel).await;
+    let outcome = engine
+        .run(waiting, &ScriptInput::default(), &NoScriptHost, &cancel)
+        .await;
     assert_eq!(outcome.error, Some(ScriptError::Cancelled));
     assert!(started.elapsed() < Duration::from_secs(2));
 }
@@ -224,12 +233,16 @@ async fn nothing_is_kept_between_scripts() {
         name: "a",
         code: "globalThis.kept = 1",
     };
-    engine.run(first, &ScriptInput::default(), &cancel).await;
+    engine
+        .run(first, &ScriptInput::default(), &NoScriptHost, &cancel)
+        .await;
     let second = Script {
         name: "b",
         code: "console.log(typeof kept)",
     };
-    let outcome = engine.run(second, &ScriptInput::default(), &cancel).await;
+    let outcome = engine
+        .run(second, &ScriptInput::default(), &NoScriptHost, &cancel)
+        .await;
     assert_eq!(outcome.console, [log("undefined")]);
 }
 

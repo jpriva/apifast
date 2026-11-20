@@ -2,8 +2,9 @@
 //!
 //! A script runs alone, with limits on its time and memory, and without
 //! access to the file system or the network: what it can read and change
-//! is only what the engine is given. What it writes to the console is kept,
-//! also when it fails.
+//! is what the engine is given, and what it asks of the application
+//! through a [`ScriptHost`] (send a request, run one of the collection).
+//! What it writes to the console is kept, also when it fails.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -254,14 +255,92 @@ pub struct ScriptOutcome {
 /// `dyn ScriptEngine`.
 pub type ScriptFuture<'a> = Pin<Box<dyn Future<Output = ScriptOutcome> + Send + 'a>>;
 
+/// A request a script sends on its own (`bru.sendRequest`), as it wrote
+/// it: nothing of it is rendered.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ScriptHttpRequest {
+    /// `GET`, `POST`…
+    pub method: String,
+    /// Its URL, query included.
+    pub url: String,
+    /// Its headers, in order.
+    pub headers: Vec<(String, String)>,
+    /// Its body's text, if it has one.
+    pub body: Option<String>,
+    /// Its timeout, in milliseconds; the default one when `None`.
+    pub timeout_ms: Option<u64>,
+}
+
+/// A response a script gets from [`ScriptHost`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ScriptHttpResponse {
+    /// Its status code.
+    pub status: u16,
+    /// Its reason phrase.
+    pub status_text: String,
+    /// Its headers, in order.
+    pub headers: Vec<(String, String)>,
+    /// Its body's text (lossy UTF-8).
+    pub body: String,
+    /// How long it took, in milliseconds.
+    pub time_ms: u64,
+    /// The URL that answered, after redirects.
+    pub url: String,
+}
+
+/// A request of the collection a script ran (`bru.runRequest`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RanRequest {
+    /// Its response.
+    pub response: ScriptHttpResponse,
+    /// The variables its scripts set or deleted, in order: the script that
+    /// ran it sees them, as in Bruno.
+    pub variables: Vec<VariableChange>,
+}
+
+/// What a [`ScriptHost`] gives back: a message when it failed.
+pub type HostFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, String>> + Send + 'a>>;
+
+/// What a script can ask of the application while it runs.
+pub trait ScriptHost: Sync {
+    /// Sends `request` as it is (`bru.sendRequest`). Any status is a
+    /// response; an error is a request that got none.
+    fn send_request(&self, request: ScriptHttpRequest) -> HostFuture<'_, ScriptHttpResponse>;
+
+    /// Sends the request of the collection at `path` (relative to its
+    /// root, with or without the file's extension), its scripts and all
+    /// (`bru.runRequest`).
+    fn run_request<'a>(&'a self, path: &'a str) -> HostFuture<'a, RanRequest>;
+}
+
+/// A host for scripts that can ask the application nothing.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NoScriptHost;
+
+impl ScriptHost for NoScriptHost {
+    fn send_request(&self, _: ScriptHttpRequest) -> HostFuture<'_, ScriptHttpResponse> {
+        Box::pin(std::future::ready(Err(
+            "scripts cannot send requests here".to_owned()
+        )))
+    }
+
+    fn run_request<'a>(&'a self, _: &'a str) -> HostFuture<'a, RanRequest> {
+        Box::pin(std::future::ready(Err(
+            "scripts cannot run requests here".to_owned()
+        )))
+    }
+}
+
 /// Runs JavaScript scripts.
 pub trait ScriptEngine {
     /// Runs `script` with `input` until it ends, fails, exceeds its limits
-    /// or `cancel` asks it to stop.
+    /// or `cancel` asks it to stop; what it asks of the application goes
+    /// to `host`.
     fn run<'a>(
         &'a self,
         script: Script<'a>,
         input: &'a ScriptInput,
+        host: &'a dyn ScriptHost,
         cancel: &'a CancelToken,
     ) -> ScriptFuture<'a>;
 }

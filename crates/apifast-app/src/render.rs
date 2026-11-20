@@ -179,6 +179,12 @@ impl RenderedRequest {
         }
     }
 
+    /// This request with a timeout of `timeout_ms` (0: none).
+    pub(crate) fn with_timeout_ms(mut self, timeout_ms: u64) -> Self {
+        self.timeout_ms = timeout_ms;
+        self
+    }
+
     /// Method.
     pub fn method(&self) -> &Method {
         &self.method

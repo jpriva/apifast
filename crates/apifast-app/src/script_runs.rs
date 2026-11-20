@@ -19,8 +19,8 @@ use apifast_domain::{
 
 use crate::{
     AppError, CancelToken, ConsoleLine, RenderedRequest, ResponseHead, RunnerRequest, Script,
-    ScriptEngine, ScriptError, ScriptInput, ScriptRequest, ScriptResponse, ScriptVariables,
-    TestOutcome, VariableChange, VariableScope, reason_phrase,
+    ScriptEngine, ScriptError, ScriptHost, ScriptInput, ScriptRequest, ScriptResponse,
+    ScriptVariables, TestOutcome, VariableChange, VariableScope, reason_phrase,
 };
 
 /// Where a script comes from.
@@ -101,6 +101,9 @@ pub fn apply_script_variables(runtime: &mut Vec<Variable>, changes: &[VariableCh
         }
     }
 }
+
+/// The engine scripts run on, and the host they ask things of.
+pub(crate) type Runner<'a> = (&'a (dyn ScriptEngine + Sync), &'a dyn ScriptHost);
 
 /// The scripts of a send, between the request and its response: what
 /// they are given, and what they did so far.
@@ -196,7 +199,7 @@ impl SendScripts {
     /// If one of them fails (the request is not sent), or asks to skip it.
     pub(crate) async fn before(
         &mut self,
-        engine: &(dyn ScriptEngine + Sync),
+        (engine, host): Runner<'_>,
         resolved: &mut ResolvedRequest,
         variables: &mut ResolvedVariables,
         cancel: &CancelToken,
@@ -204,7 +207,7 @@ impl SendScripts {
         self.input.request = script_request(&self.input.request, resolved);
         for (source, code) in self.scripts(&ScriptKind::BeforeRequest) {
             let script = (&ScriptKind::BeforeRequest, &source, code.as_str());
-            let outcome = self.run(engine, script, variables, cancel).await;
+            let outcome = self.run((engine, host), script, variables, cancel).await;
             if let Some(request) = outcome {
                 apply_request(resolved, &request);
                 self.input.request = request;
@@ -236,7 +239,7 @@ impl SendScripts {
     /// errors are in the report.
     pub(crate) async fn after(
         &mut self,
-        engine: &(dyn ScriptEngine + Sync),
+        (engine, host): Runner<'_>,
         kind: &ScriptKind,
         (head, body): (&ResponseHead, Option<&str>),
         variables: &mut ResolvedVariables,
@@ -254,7 +257,7 @@ impl SendScripts {
             });
         }
         for (source, code) in self.scripts(kind) {
-            self.run(engine, (kind, &source, &code), variables, cancel)
+            self.run((engine, host), (kind, &source, &code), variables, cancel)
                 .await;
         }
     }
@@ -274,14 +277,14 @@ impl SendScripts {
     /// changed it.
     async fn run(
         &mut self,
-        engine: &(dyn ScriptEngine + Sync),
+        (engine, host): Runner<'_>,
         (kind, source, code): (&ScriptKind, &ScriptSource, &str),
         variables: &mut ResolvedVariables,
         cancel: &CancelToken,
     ) -> Option<ScriptRequest> {
         let name = source.to_string();
         let script = Script { name: &name, code };
-        let outcome = engine.run(script, &self.input, cancel).await;
+        let outcome = engine.run(script, &self.input, host, cancel).await;
         for change in &outcome.variables {
             self.keep(change, variables);
         }

@@ -31,6 +31,7 @@ mod reimport;
 mod render;
 mod report;
 mod runner;
+mod script_host;
 mod script_runs;
 mod scripts;
 mod url_encoding;
@@ -87,7 +88,8 @@ pub use runner::{
 };
 pub use script_runs::{ScriptReport, ScriptRun, ScriptSource, apply_script_variables};
 pub use scripts::{
-    ConsoleLevel, ConsoleLine, RunnerRequest, Script, ScriptEngine, ScriptError, ScriptFuture,
+    ConsoleLevel, ConsoleLine, HostFuture, NoScriptHost, RanRequest, RunnerRequest, Script,
+    ScriptEngine, ScriptError, ScriptFuture, ScriptHost, ScriptHttpRequest, ScriptHttpResponse,
     ScriptInput, ScriptLimits, ScriptOutcome, ScriptRequest, ScriptResponse, ScriptVariables,
     TestOutcome, VariableChange, VariableScope,
 };

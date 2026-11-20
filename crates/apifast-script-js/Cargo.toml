@@ -15,7 +15,7 @@ serde_json.workspace = true
 # `futures`: scripts may await; `parallel`: its runtime is `Send`, so a
 # script runs on any tokio thread.
 rquickjs = { version = "0.14.0", default-features = false, features = ["std", "futures", "parallel"] }
-tokio = { version = "1.54.1", features = ["time", "macros"] }
+tokio = { version = "1.54.1", features = ["time", "macros", "sync"] }
 
 [lints]
 workspace = true

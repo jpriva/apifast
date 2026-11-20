@@ -7,9 +7,10 @@ use std::time::{Duration, Instant};
 
 use VariableScope::{Environment, Runtime};
 use apifast_app::{
-    CancelToken, ConsoleLine, RunnerRequest, Script, ScriptEngine, ScriptError, ScriptInput,
-    ScriptLimits, ScriptOutcome, ScriptRequest, ScriptResponse, ScriptVariables, TestOutcome,
-    VariableChange, VariableScope,
+    CancelToken, ConsoleLine, HostFuture, RanRequest, RunnerRequest, Script, ScriptEngine,
+    ScriptError, ScriptHost, ScriptHttpRequest, ScriptHttpResponse, ScriptInput, ScriptLimits,
+    ScriptOutcome, ScriptRequest, ScriptResponse, ScriptVariables, TestOutcome, VariableChange,
+    VariableScope,
 };
 use apifast_domain::{ValueKind, Variable, VariableValue};
 use apifast_script_js::QuickJs;
@@ -73,8 +74,64 @@ async fn run_with(code: &str, input: &ScriptInput) -> ScriptOutcome {
         ..ScriptLimits::default()
     };
     QuickJs::new(limits)
-        .run(script, input, &CancelToken::new())
+        .run(script, input, &FakeHost, &CancelToken::new())
         .await
+}
+
+/// Answers `bru.sendRequest` with what it was sent (`/missing` is a 404,
+/// `/down` no answer), and `bru.runRequest('login')` with a token it sets.
+struct FakeHost;
+
+impl ScriptHost for FakeHost {
+    fn send_request(&self, request: ScriptHttpRequest) -> HostFuture<'_, ScriptHttpResponse> {
+        Box::pin(async move {
+            if request.url.ends_with("/down") {
+                return Err("connection refused".to_owned());
+            }
+            let status = if request.url.ends_with("/missing") {
+                404
+            } else {
+                200
+            };
+            let echo = serde_json::json!({
+                "method": request.method,
+                "url": request.url,
+                "headers": request.headers,
+                "body": request.body,
+                "timeout": request.timeout_ms,
+            });
+            Ok(ScriptHttpResponse {
+                status,
+                status_text: if status == 200 { "OK" } else { "Not Found" }.into(),
+                headers: vec![("Content-Type".into(), "application/json".into())],
+                body: echo.to_string(),
+                time_ms: 3,
+                url: request.url,
+            })
+        })
+    }
+
+    fn run_request<'a>(&'a self, path: &'a str) -> HostFuture<'a, RanRequest> {
+        Box::pin(async move {
+            if path != "login" {
+                return Err(format!("there is no request `{path}` in the collection"));
+            }
+            Ok(RanRequest {
+                response: ScriptHttpResponse {
+                    status: 200,
+                    status_text: "OK".into(),
+                    body: "pong".into(),
+                    ..ScriptHttpResponse::default()
+                },
+                variables: vec![VariableChange {
+                    scope: Runtime,
+                    name: "token".into(),
+                    value: Some(VariableValue::text("t0k")),
+                    persist: false,
+                }],
+            })
+        })
+    }
 }
 
 async fn run(code: &str) -> ScriptOutcome {
@@ -714,4 +771,52 @@ async fn json_schema_formats_reject_what_ajv_rejects() {
             "true false false false",
         ]
     );
+}
+
+#[tokio::test]
+async fn bru_send_request_answers_as_axios() {
+    let outcome = run(r"
+        const res = await bru.sendRequest({
+            url: 'https://api.test/echo', method: 'post', params: { q: 'a b' },
+            headers: { 'X-Id': 7 }, data: { name: 'Ana' }, timeout: 500,
+        });
+        console.log(res.status, res.statusText, res.headers['content-type'], res.data.method, res.data.url);
+        console.log(JSON.stringify(res.data.headers), res.data.body, res.data.timeout);
+        console.log((await bru.sendRequest('https://api.test/plain')).data.method);
+        try { await bru.sendRequest('https://api.test/missing'); } catch (e) { console.log(e.message, e.status, e.response.status); }
+        await bru.sendRequest('https://api.test/missing', (error, response) => console.log(error.status, response));
+        await bru.sendRequest('https://api.test/ok', (error, response) => console.log(error, response.status));
+        try { await bru.sendRequest('https://api.test/down'); } catch (e) { console.log(e.message); }
+    ")
+    .await;
+    assert_eq!(
+        logged(&outcome),
+        [
+            "200 OK application/json POST https://api.test/echo?q=a%20b",
+            r#"[["X-Id","7"],["Content-Type","application/json"]] {"name":"Ana"} 500"#,
+            "GET",
+            "Request failed with status code 404 404 404",
+            "404 null",
+            "null 200",
+            "connection refused",
+        ]
+    );
+}
+
+#[tokio::test]
+async fn bru_run_request_gives_its_response_and_the_variables_it_set() {
+    let outcome = run(r"
+        const res = await bru.runRequest('login');
+        console.log(res.data, res.status, res.statusText, bru.getVar('token'));
+        try { await bru.runRequest('nope'); } catch (e) { console.log(e.message); }
+    ")
+    .await;
+    assert_eq!(
+        logged(&outcome),
+        [
+            "pong 200 OK t0k",
+            "there is no request `nope` in the collection"
+        ]
+    );
+    assert_eq!(outcome.variables.len(), 1, "it reaches the caller too");
 }

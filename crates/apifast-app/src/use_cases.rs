@@ -9,9 +9,11 @@ use apifast_domain::{
 };
 use apifast_template::{Mode, Problem};
 
+use crate::ScriptHost;
 use crate::ScriptReport;
 use crate::checks::{CHECK_LIMIT, has_checks, run_checks};
 use crate::functions::{Fetched, ResponseFunctions};
+use crate::script_host::SendHost;
 use crate::script_runs::{Scopes, SendScripts};
 use crate::{
     AppError, AppHost, BodyWriter, CancelToken, Clock, CollectionRepository, CollectionTree,
@@ -186,6 +188,17 @@ pub(crate) struct ChainContext {
     pub(crate) recorded: Vec<HistoryEntry>,
 }
 
+impl ChainContext {
+    /// A new send within `chain`: one of its requests sent again is a
+    /// cycle.
+    pub(crate) fn following(chain: &[RequestPath]) -> Self {
+        Self {
+            chain: chain.to_vec(),
+            ..Self::default()
+        }
+    }
+}
+
 /// Loads a request, resolves inheritance and variables, renders it, sends it
 /// and stores the response body. Then runs its captures and assertions.
 ///
@@ -219,7 +232,7 @@ where
 
 /// [`send_request`] for one request of a chain; boxed, since it calls
 /// itself for the dependencies.
-fn send_in_chain<'s, 'p: 's, C, E, T, S>(
+pub(crate) fn send_in_chain<'s, 'p: 's, C, E, T, S>(
     ports: &'s SendPorts<'p, C, E, T, S>,
     path: &'s RequestPath,
     options: &'s SendOptions,
@@ -294,11 +307,13 @@ where
         }
         _ => None,
     };
+    let script_host = SendHost::new(ports, options, context.chain.clone(), cancel);
     if let (Some(scripts), Some(engine)) = (&mut scripts, ports.scripts) {
         let response = (&head, text.as_deref());
         let after = ScriptKind::AfterResponse;
+        let runner = (engine, &script_host as &dyn ScriptHost);
         scripts
-            .after(engine, &after, response, &mut variables, cancel)
+            .after(runner, &after, response, &mut variables, cancel)
             .await;
     }
     let (captures, assertions) = checks_after(
@@ -311,8 +326,9 @@ where
     )?;
     if let (Some(scripts), Some(engine)) = (&mut scripts, ports.scripts) {
         let response = (&head, text.as_deref());
+        let runner = (engine, &script_host as &dyn ScriptHost);
         scripts
-            .after(engine, &ScriptKind::Tests, response, &mut variables, cancel)
+            .after(runner, &ScriptKind::Tests, response, &mut variables, cancel)
             .await;
     }
 
@@ -468,7 +484,7 @@ where
         ports,
         (&loaded, &collection, kind),
         (&mut resolved, &mut variables),
-        options,
+        (options, &context.chain),
         cancel,
     )
     .await?;
@@ -508,11 +524,15 @@ async fn before_scripts<C, E, T, S>(
     ports: &SendPorts<'_, C, E, T, S>,
     (loaded, collection, kind): (&LoadedRequest, &Collection, RequestKind),
     (resolved, variables): (&mut ResolvedRequest, &mut ResolvedVariables),
-    options: &SendOptions,
+    (options, chain): (&SendOptions, &[RequestPath]),
     cancel: &CancelToken,
 ) -> Result<Option<SendScripts>, AppError>
 where
+    C: CollectionRepository + Sync,
     E: EnvironmentRepository + Sync,
+    T: HttpTransport + Sync,
+    S: ResponseStore + Sync,
+    S::Writer: Send,
 {
     let Some(engine) = ports.scripts.filter(|_| kind != RequestKind::Grpc) else {
         return Ok(None);
@@ -534,7 +554,9 @@ where
     let Some(mut scripts) = SendScripts::of(&loaded.request, &loaded.folders, &scopes) else {
         return Ok(None);
     };
-    scripts.before(engine, resolved, variables, cancel).await?;
+    let host = SendHost::new(ports, options, chain.to_vec(), cancel);
+    let runner = (engine, &host as &dyn ScriptHost);
+    scripts.before(runner, resolved, variables, cancel).await?;
     Ok(Some(scripts))
 }
 

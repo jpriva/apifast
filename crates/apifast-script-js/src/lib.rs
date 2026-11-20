@@ -13,13 +13,14 @@
 mod api;
 mod console;
 mod errors;
+mod host;
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use apifast_app::{
-    CancelToken, Script, ScriptEngine, ScriptError, ScriptFuture, ScriptInput, ScriptLimits,
-    ScriptOutcome,
+    CancelToken, Script, ScriptEngine, ScriptError, ScriptFuture, ScriptHost, ScriptInput,
+    ScriptLimits, ScriptOutcome,
 };
 use rquickjs::context::EvalOptions;
 use rquickjs::{AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Promise, Value};
@@ -54,18 +55,36 @@ impl ScriptEngine for QuickJs {
         &'a self,
         script: Script<'a>,
         input: &'a ScriptInput,
+        host: &'a dyn ScriptHost,
         cancel: &'a CancelToken,
     ) -> ScriptFuture<'a> {
-        let (limits, cancel) = (self.limits, cancel.clone());
+        let stop = Stop {
+            cancel: cancel.clone(),
+            deadline: Instant::now() + Duration::from_millis(self.limits.time_ms),
+            limits: self.limits,
+        };
         let (code, input) = (script.code.to_owned(), input.clone());
         Box::pin(async move {
             let console = Arc::new(Mutex::new(Console::default()));
-            let mut outcome = run(&code, &input, limits, &cancel, &console)
-                .await
-                .unwrap_or_else(|error| ScriptOutcome {
-                    error: Some(error),
-                    ..ScriptOutcome::default()
-                });
+            let (calls, mut inbox) = tokio::sync::mpsc::unbounded_channel();
+            let deadline = tokio::time::Instant::from_std(stop.deadline);
+            let script = run(&code, &input, &stop, &console, calls);
+            let mut script = std::pin::pin!(script);
+            // The script runs while its calls are served: one at a time,
+            // within its time limit.
+            let result = loop {
+                tokio::select! {
+                    result = &mut script => break result,
+                    Some(call) = inbox.recv() => tokio::select! {
+                        () = host::serve(host, call) => {}
+                        () = tokio::time::sleep_until(deadline) => {}
+                    },
+                }
+            };
+            let mut outcome = result.unwrap_or_else(|error| ScriptOutcome {
+                error: Some(error),
+                ..ScriptOutcome::default()
+            });
             outcome.console = console::take(&console);
             outcome
         })
@@ -100,16 +119,12 @@ impl Stop {
 async fn run(
     code: &str,
     input: &ScriptInput,
-    limits: ScriptLimits,
-    cancel: &CancelToken,
+    stop: &Stop,
     console: &Arc<Mutex<Console>>,
+    calls: host::Calls,
 ) -> Result<ScriptOutcome, ScriptError> {
     let engine = |e: rquickjs::Error| ScriptError::Engine(e.to_string());
-    let stop = Stop {
-        cancel: cancel.clone(),
-        deadline: Instant::now() + Duration::from_millis(limits.time_ms),
-        limits,
-    };
+    let (stop, limits) = (stop.clone(), stop.limits);
     let runtime = AsyncRuntime::new().map_err(engine)?;
     runtime.set_memory_limit(limits.memory_bytes).await;
     runtime.set_max_stack_size(STACK_BYTES).await;
@@ -132,7 +147,7 @@ async fn run(
         .async_with(async |ctx| {
             // Interrupted here too, if cancelled before it started.
             console::install(&ctx, console)
-                .and_then(|()| api::install(&ctx, input))
+                .and_then(|()| api::install(&ctx, input, calls))
                 .map_err(|e| stop.reason().unwrap_or_else(|| engine(e)))?;
             let mut outcome = ScriptOutcome {
                 error: evaluate(&ctx, code, &stop).await.err(),

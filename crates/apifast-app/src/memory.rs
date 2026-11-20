@@ -846,6 +846,7 @@ impl crate::ScriptEngine for CannedScripts {
         &'a self,
         script: crate::Script<'a>,
         _: &'a crate::ScriptInput,
+        _: &'a dyn crate::ScriptHost,
         _: &'a CancelToken,
     ) -> crate::ScriptFuture<'a> {
         lock(&self.ran).push(script.code.to_owned());
