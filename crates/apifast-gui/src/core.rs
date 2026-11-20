@@ -50,8 +50,9 @@ use apifast_app::{
     CollectionTree, HistoryEntry, HistoryLimits, HistoryOutcome, HistoryStore, ItemPath,
     NoPrompter, NoSecrets, Placement, RequestPath, ResponseHead, ResponseId, ResponseStore,
     SecretStore, SendOptions, SendPorts, Session, SessionStore, SessionTab, SharedSecretFiles,
-    TokenStore, TransportError, apply_captures, create_folder, create_request, delete_item,
-    load_request, move_item, rename_item, resolve_request_variables, save_request, send_request,
+    TokenStore, TransportError, apply_captures, apply_script_variables, create_folder,
+    create_request, delete_item, load_request, move_item, rename_item, resolve_request_variables,
+    save_request, send_request,
 };
 use apifast_domain::{
     AuthScheme, Chain, Collection, Environment, Header, HttpRequest, Origin, Resolved,
@@ -230,6 +231,7 @@ fn finished(
         checks: Checks {
             captures: outcome.captures,
             assertions: outcome.assertions,
+            scripts: Box::new(outcome.scripts),
         },
         ..received(responses, outcome.head, outcome.body.size, outcome.body.id)
     });
@@ -807,13 +809,17 @@ pub struct Received {
     pub checks: Checks,
 }
 
-/// The captures and assertions that ran after a response, masked.
+/// The captures and assertions that ran after a response, masked, and
+/// what the scripts did.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Checks {
     /// Captures, in order.
     pub captures: Vec<CaptureOutcome>,
     /// Assertions, in order.
     pub assertions: Vec<AssertionOutcome>,
+    /// The scripts of the request, its folders and the collection; boxed,
+    /// so a response state stays small.
+    pub scripts: Box<apifast_app::ScriptReport>,
 }
 
 /// Messages the core thread handles: commands from the interface and
@@ -1562,6 +1568,7 @@ impl State {
         };
         tokio::spawn(async move {
             let authorizer = apifast_http::LoopbackAuthorizer::system();
+            let engine = apifast_script_js::QuickJs::default();
             let (clock, random) = (SystemClock, SystemRandom::default());
             let ports = SendPorts {
                 collections: &*repo,
@@ -1576,6 +1583,7 @@ impl State {
                 history: Some(&*history),
                 tokens: Some(tokens.as_ref()),
                 authorizer: Some(&authorizer),
+                scripts: Some(&engine),
             };
             let at_ms = clock.unix_millis();
             let result = send_request(ports, &key.path, &options, &cancel).await;
@@ -1629,10 +1637,14 @@ impl State {
         self.sending.remove(&key);
         let response = match result {
             Ok(received) => {
+                let checks = &received.checks;
                 if let Some(open) = self.open.get_mut(&key.root) {
-                    apply_captures(&mut open.runtime, &received.checks.captures);
+                    apply_captures(&mut open.runtime, &checks.captures);
+                    apply_script_variables(&mut open.runtime, &checks.scripts.variables);
                 }
-                self.note_environment_captures(&key.root, &received.checks.captures);
+                self.note_environment_captures(&key.root, &checks.captures);
+                let persisted = captures::persisted(&checks.scripts.variables);
+                self.note_environment_captures(&key.root, &persisted);
                 ResponseState::Received(received)
             }
             Err(AppError::Transport(TransportError::Cancelled)) => ResponseState::Cancelled,

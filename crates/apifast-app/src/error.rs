@@ -101,4 +101,10 @@ pub enum AppError {
     /// The data does not pass validation; the message says why.
     #[error("{0}")]
     Validation(String),
+    /// A script before the request failed: it was not sent.
+    #[error("{0}")]
+    Script(String),
+    /// A script asked to skip the request: it was not sent.
+    #[error("{0}")]
+    Skipped(String),
 }

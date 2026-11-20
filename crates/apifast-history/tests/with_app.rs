@@ -55,6 +55,7 @@ fn a_sent_response_is_stored_and_a_cancelled_one_leaves_nothing() {
         history: None,
         tokens: None,
         authorizer: None,
+        scripts: None,
     };
     let path = RequestPath::new("r.yml");
 

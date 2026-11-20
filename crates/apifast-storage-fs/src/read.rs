@@ -6,8 +6,8 @@ use apifast_domain::{
     ApiKeyAuth, ApiKeyPlacement, Assertion, Auth, AuthScheme, AwsV4Auth, BasicAuth, BearerAuth,
     Body, Capture, CaptureScope, Collection, DigestAuth, Environment, Folder, FormField, GrpcCall,
     GrpcMessage, GrpcMethodType, Header, HttpRequest, Method, MultipartPart, MultipartValue,
-    NtlmAuth, Operator, Param, ParamKind, RequestDefaults, Setting, Settings, ValueKind, Variable,
-    VariableValue, WsMessage, WsMessageKind,
+    NtlmAuth, Operator, Param, ParamKind, RequestDefaults, ScriptBlock, ScriptKind, Setting,
+    Settings, ValueKind, Variable, VariableValue, WsMessage, WsMessageKind,
 };
 use apifast_domain::{
     CredentialsPlacement, OAuth2Auth, OAuth2Flow, OAuth2Parameter, OAuth2Request,
@@ -107,6 +107,7 @@ fn http_request(doc: &Value, name: String, seq: Option<u32>, block: &str) -> Htt
         settings: settings(get(doc, "settings")),
         docs: text(get(doc, "docs")),
         examples: crate::examples::read_examples(doc),
+        scripts: scripts(get_in(doc, &["runtime", "scripts"])),
     };
     if websocket {
         // Its file has no parameters: they are those of its URL.
@@ -581,7 +582,19 @@ fn request_defaults(request: Option<&Value>, auth: Auth) -> RequestDefaults {
         variables: variables(field("variables")),
         // OpenCollection has no folder or collection settings.
         settings: Settings::default(),
+        scripts: scripts(field("scripts")),
     }
+}
+
+/// A `scripts` list: `type` and `code` of each.
+pub(crate) fn scripts(value: Option<&Value>) -> Vec<ScriptBlock> {
+    items(value)
+        .iter()
+        .map(|item| ScriptBlock {
+            kind: ScriptKind::parse(&text_or_empty(get(item, "type"))),
+            code: text_or_empty(get(item, "code")),
+        })
+        .collect()
 }
 
 /// `environments/<name>.yml`. `file_stem` names an environment without a name.

@@ -570,7 +570,7 @@ docs: ''
 | Bruno reescribe archivos de la colección | Seguro: no toca `.apifast/` y los archivos no contienen claves de apifast |
 | Bruno renombra un entorno o una variable secreta | El secreto compartido queda huérfano; apifast lo detecta y ofrece reasignarlo |
 
-Los bloques `runtime.scripts` de Bruno se conservan intactos aunque apifast no los ejecute hasta la fase F9.
+Los scripts van en `runtime.scripts` de una request y en `request.scripts` de una carpeta o de la colección: una lista de `type` (`before-request`, `after-response`, `tests`) y `code`. apifast los lee y los escribe, y conserva los de tipos que no ejecuta (como los de gRPC de Bruno). Ver [Scripting en JavaScript](08-tests-y-runner.md#scripting-en-javascript-fase-f9).
 
 ## Reglas de lectura y escritura
 

@@ -11,8 +11,8 @@
 use apifast_domain::{
     ApiKeyPlacement, Assertion, Auth, AuthScheme, AwsV4Auth, Body, Capture, Collection,
     Environment, Folder, FormField, GrpcCall, GrpcMessage, Header, HttpRequest, MultipartPart,
-    MultipartValue, Param, ParamKind, RequestDefaults, Setting, ValueKind, Variable, VariableValue,
-    WsMessage,
+    MultipartValue, Param, ParamKind, RequestDefaults, ScriptBlock, Setting, ValueKind, Variable,
+    VariableValue, WsMessage,
 };
 use apifast_domain::{
     CredentialsPlacement, OAuth2Auth, OAuth2Flow, OAuth2Request, ParameterPlacement, TokenPlacement,
@@ -235,6 +235,35 @@ pub(crate) fn update_request(doc: &mut Value, old: &HttpRequest, new: &HttpReque
 
     if old.examples != new.examples {
         crate::examples::update_examples(doc, &old.examples, &new.examples);
+    }
+
+    if old.scripts != new.scripts {
+        let runtime = child_mut(doc, "runtime");
+        update_list(
+            runtime,
+            "scripts",
+            &old.scripts,
+            &new.scripts,
+            script_item,
+            merge_script,
+        );
+        prune_empty(doc, "runtime");
+    }
+}
+
+fn script_item(script: &ScriptBlock) -> Value {
+    mapping([
+        ("type", Some(string(script.kind.as_str()))),
+        ("code", Some(string(&script.code))),
+    ])
+}
+
+fn merge_script(item: &mut Value, old: &ScriptBlock, new: &ScriptBlock) {
+    if old.kind != new.kind {
+        set(item, "type", string(new.kind.as_str()));
+    }
+    if old.code != new.code {
+        set(item, "code", string(&new.code));
     }
 }
 
@@ -1382,7 +1411,11 @@ fn update_defaults(
     new: &RequestDefaults,
     level: AuthLevel,
 ) {
-    if old.headers == new.headers && old.auth == new.auth && old.variables == new.variables {
+    if old.headers == new.headers
+        && old.auth == new.auth
+        && old.variables == new.variables
+        && old.scripts == new.scripts
+    {
         return;
     }
     let request = child_mut(doc, "request");
@@ -1402,6 +1435,14 @@ fn update_defaults(
         &new.variables,
         variable_value_item,
         merge_variable,
+    );
+    update_list(
+        request,
+        "scripts",
+        &old.scripts,
+        &new.scripts,
+        script_item,
+        merge_script,
     );
     prune_empty(doc, "request");
 }

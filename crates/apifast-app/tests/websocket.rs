@@ -98,6 +98,7 @@ impl World {
             history: None,
             tokens: None,
             authorizer: None,
+            scripts: None,
         }
     }
 

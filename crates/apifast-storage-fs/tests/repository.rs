@@ -15,8 +15,8 @@ use apifast_app::{
 };
 use apifast_domain::{
     ApiKeyAuth, ApiKeyPlacement, AuthScheme, BasicAuth, BearerAuth, Body, Collection, Environment,
-    Folder, FormField, Header, HttpRequest, Method, Param, ParamKind, Setting, ValueKind, Variable,
-    VariableValue,
+    Folder, FormField, Header, HttpRequest, Method, Param, ParamKind, ScriptBlock, ScriptKind,
+    Setting, ValueKind, Variable, VariableValue,
 };
 use apifast_storage_fs::FsCollection;
 use tempfile::TempDir;
@@ -631,6 +631,63 @@ fn folders_are_created_and_edited() {
     assert_eq!(
         repo.request(&path("users/x.yml")).unwrap().folders[0],
         folder
+    );
+}
+
+#[test]
+fn scripts_of_requests_folders_and_the_collection_are_read_and_written() {
+    let folder_yml = "info:\n  name: Users\n  type: folder\n\nrequest:\n  scripts:\n    - type: before-request\n      code: |-\n        req.setHeader('a', '1');\n        bru.setVar('b', 2);\n";
+    let request_yml = "info:\n  name: Get\n  type: http\n\nhttp:\n  method: GET\n  url: /\n\nruntime:\n  scripts:\n    - type: tests\n      code: test('ok', () => {});\n    - type: grpc:after-call-end\n      code: kept();\n";
+    let (dir, repo) = setup(&[
+        ("users/folder.yml", folder_yml),
+        ("users/get.yml", request_yml),
+    ]);
+    let loaded = repo.request(&path("users/get.yml")).unwrap();
+    assert_eq!(
+        loaded.folders[0].defaults.scripts,
+        [ScriptBlock::new(
+            ScriptKind::BeforeRequest,
+            "req.setHeader('a', '1');\nbru.setVar('b', 2);"
+        )]
+    );
+    assert_eq!(
+        loaded.request.scripts,
+        [
+            ScriptBlock::new(ScriptKind::Tests, "test('ok', () => {});"),
+            ScriptBlock::new(ScriptKind::Other("grpc:after-call-end".into()), "kept();"),
+        ]
+    );
+
+    let mut request = loaded.request.clone();
+    request.scripts[0].code = "test('changed', () => {});".into();
+    request
+        .scripts
+        .push(ScriptBlock::new(ScriptKind::AfterResponse, "a();\nb();"));
+    repo.save_request(&path("users/get.yml"), &request).unwrap();
+    assert_eq!(
+        repo.request(&path("users/get.yml")).unwrap().request,
+        request
+    );
+    assert!(
+        read(&dir, "users/get.yml")
+            .contains("    - type: grpc:after-call-end\n      code: kept();\n")
+    );
+
+    let mut folder = loaded.folders[0].clone();
+    folder.defaults.scripts.clear();
+    repo.save_folder("users", &folder).unwrap();
+    assert!(!read(&dir, "users/folder.yml").contains("scripts"));
+
+    let mut collection = repo.collection().unwrap();
+    collection.defaults.scripts = vec![ScriptBlock::new(ScriptKind::BeforeRequest, "c();")];
+    repo.save_collection(&collection).unwrap();
+    assert_eq!(
+        repo.collection().unwrap().defaults.scripts,
+        collection.defaults.scripts
+    );
+    assert!(
+        read(&dir, "opencollection.yml")
+            .contains("request:\n  scripts:\n    - type: before-request\n      code: c();")
     );
 }
 

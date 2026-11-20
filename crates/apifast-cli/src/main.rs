@@ -299,6 +299,7 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
     let (messages, grpc) = exchanged(repo.request(&located.request)?.request.body);
     let tokens = apifast_app::memory::MemoryTokens::default();
     let authorizer = terminal_authorizer();
+    let engine = apifast_script_js::QuickJs::default();
     let (runtime, cancel) = runtime()?;
     // The same ports for both, but for where the body goes.
     macro_rules! ports {
@@ -320,6 +321,7 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
                 authorizer: authorizer
                     .as_ref()
                     .map(|a| a as &dyn apifast_app::Authorizer),
+                scripts: Some(&engine),
             }
         };
     }
@@ -367,10 +369,12 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
     if !args.quiet {
         eprintln!("{}", summary(&outcome));
     }
+    report_scripts(&outcome.scripts, args.quiet);
     report_checks(&outcome, args.quiet);
     print_response(&outcome, &responses, args.include)?;
 
-    Ok(if outcome.assertions.iter().any(|a| !a.verdict.passed) {
+    let failed = outcome.assertions.iter().any(|a| !a.verdict.passed) || !outcome.scripts.passed();
+    Ok(if failed {
         ExitCode::from(EXIT_ASSERTION_FAILED)
     } else if args.fail && outcome.head.status >= 400 {
         ExitCode::from(EXIT_HTTP_ERROR)
@@ -453,6 +457,28 @@ fn report_checks(outcome: &SendOutcome, quiet: bool) {
             None if !quiet => eprintln!("pass  {text}"),
             None => {}
             Some(message) => eprintln!("FAIL  {text}: {message}"),
+        }
+    }
+}
+
+/// What the scripts wrote and their tests, on stderr; with `quiet`, only
+/// the failures and errors.
+fn report_scripts(scripts: &apifast_app::ScriptReport, quiet: bool) {
+    for run in &scripts.runs {
+        if !quiet {
+            for line in &run.console {
+                eprintln!("console  {}", line.text);
+            }
+        }
+        for test in &run.tests {
+            match &test.error {
+                None if !quiet => eprintln!("pass  test: {}", test.name),
+                None => {}
+                Some(error) => eprintln!("FAIL  test: {}: {error}", test.name),
+            }
+        }
+        if let Some(error) = apifast_app::script_error_text(run) {
+            eprintln!("error: {error}");
         }
     }
 }

@@ -30,6 +30,8 @@ pub struct RequestDefaults {
     pub variables: Vec<Variable>,
     /// Send settings.
     pub settings: Settings,
+    /// Its scripts (`request.scripts`).
+    pub scripts: Vec<crate::ScriptBlock>,
 }
 
 /// Root of a collection (`opencollection.yml`).

@@ -84,6 +84,7 @@ impl World {
                 .map(|h| h as &(dyn HistoryStore + Sync)),
             tokens: None,
             authorizer: None,
+            scripts: None,
         };
         block_on(send_request(
             ports,
@@ -111,6 +112,7 @@ impl World {
             history: None,
             tokens: None,
             authorizer: None,
+            scripts: None,
         };
         apifast_app::render_for_copy(&ports, &RequestPath::new(path), options)
     }
@@ -461,6 +463,7 @@ fn problems_are_reported_before_sending_even_if_the_send_fails() {
         history: None,
         tokens: None,
         authorizer: None,
+        scripts: None,
     };
     let options = SendOptions {
         allow_unresolved: true,
@@ -502,6 +505,7 @@ fn send_request_can_run_on_any_thread() {
         history: None,
         tokens: None,
         authorizer: None,
+        scripts: None,
     };
     let options = SendOptions::default();
     let cancel = CancelToken::new();

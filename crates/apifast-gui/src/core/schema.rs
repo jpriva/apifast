@@ -111,6 +111,7 @@ impl State {
                 history: None,
                 tokens: Some(tokens.as_ref()),
                 authorizer: None,
+                scripts: None,
             };
             let result = fetch_schema(
                 ports,

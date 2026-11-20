@@ -56,6 +56,7 @@ impl State {
             history: Some(&*open.history as &(dyn HistoryStore + Sync)),
             tokens: Some(open.tokens.as_ref()),
             authorizer: None,
+            scripts: None,
         };
         let copied = match render_for_copy(&ports, &key.path, &options) {
             Ok(copied) => {

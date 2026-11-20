@@ -17,6 +17,7 @@ apifast-template.workspace = true
 apifast-history.workspace = true
 apifast-http.workspace = true
 apifast-ws.workspace = true
+apifast-script-js.workspace = true
 # gRPC, behind the `grpc` feature (on by default): without it, gRPC
 # requests open and save but say they cannot be called.
 apifast-grpc = { workspace = true, optional = true }

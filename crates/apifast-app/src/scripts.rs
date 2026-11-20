@@ -6,6 +6,7 @@
 //! also when it fails.
 
 use std::future::Future;
+use std::pin::Pin;
 
 use apifast_domain::{Variable, VariableValue};
 
@@ -242,16 +243,20 @@ pub struct ScriptOutcome {
     pub runner: Option<RunnerRequest>,
 }
 
+/// What [`ScriptEngine::run`] gives: boxed, so the engine can be a
+/// `dyn ScriptEngine`.
+pub type ScriptFuture<'a> = Pin<Box<dyn Future<Output = ScriptOutcome> + Send + 'a>>;
+
 /// Runs JavaScript scripts.
 pub trait ScriptEngine {
     /// Runs `script` with `input` until it ends, fails, exceeds its limits
     /// or `cancel` asks it to stop.
-    fn run(
-        &self,
-        script: Script<'_>,
-        input: &ScriptInput,
-        cancel: &CancelToken,
-    ) -> impl Future<Output = ScriptOutcome> + Send;
+    fn run<'a>(
+        &'a self,
+        script: Script<'a>,
+        input: &'a ScriptInput,
+        cancel: &'a CancelToken,
+    ) -> ScriptFuture<'a>;
 }
 
 #[cfg(test)]

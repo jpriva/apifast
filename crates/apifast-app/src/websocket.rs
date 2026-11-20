@@ -157,6 +157,7 @@ where
         loaded,
         variables,
         rendered,
+        scripts,
     } = prepare(
         &ports,
         path,
@@ -198,6 +199,7 @@ where
         captures: Vec::new(),
         assertions: Vec::new(),
         dependencies: context.recorded,
+        scripts: scripts.map(|s| s.report).unwrap_or_default(),
     })
 }
 

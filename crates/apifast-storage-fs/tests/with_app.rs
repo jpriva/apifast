@@ -72,6 +72,7 @@ fn sends_a_bruno_collection_from_disk() {
         history: None,
         tokens: None,
         authorizer: None,
+        scripts: None,
     };
     let options = SendOptions {
         environment: Some("prod".into()),

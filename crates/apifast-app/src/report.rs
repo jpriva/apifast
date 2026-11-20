@@ -12,7 +12,8 @@ use apifast_domain::Json;
 use apifast_template::iso_timestamp;
 
 use crate::{
-    AssertionOutcome, CaptureOutcome, HIDDEN, RunReport, RunSummary, SendOutcome, StepResult,
+    AssertionOutcome, CaptureOutcome, HIDDEN, RunReport, RunSummary, ScriptRun, SendOutcome,
+    StepResult,
 };
 
 /// What a report says about the run besides its results.
@@ -98,6 +99,17 @@ pub fn assertion_text(outcome: &AssertionOutcome) -> String {
     line
 }
 
+/// Why a script did not finish, in one line: `the request after-response
+/// script failed: Error: boom at line 3`; `None` if it finished.
+pub fn script_error_text(run: &ScriptRun) -> Option<String> {
+    let error = run.error.as_ref()?;
+    Some(format!(
+        "the {} {} script failed: {error}",
+        run.source,
+        run.kind.as_str()
+    ))
+}
+
 fn summary_json(summary: &RunSummary) -> Json {
     object(vec![
         ("requests", number(summary.requests)),
@@ -110,6 +122,13 @@ fn summary_json(summary: &RunSummary) -> Json {
             object(vec![
                 ("passed", number(summary.assertions_passed)),
                 ("failed", number(summary.assertions_failed)),
+            ]),
+        ),
+        (
+            "tests",
+            object(vec![
+                ("passed", number(summary.tests_passed)),
+                ("failed", number(summary.tests_failed)),
             ]),
         ),
     ])
@@ -163,12 +182,27 @@ fn outcome_json(outcome: &SendOutcome) -> Vec<(&'static str, Json)> {
             ])
         })
         .collect();
+    let tests = (outcome.scripts.tests())
+        .map(|t| {
+            object(vec![
+                ("name", text(&t.name)),
+                ("passed", Json::Bool(t.error.is_none())),
+                ("error", optional(t.error.as_deref())),
+            ])
+        })
+        .collect();
+    let script_errors = (outcome.scripts.runs.iter())
+        .filter_map(script_error_text)
+        .map(|e| text(&e))
+        .collect();
     vec![
         ("status", number(outcome.head.status)),
         ("responseTimeMs", number(outcome.head.elapsed_ms)),
         ("size", number(outcome.body.size)),
         ("assertions", Json::Array(assertions)),
         ("captures", Json::Array(captures)),
+        ("tests", Json::Array(tests)),
+        ("scriptErrors", Json::Array(script_errors)),
     ]
 }
 
@@ -192,6 +226,7 @@ pub fn json_report(report: &RunReport, meta: &ReportMeta) -> String {
         ("durationMs", number(report.duration_ms)),
         ("succeeded", Json::Bool(report.succeeded())),
         ("bailed", Json::Bool(report.bailed)),
+        ("stopped", Json::Bool(report.stopped)),
         ("cancelled", Json::Bool(report.cancelled)),
         ("summary", summary_json(&report.summary())),
         (
@@ -261,7 +296,7 @@ pub fn junit_report(report: &RunReport, meta: &ReportMeta) -> String {
                     escape(error)
                 );
             }
-            Ok(outcome) if outcome.assertions.is_empty() => {
+            Ok(outcome) if outcome.assertions.is_empty() && outcome.scripts.runs.is_empty() => {
                 count += 1;
                 let _ = writeln!(
                     cases,
@@ -270,6 +305,8 @@ pub fn junit_report(report: &RunReport, meta: &ReportMeta) -> String {
                 );
             }
             Ok(outcome) => {
+                let (c, f, e) = junit_scripts(&mut cases, outcome, &name);
+                (count, failures, errors) = (count + c, failures + f, errors + e);
                 for assertion in &outcome.assertions {
                     count += 1;
                     let case = escape(&assertion_text(assertion));
@@ -321,12 +358,53 @@ pub fn junit_report(report: &RunReport, meta: &ReportMeta) -> String {
     format!(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<testsuites name=\"{}\" tests=\"{tests}\" failures=\"{}\" errors=\"{}\" skipped=\"{}\" time=\"{}\" timestamp=\"{}\">\n{suites}</testsuites>\n",
         escape(&meta.collection),
-        summary.assertions_failed,
+        summary.assertions_failed + summary.tests_failed,
         summary.errors,
         summary.skipped,
         seconds(report.duration_ms),
         iso_timestamp(meta.started_ms),
     )
+}
+
+/// The test cases of the scripts of `outcome`: one per test, and one
+/// error per script that did not finish. Gives how many cases, failures
+/// and errors it wrote.
+fn junit_scripts(cases: &mut String, outcome: &SendOutcome, class: &str) -> (usize, usize, usize) {
+    let (mut count, mut failures, mut errors) = (0, 0, 0);
+    let class = escape(class);
+    for run in &outcome.scripts.runs {
+        for test in &run.tests {
+            count += 1;
+            let case = escape(&format!("test: {}", test.name));
+            match &test.error {
+                None => {
+                    let _ = writeln!(
+                        cases,
+                        "      <testcase name=\"{case}\" classname=\"{class}\" time=\"0\"/>"
+                    );
+                }
+                Some(message) => {
+                    failures += 1;
+                    let _ = write!(
+                        cases,
+                        "      <testcase name=\"{case}\" classname=\"{class}\" time=\"0\">\n        <failure message=\"{}\" type=\"test\"/>\n      </testcase>\n",
+                        escape(message)
+                    );
+                }
+            }
+        }
+        if let Some(error) = script_error_text(run) {
+            count += 1;
+            errors += 1;
+            let case = escape(&format!("{} {} script", run.source, run.kind.as_str()));
+            let _ = write!(
+                cases,
+                "      <testcase name=\"{case}\" classname=\"{class}\" time=\"0\">\n        <error message=\"{}\"/>\n      </testcase>\n",
+                escape(&error)
+            );
+        }
+    }
+    (count, failures, errors)
 }
 
 const STYLE: &str = "
@@ -381,7 +459,7 @@ pub fn html_report(report: &RunReport, meta: &ReportMeta) -> String {
     );
     let _ = writeln!(
         body,
-        "<div class=\"totals\"><div><b>{}</b>requests</div><div><b class=\"pass\">{}</b>passed</div><div><b class=\"fail\">{}</b>failed</div><div><b class=\"fail\">{}</b>errors</div><div><b class=\"skip\">{}</b>skipped</div><div><b>{}/{}</b>assertions</div></div>",
+        "<div class=\"totals\"><div><b>{}</b>requests</div><div><b class=\"pass\">{}</b>passed</div><div><b class=\"fail\">{}</b>failed</div><div><b class=\"fail\">{}</b>errors</div><div><b class=\"skip\">{}</b>skipped</div><div><b>{}/{}</b>assertions</div><div><b>{}/{}</b>tests</div></div>",
         summary.requests,
         summary.passed,
         summary.failed,
@@ -389,6 +467,8 @@ pub fn html_report(report: &RunReport, meta: &ReportMeta) -> String {
         summary.skipped,
         summary.assertions_passed,
         summary.assertions_passed + summary.assertions_failed,
+        summary.tests_passed,
+        summary.tests_passed + summary.tests_failed,
     );
     for step in &report.steps {
         html_step(&mut body, step, iterations);
@@ -409,6 +489,33 @@ pub fn html_report(report: &RunReport, meta: &ReportMeta) -> String {
         "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>{} run</title>\n<style>{STYLE}</style>\n</head>\n<body>\n<main>\n{body}</main>\n</body>\n</html>\n",
         escape(&meta.collection)
     )
+}
+
+/// The tests of the scripts of `outcome`, and their errors.
+fn html_scripts(body: &mut String, outcome: &SendOutcome) {
+    for error in outcome.scripts.runs.iter().filter_map(script_error_text) {
+        let _ = writeln!(body, "<p class=\"fail\">{}</p>", escape(&error));
+    }
+    if outcome.scripts.tests().next().is_none() {
+        return;
+    }
+    body.push_str("<table>\n<tr><th></th><th>Test</th></tr>\n");
+    for test in outcome.scripts.tests() {
+        let (mark, class) = if test.error.is_none() {
+            ("✓", "pass")
+        } else {
+            ("✗", "fail")
+        };
+        let message = (test.error.as_deref())
+            .map(|m| format!("<br><span class=\"fail\">{}</span>", escape(m)))
+            .unwrap_or_default();
+        let _ = writeln!(
+            body,
+            "<tr><td class=\"{class}\">{mark}</td><td>{}{message}</td></tr>",
+            escape(&test.name)
+        );
+    }
+    body.push_str("</table>\n");
 }
 
 fn html_step(body: &mut String, step: &StepResult, iterations: bool) {
@@ -433,9 +540,13 @@ fn html_step(body: &mut String, step: &StepResult, iterations: bool) {
             let _ = writeln!(body, "<p class=\"fail\">{}</p>", escape(error));
         }
         Ok(outcome) => {
-            if outcome.assertions.is_empty() && outcome.captures.is_empty() {
+            if outcome.assertions.is_empty()
+                && outcome.captures.is_empty()
+                && outcome.scripts.runs.is_empty()
+            {
                 body.push_str("<p class=\"muted\">No assertions.</p>\n");
             }
+            html_scripts(body, outcome);
             if !outcome.assertions.is_empty() {
                 body.push_str("<table>\n<tr><th></th><th>Assertion</th><th>Actual</th></tr>\n");
                 for assertion in &outcome.assertions {

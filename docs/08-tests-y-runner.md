@@ -157,15 +157,17 @@ El crate `apifast-query` evalúa las dos lenguas sobre el cuerpo de una respuest
 
 ## Orden de evaluación en un envío
 
-1. Variables previas de la request.
-2. Envío.
-3. Capturas.
-4. Aserciones.
-5. (F9) Scripts posteriores y tests en JavaScript.
+1. Scripts previos (`before-request`): colección, carpetas de la más externa a la más interna, request. Ven y cambian la request resuelta, sin renderizar.
+2. Variables y plantillas: se renderiza la request, con lo que fijaron los scripts.
+3. Envío.
+4. Scripts posteriores (`after-response`): request, carpetas de la más interna a la más externa, colección.
+5. Capturas.
+6. Aserciones, que ven las variables fijadas por los scripts.
+7. Scripts de tests (`tests`), en el mismo orden que los posteriores.
 
 ### `apifast send`
 
-Muestra cada aserción en stderr (`pass` o `FAIL` con su motivo) y cada captura sin valor como aviso; con `--quiet`, solo los fallos. Si una aserción falla, termina con código 1.
+Muestra cada aserción en stderr (`pass` o `FAIL` con su motivo) y cada captura sin valor como aviso; con `--quiet`, solo los fallos. Lo mismo con los tests de los scripts (`pass  test: …`), lo que escribieron en la consola (`console  …`) y los errores de los que no terminaron. Si una aserción o un test falla, o un script posterior no termina, termina con código 1.
 
 Una request WebSocket se conecta ([docs/07](07-motor-de-red.md#websocket-f7)): envía sus mensajes en orden y sigue abierta hasta que el servidor cierra o `Ctrl+C` la cierra. Cada mensaje recibido va a stdout en su línea, a medida que llega (los binarios, en hexadecimal), así que la salida se puede encadenar. En stderr van los enviados (`> …`), los que no se pudieron enviar (`warning: …`), el cierre y el resumen; con `--quiet`, solo los avisos.
 
@@ -282,7 +284,7 @@ Lo que se traduce de Postman (con las decisiones del importador de Bruno):
 - Las respuestas guardadas, como ejemplos de la request.
 - Variables de colección. `{{$guid}}` pasa a `{{$randomUUID}}`; una variable dinámica que apifast no genera se avisa.
 - Entornos: sus variables; las de tipo `secret` se declaran secretas sin valor (el valor nunca va a un archivo) y se avisa para ponerlo en la bóveda.
-- Los scripts no se importan hasta que llegue el motor de JavaScript (F9): cada uno se avisa.
+- Los scripts no se importan todavía: cada uno se avisa. Su traducción a la API de Bruno es una tarea de F9.
 
 ```
 apifast import openapi <spec.yaml|spec.json> --out <carpeta> [--dry-run]
@@ -307,7 +309,7 @@ Una colección de Bruno en su formato anterior, `.bru` (la carpeta con `bruno.js
 - `bruno.json` da el nombre; `collection.bru`, los headers, la auth y las variables que todo hereda; el `folder.bru` de cada carpeta, su nombre, su posición y lo que heredan sus requests.
 - Cada request: método y URL, path params con su valor y params de query desactivados, headers, body (JSON, texto, XML, SPARQL, formulario, multipart con `@file(a|b)` y `@contentType(…)`, archivo, GraphQL), auth (basic, bearer, digest, NTLM, API key, AWS SigV4, OAuth 2.0), variables, aserciones (`res.status: eq 200`), `vars:post-response` como capturas, ajustes, tags y documentación. El orden es el `seq` de Bruno.
 - Los entornos de `environments/`: sus variables, y las de `vars:secret` declaradas secretas sin valor (Bruno guarda los valores aparte); se avisa para ponerlos en la bóveda.
-- Los scripts y los bloques `tests` se avisan (F9). Una request que no es HTTP (WebSocket, gRPC) se deja fuera con aviso, igual que un archivo que no se puede leer, con su línea.
+- Los scripts y los bloques `tests` se avisan: el importador todavía no los traslada. Una request que no es HTTP (WebSocket, gRPC) se deja fuera con aviso, igual que un archivo que no se puede leer, con su línea.
 - Se ignoran las carpetas ocultas y `node_modules`.
 
 ```
@@ -321,7 +323,7 @@ Una exportación de Insomnia: la v4 (JSON, una lista de recursos enlazados por `
 - Headers, body según su `mimeType` (JSON, XML, texto, formulario, multipart con archivos, archivo, GraphQL; uno que no es `{"query": …}` queda como JSON con aviso), auth (basic, bearer, digest, NTLM, API key, AWS IAM como SigV4, OAuth 2.0 con PKCE; una auth desactivada es ninguna; vacía, hereda), `encodeUrl` y `followRedirects`, la descripción como documentación.
 - Las carpetas conservan su auth y su entorno, como variables de la carpeta.
 - Los entornos: el base y uno por cada sub-entorno, mezclado sobre el base. Un valor anidado es una variable de tipo objeto (`{{user.name}}` lo lee), no se aplana en claves con puntos.
-- Los scripts se avisan (F9); las requests de WebSocket y gRPC se dejan fuera con aviso.
+- Los scripts se avisan: el importador todavía no los traslada; las requests de WebSocket y gRPC se dejan fuera con aviso.
 
 #### Importar otra vez
 
@@ -413,9 +415,9 @@ SKIP  socket.yml · websocket requests cannot run yet
 
 | Código | Significado |
 |---|---|
-| 0 | Todas las aserciones pasaron |
-| 1 | Al menos una aserción falló |
-| 2 | Error de ejecución (red, archivo inválido, variable sin resolver) |
+| 0 | Todas las aserciones y los tests de los scripts pasaron |
+| 1 | Al menos una aserción o un test falló, o un script posterior no terminó |
+| 2 | Error de ejecución (red, archivo inválido, variable sin resolver, un script previo que falló) |
 | 3 | Error de uso (argumentos) |
 
 Se aplica el código más grave: una request que no se pudo enviar da 2 aunque otras tengan aserciones fallidas. Una ejecución cancelada con Ctrl+C también da 2. El 3 vale para todos los comandos: `apifast send` usaba antes el 2.
@@ -481,4 +483,11 @@ Todavía no están: `bru.sendRequest` y `bru.runRequest`, `require` de librería
 - **Ubicación en el archivo:** el bloque `runtime.scripts` de OpenCollection, que apifast ya conserva desde la fase F1.
 - **Niveles:** scripts de colección, carpeta y request, con el orden "sándwich" de Bruno (antes del envío de afuera hacia adentro; después, de adentro hacia afuera).
 
-Hasta la fase F9, una request con scripts muestra un aviso: los scripts se conservan pero no se ejecutan.
+### Ejecución en un envío
+
+- **Niveles y orden "sándwich":** ver [Orden de evaluación en un envío](#orden-de-evaluación-en-un-envío). Cada script corre por separado, con lo que dejaron los anteriores: la request que cambiaron y las variables que fijaron. Varios bloques del mismo tipo en un archivo se juntan en uno.
+- **Tipos que se ejecutan:** `before-request`, `after-response` y `tests`. Los demás (los de gRPC de Bruno, como `grpc:before-call-start`) se conservan y no se ejecutan; una llamada gRPC no ejecuta scripts todavía. Una conexión WebSocket ejecuta los previos, sobre su handshake.
+- **Errores:** si un script previo falla, la request no se envía y el error dice cuál (`the request script before the request failed: …`). Si falla uno posterior o de tests, el envío sigue: el error queda en el resultado y la request cuenta como fallida en el runner.
+- **Variables:** las de `bru.setVar` y `bru.setEnvVar` siguen como valores de runtime en las siguientes requests, igual que las capturas. Las de `setEnvVar(…, {persist: true})` se ofrecen para guardar en el entorno, como las capturas de ámbito `environment` (en la interfaz, con la misma confirmación).
+- **Runner:** `bru.runner.skipRequest()` en un script previo deja la request sin enviar y la cuenta como omitida; `bru.runner.stopExecution()` termina la ejecución después de la request; `bru.setNextRequest(nombre)` sigue por la request con ese nombre (o termina la iteración si no existe). Los tests de los scripts cuentan en el resumen (`3/4 tests`), en el código de salida y en los reportes: JSON (`tests`, `scriptErrors`, y `summary.tests`), JUnit (un caso `test: …` por test, y un error por script que no terminó) y HTML.
+- **Interfaz:** la pestaña Tests de la respuesta muestra los tests de los scripts (primero los que fallan), los errores y la consola, y su contador suma aserciones y tests.

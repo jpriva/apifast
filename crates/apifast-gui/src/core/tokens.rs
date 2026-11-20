@@ -67,6 +67,7 @@ fn with_ports<R>(
         history: None,
         tokens: Some(open.tokens.as_ref()),
         authorizer: None,
+        scripts: None,
     })
 }
 
@@ -111,6 +112,7 @@ impl State {
                 history: None,
                 tokens: Some(tokens.as_ref()),
                 authorizer: Some(&authorizer),
+                scripts: None,
             };
             let result = get_new_token(ports, &key.path, &options, &CancelToken::new())
                 .await

@@ -80,6 +80,7 @@ impl State {
         };
         tokio::spawn(async move {
             let authorizer = apifast_http::LoopbackAuthorizer::system();
+            let engine = apifast_script_js::QuickJs::default();
             let (clock, random) = (SystemClock, SystemRandom::default());
             let ports = SendPorts {
                 collections: &*repo,
@@ -94,6 +95,7 @@ impl State {
                 history: Some(&*history),
                 tokens: Some(tokens.as_ref()),
                 authorizer: Some(&authorizer),
+                scripts: Some(&engine),
             };
             let at_ms = clock.unix_millis();
             let mut outbox = Outbox(receiver);

@@ -172,6 +172,31 @@ impl ResolvedRequest {
     pub fn settings(&self) -> &ResolvedSettings {
         &self.settings
     }
+
+    /// Changes the method, as a script does.
+    pub fn set_method(&mut self, method: Method) {
+        self.method = method;
+    }
+
+    /// Changes the URL, as a script does.
+    pub fn set_url(&mut self, url: String) {
+        self.url = url;
+    }
+
+    /// Replaces the headers, as a script does.
+    pub fn set_headers(&mut self, headers: Vec<Resolved<Header>>) {
+        self.headers = headers;
+    }
+
+    /// Replaces the body, as a script does.
+    pub fn set_body(&mut self, body: Body) {
+        self.body = body;
+    }
+
+    /// Changes the timeout, as a script does: it then comes from the request.
+    pub fn set_timeout_ms(&mut self, timeout_ms: u64) {
+        self.settings.timeout_ms = Resolved::new(timeout_ms, Origin::Request);
+    }
 }
 
 /// Applies header, auth and settings inheritance to a request.

@@ -12,7 +12,7 @@ use apifast_app::{CollectionRepository, RequestPath};
 use apifast_domain::{
     ApiKeyAuth, ApiKeyPlacement, Assertion, AuthScheme, AwsV4Auth, BasicAuth, BearerAuth, Body,
     Capture, CaptureScope, FormField, Header, HttpRequest, Method, Operator, Param, ParamKind,
-    Setting, Settings, ValueKind, Variable, VariableValue,
+    ScriptBlock, ScriptKind, Setting, Settings, ValueKind, Variable, VariableValue,
 };
 use apifast_storage_fs::FsCollection;
 use proptest::prelude::*;
@@ -55,6 +55,16 @@ fn text() -> impl Strategy<Value = String> {
         Just("  spaced  ".to_owned()),
         Just("'\"quotes\"'".to_owned()),
     ]
+}
+
+fn script() -> impl Strategy<Value = ScriptBlock> {
+    let kind = prop_oneof![
+        Just(ScriptKind::BeforeRequest),
+        Just(ScriptKind::AfterResponse),
+        Just(ScriptKind::Tests),
+        Just(ScriptKind::Other("grpc:after-call-end".into())),
+    ];
+    (kind, text()).prop_map(|(kind, code)| ScriptBlock::new(kind, code))
 }
 
 fn header() -> impl Strategy<Value = Header> {
@@ -296,6 +306,7 @@ fn request() -> BoxedStrategy<HttpRequest> {
         prop::collection::vec(assertion(), 0..3),
         prop::collection::vec(capture(), 0..3),
         prop::collection::vec(example(), 0..3),
+        prop::collection::vec(script(), 0..3),
     )
         .boxed();
     let settings = (
@@ -311,10 +322,11 @@ fn request() -> BoxedStrategy<HttpRequest> {
             |(
                 (name, seq, tags, method, url),
                 (params, headers, body, auth, variables),
-                (assertions, captures, examples),
+                (assertions, captures, examples, scripts),
                 (timeout, follow, max, encode, docs),
             )| {
                 HttpRequest {
+                    scripts,
                     name,
                     seq,
                     tags,
@@ -353,7 +365,11 @@ proptest! {
         let path = RequestPath::new("r.yml");
 
         // Two saves in a row: the second edits a file apifast itself wrote.
+        // Both keep the file's script.
         for request in [&first, &second] {
+            let mut request = request.clone();
+            request.scripts.insert(0, ScriptBlock::new(ScriptKind::BeforeRequest, "console.log(1)"));
+            let request = &request;
             repo.save_request(&path, request).unwrap();
             prop_assert_eq!(&repo.request(&path).unwrap().request, request);
             let text = fs::read_to_string(dir.path().join("r.yml")).unwrap();

@@ -148,6 +148,12 @@ impl ResolvedVariables {
         );
     }
 
+    /// Forgets the variable `name`, as a script that deletes it: it is
+    /// then missing, whatever scope defined it.
+    pub fn forget(&mut self, name: &str) {
+        self.by_name.remove(name);
+    }
+
     /// Sets `name` to a value captured from a response, above every scope.
     /// A secret stays a secret, so its new value is masked as well.
     pub fn capture(&mut self, name: &str, value: VariableValue) {

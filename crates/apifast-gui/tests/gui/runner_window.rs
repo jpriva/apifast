@@ -47,6 +47,7 @@ fn step(path: &str, status: u16) -> StepResult {
         path: RequestPath::new(path),
         name: path.trim_end_matches(".yml").to_owned(),
         outcome: Ok(SendOutcome {
+            scripts: apifast_app::ScriptReport::default(),
             head: ResponseHead {
                 status,
                 version: "HTTP/1.1".into(),
@@ -91,6 +92,7 @@ fn view(running: bool) -> RunView {
                 duration_ms: 3,
                 bailed: false,
                 cancelled: false,
+                stopped: false,
                 runtime: Vec::new(),
             })
         }),

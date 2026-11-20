@@ -615,27 +615,84 @@ fn timeline(ui: &mut egui::Ui, received: &Received, strings: &Strings) {
         });
 }
 
-/// "Tests 2/3", red when one failed, green when all passed.
+/// "Tests 2/3", counting assertions and script tests: red when one failed
+/// or a script did not finish, green when all passed.
 fn tests_label(ui: &egui::Ui, received: &Received, strings: &Strings) -> RichText {
-    let assertions = &received.checks.assertions;
-    if assertions.is_empty() {
+    let checks = &received.checks;
+    let scripts = &checks.scripts;
+    let total = checks.assertions.len() + scripts.tests().count();
+    if total == 0 && scripts.passed() {
         return RichText::new(strings.tests);
     }
-    let passed = assertions.iter().filter(|a| a.verdict.passed).count();
+    let passed = checks
+        .assertions
+        .iter()
+        .filter(|a| a.verdict.passed)
+        .count()
+        + scripts.tests().filter(|t| t.error.is_none()).count();
     let palette = theme::palette(ui);
-    let color = if passed == assertions.len() {
+    let color = if passed == total && scripts.passed() {
         palette.success
     } else {
         palette.danger
     };
-    RichText::new(format!("{} {passed}/{}", strings.tests, assertions.len())).color(color)
+    RichText::new(format!("{} {passed}/{total}", strings.tests)).color(color)
 }
 
-/// The assertions, failures first, then the captures.
+/// The tests of the scripts, failures first, the errors of those that did
+/// not finish, and what they wrote to the console.
+fn script_results(ui: &mut egui::Ui, scripts: &apifast_app::ScriptReport, strings: &Strings) {
+    let palette = theme::palette(ui);
+    for error in scripts
+        .runs
+        .iter()
+        .filter_map(apifast_app::script_error_text)
+    {
+        ui.label(RichText::new(error).color(palette.danger));
+    }
+    if scripts.tests().next().is_some() {
+        ui.label(RichText::new(strings.script_tests).strong());
+        let mut ordered: Vec<_> = scripts.tests().collect();
+        ordered.sort_by_key(|t| t.error.is_none());
+        for test in ordered {
+            let (mark, color) = match test.error {
+                None => (strings.pass, palette.success),
+                Some(_) => (strings.fail, palette.danger),
+            };
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new(mark).color(color).strong().monospace());
+                ui.label(test.name.as_str());
+            });
+            if let Some(error) = &test.error {
+                ui.indent("why", |ui| {
+                    ui.label(RichText::new(error.as_str()).color(color));
+                });
+            }
+        }
+        ui.add_space(theme::space::S);
+    }
+    let lines: Vec<_> = scripts.runs.iter().flat_map(|run| &run.console).collect();
+    if !lines.is_empty() {
+        ui.label(RichText::new(strings.script_console).strong());
+        for line in lines {
+            let color = match line.level {
+                apifast_app::ConsoleLevel::Warn => palette.warning,
+                apifast_app::ConsoleLevel::Error => palette.danger,
+                _ => palette.text_muted,
+            };
+            ui.label(RichText::new(line.text.as_str()).monospace().color(color));
+        }
+        ui.add_space(theme::space::S);
+    }
+}
+
+/// What the scripts did, the assertions, failures first, then the
+/// captures.
 fn tests(ui: &mut egui::Ui, received: &Received, strings: &Strings) {
     let palette = theme::palette(ui);
     let checks = &received.checks;
-    if checks.assertions.is_empty() && checks.captures.is_empty() {
+    if checks.assertions.is_empty() && checks.captures.is_empty() && checks.scripts.runs.is_empty()
+    {
         ui.label(RichText::new(strings.tests_none).color(palette.text_muted));
         return;
     }
@@ -643,6 +700,7 @@ fn tests(ui: &mut egui::Ui, received: &Received, strings: &Strings) {
         .id_salt("response-tests")
         .auto_shrink([false, true])
         .show(ui, |ui| {
+            script_results(ui, &checks.scripts, strings);
             if !checks.assertions.is_empty() {
                 ui.label(RichText::new(strings.assertions).strong());
                 let mut ordered: Vec<_> = checks.assertions.iter().collect();

@@ -4,13 +4,15 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use apifast_domain::{
-    Chain, HttpRequest, Origin, RequestKind, ResolvedRequest, ResolvedVariables, Secret, Variable,
-    VariableValue, environment_chain, resolve, resolve_variables,
+    Chain, Collection, HttpRequest, Origin, RequestKind, ResolvedRequest, ResolvedVariables,
+    ScriptKind, Secret, Variable, VariableValue, environment_chain, resolve, resolve_variables,
 };
 use apifast_template::{Mode, Problem};
 
+use crate::ScriptReport;
 use crate::checks::{CHECK_LIMIT, has_checks, run_checks};
 use crate::functions::{Fetched, ResponseFunctions};
+use crate::script_runs::{Scopes, SendScripts};
 use crate::{
     AppError, AppHost, BodyWriter, CancelToken, Clock, CollectionRepository, CollectionTree,
     EnvironmentRepository, HttpTransport, LoadedRequest, Prompter, Random, RenderOutcome,
@@ -116,6 +118,9 @@ pub struct SendPorts<'a, C, E, T, S> {
     /// Opens a browser for the OAuth 2.0 authorization code grant. `None`
     /// where there is no user, as in CI: that grant then fails.
     pub authorizer: Option<&'a dyn crate::Authorizer>,
+    /// Runs the scripts of the request, its folders and the collection.
+    /// `None`: they are not run, and a request that has any says so.
+    pub scripts: Option<&'a (dyn crate::ScriptEngine + Sync)>,
 }
 
 // Only references: copying them is free, whatever the port types are.
@@ -163,6 +168,8 @@ pub struct SendOutcome {
     /// The entries added to the history for the requests `response(...)`
     /// sent first, in order, so a driver can show them.
     pub dependencies: Vec<HistoryEntry>,
+    /// What the scripts of the request, its folders and the collection did.
+    pub scripts: ScriptReport,
 }
 
 /// How many rounds of `response(...)` dependencies one render may need.
@@ -262,6 +269,7 @@ where
         loaded,
         mut variables,
         rendered,
+        mut scripts,
     } = prepare(
         ports,
         path,
@@ -279,6 +287,17 @@ where
         .await?;
     let body = writer.finish()?;
 
+    let text = match (&scripts, ports.scripts) {
+        (Some(_), Some(_)) => body_text(ports.responses, &body)?,
+        _ => None,
+    };
+    if let (Some(scripts), Some(engine)) = (&mut scripts, ports.scripts) {
+        let response = (&head, text.as_deref());
+        let after = ScriptKind::AfterResponse;
+        scripts
+            .after(engine, &after, response, &mut variables, cancel)
+            .await;
+    }
     let (captures, assertions) = checks_after(
         ports.responses,
         &loaded.request,
@@ -287,6 +306,12 @@ where
         &mut host,
         rendered.request.secrets(),
     )?;
+    if let (Some(scripts), Some(engine)) = (&mut scripts, ports.scripts) {
+        let response = (&head, text.as_deref());
+        scripts
+            .after(engine, &ScriptKind::Tests, response, &mut variables, cancel)
+            .await;
+    }
 
     // A dependency goes to the history here; the request the driver asked
     // for is recorded by the driver.
@@ -320,7 +345,22 @@ where
         captures,
         assertions,
         dependencies: Vec::new(),
+        scripts: scripts.map(|s| s.report).unwrap_or_default(),
     })
+}
+
+/// The text of a response's body for its scripts, when it is small enough
+/// ([`CHECK_LIMIT`]).
+fn body_text(
+    responses: &impl ResponseStore,
+    body: &StoredBody,
+) -> Result<Option<String>, AppError> {
+    if body.size > CHECK_LIMIT {
+        return Ok(None);
+    }
+    let len = usize::try_from(body.size).unwrap_or(usize::MAX);
+    let bytes = responses.read(&body.id, 0, len)?;
+    Ok(Some(String::from_utf8_lossy(&bytes).into_owned()))
 }
 
 /// A request rendered and ready for its exchange.
@@ -331,6 +371,9 @@ pub(crate) struct Prepared {
     pub variables: ResolvedVariables,
     /// The request to send.
     pub rendered: RenderOutcome,
+    /// Its scripts, if it has any and they run, with what those before
+    /// the request did.
+    pub scripts: Option<SendScripts>,
 }
 
 /// The template host of one send: the ports, and `response(...)` reading
@@ -417,7 +460,15 @@ where
             variables.fill_secret(&name, VariableValue::text(value.expose()));
         }
     }
-    let resolved = resolve(Chain::new(&collection, &loaded.folders, &loaded.request));
+    let mut resolved = resolve(Chain::new(&collection, &loaded.folders, &loaded.request));
+    let scripts = before_scripts(
+        ports,
+        (&loaded, &collection, kind),
+        (&mut resolved, &mut variables),
+        options,
+        cancel,
+    )
+    .await?;
 
     let mode = if options.allow_unresolved {
         Mode::Lenient
@@ -443,7 +494,45 @@ where
         loaded,
         variables,
         rendered,
+        scripts,
     })
+}
+
+/// Runs the scripts before the request, when there is an engine and the
+/// request, its folders or the collection have scripts (a gRPC call has
+/// its own, not run yet).
+async fn before_scripts<C, E, T, S>(
+    ports: &SendPorts<'_, C, E, T, S>,
+    (loaded, collection, kind): (&LoadedRequest, &Collection, RequestKind),
+    (resolved, variables): (&mut ResolvedRequest, &mut ResolvedVariables),
+    options: &SendOptions,
+    cancel: &CancelToken,
+) -> Result<Option<SendScripts>, AppError>
+where
+    E: EnvironmentRepository + Sync,
+{
+    let Some(engine) = ports.scripts.filter(|_| kind != RequestKind::Grpc) else {
+        return Ok(None);
+    };
+    let all = ports.environments.environments()?;
+    let environment: Vec<Variable> = match options.environment.as_deref() {
+        Some(name) => environment_chain(name, &all)?
+            .into_iter()
+            .flat_map(|e| e.variables.iter().cloned())
+            .collect(),
+        None => Vec::new(),
+    };
+    let scopes = Scopes {
+        collection,
+        environment: (options.environment.as_deref(), &environment),
+        runtime: &options.runtime,
+        variables,
+    };
+    let Some(mut scripts) = SendScripts::of(&loaded.request, &loaded.folders, &scopes) else {
+        return Ok(None);
+    };
+    scripts.before(engine, resolved, variables, cancel).await?;
+    Ok(Some(scripts))
 }
 
 /// The captures and assertions of `request`, if it has any: its body is

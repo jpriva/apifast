@@ -8,8 +8,8 @@ use crate::ports::is_within;
 use crate::use_cases::send_request;
 use crate::{
     AppError, CancelToken, CollectionRepository, EnvironmentRepository, HttpTransport, Pause,
-    RequestPath, ResponseStore, SendOptions, SendOutcome, SendPorts, TreeItem, apply_captures,
-    sort_tree,
+    RequestPath, ResponseStore, RunnerRequest, SendOptions, SendOutcome, SendPorts, TreeItem,
+    apply_captures, apply_script_variables, sort_tree,
 };
 
 /// What to run and how.
@@ -84,11 +84,12 @@ pub struct StepResult {
 }
 
 impl StepResult {
-    /// Whether it was sent and all its assertions held.
+    /// Whether it was sent, all its assertions held, and its scripts
+    /// finished with their tests passing.
     pub fn passed(&self) -> bool {
         self.outcome
             .as_ref()
-            .is_ok_and(|o| o.assertions.iter().all(|a| a.verdict.passed))
+            .is_ok_and(|o| o.assertions.iter().all(|a| a.verdict.passed) && o.scripts.passed())
     }
 }
 
@@ -127,6 +128,10 @@ pub struct RunSummary {
     pub assertions_passed: usize,
     /// Assertions that did not.
     pub assertions_failed: usize,
+    /// Script tests that passed.
+    pub tests_passed: usize,
+    /// Script tests that failed.
+    pub tests_failed: usize,
 }
 
 /// The result of a run.
@@ -142,6 +147,8 @@ pub struct RunReport {
     pub bailed: bool,
     /// Whether it stopped early because it was cancelled.
     pub cancelled: bool,
+    /// Whether a script stopped it (`bru.runner.stopExecution()`).
+    pub stopped: bool,
     /// The runtime values at the end, with everything captured.
     pub runtime: Vec<Variable>,
 }
@@ -165,7 +172,13 @@ impl RunReport {
                         .count();
                     summary.assertions_failed += failed;
                     summary.assertions_passed += outcome.assertions.len() - failed;
-                    if failed == 0 {
+                    let tests = outcome.scripts.tests().count();
+                    let tests_failed = (outcome.scripts.tests())
+                        .filter(|t| t.error.is_some())
+                        .count();
+                    summary.tests_failed += tests_failed;
+                    summary.tests_passed += tests - tests_failed;
+                    if failed == 0 && outcome.scripts.passed() {
                         summary.passed += 1;
                     } else {
                         summary.failed += 1;
@@ -321,24 +334,10 @@ where
     S::Writer: Send,
 {
     let started = ports.clock.unix_millis();
-    let mut tree = ports.collections.tree()?;
-    // Repositories list files as they find them; a run follows `seq`.
-    sort_tree(&mut tree.items);
     let Selection {
-        runnable: candidates,
-        mut skipped,
-    } = run_selection(&tree.items, options.folder.as_deref(), options.recursive)?;
-    let mut selection = Vec::new();
-    for (path, name) in candidates {
-        let reason = match ports.collections.request(&path) {
-            Ok(loaded) => tags_allow(&loaded.request, &options.tags, &options.exclude_tags).err(),
-            Err(e) => Some(e.to_string()),
-        };
-        match reason {
-            Some(reason) => skipped.push(Skipped { path, name, reason }),
-            None => selection.push((path, name)),
-        }
-    }
+        runnable: selection,
+        skipped,
+    } = select(ports.collections, options)?;
 
     let mut send = options.send.clone();
     send.draft = None;
@@ -348,6 +347,7 @@ where
         duration_ms: 0,
         bailed: false,
         cancelled: false,
+        stopped: false,
         runtime: Vec::new(),
     };
     let total = selection.len();
@@ -360,7 +360,8 @@ where
         if let Some(row) = options.data.get(iteration as usize - 1) {
             set_row(&mut send.runtime, row);
         }
-        for (index, (path, name)) in selection.iter().enumerate() {
+        let mut index = 0;
+        while let Some((path, name)) = selection.get(index) {
             if !report.steps.is_empty() && options.delay_ms > 0 {
                 pause.pause(options.delay_ms).await;
             }
@@ -376,9 +377,23 @@ where
             });
             let at = ports.clock.unix_millis();
             let outcome = send_request(ports, path, &send, cancel).await;
-            if let Ok(outcome) = &outcome {
-                apply_captures(&mut send.runtime, &outcome.captures);
-            }
+            let asked = match &outcome {
+                Ok(outcome) => {
+                    apply_captures(&mut send.runtime, &outcome.captures);
+                    apply_script_variables(&mut send.runtime, &outcome.scripts.variables);
+                    outcome.scripts.runner.clone()
+                }
+                Err(AppError::Skipped(reason)) => {
+                    report.skipped.push(Skipped {
+                        path: path.clone(),
+                        name: name.clone(),
+                        reason: reason.clone(),
+                    });
+                    index += 1;
+                    continue;
+                }
+                Err(_) => None,
+            };
             let step = StepResult {
                 iteration,
                 path: path.clone(),
@@ -398,11 +413,52 @@ where
                 report.bailed = true;
                 break 'run;
             }
+            index = match asked {
+                Some(RunnerRequest::Stop) => {
+                    report.stopped = true;
+                    break 'run;
+                }
+                // To the request of that name; to the end when there is none.
+                Some(RunnerRequest::Next(next)) => (selection.iter())
+                    .position(|(_, name)| *name == next)
+                    .unwrap_or(selection.len()),
+                _ => index + 1,
+            };
         }
     }
     report.runtime = send.runtime;
     report.duration_ms = elapsed(started, ports.clock.unix_millis());
     Ok(report)
+}
+
+/// The requests of the run, with their names, and those that do not run,
+/// tags applied.
+fn select(
+    collections: &impl CollectionRepository,
+    options: &RunOptions,
+) -> Result<Selection, AppError> {
+    let mut tree = collections.tree()?;
+    // Repositories list files as they find them; a run follows `seq`.
+    sort_tree(&mut tree.items);
+    let Selection {
+        runnable: candidates,
+        mut skipped,
+    } = run_selection(&tree.items, options.folder.as_deref(), options.recursive)?;
+    let mut selection = Vec::new();
+    for (path, name) in candidates {
+        let reason = match collections.request(&path) {
+            Ok(loaded) => tags_allow(&loaded.request, &options.tags, &options.exclude_tags).err(),
+            Err(e) => Some(e.to_string()),
+        };
+        match reason {
+            Some(reason) => skipped.push(Skipped { path, name, reason }),
+            None => selection.push((path, name)),
+        }
+    }
+    Ok(Selection {
+        runnable: selection,
+        skipped,
+    })
 }
 
 /// Puts the columns of a data row in the runtime values, replacing what

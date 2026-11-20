@@ -31,6 +31,7 @@ mod reimport;
 mod render;
 mod report;
 mod runner;
+mod script_runs;
 mod scripts;
 mod url_encoding;
 mod use_cases;
@@ -78,15 +79,17 @@ pub use render::{
 };
 pub use report::{
     ReportFormat, ReportMeta, assertion_text, duration, html_report, json_report, junit_report,
+    script_error_text,
 };
 pub use runner::{
     RunEvent, RunOptions, RunReport, RunSummary, Selection, Skipped, StepResult, run_collection,
     run_selection,
 };
+pub use script_runs::{ScriptReport, ScriptRun, ScriptSource, apply_script_variables};
 pub use scripts::{
-    ConsoleLevel, ConsoleLine, RunnerRequest, Script, ScriptEngine, ScriptError, ScriptInput,
-    ScriptLimits, ScriptOutcome, ScriptRequest, ScriptResponse, ScriptVariables, TestOutcome,
-    VariableChange, VariableScope,
+    ConsoleLevel, ConsoleLine, RunnerRequest, Script, ScriptEngine, ScriptError, ScriptFuture,
+    ScriptInput, ScriptLimits, ScriptOutcome, ScriptRequest, ScriptResponse, ScriptVariables,
+    TestOutcome, VariableChange, VariableScope,
 };
 pub use use_cases::{
     SendOptions, SendOutcome, SendPorts, load_request, open_collection, resolve_request_variables,

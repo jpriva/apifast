@@ -193,6 +193,7 @@ impl World {
             history: None,
             tokens: Some(&self.tokens),
             authorizer: None,
+            scripts: None,
         };
         let outcome = block_on(send_request(
             ports,
@@ -346,6 +347,7 @@ fn send_with_browser(world: &World, browser: &Browser) -> Result<(), AppError> {
         history: None,
         tokens: Some(&world.tokens),
         authorizer: Some(browser),
+        scripts: None,
     };
     block_on(send_request(
         ports,

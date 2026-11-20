@@ -773,6 +773,10 @@ pub struct Strings {
     pub tests_none: &'static str,
     /// Between a capture's variable and its value.
     pub captured_as: &'static str,
+    /// Response tab: heading of the tests of the scripts.
+    pub script_tests: &'static str,
+    /// Response tab: heading of what the scripts wrote to the console.
+    pub script_console: &'static str,
     /// Timeline event: a redirect was followed.
     pub event_redirect: &'static str,
     /// Timeline: the addresses came from the collection's DNS overrides.
@@ -1494,8 +1498,10 @@ pub const EN: Strings = Strings {
     capture_variable: "Variable",
     capture_scope: "Scope",
     tests_hint: "Checked after every send, captures first. Expressions: res.status, res.headers.<name>, res.body.<path> (JSONPath too), res.responseTime, res.size.",
-    tests_none: "No assertions or captures ran. Responses from the history do not keep their results.",
+    tests_none: "No assertions, captures or scripts ran. Responses from the history do not keep their results.",
     captured_as: "=",
+    script_tests: "Script tests",
+    script_console: "Console",
     event_redirect: "Redirect",
     event_dns_override: "DNS override",
     event_decompressed: "Decompressed",

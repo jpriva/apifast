@@ -270,6 +270,7 @@ impl State {
                 checks: Checks {
                     captures: outcome.captures,
                     assertions: outcome.assertions,
+                    scripts: Box::new(outcome.scripts),
                 },
                 ..received(&responses, outcome.head, outcome.body.size, outcome.body.id)
             }),
@@ -310,6 +311,7 @@ fn spawn_run(
             tokens,
         } = ports;
         let authorizer = apifast_http::LoopbackAuthorizer::system();
+        let engine = apifast_script_js::QuickJs::default();
         let (clock, random) = (SystemClock, SystemRandom::default());
         let send = SendPorts {
             collections: &*repo,
@@ -324,6 +326,7 @@ fn spawn_run(
             history: Some(&*history),
             tokens: Some(tokens.as_ref()),
             authorizer: Some(&authorizer),
+            scripts: Some(&engine),
         };
         let tell = |message: RunMessage| {
             if let Some(messages) = messages.upgrade() {

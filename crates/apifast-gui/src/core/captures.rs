@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
-use apifast_app::{CaptureOutcome, save_environment};
+use apifast_app::{CaptureOutcome, VariableChange, VariableScope, save_environment};
 use apifast_domain::{CaptureScope, Variable, VariableValue};
 
 use super::{PendingCaptures, State};
@@ -25,6 +25,23 @@ impl Captured {
             names: self.values.iter().map(|(name, ..)| name.clone()).collect(),
         }
     }
+}
+
+/// The environment variables scripts asked to keep in the file
+/// (`bru.setEnvVar(name, value, {persist: true})`), as captures of scope
+/// `environment`, so they wait for the user the same way.
+pub(super) fn persisted(changes: &[VariableChange]) -> Vec<CaptureOutcome> {
+    (changes.iter())
+        .filter(|c| c.scope == VariableScope::Environment && c.persist)
+        .filter_map(|c| {
+            Some(CaptureOutcome {
+                variable: c.name.clone(),
+                scope: CaptureScope::Environment,
+                value: Ok(c.value.clone()?),
+                secret: false,
+            })
+        })
+        .collect()
 }
 
 impl State {

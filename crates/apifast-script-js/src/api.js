@@ -116,6 +116,9 @@
             request.headers = request.headers.filter(([n]) => !same(n, String(name)));
             touch();
         },
+        deleteHeaders(names) {
+            for (const name of names) req.deleteHeader(name);
+        },
         getBody: () => parsed(request.body, request.headers),
         setBody(body) { request.body = body === undefined || body === null ? null : text(body); touch(); },
         getTimeout: () => request.timeout_ms ?? undefined,

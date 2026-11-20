@@ -123,26 +123,7 @@ pub fn run(args: &RunArgs) -> Result<ExitCode> {
         secrets,
     } = wire(&root, &args.tls)?;
     let (clock, random) = (system::SystemClock, system::SystemRandom::new());
-    let options = RunOptions {
-        folder,
-        recursive: args.recursive,
-        tags: args.tags.clone(),
-        exclude_tags: args.exclude_tags.clone(),
-        delay_ms: args.delay,
-        bail: args.bail,
-        iterations: args.iterations,
-        data: data.unwrap_or_default(),
-        send: SendOptions {
-            environment: args.env.clone(),
-            runtime: args
-                .vars
-                .iter()
-                .map(|(n, v)| Variable::text(n, v))
-                .collect(),
-            allow_unresolved: args.allow_unresolved,
-            draft: None,
-        },
-    };
+    let options = run_options(args, folder, data.unwrap_or_default());
     let console = Console {
         color: !args.no_color
             && std::env::var_os("NO_COLOR").is_none()
@@ -167,6 +148,7 @@ pub fn run(args: &RunArgs) -> Result<ExitCode> {
     // A token obtained once serves the whole run.
     let tokens = apifast_app::memory::MemoryTokens::default();
     let authorizer = crate::terminal_authorizer();
+    let engine = apifast_script_js::QuickJs::default();
     let (runtime, cancel) = runtime()?;
     let report = runtime.block_on(async {
         let ports = SendPorts {
@@ -191,6 +173,7 @@ pub fn run(args: &RunArgs) -> Result<ExitCode> {
             authorizer: authorizer
                 .as_ref()
                 .map(|a| a as &dyn apifast_app::Authorizer),
+            scripts: Some(&engine),
         };
         let on_event = |event: RunEvent<'_>| console.event(&event);
         run_collection(ports, &system::TokioPause, &options, &cancel, &on_event).await
@@ -217,6 +200,30 @@ pub fn run(args: &RunArgs) -> Result<ExitCode> {
     } else {
         ExitCode::SUCCESS
     })
+}
+
+/// What to run, from the command line.
+fn run_options(args: &RunArgs, folder: Option<String>, data: Vec<Vec<Variable>>) -> RunOptions {
+    RunOptions {
+        folder,
+        recursive: args.recursive,
+        tags: args.tags.clone(),
+        exclude_tags: args.exclude_tags.clone(),
+        delay_ms: args.delay,
+        bail: args.bail,
+        iterations: args.iterations,
+        data,
+        send: SendOptions {
+            environment: args.env.clone(),
+            runtime: args
+                .vars
+                .iter()
+                .map(|(n, v)| Variable::text(n, v))
+                .collect(),
+            allow_unresolved: args.allow_unresolved,
+            draft: None,
+        },
+    }
 }
 
 const GREEN: &str = "32";
@@ -303,6 +310,7 @@ impl Console {
                         None => {}
                     }
                 }
+                self.scripts(&outcome.scripts);
                 for capture in &outcome.captures {
                     match &capture.value {
                         Err(reason) => println!(
@@ -323,6 +331,36 @@ impl Console {
                         Ok(_) => {}
                     }
                 }
+            }
+        }
+    }
+
+    /// Failing tests and script errors; with `verbose`, also passing tests
+    /// and what the scripts wrote.
+    fn scripts(&self, scripts: &apifast_app::ScriptReport) {
+        for run in &scripts.runs {
+            if self.verbose {
+                for line in &run.console {
+                    println!("      {}", self.paint(DIM, &line.text));
+                }
+            }
+            for test in &run.tests {
+                match &test.error {
+                    Some(error) => {
+                        println!(
+                            "      {} test: {}: {error}",
+                            self.paint(RED, "✗"),
+                            test.name
+                        );
+                    }
+                    None if self.verbose => {
+                        println!("      {} test: {}", self.paint(GREEN, "✓"), test.name);
+                    }
+                    None => {}
+                }
+            }
+            if let Some(error) = apifast_app::script_error_text(run) {
+                println!("      {}", self.paint(RED, &error));
             }
         }
     }
@@ -358,8 +396,19 @@ impl Console {
             s.assertions_passed + s.assertions_failed,
             duration(report.duration_ms)
         );
+        if s.tests_passed + s.tests_failed > 0 {
+            let tests = format!(
+                " · {}/{} tests",
+                s.tests_passed,
+                s.tests_passed + s.tests_failed
+            );
+            line.insert_str(line.rfind(" · ").unwrap_or(line.len()), &tests);
+        }
         if report.bailed {
             line.push_str(" · stopped at the first failure");
+        }
+        if report.stopped {
+            line.push_str(" · stopped by a script");
         }
         if report.cancelled {
             line.push_str(" · cancelled");

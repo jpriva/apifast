@@ -842,13 +842,13 @@ impl CannedScripts {
 }
 
 impl crate::ScriptEngine for CannedScripts {
-    fn run(
-        &self,
-        script: crate::Script<'_>,
-        _: &crate::ScriptInput,
-        _: &CancelToken,
-    ) -> impl Future<Output = crate::ScriptOutcome> + Send {
+    fn run<'a>(
+        &'a self,
+        script: crate::Script<'a>,
+        _: &'a crate::ScriptInput,
+        _: &'a CancelToken,
+    ) -> crate::ScriptFuture<'a> {
         lock(&self.ran).push(script.code.to_owned());
-        std::future::ready(self.outcome.clone())
+        Box::pin(std::future::ready(self.outcome.clone()))
     }
 }

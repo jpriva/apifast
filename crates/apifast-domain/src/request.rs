@@ -69,6 +69,8 @@ pub struct HttpRequest {
     pub docs: Option<String>,
     /// Saved examples of its responses.
     pub examples: Vec<crate::Example>,
+    /// Its scripts (`runtime.scripts`).
+    pub scripts: Vec<crate::ScriptBlock>,
 }
 
 impl HttpRequest {
@@ -85,6 +87,7 @@ impl HttpRequest {
     /// Request with no own headers, body or settings, and inherited auth.
     pub fn new(name: impl Into<String>, method: Method, url: impl Into<String>) -> Self {
         Self {
+            scripts: Vec::new(),
             name: name.into(),
             seq: None,
             tags: Vec::new(),

@@ -102,6 +102,7 @@ impl State {
                 history: None,
                 tokens: Some(tokens.as_ref()),
                 authorizer: None,
+                scripts: None,
             };
             let grpc = grpc_transport((*transport).clone());
             let result = describe_grpc(ports, &grpc, &key.path, &options, &CancelToken::new())

@@ -289,6 +289,69 @@ fn the_tests_tab_shows_failures_first_and_masks_secret_captures() {
 }
 
 #[test]
+fn the_tests_tab_shows_what_the_scripts_did() {
+    use apifast_app::{
+        ConsoleLevel, ConsoleLine, ScriptError, ScriptReport, ScriptRun, ScriptSource, TestOutcome,
+    };
+    use apifast_domain::ScriptKind;
+    let ResponseState::Received(mut received) = received("application/json", "{}") else {
+        unreachable!()
+    };
+    let run = |kind, tests: Vec<TestOutcome>, error| ScriptRun {
+        console: (kind == ScriptKind::AfterResponse)
+            .then(|| ConsoleLine {
+                level: ConsoleLevel::Log,
+                text: "user is Ana".into(),
+            })
+            .into_iter()
+            .collect(),
+        kind,
+        source: ScriptSource::Request,
+        tests,
+        error,
+    };
+    received.checks.scripts = Box::new(ScriptReport {
+        runs: vec![
+            run(
+                ScriptKind::AfterResponse,
+                Vec::new(),
+                Some(ScriptError::Thrown {
+                    message: "Error: late".into(),
+                    line: Some(2),
+                }),
+            ),
+            run(
+                ScriptKind::Tests,
+                vec![
+                    TestOutcome {
+                        name: "is ok".into(),
+                        error: None,
+                    },
+                    TestOutcome {
+                        name: "is admin".into(),
+                        error: Some("expected undefined to be true".into()),
+                    },
+                ],
+                None,
+            ),
+        ],
+        ..ScriptReport::default()
+    });
+    let mut harness = harness(ResponseState::Received(received));
+    harness.get_by_label("Tests 1/2").click();
+    harness.run();
+    assert!(has(&harness, EN.script_tests));
+    assert!(has(&harness, "expected undefined to be true"));
+    assert!(has(
+        &harness,
+        "the request after-response script failed: Error: late at line 2"
+    ));
+    assert!(has(&harness, "user is Ana"));
+    let top = |label: &str| harness.get_by_label(label).rect().min.y;
+    assert!(top("is admin") < top("is ok"));
+}
+
+#[test]
 fn the_tests_tab_says_when_nothing_ran() {
     let mut harness = harness(received("application/json", "{}"));
     harness.get_by_label(EN.tests).click();

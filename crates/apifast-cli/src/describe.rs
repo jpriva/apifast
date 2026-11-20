@@ -69,6 +69,7 @@ pub fn run(args: &DescribeArgs) -> Result<ExitCode> {
         history: None,
         tokens: Some(&tokens),
         authorizer: (authorizer.as_ref()).map(|a| a as &dyn apifast_app::Authorizer),
+        scripts: None,
     };
     let catalog = runtime.block_on(describe_grpc(
         ports,

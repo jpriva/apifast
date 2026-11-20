@@ -18,7 +18,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use apifast_app::{
-    CancelToken, Script, ScriptEngine, ScriptError, ScriptInput, ScriptLimits, ScriptOutcome,
+    CancelToken, Script, ScriptEngine, ScriptError, ScriptFuture, ScriptInput, ScriptLimits,
+    ScriptOutcome,
 };
 use rquickjs::context::EvalOptions;
 use rquickjs::{AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Promise, Value};
@@ -49,15 +50,15 @@ impl QuickJs {
 }
 
 impl ScriptEngine for QuickJs {
-    fn run(
-        &self,
-        script: Script<'_>,
-        input: &ScriptInput,
-        cancel: &CancelToken,
-    ) -> impl Future<Output = ScriptOutcome> + Send {
+    fn run<'a>(
+        &'a self,
+        script: Script<'a>,
+        input: &'a ScriptInput,
+        cancel: &'a CancelToken,
+    ) -> ScriptFuture<'a> {
         let (limits, cancel) = (self.limits, cancel.clone());
         let (code, input) = (script.code.to_owned(), input.clone());
-        async move {
+        Box::pin(async move {
             let console = Arc::new(Mutex::new(Console::default()));
             let mut outcome = run(&code, &input, limits, &cancel, &console)
                 .await
@@ -67,7 +68,7 @@ impl ScriptEngine for QuickJs {
                 });
             outcome.console = console::take(&console);
             outcome
-        }
+        })
     }
 }
 

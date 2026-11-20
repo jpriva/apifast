@@ -21,3 +21,4 @@ workspace = true
 
 [dev-dependencies]
 tokio = { version = "1.54.1", features = ["rt", "macros", "time"] }
+apifast-domain.workspace = true
