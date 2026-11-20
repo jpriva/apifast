@@ -67,7 +67,7 @@ flowchart TB
 | `apifast-import` | Adaptador | Importadores y exportadores. Hoy, cURL (`parse_curl` y `to_curl`) Postman (`import_postman`, `import_postman_environment`) OpenAPI 3 (`import_openapi`, sobre un valor JSON: el YAML lo convierte `yaml_to_json` de `apifast-storage-fs`, el único que usa oneyaml) , Bruno `.bru` (`import_bruno`, que lee la carpeta) e Insomnia v4 y v5 (`import_insomnia`, también sobre JSON): cURL (sobre una `RenderedRequest` de `render_for_copy`, el caso de uso que renderiza sin enviar); la interfaz lo usa directamente, sin puerto, porque es puro | Aplicación, serde |
 | `apifast-ws` | Adaptador | WebSocket: los frames, sobre el handshake de `apifast-http` | Aplicación, `apifast-http`, tokio-tungstenite |
 | `apifast-grpc` | Adaptador | gRPC: reflection, `.proto` y llamadas, sobre una conexión de `apifast-http` | Aplicación, `apifast-http`, tonic, tonic-reflection, prost-reflect, protox |
-| `apifast-script-js` | Adaptador | Motor JavaScript | Aplicación, rquickjs |
+| `apifast-script-js` | Adaptador | Motor JavaScript: un runtime de QuickJS por script | Aplicación, rquickjs |
 | `apifast-gui` | Driver | Interfaz egui y composición | Aplicación y todos los adaptadores |
 | `apifast-cli` | Driver | Línea de comandos y composición | Aplicación y los adaptadores que use |
 
@@ -128,7 +128,7 @@ Definidos como traits en `apifast-app`:
 | `SessionStore` | Guardar las pestañas abiertas y sus borradores sin guardar | `apifast-storage-fs` |
 | `WorkspaceRepository` | Leer y editar `workspace.yml`: nombre y colecciones del workspace | `apifast-storage-fs` |
 | `FsWatcher` | Notificar cambios externos en la colección, agrupados en lotes de rutas relativas. No implementa un puerto: el driver lo arranca al abrir la colección y reconcilia cada lote (`ApplyExternalChange`) | `apifast-watch` |
-| `ScriptEngine` | Ejecutar scripts de usuario | `apifast-script-js` |
+| `ScriptEngine` | Ejecutar un script de usuario con límites de tiempo y memoria, y devolver lo que escribió en la consola y por qué falló | `apifast-script-js` |
 | `Clock` | Hora actual y medición de tiempos | Sistema, o falso en tests |
 | `Pause` | Esperar entre las requests de una ejecución del runner | tokio, o una que no espera en tests |
 | `Prompter` | Pedir un valor al usuario (`{{?Texto}}`) | GUI o terminal |

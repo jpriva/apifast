@@ -31,6 +31,7 @@ mod reimport;
 mod render;
 mod report;
 mod runner;
+mod scripts;
 mod url_encoding;
 mod use_cases;
 mod websocket;
@@ -81,6 +82,9 @@ pub use report::{
 pub use runner::{
     RunEvent, RunOptions, RunReport, RunSummary, Selection, Skipped, StepResult, run_collection,
     run_selection,
+};
+pub use scripts::{
+    ConsoleLevel, ConsoleLine, Script, ScriptEngine, ScriptError, ScriptLimits, ScriptOutcome,
 };
 pub use use_cases::{
     SendOptions, SendOutcome, SendPorts, load_request, open_collection, resolve_request_variables,

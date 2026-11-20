@@ -459,7 +459,11 @@ Cuando las aserciones declarativas no alcanzan, se podrá escribir JavaScript.
 
 - **Motor:** QuickJS embebido (`apifast-script-js`), sin acceso al sistema de archivos ni a la red salvo por la API expuesta.
 - **Carga bajo demanda:** el motor se inicializa solo cuando se ejecuta una request con scripts. Una colección sin scripts no paga ese costo.
-- **Límites:** tiempo máximo de ejecución y memoria máxima por script.
+- **Límites:** tiempo máximo de ejecución y memoria máxima por script (`ScriptLimits`; por defecto 10 s y 64 MB). El tiempo cuenta también las esperas: un manejador de interrupción de QuickJS corta el código que sigue corriendo, y un plazo corta el que sigue esperando una promesa. Ninguno de los dos se puede atrapar con `try`. La recursión profunda da un error del script, no un fallo del programa. Cancelar el envío detiene el script igual.
+- **Aislamiento:** cada script corre en un runtime propio, creado al empezar y descartado al terminar; no queda nada entre un script y otro. No hay módulos (`import`, `require`), ni `std`, `os` o `fetch`.
+- **Forma:** el script es el cuerpo de una función `async`, como en Bruno: puede usar `await`, y `return` lo termina. Corre en modo no estricto.
+- **Consola:** `console.log`, `info`, `warn`, `error` y `debug` se guardan con su nivel, también cuando el script falla; las cadenas van tal cual y los demás valores en JSON. Se guarda hasta 1 MB de texto.
+- **Errores:** de sintaxis (antes de ejecutar nada), excepciones y promesas rechazadas, con el tipo y la línea del script (`TypeError: cannot read property 'name' of null at line 3`), tiempo agotado, memoria agotada y cancelación.
 - **API compatible con Bruno** para facilitar la importación:
 
 | Objeto | Funciones principales |

@@ -824,3 +824,30 @@ impl crate::CookieStore for MemoryCookies {
         Ok(())
     }
 }
+
+/// A script engine that runs nothing: each script gives `outcome`. It
+/// records the code of the scripts it was given, in order.
+#[derive(Debug, Default)]
+pub struct CannedScripts {
+    /// What every script gives.
+    pub outcome: crate::ScriptOutcome,
+    ran: Mutex<Vec<String>>,
+}
+
+impl CannedScripts {
+    /// The code of the scripts run so far.
+    pub fn ran(&self) -> Vec<String> {
+        lock(&self.ran).clone()
+    }
+}
+
+impl crate::ScriptEngine for CannedScripts {
+    fn run(
+        &self,
+        script: crate::Script<'_>,
+        _: &CancelToken,
+    ) -> impl Future<Output = crate::ScriptOutcome> + Send {
+        lock(&self.ran).push(script.code.to_owned());
+        std::future::ready(self.outcome.clone())
+    }
+}
