@@ -840,11 +840,7 @@ enum Message {
     Streamed(u64),
     /// The methods of collection `.0`'s gRPC request, kept by `.1`, came,
     /// or why not.
-    MethodsLoaded(
-        PathBuf,
-        String,
-        Result<Vec<apifast_domain::GrpcService>, String>,
-    ),
+    MethodsLoaded(PathBuf, String, Result<apifast_domain::GrpcCatalog, String>),
     /// The schema of collection `.0`, kept by `.1`, came, or why not.
     SchemaFetched(
         PathBuf,

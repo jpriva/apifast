@@ -60,7 +60,10 @@ pub use graphql::{
     EnumValue, GraphQlSchema, INTROSPECTION_QUERY, InputValue, SchemaError, SchemaField,
     SchemaType, TypeKind, TypeRef,
 };
-pub use grpc::{GrpcMethod, GrpcService, find_grpc_method, grpc_status_name, is_grpc_response};
+pub use grpc::{
+    GrpcCatalog, GrpcField, GrpcFieldKind, GrpcMethod, GrpcService, find_grpc_method,
+    grpc_status_name, is_grpc_response,
+};
 pub use json::{Json, JsonError, MAX_DEPTH as MAX_JSON_DEPTH, PathError};
 pub use origin::Origin;
 pub use proxy::{CollectionProxy, ProxyChoice, ProxyConfig, ProxyMode, ProxyProtocol};

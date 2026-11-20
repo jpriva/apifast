@@ -164,7 +164,7 @@ fn a_grpc_request_loads_its_methods_and_streams_the_messages_picked() {
     core.send(Command::LoadMethods(key));
     let snapshot = wait(&core, "the methods", |s| {
         let methods = s.active_tab().and_then(|t| t.context.methods.clone());
-        methods.is_some_and(|m| m.services.is_some())
+        methods.is_some_and(|m| m.catalog.is_some())
     });
     let methods = snapshot
         .active_tab()
@@ -173,7 +173,8 @@ fn a_grpc_request_loads_its_methods_and_streams_the_messages_picked() {
         .methods
         .clone()
         .unwrap();
-    let method = &methods.services.unwrap()[0].methods[0];
+    let catalog = methods.catalog.unwrap();
+    let method = &catalog.services[0].methods[0];
     assert_eq!(method.path, "/hello.Greeter/LotsOfGreetings");
     assert_eq!(method.method_type, GrpcMethodType::ClientStreaming);
 

@@ -8,10 +8,12 @@
 mod format;
 mod graphql_complete;
 mod highlight;
+mod message_complete;
 
 pub use format::{FormatError, format};
 pub use graphql_complete::{Completion, CompletionItem, complete};
 pub use highlight::{Token, TokenKind, tokens};
+pub use message_complete::complete_message;
 
 use apifast_domain::Body;
 

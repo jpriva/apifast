@@ -21,7 +21,7 @@ use apifast_app::{
     WsHandler,
 };
 use apifast_domain::GrpcCall;
-use apifast_domain::GrpcService;
+use apifast_domain::GrpcCatalog;
 use apifast_http::ReqwestTransport;
 use tonic::metadata::{MetadataKey, MetadataMap, MetadataValue};
 use tonic::{Code, Status};
@@ -44,12 +44,12 @@ impl TonicTransport {
         Self { http }
     }
 
-    async fn reflect(&self, request: &RenderedRequest) -> Result<Vec<GrpcService>, TransportError> {
+    async fn reflect(&self, request: &RenderedRequest) -> Result<GrpcCatalog, TransportError> {
         let target = Target::parse(request.url())?;
         let metadata = metadata(request)?;
         let channel = channel::connect(&self.http, &target).await?;
         let pool = reflection::reflect(&channel, &metadata).await?;
-        Ok(services::services(&pool))
+        Ok(services::catalog(&pool))
     }
 }
 
@@ -59,10 +59,10 @@ impl GrpcTransport for TonicTransport {
         request: &RenderedRequest,
         proto: Option<&str>,
         cancel: &CancelToken,
-    ) -> Result<Vec<GrpcService>, TransportError> {
+    ) -> Result<GrpcCatalog, TransportError> {
         if let Some(proto) = proto {
             let pool = protos::compile(self.http.files_root(), proto)?;
-            return Ok(services::services(&pool));
+            return Ok(services::catalog(&pool));
         }
         within(request, cancel, self.reflect(request)).await
     }

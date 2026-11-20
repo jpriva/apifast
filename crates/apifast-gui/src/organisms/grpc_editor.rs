@@ -4,12 +4,12 @@
 //! messages, edited as JSON; while the call is open, sending them and
 //! ending the client's stream.
 
-use apifast_domain::{GrpcCall, GrpcMessage, GrpcMethodType};
+use apifast_domain::{GrpcCall, GrpcCatalog, GrpcMessage, GrpcMethodType};
 use eframe::egui::{self, RichText};
 
 use super::request_panel::{Connection, code_body, muted};
-use crate::atoms::VariableHints;
-use crate::code::Language;
+use crate::atoms::{Completer, VariableHints};
+use crate::code::{self, Language};
 use crate::core::MethodsView;
 use crate::strings::Strings;
 use crate::theme;
@@ -89,10 +89,17 @@ pub fn grpc_call(
     ui.add_space(theme::space::M);
     let streams = call.method_type.is_none_or(GrpcMethodType::client_streams);
     let call_state = (connection, streams);
+    // With the method's type known, its messages are completed from it.
+    let catalog = methods.and_then(|m| m.catalog.as_deref());
+    let input = catalog
+        .and_then(|c| c.method(&call.method))
+        .map(|m| m.input.clone());
+    let schema = catalog.zip(input.as_deref());
+    let messages_of = (&mut call.messages, schema);
     changed
         | messages(
             ui,
-            &mut call.messages,
+            messages_of,
             (shortcuts, now),
             call_state,
             hints,
@@ -122,7 +129,9 @@ fn method_picker(
         {
             connection.load_methods = true;
         }
-        let services = methods.and_then(|m| m.services.as_deref());
+        let services = methods
+            .and_then(|m| m.catalog.as_deref())
+            .map(|c| &c.services);
         if let Some(services) = services.filter(|s| !s.is_empty()) {
             egui::ComboBox::from_id_salt("grpc-method-pick")
                 .selected_text(strings.grpc_pick_method)
@@ -185,7 +194,7 @@ fn type_label(kind: Option<GrpcMethodType>, strings: &Strings) -> &str {
 /// shown, its name and its JSON.
 fn messages(
     ui: &mut egui::Ui,
-    messages: &mut Vec<GrpcMessage>,
+    (messages, schema): (&mut Vec<GrpcMessage>, Option<(&GrpcCatalog, &str)>),
     (shortcuts, now): (&[egui::KeyboardShortcut], bool),
     (connection, streams): (&mut Connection, bool),
     hints: &VariableHints,
@@ -263,11 +272,17 @@ fn messages(
         .accessible_name(strings.ws_message_name)
         .changed();
     let target = (editor, strings.ws_messages);
+    let complete = |text: &str, at: usize| {
+        schema.map_or_else(code::Completion::default, |(catalog, input)| {
+            code::complete_message(text, at, catalog, input)
+        })
+    };
+    let completer = schema.map(|_| &complete as Completer<'_>);
     changed
         | code_body(
             ui,
             &mut message.data,
-            (Language::Json, None),
+            (Language::Json, completer),
             target,
             format,
             hints,

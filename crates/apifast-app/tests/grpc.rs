@@ -160,7 +160,7 @@ fn a_grpc_request_is_described_with_its_metadata_and_proto() {
         &CancelToken::new(),
     ))
     .unwrap();
-    assert_eq!(described, services());
+    assert_eq!(described.services, services());
     let (request, proto) = world.grpc.asked().pop().unwrap();
     assert_eq!(request.url(), "localhost:50051");
     assert_eq!(proto.as_deref(), Some("protos/hello.proto"));

@@ -70,14 +70,14 @@ pub fn run(args: &DescribeArgs) -> Result<ExitCode> {
         tokens: Some(&tokens),
         authorizer: (authorizer.as_ref()).map(|a| a as &dyn apifast_app::Authorizer),
     };
-    let services = runtime.block_on(describe_grpc(
+    let catalog = runtime.block_on(describe_grpc(
         ports,
         &grpc,
         &located.request,
         &options,
         &cancel,
     ))?;
-    print!("{}", listing(&services));
+    print!("{}", listing(&catalog.services));
     Ok(ExitCode::SUCCESS)
 }
 

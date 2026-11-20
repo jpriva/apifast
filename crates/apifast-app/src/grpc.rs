@@ -5,7 +5,7 @@
 
 use std::future::Future;
 
-use apifast_domain::{Body, GrpcCall, GrpcService, HttpRequest, RequestKind};
+use apifast_domain::{Body, GrpcCall, GrpcCatalog, HttpRequest, RequestKind};
 
 use crate::use_cases::{ChainContext, Prepared, host_for, prepare};
 use crate::websocket::{Exchange, exchange};
@@ -17,10 +17,10 @@ use crate::{
 
 /// Talks to gRPC servers.
 pub trait GrpcTransport {
-    /// The services the server of `request` offers, as reflection says;
-    /// or, with `proto` (relative to the collection's folder), as that
-    /// file describes them, without asking the server. The request's
-    /// headers go as metadata.
+    /// The services the server of `request` offers, and the fields of the
+    /// messages they take, as reflection says; or, with `proto` (relative
+    /// to the collection's folder), as that file describes them, without
+    /// asking the server. The request's headers go as metadata.
     ///
     /// # Errors
     ///
@@ -31,7 +31,7 @@ pub trait GrpcTransport {
         request: &RenderedRequest,
         proto: Option<&str>,
         cancel: &CancelToken,
-    ) -> impl Future<Output = Result<Vec<GrpcService>, TransportError>> + Send;
+    ) -> impl Future<Output = Result<GrpcCatalog, TransportError>> + Send;
 
     /// Calls `call.method` on the server of `request`, its messages
     /// described by `call.proto_path` or else by reflection; the request's
@@ -131,7 +131,7 @@ pub async fn describe_grpc<C, E, T, S, G>(
     path: &RequestPath,
     options: &SendOptions,
     cancel: &CancelToken,
-) -> Result<Vec<GrpcService>, AppError>
+) -> Result<GrpcCatalog, AppError>
 where
     C: CollectionRepository + Sync,
     E: EnvironmentRepository + Sync,

@@ -135,10 +135,13 @@ async fn reflection_lists_the_services_in_both_versions_with_the_metadata() {
             .describe(&rendered(&address, true), None, &CancelToken::new())
             .await
             .unwrap_or_else(|e| panic!("alpha {alpha}: {e}"));
-        assert_eq!(services.len(), 1, "{services:?}");
-        assert_eq!(services[0].name, "hello.Greeter");
-        assert_eq!(described(&services), hello_methods());
-        assert_eq!(services[0].methods[0].method_type, GrpcMethodType::Unary);
+        assert_eq!(services.services.len(), 1, "{services:?}");
+        assert_eq!(services.services[0].name, "hello.Greeter");
+        assert_eq!(described(&services.services), hello_methods());
+        assert_eq!(
+            services.services[0].methods[0].method_type,
+            GrpcMethodType::Unary
+        );
 
         // Without the token, the server says no.
         let error = grpc
@@ -160,7 +163,7 @@ async fn a_proto_file_is_read_without_asking_the_server() {
         )
         .await
         .unwrap();
-    assert_eq!(described(&services), hello_methods());
+    assert_eq!(described(&services.services), hello_methods());
 }
 
 #[tokio::test]
@@ -266,7 +269,7 @@ async fn a_server_in_tls_is_trusted_and_given_the_client_certificate() {
         .describe(&rendered(&url, false), None, &CancelToken::new())
         .await
         .unwrap();
-    assert_eq!(described(&services), hello_methods());
+    assert_eq!(described(&services.services), hello_methods());
 
     // Without the certificate the server does not let it in; without the
     // CA, the server is not trusted.
@@ -330,6 +333,6 @@ async fn a_call_goes_through_the_collections_proxy() {
         .describe(&rendered(&address, true), None, &CancelToken::new())
         .await
         .unwrap();
-    assert_eq!(described(&services), hello_methods());
+    assert_eq!(described(&services.services), hello_methods());
     assert_eq!(count.load(std::sync::atomic::Ordering::SeqCst), 1);
 }

@@ -659,7 +659,9 @@ fn a_grpc_request_edits_its_call() {
 
 #[test]
 fn a_grpc_request_picks_a_loaded_method_and_streams_while_called() {
-    use apifast_domain::{GrpcCall, GrpcMessage, GrpcMethod, GrpcMethodType, GrpcService};
+    use apifast_domain::{
+        GrpcCall, GrpcCatalog, GrpcMessage, GrpcMethod, GrpcMethodType, GrpcService,
+    };
     use apifast_gui::core::MethodsView;
     let mut call = HttpRequest::new("Call", Method::Get, "localhost:50051");
     call.body = Body::Grpc(GrpcCall {
@@ -674,16 +676,19 @@ fn a_grpc_request_picks_a_loaded_method_and_streams_while_called() {
     ));
 
     harness.state_mut().context.methods = Some(MethodsView {
-        services: Some(std::sync::Arc::new(vec![GrpcService {
-            name: "hello.Greeter".into(),
-            methods: vec![GrpcMethod {
-                name: "Chat".into(),
-                path: "/hello.Greeter/Chat".into(),
-                method_type: GrpcMethodType::BidiStreaming,
-                input: "hello.Req".into(),
-                output: "hello.Rep".into(),
+        catalog: Some(std::sync::Arc::new(GrpcCatalog {
+            services: vec![GrpcService {
+                name: "hello.Greeter".into(),
+                methods: vec![GrpcMethod {
+                    name: "Chat".into(),
+                    path: "/hello.Greeter/Chat".into(),
+                    method_type: GrpcMethodType::BidiStreaming,
+                    input: "hello.Req".into(),
+                    output: "hello.Rep".into(),
+                }],
             }],
-        }])),
+            ..GrpcCatalog::default()
+        })),
         ..MethodsView::default()
     });
     harness.run();
@@ -710,4 +715,77 @@ fn a_grpc_request_picks_a_loaded_method_and_streams_while_called() {
     let connection = harness.state().panel.connection;
     assert_eq!(connection.send, Some(0));
     assert!(connection.end);
+}
+
+#[test]
+fn a_grpc_message_is_completed_from_its_methods_type() {
+    use apifast_domain::{
+        GrpcCall, GrpcCatalog, GrpcField, GrpcFieldKind, GrpcMessage, GrpcMethod, GrpcMethodType,
+        GrpcService,
+    };
+    use apifast_gui::core::MethodsView;
+    let mut call = HttpRequest::new("Call", Method::Get, "localhost:50051");
+    call.body = Body::Grpc(GrpcCall {
+        method: "/s.S/Do".into(),
+        messages: vec![GrpcMessage::new("", "")],
+        ..GrpcCall::default()
+    });
+    let mut harness = harness(RequestTab::Body, call);
+    let field = |name: &str, kind| GrpcField {
+        name: name.into(),
+        kind,
+        repeated: false,
+        map: false,
+    };
+    harness.state_mut().context.methods = Some(MethodsView {
+        catalog: Some(std::sync::Arc::new(GrpcCatalog {
+            services: vec![GrpcService {
+                name: "s.S".into(),
+                methods: vec![GrpcMethod {
+                    name: "Do".into(),
+                    path: "/s.S/Do".into(),
+                    method_type: GrpcMethodType::Unary,
+                    input: "s.Ask".into(),
+                    output: "s.Done".into(),
+                }],
+            }],
+            messages: [(
+                "s.Ask".to_owned(),
+                vec![
+                    field("userId", GrpcFieldKind::Scalar("string".into())),
+                    field(
+                        "color",
+                        GrpcFieldKind::Enum("s.Color".into(), vec!["RED".into(), "BLUE".into()]),
+                    ),
+                ],
+            )]
+            .into(),
+        })),
+        ..MethodsView::default()
+    });
+    harness.set_size(egui::vec2(800.0, 1200.0));
+    harness.run();
+    harness
+        .get_by_role_and_label(Role::MultilineTextInput, EN.ws_messages)
+        .focus();
+    harness.run();
+    type_slowly(&mut harness, "{\"us");
+    assert!(harness.query_by_label("userId").is_some(), "suggested");
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    harness.run();
+    let data = |h: &Harness<'_, State>| match &h.state().request.body {
+        Body::Grpc(call) => call.messages[0].data.clone(),
+        other => panic!("{other:?}"),
+    };
+    assert!(
+        data(&harness).starts_with("{\"userId"),
+        "{}",
+        data(&harness)
+    );
+    type_slowly(&mut harness, "\": \"a\", \"color\": \"B");
+    assert!(
+        harness.query_by_label("BLUE").is_some(),
+        "the enum's values"
+    );
 }

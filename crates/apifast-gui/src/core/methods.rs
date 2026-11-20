@@ -7,7 +7,7 @@ use std::sync::Arc;
 use apifast_app::{
     CancelToken, NoPrompter, NoSecrets, SecretStore, SendOptions, SendPorts, describe_grpc,
 };
-use apifast_domain::{Body, GrpcService, HttpRequest};
+use apifast_domain::{Body, GrpcCatalog, HttpRequest};
 
 use super::collections::Open;
 use super::{Message, State, TabKey};
@@ -16,8 +16,8 @@ use crate::system::{SystemClock, SystemRandom};
 /// What the interface knows of a gRPC request's methods.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MethodsView {
-    /// The services the server or the `.proto` described last.
-    pub services: Option<Arc<Vec<GrpcService>>>,
+    /// What the server or the `.proto` described last.
+    pub catalog: Option<Arc<GrpcCatalog>>,
     /// Whether they are being loaded.
     pub loading: bool,
     /// Why the last load failed.
@@ -106,7 +106,7 @@ impl State {
         &mut self,
         root: &std::path::Path,
         methods_key: String,
-        result: Result<Vec<GrpcService>, String>,
+        result: Result<GrpcCatalog, String>,
     ) {
         let Some(open) = self.open.get_mut(root) else {
             return;
@@ -114,8 +114,8 @@ impl State {
         let view = open.methods.entry(methods_key).or_default();
         view.loading = false;
         match result {
-            Ok(services) => {
-                view.services = Some(Arc::new(services));
+            Ok(catalog) => {
+                view.catalog = Some(Arc::new(catalog));
                 view.error = None;
             }
             Err(why) => view.error = Some(why),

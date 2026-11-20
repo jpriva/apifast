@@ -419,7 +419,7 @@ impl crate::WsTransport for MemorySockets {
 #[derive(Debug, Default)]
 pub struct MemoryGrpc {
     /// What it offers.
-    pub services: Vec<apifast_domain::GrpcService>,
+    pub catalog: apifast_domain::GrpcCatalog,
     asked: Mutex<Vec<(RenderedRequest, Option<String>)>>,
 }
 
@@ -427,7 +427,10 @@ impl MemoryGrpc {
     /// A server offering `services`.
     pub fn new(services: Vec<apifast_domain::GrpcService>) -> Self {
         Self {
-            services,
+            catalog: apifast_domain::GrpcCatalog {
+                services,
+                ..apifast_domain::GrpcCatalog::default()
+            },
             asked: Mutex::default(),
         }
     }
@@ -444,12 +447,12 @@ impl crate::GrpcTransport for MemoryGrpc {
         request: &RenderedRequest,
         proto: Option<&str>,
         cancel: &CancelToken,
-    ) -> impl Future<Output = Result<Vec<apifast_domain::GrpcService>, TransportError>> + Send {
+    ) -> impl Future<Output = Result<apifast_domain::GrpcCatalog, TransportError>> + Send {
         let result = if cancel.is_cancelled() {
             Err(TransportError::Cancelled)
         } else {
             lock(&self.asked).push((request.clone(), proto.map(str::to_owned)));
-            Ok(self.services.clone())
+            Ok(self.catalog.clone())
         };
         std::future::ready(result)
     }

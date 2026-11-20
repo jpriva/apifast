@@ -1,7 +1,51 @@
 //! What a gRPC server offers (docs/07, F8): its services and their
-//! methods, as reflection or a `.proto` file describe them.
+//! methods, and the fields of the messages they take, as reflection or a
+//! `.proto` file describe them.
+
+use std::collections::BTreeMap;
 
 use crate::GrpcMethodType;
+
+/// What a server or a `.proto` describes.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GrpcCatalog {
+    /// The services, sorted by name.
+    pub services: Vec<GrpcService>,
+    /// The fields of every message the methods take, and of the messages
+    /// in them, by the message's full name.
+    pub messages: BTreeMap<String, Vec<GrpcField>>,
+}
+
+impl GrpcCatalog {
+    /// The method at `path` (`/package.Service/Method`).
+    pub fn method(&self, path: &str) -> Option<&GrpcMethod> {
+        find_grpc_method(&self.services, path)
+    }
+}
+
+/// A field of a message, as it is written in JSON.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GrpcField {
+    /// Its JSON name (`userId` for `user_id`).
+    pub name: String,
+    /// What it holds; for a map, what each of its values holds.
+    pub kind: GrpcFieldKind,
+    /// Whether it is a list.
+    pub repeated: bool,
+    /// Whether it is a map: an object of any keys.
+    pub map: bool,
+}
+
+/// What a field holds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GrpcFieldKind {
+    /// A scalar, by its protobuf name: `string`, `int32`, `bool`, `bytes`…
+    Scalar(String),
+    /// A message, by its full name.
+    Message(String),
+    /// An enum: its full name and its values' names.
+    Enum(String, Vec<String>),
+}
 
 /// A service and its methods.
 #[derive(Debug, Clone, PartialEq, Eq)]
