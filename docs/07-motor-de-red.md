@@ -306,7 +306,7 @@ Probado con un servidor que mantiene la conexión (el primer envío a `localhost
 - **El log de la llamada** es el de una conexión WebSocket ([`WsLogEntry`](#websocket-f7)): `sent`, `received`, `error` y `closed`. Al final, `closed` por el servidor lleva el código de estado de gRPC y su nombre con el mensaje (`0 OK`, `5 NOT_FOUND: …`); cancelar la cierra desde el cliente (`1 CANCELLED`). Un estado de error no es un error de la llamada: queda en el log. La respuesta es la de HTTP/2 (`200`, `content-type: application/grpc`, que la distingue en el historial), con la metadata y los trailers como headers y el tiempo de toda la llamada.
 - El timeout cubre hasta que el servidor responde; un stream largo no se corta.
 - **En la GUI**, llamar envía el mensaje mostrado; mientras el cliente transmite, cada mensaje se envía cuando el usuario lo pide, por el mismo canal del núcleo que en WebSocket, y "End stream" lo cierra ([docs/09](09-ui-ux.md#requests-grpc)).
-- El adaptador se inicializa al abrir la primera request gRPC.
+- **Al primer uso:** el adaptador no tiene estado global; se crea en cada llamada o descripción, así que abrir la aplicación sin usar gRPC no cuesta memoria. Se puede compilar sin él con la feature `grpc` de los drivers ([docs/10](10-rendimiento-y-memoria.md#funciones-opcionales)).
 
 ## Errores
 

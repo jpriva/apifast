@@ -37,6 +37,20 @@ pub(super) fn key_of(open: &Open, request: &HttpRequest) -> Option<String> {
     ))
 }
 
+/// The gRPC transport of this build, over `http`'s connections: tonic's,
+/// or, without the `grpc` feature, one that says there is none.
+#[cfg(feature = "grpc")]
+pub(super) fn grpc_transport(http: apifast_http::ReqwestTransport) -> apifast_grpc::TonicTransport {
+    apifast_grpc::TonicTransport::new(http)
+}
+
+/// The gRPC transport of this build: without the `grpc` feature, one that
+/// says there is none.
+#[cfg(not(feature = "grpc"))]
+pub(super) fn grpc_transport(_: apifast_http::ReqwestTransport) -> apifast_app::NoGrpc {
+    apifast_app::NoGrpc
+}
+
 impl State {
     /// Loads the methods of the tab's gRPC request, as it is on screen, in
     /// the background.
@@ -89,7 +103,7 @@ impl State {
                 tokens: Some(tokens.as_ref()),
                 authorizer: None,
             };
-            let grpc = apifast_grpc::TonicTransport::new((*transport).clone());
+            let grpc = grpc_transport((*transport).clone());
             let result = describe_grpc(ports, &grpc, &key.path, &options, &CancelToken::new())
                 .await
                 .map_err(|e| e.to_string());

@@ -98,7 +98,7 @@ impl State {
             let at_ms = clock.unix_millis();
             let mut outbox = Outbox(receiver);
             let result = if grpc {
-                let calls = apifast_grpc::TonicTransport::new((*transport).clone());
+                let calls = super::methods::grpc_transport((*transport).clone());
                 let exchange = (&calls, &mut outbox);
                 call_grpc(ports, exchange, &key.path, &options, &cancel).await
             } else {

@@ -1,6 +1,7 @@
 //! `apifast describe` end to end: the real binary and a collection on
 //! disk, with a `.proto` file. No test uses the network.
 
+#![cfg(feature = "grpc")]
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,

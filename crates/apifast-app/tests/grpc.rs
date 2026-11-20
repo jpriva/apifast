@@ -181,6 +181,29 @@ fn a_grpc_request_is_described_with_its_metadata_and_proto() {
 }
 
 #[test]
+fn a_build_without_grpc_says_so() {
+    let world = World::new(None);
+    let error = block_on(describe_grpc(
+        world.ports(),
+        &apifast_app::NoGrpc,
+        &RequestPath::new("call.yml"),
+        &World::options(),
+        &CancelToken::new(),
+    ))
+    .unwrap_err();
+    assert_eq!(error.to_string(), apifast_app::NO_GRPC);
+    let error = block_on(call_grpc(
+        world.ports(),
+        (&apifast_app::NoGrpc, &mut MemoryOutbox::default()),
+        &RequestPath::new("call.yml"),
+        &World::options(),
+        &CancelToken::new(),
+    ))
+    .unwrap_err();
+    assert_eq!(error.to_string(), apifast_app::NO_GRPC);
+}
+
+#[test]
 fn a_call_renders_its_messages_masks_secrets_and_logs_how_it_ended() {
     let world = World::new(Some(GrpcMethodType::ClientStreaming));
     let outcome = world

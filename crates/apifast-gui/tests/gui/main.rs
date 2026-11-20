@@ -10,6 +10,7 @@ mod core_thread;
 mod editing;
 mod environments;
 mod flow;
+#[cfg(feature = "grpc")]
 mod grpc;
 mod history;
 mod keyboard;

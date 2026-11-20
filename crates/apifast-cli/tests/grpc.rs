@@ -2,6 +2,7 @@
 //! collection with a `.proto` and a local gRPC server. No test uses the
 //! external network.
 
+#![cfg(feature = "grpc")]
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,

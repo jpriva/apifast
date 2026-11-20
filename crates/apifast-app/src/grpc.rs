@@ -118,6 +118,35 @@ impl<G: GrpcTransport + Sync> Exchange for Call<'_, G> {
     }
 }
 
+/// What a build without gRPC says when asked for it.
+pub const NO_GRPC: &str = "this build of apifast has no gRPC support";
+
+/// The [`GrpcTransport`] of a build without gRPC: every call fails, saying
+/// so.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NoGrpc;
+
+impl GrpcTransport for NoGrpc {
+    fn describe(
+        &self,
+        _: &RenderedRequest,
+        _: Option<&str>,
+        _: &CancelToken,
+    ) -> impl Future<Output = Result<GrpcCatalog, TransportError>> + Send {
+        std::future::ready(Err(TransportError::Other(NO_GRPC.into())))
+    }
+
+    fn call<H: WsHandler>(
+        &self,
+        _: &RenderedRequest,
+        _: &GrpcCall,
+        _: &mut H,
+        _: &CancelToken,
+    ) -> impl Future<Output = Result<ResponseHead, TransportError>> + Send {
+        std::future::ready(Err(TransportError::Other(NO_GRPC.into())))
+    }
+}
+
 /// The services the gRPC request at `path` (or the draft) can call, as its
 /// `.proto` file describes them or, without one, as its server says.
 ///

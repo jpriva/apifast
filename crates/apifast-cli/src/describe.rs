@@ -55,7 +55,7 @@ pub fn run(args: &DescribeArgs) -> Result<ExitCode> {
     let tokens = apifast_app::memory::MemoryTokens::default();
     let authorizer = terminal_authorizer();
     let (runtime, cancel) = runtime()?;
-    let grpc = apifast_grpc::TonicTransport::new(transport.clone());
+    let grpc = crate::grpc_transport(transport.clone());
     let ports = SendPorts {
         collections: &*repo,
         environments: &*repo,

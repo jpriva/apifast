@@ -21,10 +21,16 @@ apifast-history.workspace = true
 apifast-vault.workspace = true
 apifast-import.workspace = true
 apifast-ws.workspace = true
-apifast-grpc.workspace = true
+# gRPC, behind the `grpc` feature (on by default): without it, gRPC
+# requests open and save but say they cannot be called.
+apifast-grpc = { workspace = true, optional = true }
 clap = { version = "4.6.7", features = ["derive"] }
 anyhow = "1.0.104"
 tokio = { version = "1.54.1", features = ["rt", "time", "signal", "macros"] }
+
+[features]
+default = ["grpc"]
+grpc = ["dep:apifast-grpc"]
 
 [lints]
 workspace = true

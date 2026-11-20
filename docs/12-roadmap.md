@@ -390,11 +390,13 @@ Cada protocolo tiene su editor y su visor, y sus archivos pasan el round-trip.
   - [x] En la GUI ([docs/09](09-ui-ux.md#requests-grpc)): "Load methods" y "Pick a method", "Call" (envía el mensaje mostrado), "Send" y "End stream" para un cliente que transmite, "Cancel", y la pestaña Messages en vivo; la llamada en el historial con `gRPC`. Probado en el núcleo contra un servidor local (cargar los métodos, llamar con streaming del cliente, terminar el stream, el log y el historial), en el editor y en el panel de respuesta.
 - [x] Editor de mensajes JSON con esquema para autocompletar ([docs/09](09-ui-ux.md#requests-grpc)): la descripción trae los campos de los mensajes (nombre en JSON, tipo, lista o mapa, valores de enum), y el editor completa campos, valores de enum y booleanos según el tipo de entrada del método, con una lectura ligera del JSON hasta el cursor. Probado con casos de cada contexto (anidados, listas, mapas, plantillas) y en el editor.
 - [x] Metadata, TLS y autenticación reutilizando el motor ([docs/07](07-motor-de-red.md#grpc-f8)): la conexión de `apifast-http` ahora pasa por el proxy (las reglas de reqwest, con `CONNECT` sobre HTTP o HTTPS, SOCKS5 y SOCKS4a), y tonic no pone TLS propio. Probado con proxies mínimos locales (`CONNECT` con credenciales, un `407`, las exclusiones, SOCKS5 con usuario y contraseña), una llamada a través del proxy de la colección y un servidor en TLS que exige certificado de cliente (con él, sin él y sin la CA).
-- [ ] Inicialización diferida y feature de Cargo.
+- [x] Inicialización diferida y feature de Cargo ([docs/10](10-rendimiento-y-memoria.md#funciones-opcionales)): el transporte se crea en cada uso; la feature `grpc` (por defecto) de la CLI y la GUI trae `apifast-grpc`, y sin ella las requests gRPC dicen que la build no lo tiene. Medido: un envío HTTP ocupa la misma memoria con y sin gRPC, y la CLI sin él pesa 2,3 MB menos. El CI compila y prueba los drivers sin la feature.
 
 ### Criterio de salida
 
 Los cuatro modos funcionan contra un servidor de pruebas, y abrir la aplicación sin usar gRPC no aumenta la memoria.
+
+Se cumple: los cuatro modos funcionan contra un servidor local (con `.proto` y por reflection v1 y v1alpha, en texto plano, en TLS con certificado de cliente y a través de un proxy), desde el transporte, el núcleo de la GUI y `apifast send`. La memoria se midió con la CLI: un envío HTTP ocupa lo mismo con gRPC compilado que sin él, porque nada de gRPC corre hasta usarlo; la GUI crea el transporte de la misma forma. Quedan pendientes anotados: los importadores de Bruno `.bru` e Insomnia todavía omiten las requests gRPC, los scripts de sus ciclos esperan a F9, y el proxy HTTPS y SOCKS4a no tienen prueba propia.
 
 ---
 

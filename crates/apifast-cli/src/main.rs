@@ -333,7 +333,7 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
         };
         let mut outbox = socket::Messages(messages.into(), grpc);
         if grpc {
-            let calls = apifast_grpc::TonicTransport::new(transport.clone());
+            let calls = grpc_transport(transport.clone());
             let outcome = runtime.block_on(call_grpc(
                 ports!(&printing),
                 (&calls, &mut outbox),
@@ -471,6 +471,20 @@ fn exchanged(body: apifast_domain::Body) -> (Option<Vec<apifast_domain::WsMessag
         }
         _ => (None, false),
     }
+}
+
+/// The gRPC transport of this build, over `http`'s connections: tonic's,
+/// or, without the `grpc` feature, one that says there is none.
+#[cfg(feature = "grpc")]
+fn grpc_transport(http: ReqwestTransport) -> apifast_grpc::TonicTransport {
+    apifast_grpc::TonicTransport::new(http)
+}
+
+/// The gRPC transport of this build: without the `grpc` feature, one that
+/// says there is none.
+#[cfg(not(feature = "grpc"))]
+fn grpc_transport(_: ReqwestTransport) -> apifast_app::NoGrpc {
+    apifast_app::NoGrpc
 }
 
 /// Tells how a gRPC call `ended` (its status, then its time) and gives its
