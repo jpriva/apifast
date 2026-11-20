@@ -82,6 +82,7 @@ impl State {
         let options = SendOptions {
             environment: open.environment.clone(),
             runtime: open.runtime.clone(),
+            script_changes: open.script_changes.clone(),
             draft: Some(request),
             ..SendOptions::default()
         };

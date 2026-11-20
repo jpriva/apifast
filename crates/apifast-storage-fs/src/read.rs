@@ -491,6 +491,10 @@ pub(crate) fn folder(doc: &Value, dir_name: &str) -> Folder {
     Folder {
         name: text(info.and_then(|i| get(i, "name"))).unwrap_or_else(|| dir_name.to_owned()),
         seq: info.and_then(|i| unsigned(get(i, "seq"))),
+        tags: items(get_in(doc, &["info", "tags"]))
+            .iter()
+            .filter_map(|t| text(Some(t)))
+            .collect(),
         defaults: request_defaults(get(doc, "request"), auth(get_in(doc, &["request", "auth"]))),
     }
 }

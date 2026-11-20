@@ -51,8 +51,8 @@ use apifast_app::{
     NoPrompter, NoSecrets, Placement, RequestPath, ResponseHead, ResponseId, ResponseStore,
     SecretStore, SendOptions, SendPorts, Session, SessionStore, SessionTab, SharedSecretFiles,
     TokenStore, TransportError, apply_captures, apply_script_variables, create_folder,
-    create_request, delete_item, load_request, move_item, rename_item, resolve_request_variables,
-    save_request, send_request,
+    create_request, delete_item, keep_script_changes, load_request, move_item, rename_item,
+    resolve_request_variables, save_request, send_request,
 };
 use apifast_domain::{
     AuthScheme, Chain, Collection, Environment, Header, HttpRequest, Origin, Resolved,
@@ -1555,6 +1555,7 @@ impl State {
             environment: open.environment.clone(),
             draft: self.tab(&key).and_then(|tab| tab.draft.clone()),
             runtime: open.runtime.clone(),
+            script_changes: open.script_changes.clone(),
             ..SendOptions::default()
         };
         let Some(tab) = self.tab_mut(&key) else {
@@ -1656,6 +1657,7 @@ impl State {
                 if let Some(open) = self.open.get_mut(&key.root) {
                     apply_captures(&mut open.runtime, &checks.captures);
                     apply_script_variables(&mut open.runtime, &checks.scripts.variables);
+                    keep_script_changes(&mut open.script_changes, &checks.scripts.variables);
                 }
                 self.note_environment_captures(&key.root, &checks.captures);
                 let persisted = captures::persisted(&checks.scripts.variables);

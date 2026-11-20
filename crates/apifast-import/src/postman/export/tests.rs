@@ -132,7 +132,7 @@ fn sample() -> ImportedCollection {
         },
         items: vec![
             ImportedItem::Folder {
-                folder,
+                folder: Box::new(folder),
                 items: vec![item(create), item(form)],
             },
             item(upload),

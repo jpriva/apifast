@@ -49,7 +49,7 @@ pub use body::{
     WsMessage, WsMessageKind,
 };
 pub use certificates::{ClientCertificate, ClientCertificateKind, TlsTrust};
-pub use collection::{Collection, CollectionId, Folder, RequestDefaults};
+pub use collection::{Collection, CollectionId, Folder, RequestDefaults, effective_tags};
 pub use cookie::{
     Cookie, CookieJar, CookieSpec, CookieTarget, SameSite, cookie_from_spec, format_expiry,
     merge_cookie_header, parse_expiry, parse_set_cookie,

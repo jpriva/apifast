@@ -171,6 +171,9 @@ pub struct ScriptVariables {
     pub request: Vec<Variable>,
     /// Those set while running (`bru.setVar`, captures).
     pub runtime: Vec<Variable>,
+    /// The global ones (`bru.getGlobalEnvVar`): those scripts set, for as
+    /// long as the run or the open collection lasts.
+    pub globals: Vec<Variable>,
 }
 
 /// What a script is given: the request, the response once there is one,
@@ -198,6 +201,8 @@ pub enum VariableScope {
     /// The collection (`bru.setCollectionVar`), for this run: the
     /// collection file is not changed.
     Collection,
+    /// The global ones (`bru.setGlobalEnvVar`), for this run.
+    Global,
 }
 
 /// A variable a script set or deleted.

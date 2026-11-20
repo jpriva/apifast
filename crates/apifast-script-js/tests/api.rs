@@ -60,6 +60,7 @@ fn input() -> ScriptInput {
                 typed("seen", ValueKind::Bool, "true"),
                 Variable::secret("hidden"),
             ],
+            globals: vec![Variable::text("region", "eu")],
         },
         cookies: Vec::new(),
     }
@@ -831,4 +832,44 @@ async fn bru_run_request_gives_its_response_and_the_variables_it_set() {
         ]
     );
     assert_eq!(outcome.variables.len(), 1, "it reaches the caller too");
+}
+
+#[tokio::test]
+async fn bru_reads_and_sets_global_variables() {
+    let outcome = run(r"
+        console.log(bru.getGlobalEnvVar('region'), bru.hasGlobalEnvVar('nope'), bru.interpolate('{{region}}'));
+        bru.setGlobalEnvVar('zone', 2);
+        const all = bru.getAllGlobalEnvVars();
+        all.zone = 'mutated';
+        console.log(bru.getAllGlobalEnvVars().zone, bru.getVar('zone'));
+        bru.deleteAllGlobalEnvVars();
+        console.log(Object.keys(bru.getAllGlobalEnvVars()).length);
+    ")
+    .await;
+    assert_eq!(logged(&outcome), ["eu false eu", "2 undefined", "0"]);
+    let scopes: Vec<_> = (outcome.variables.iter())
+        .map(|c| (c.scope, c.name.as_str(), c.value.is_some()))
+        .collect();
+    assert_eq!(
+        scopes,
+        [
+            (VariableScope::Global, "zone", true),
+            (VariableScope::Global, "region", false),
+            (VariableScope::Global, "zone", false),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn awaiting_a_test_waits_for_it_to_end() {
+    let outcome = run(r"
+        const order = [];
+        await test('first', async () => { await bru.sleep(20); order.push('first'); });
+        await test('second', () => { order.push('second'); });
+        const failed = await test('failed', async () => { throw new Error('no'); });
+        console.log(order.join(), failed, req.tags);
+    ")
+    .await;
+    assert_eq!(logged(&outcome), [r#"first,second undefined ["smoke"]"#]);
+    assert_eq!(outcome.tests[2].error.as_deref(), Some("no"));
 }

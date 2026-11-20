@@ -31,6 +31,7 @@ fn options(open: &Open, request: &HttpRequest) -> SendOptions {
     SendOptions {
         environment: open.environment.clone(),
         runtime: open.runtime.clone(),
+        script_changes: open.script_changes.clone(),
         draft: Some(request.clone()),
         ..SendOptions::default()
     }

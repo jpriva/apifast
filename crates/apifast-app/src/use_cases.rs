@@ -146,6 +146,10 @@ pub struct SendOptions {
     /// Send this instead of the request as saved: an unsaved draft. Its
     /// folders and collection still come from the repository.
     pub draft: Option<HttpRequest>,
+    /// What scripts of earlier requests changed in the environment, the
+    /// collection and the globals: the scripts of this one read it over
+    /// the files. Kept with [`keep_script_changes`](crate::keep_script_changes).
+    pub script_changes: Vec<crate::VariableChange>,
 }
 
 /// Result of [`send_request`].
@@ -549,6 +553,7 @@ where
         collection,
         environment: (options.environment.as_deref(), &environment),
         runtime: &options.runtime,
+        changed: &options.script_changes,
         variables,
     };
     let Some(mut scripts) = SendScripts::of(&loaded.request, &loaded.folders, &scopes) else {
@@ -648,6 +653,7 @@ where
         runtime: options.runtime.clone(),
         allow_unresolved: options.allow_unresolved,
         draft: None,
+        script_changes: options.script_changes.clone(),
     };
     let outcome = send_in_chain(ports, dependency, &dependency_options, cancel, context)
         .await

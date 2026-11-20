@@ -153,6 +153,7 @@ impl State {
             send: SendOptions {
                 environment: open.environment.clone(),
                 runtime: open.runtime.clone(),
+                script_changes: open.script_changes.clone(),
                 ..SendOptions::default()
             },
         };
@@ -239,6 +240,7 @@ impl State {
                         // What the run captured is there for the next sends.
                         if let Some(open) = self.open.get_mut(&view.root) {
                             open.runtime.clone_from(&report.runtime);
+                            open.script_changes.clone_from(&report.script_changes);
                         }
                         view.report = Some(Arc::new(report));
                     }

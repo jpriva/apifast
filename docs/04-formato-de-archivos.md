@@ -81,6 +81,7 @@ info:
   name: Usuarios
   type: folder
   seq: 2
+  tags: [users]       # sus requests los llevan además de los suyos
 
 request:
   headers:

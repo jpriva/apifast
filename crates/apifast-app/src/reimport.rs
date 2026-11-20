@@ -262,7 +262,7 @@ pub fn apply_reimport(
     let mut requests: Vec<(String, HttpRequest)> = Vec::new();
     let mut folders: Vec<(String, Folder)> = Vec::new();
     walk_planned(&imported.items, "", &mut |entry, item| match item {
-        ImportedItem::Folder { folder, .. } => folders.push((entry.path, folder.clone())),
+        ImportedItem::Folder { folder, .. } => folders.push((entry.path, (**folder).clone())),
         ImportedItem::Request { request, key } => {
             requests.push((key.clone().unwrap_or(entry.path), request.as_ref().clone()));
         }
@@ -374,7 +374,7 @@ mod tests {
         ImportedCollection {
             name: "Shop".into(),
             items: vec![ImportedItem::Folder {
-                folder: Folder::new("Users"),
+                folder: Box::new(Folder::new("Users")),
                 items,
             }],
             ..ImportedCollection::default()

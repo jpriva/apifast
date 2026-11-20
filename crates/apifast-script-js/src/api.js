@@ -53,6 +53,7 @@
         folders: scope(vars.folders),
         request: scope(vars.request),
         runtime: scope(vars.runtime),
+        global: scope(vars.globals ?? []),
     };
     const validName = (name) => {
         if (typeof name !== 'string' || !/^[\w.-]+$/.test(name)) {
@@ -65,7 +66,7 @@
     // From the lowest precedence to the highest, as templates resolve them.
     const lookup = (name) => {
         let found;
-        for (const values of [scopes.collection, scopes.environment, scopes.folders, scopes.request, scopes.runtime]) {
+        for (const values of [scopes.global, scopes.collection, scopes.environment, scopes.folders, scopes.request, scopes.runtime]) {
             if (values.has(name)) found = { value: values.get(name) };
         }
         return found;
@@ -178,6 +179,7 @@
         ['headers', req.getHeaders, req.setHeaders],
         ['body', req.getBody, req.setBody],
         ['timeout', req.getTimeout, req.setTimeout],
+        ['tags', req.getTags, undefined],
     ]) {
         Object.defineProperty(req, name, { get, set, enumerable: true });
     }
@@ -367,6 +369,21 @@
         deleteAllEnvVars() {
             for (const name of [...scopes.environment.keys()]) bru.deleteEnvVar(name);
         },
+        getGlobalEnvVar: (name) => scopes.global.get(name),
+        hasGlobalEnvVar: (name) => scopes.global.has(name),
+        setGlobalEnvVar(name, value) {
+            validName(name);
+            scopes.global.set(name, value);
+            change('global', name, value, false);
+        },
+        deleteGlobalEnvVar(name) {
+            scopes.global.delete(name);
+            change('global', name, undefined, false);
+        },
+        getAllGlobalEnvVars: () => Object.fromEntries(scopes.global),
+        deleteAllGlobalEnvVars() {
+            for (const name of [...scopes.global.keys()]) bru.deleteGlobalEnvVar(name);
+        },
         // Scripts reach neither files nor the network: always safe mode.
         isSafeMode: () => true,
         getProcessEnv: (name) => processEnv(String(name)) ?? undefined,
@@ -417,17 +434,22 @@
 
     // `test`: each one passes unless its function throws or rejects.
     const why = (error) => (error instanceof Error ? error.message : String(error));
+    // It gives a promise that resolves once the test ends, and never
+    // rejects: `await test(…)` runs the next one after it, as in Bruno.
     const test = (name, run) => {
         const entry = { name: String(name), error: null };
         out.tests.push(entry);
         try {
             const result = run();
             if (result && typeof result.then === 'function') {
-                pending.push(Promise.resolve(result).then(() => {}, (error) => { entry.error = why(error); }));
+                const ended = Promise.resolve(result).then(() => {}, (error) => { entry.error = why(error); });
+                pending.push(ended);
+                return ended;
             }
         } catch (error) {
             entry.error = why(error);
         }
+        return Promise.resolve();
     };
 
     Object.assign(globalThis, {

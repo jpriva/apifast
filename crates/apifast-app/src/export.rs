@@ -39,7 +39,7 @@ fn contents(
             TreeItem::Folder {
                 folder, children, ..
             } => Some(ImportedItem::Folder {
-                folder: folder.clone(),
+                folder: Box::new(folder.clone()),
                 items: contents(collections, children, warnings),
             }),
             TreeItem::Request {
@@ -115,7 +115,7 @@ mod tests {
             name: "Shop".into(),
             items: vec![
                 ImportedItem::Folder {
-                    folder: Folder::new("Users"),
+                    folder: Box::new(Folder::new("Users")),
                     items: vec![request("Zeta"), request("Alpha")],
                 },
                 request("Health"),

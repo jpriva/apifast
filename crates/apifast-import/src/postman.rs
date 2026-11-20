@@ -147,7 +147,7 @@ fn items(node: &Value, path: &[String], warnings: &mut Vec<ImportWarning>) -> Ve
                 let mut folder = apifast_domain::Folder::new(name);
                 folder.defaults = defaults(item, &at, warnings);
                 ImportedItem::Folder {
-                    folder,
+                    folder: Box::new(folder),
                     items: items(item, &here, warnings),
                 }
             } else {

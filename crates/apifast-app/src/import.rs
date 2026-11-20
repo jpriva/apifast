@@ -31,8 +31,9 @@ pub struct ImportedCollection {
 pub enum ImportedItem {
     /// A folder and what it holds, in order.
     Folder {
-        /// The folder: name and what its requests inherit.
-        folder: Folder,
+        /// The folder: name and what its requests inherit. Boxed, as the
+        /// request is, to keep the item small.
+        folder: Box<Folder>,
         /// Its folders and requests.
         items: Vec<ImportedItem>,
     },
@@ -227,10 +228,10 @@ pub(crate) fn walk_planned<'a>(
         match item {
             ImportedItem::Folder { folder, items } => {
                 let positioned = ImportedItem::Folder {
-                    folder: Folder {
+                    folder: Box::new(Folder {
                         seq: Some(seq),
-                        ..folder.clone()
-                    },
+                        ..(**folder).clone()
+                    }),
                     items: Vec::new(),
                 };
                 visit(entry, &positioned);
@@ -269,12 +270,12 @@ mod tests {
             name: "Shop".into(),
             items: vec![
                 ImportedItem::Folder {
-                    folder: Folder::new("Users"),
+                    folder: Box::new(Folder::new("Users")),
                     items: vec![request("Get user"), request("Get user"), request("¿?")],
                 },
                 request("Health"),
                 ImportedItem::Folder {
-                    folder: Folder::new("users"),
+                    folder: Box::new(Folder::new("users")),
                     items: Vec::new(),
                 },
             ],

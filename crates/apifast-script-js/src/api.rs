@@ -134,6 +134,7 @@ fn to_json(input: &ScriptInput) -> Json {
             "folders": variables_json(&variables.folders),
             "request": variables_json(&variables.request),
             "runtime": variables_json(&variables.runtime),
+            "globals": variables_json(&variables.globals),
         },
         "cookies": input.cookies.iter().map(cookie_json).collect::<Vec<_>>(),
     })
@@ -231,6 +232,7 @@ pub(crate) fn change_json(change: &VariableChange) -> Json {
         VariableScope::Runtime => "runtime",
         VariableScope::Environment => "environment",
         VariableScope::Collection => "collection",
+        VariableScope::Global => "global",
     };
     let value = (change.value.as_ref())
         .map(|value| json!({"kind": kind_name(value.kind), "data": value.data}));
@@ -241,6 +243,7 @@ fn change(json: &Json) -> Option<VariableChange> {
     let scope = match json.get("scope")?.as_str()? {
         "environment" => VariableScope::Environment,
         "collection" => VariableScope::Collection,
+        "global" => VariableScope::Global,
         _ => VariableScope::Runtime,
     };
     let value = json

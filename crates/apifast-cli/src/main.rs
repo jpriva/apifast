@@ -294,6 +294,7 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
             .collect(),
         allow_unresolved: args.allow_unresolved,
         draft: None,
+        script_changes: Vec::new(),
     };
 
     let (messages, grpc) = exchanged(repo.request(&located.request)?.request.body);

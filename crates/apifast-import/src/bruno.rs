@@ -70,6 +70,15 @@ pub fn import_bruno(dir: &Path) -> Result<ImportedCollection, BrunoError> {
     })
 }
 
+/// The tags of a `meta` block (`tags: [a, b]`).
+fn tags(file: &BruFile) -> Vec<String> {
+    (file.get("meta", "tags").into_iter())
+        .flat_map(|t| t.split(','))
+        .map(|t| t.trim().to_owned())
+        .filter(|t| !t.is_empty())
+        .collect()
+}
+
 /// The `.bru` file at `path`, or `None` if it is missing or cannot be read
 /// (with a warning).
 fn read_bru(path: &Path, at: &str, warnings: &mut Vec<ImportWarning>) -> Option<BruFile> {
@@ -119,6 +128,7 @@ fn folder_items(
             let mut folder = Folder::new(name.clone());
             if let Some(file) = &folder_file {
                 folder.defaults = defaults(file, &at, warnings);
+                folder.tags = tags(file);
             }
             let seq = folder_file
                 .as_ref()
@@ -133,7 +143,7 @@ fn folder_items(
                 seq,
                 name,
                 ImportedItem::Folder {
-                    folder,
+                    folder: Box::new(folder),
                     items: children,
                 },
             ));
@@ -247,11 +257,7 @@ fn request(
         .text("docs")
         .map(str::to_owned)
         .filter(|d| !d.trim().is_empty());
-    request.tags = (file.get("meta", "tags").into_iter())
-        .flat_map(|t| t.split(','))
-        .map(|t| t.trim().to_owned())
-        .filter(|t| !t.is_empty())
-        .collect();
+    request.tags = tags(file);
     settings(file, &mut request);
     // Path parameters keep their values; disabled query ones are kept off.
     for pair in file.pairs("params:path") {

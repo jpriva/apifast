@@ -267,6 +267,25 @@ fn tags_select_and_the_rest_is_skipped_with_a_reason() {
 }
 
 #[test]
+fn a_folders_tags_are_its_requests_tags() {
+    let mut world = World::new();
+    let mut admin = Folder::new("Admin");
+    admin.tags = vec!["danger".into()];
+    world.collections = collection().with_folder("users/admin", admin);
+    let report = world.run(&RunOptions {
+        exclude_tags: vec!["danger".into()],
+        recursive: true,
+        ..RunOptions::default()
+    });
+    assert!(
+        !paths(&report).contains(&"users/admin/purge.yml"),
+        "{:?}",
+        paths(&report)
+    );
+    assert_eq!(report.skipped[0].reason, "excluded by the tag `danger`");
+}
+
+#[test]
 fn events_follow_each_request_and_cancel_stops_the_run() {
     let world = World::new();
     let events = Mutex::default();

@@ -620,7 +620,11 @@ fn folders_are_created_and_edited() {
     );
 
     folder.defaults.variables = vec![Variable::text("resource", "users")];
+    folder.tags = vec!["users".into(), "smoke".into()];
     repo.save_folder("users", &folder).unwrap();
+    assert!(
+        read(&dir, "users/folder.yml").contains("  seq: 3\n  tags:\n    - users\n    - smoke\n")
+    );
     let loaded = repo.request(&path("users/x.yml"));
     assert!(loaded.is_err());
     repo.save_request(

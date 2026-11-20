@@ -2,14 +2,14 @@
 //! folder in order, carrying captured values from one to the next, and
 //! gathers their results.
 
-use apifast_domain::{HttpRequest, RequestKind, Variable};
+use apifast_domain::{RequestKind, Variable};
 
 use crate::ports::is_within;
 use crate::use_cases::send_request;
 use crate::{
     AppError, CancelToken, CollectionRepository, EnvironmentRepository, HttpTransport, Pause,
     RequestPath, ResponseStore, RunnerRequest, SendOptions, SendOutcome, SendPorts, TreeItem,
-    apply_captures, apply_script_variables, sort_tree,
+    apply_captures, apply_script_variables, keep_script_changes, sort_tree,
 };
 
 /// What to run and how.
@@ -151,6 +151,9 @@ pub struct RunReport {
     pub stopped: bool,
     /// The runtime values at the end, with everything captured.
     pub runtime: Vec<Variable>,
+    /// What scripts changed in the environment, the collection and the
+    /// globals, to carry on ([`keep_script_changes`]).
+    pub script_changes: Vec<crate::VariableChange>,
 }
 
 impl RunReport {
@@ -299,8 +302,8 @@ fn collect(
 }
 
 /// Whether the tags of a request let it run.
-fn tags_allow(request: &HttpRequest, include: &[String], exclude: &[String]) -> Result<(), String> {
-    let has = |tag: &String| request.tags.iter().any(|t| t.eq_ignore_ascii_case(tag));
+fn tags_allow(tags: &[String], include: &[String], exclude: &[String]) -> Result<(), String> {
+    let has = |tag: &String| tags.iter().any(|t| t.eq_ignore_ascii_case(tag));
     if let Some(tag) = exclude.iter().find(|t| has(t)) {
         return Err(format!("excluded by the tag `{tag}`"));
     }
@@ -349,6 +352,7 @@ where
         cancelled: false,
         stopped: false,
         runtime: Vec::new(),
+        script_changes: Vec::new(),
     };
     let total = selection.len();
     let iterations = if options.data.is_empty() {
@@ -381,6 +385,7 @@ where
                 Ok(outcome) => {
                     apply_captures(&mut send.runtime, &outcome.captures);
                     apply_script_variables(&mut send.runtime, &outcome.scripts.variables);
+                    keep_script_changes(&mut send.script_changes, &outcome.scripts.variables);
                     outcome.scripts.runner.clone()
                 }
                 Err(AppError::Skipped(reason)) => {
@@ -427,6 +432,7 @@ where
         }
     }
     report.runtime = send.runtime;
+    report.script_changes = send.script_changes;
     report.duration_ms = elapsed(started, ports.clock.unix_millis());
     Ok(report)
 }
@@ -447,7 +453,10 @@ fn select(
     let mut selection = Vec::new();
     for (path, name) in candidates {
         let reason = match collections.request(&path) {
-            Ok(loaded) => tags_allow(&loaded.request, &options.tags, &options.exclude_tags).err(),
+            Ok(loaded) => {
+                let tags = apifast_domain::effective_tags(&loaded.request.tags, &loaded.folders);
+                tags_allow(&tags, &options.tags, &options.exclude_tags).err()
+            }
             Err(e) => Some(e.to_string()),
         };
         match reason {
@@ -480,14 +489,13 @@ mod tests {
 
     #[test]
     fn tags_include_any_and_exclude_any() {
-        let mut request = HttpRequest::new("a", apifast_domain::Method::Get, "http://x");
-        request.tags = vec!["smoke".into(), "Slow".into()];
+        let tags: Vec<String> = vec!["smoke".into(), "Slow".into()];
         let list = |t: &[&str]| t.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
-        assert!(tags_allow(&request, &[], &[]).is_ok());
-        assert!(tags_allow(&request, &list(&["smoke", "auth"]), &[]).is_ok());
-        assert!(tags_allow(&request, &list(&["auth"]), &[]).is_err());
+        assert!(tags_allow(&tags, &[], &[]).is_ok());
+        assert!(tags_allow(&tags, &list(&["smoke", "auth"]), &[]).is_ok());
+        assert!(tags_allow(&tags, &list(&["auth"]), &[]).is_err());
         assert_eq!(
-            tags_allow(&request, &list(&["smoke"]), &list(&["slow"])),
+            tags_allow(&tags, &list(&["smoke"]), &list(&["slow"])),
             Err("excluded by the tag `slow`".into())
         );
     }

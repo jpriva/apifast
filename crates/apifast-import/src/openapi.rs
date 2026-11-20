@@ -163,7 +163,7 @@ pub fn import_openapi(spec: &Value) -> Result<ImportedCollection, OpenApiError> 
         .into_iter()
         .filter(|(_, items)| !items.is_empty())
         .map(|(name, items)| ImportedItem::Folder {
-            folder: apifast_domain::Folder::new(name),
+            folder: Box::new(apifast_domain::Folder::new(name)),
             items,
         })
         .collect();

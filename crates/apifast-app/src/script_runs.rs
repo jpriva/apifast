@@ -105,6 +105,32 @@ pub fn apply_script_variables(runtime: &mut Vec<Variable>, changes: &[VariableCh
 /// The engine scripts run on, and the host they ask things of.
 pub(crate) type Runner<'a> = (&'a (dyn ScriptEngine + Sync), &'a dyn ScriptHost);
 
+/// Keeps, for the next requests, what scripts changed in the
+/// environment, the collection and the globals: the last change of each
+/// variable, a deletion too (it hides the file's value). Runtime ones go
+/// with [`apply_script_variables`].
+pub fn keep_script_changes(kept: &mut Vec<VariableChange>, changes: &[VariableChange]) {
+    for change in changes.iter().filter(|c| c.scope != VariableScope::Runtime) {
+        kept.retain(|k| (k.scope, &k.name) != (change.scope, &change.name));
+        kept.push(change.clone());
+    }
+}
+
+/// `list` with the `changed` of `scope` over it.
+fn changed_over(list: &mut Vec<Variable>, changed: &[VariableChange], scope: VariableScope) {
+    for change in changed.iter().filter(|c| c.scope == scope) {
+        list.retain(|v| v.name != change.name);
+        if let Some(value) = &change.value {
+            list.push(Variable {
+                name: change.name.clone(),
+                value: Some(value.clone()),
+                enabled: true,
+                secret: false,
+            });
+        }
+    }
+}
+
 /// The scripts of a send, between the request and its response: what
 /// they are given, and what they did so far.
 pub(crate) struct SendScripts {
@@ -120,6 +146,8 @@ pub(crate) struct Scopes<'a> {
     pub(crate) collection: &'a Collection,
     pub(crate) environment: (Option<&'a str>, &'a [Variable]),
     pub(crate) runtime: &'a [Variable],
+    /// What scripts of earlier requests changed, by scope.
+    pub(crate) changed: &'a [VariableChange],
     pub(crate) variables: &'a ResolvedVariables,
 }
 
@@ -163,11 +191,19 @@ impl SendScripts {
                 })
                 .collect()
         };
+        let changed = |scope, mut list: Vec<Variable>| {
+            changed_over(&mut list, scopes.changed, scope);
+            list
+        };
         let variables = ScriptVariables {
             collection_name: scopes.collection.name.clone(),
             environment_name: scopes.environment.0.map(str::to_owned),
-            collection: filled(&scopes.collection.defaults.variables),
-            environment: filled(scopes.environment.1),
+            collection: changed(
+                VariableScope::Collection,
+                filled(&scopes.collection.defaults.variables),
+            ),
+            environment: changed(VariableScope::Environment, filled(scopes.environment.1)),
+            globals: changed(VariableScope::Global, Vec::new()),
             folders: filled(
                 &(folders.iter())
                     .flat_map(|f| f.defaults.variables.iter().cloned())
@@ -181,7 +217,7 @@ impl SendScripts {
             input: ScriptInput {
                 request: ScriptRequest {
                     name: request.name.clone(),
-                    tags: request.tags.clone(),
+                    tags: apifast_domain::effective_tags(&request.tags, folders),
                     ..ScriptRequest::default()
                 },
                 response: None,
@@ -316,6 +352,7 @@ impl SendScripts {
             VariableScope::Runtime => &mut self.input.variables.runtime,
             VariableScope::Environment => &mut self.input.variables.environment,
             VariableScope::Collection => &mut self.input.variables.collection,
+            VariableScope::Global => &mut self.input.variables.globals,
         };
         list.retain(|v| v.name != change.name);
         match &change.value {
@@ -402,6 +439,37 @@ mod tests {
     use apifast_domain::VariableValue;
 
     use super::*;
+
+    #[test]
+    fn script_changes_keep_the_last_change_of_each_variable_but_runtime_ones() {
+        let change = |scope, name: &str, value: Option<&str>| VariableChange {
+            scope,
+            name: name.into(),
+            value: value.map(VariableValue::text),
+            persist: false,
+        };
+        let mut kept = vec![change(VariableScope::Environment, "a", Some("1"))];
+        keep_script_changes(
+            &mut kept,
+            &[
+                change(VariableScope::Runtime, "r", Some("x")),
+                change(VariableScope::Environment, "a", None),
+                change(VariableScope::Collection, "a", Some("2")),
+                change(VariableScope::Global, "g", Some("3")),
+            ],
+        );
+        assert_eq!(
+            kept,
+            [
+                change(VariableScope::Environment, "a", None),
+                change(VariableScope::Collection, "a", Some("2")),
+                change(VariableScope::Global, "g", Some("3")),
+            ]
+        );
+        let mut list = vec![Variable::text("a", "file"), Variable::text("b", "file")];
+        changed_over(&mut list, &kept, VariableScope::Environment);
+        assert_eq!(list, [Variable::text("b", "file")]);
+    }
 
     #[test]
     fn script_variables_are_kept_and_deleted() {

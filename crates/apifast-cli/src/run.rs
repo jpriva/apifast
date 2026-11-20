@@ -222,6 +222,7 @@ fn run_options(args: &RunArgs, folder: Option<String>, data: Vec<Vec<Variable>>)
                 .collect(),
             allow_unresolved: args.allow_unresolved,
             draft: None,
+            script_changes: Vec::new(),
         },
     }
 }

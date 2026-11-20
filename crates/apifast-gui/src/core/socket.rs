@@ -51,6 +51,7 @@ impl State {
             environment: open.environment.clone(),
             draft: self.tab(&key).and_then(|tab| tab.draft.clone()),
             runtime: open.runtime.clone(),
+            script_changes: open.script_changes.clone(),
             ..SendOptions::default()
         };
         let Some(tab) = self.tab_mut(&key) else {

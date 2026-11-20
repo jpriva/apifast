@@ -1351,13 +1351,18 @@ pub(crate) fn new_folder(folder: &Folder) -> Value {
 }
 
 pub(crate) fn update_folder(doc: &mut Value, old: &Folder, new: &Folder) {
-    if (&old.name, old.seq) != (&new.name, new.seq) {
+    if (&old.name, old.seq, &old.tags) != (&new.name, new.seq, &new.tags) {
         let info = child_mut(doc, "info");
         if old.name != new.name {
             set(info, "name", string(&new.name));
         }
         if old.seq != new.seq {
             set_or_remove(info, "seq", new.seq.map(number));
+        }
+        if old.tags != new.tags {
+            let tags = (!new.tags.is_empty())
+                .then(|| new.tags.iter().map(string).collect::<Vec<_>>().into());
+            set_or_remove(info, "tags", tags);
         }
     }
     update_defaults(doc, &old.defaults, &new.defaults, AuthLevel::Item);

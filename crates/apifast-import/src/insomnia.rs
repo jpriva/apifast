@@ -98,7 +98,7 @@ fn v5_items(
                 let mut folder = Folder::new(name);
                 folder.defaults = folder_defaults(item, &at, warnings);
                 return Some(ImportedItem::Folder {
-                    folder,
+                    folder: Box::new(folder),
                     items: v5_items(children, &here, warnings),
                 });
             }
@@ -185,7 +185,10 @@ fn v4_children(
                 let mut folder = Folder::new(name);
                 folder.defaults = folder_defaults(resource, &at, warnings);
                 let items = v4_children(resources, &text(resource, "_id"), &here, warnings);
-                ImportedItem::Folder { folder, items }
+                ImportedItem::Folder {
+                    folder: Box::new(folder),
+                    items,
+                }
             } else {
                 let key = Some(text(resource, "_id"))
                     .filter(|id| !id.is_empty())

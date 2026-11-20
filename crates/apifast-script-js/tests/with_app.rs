@@ -530,3 +530,44 @@ async fn a_cookie_set_without_await_is_set_before_the_script_ends() {
     let outcome = world.send("get.yml").await.unwrap();
     assert_eq!(logged(&outcome), ["1"]);
 }
+
+#[tokio::test]
+async fn the_next_requests_scripts_read_what_earlier_ones_changed_by_scope() {
+    let mut first = HttpRequest::new("First", Method::Get, "{{host}}/a");
+    first.seq = Some(1);
+    first.scripts = vec![script(
+        ScriptKind::AfterResponse,
+        r"
+        bru.setEnvVar('token', 'new');
+        bru.deleteEnvVar('host');
+        bru.setCollectionVar('level', 'changed');
+        bru.setGlobalEnvVar('region', 'eu');
+        ",
+    )];
+    let mut second = HttpRequest::new("Second", Method::Get, "https://api.test/b");
+    second.seq = Some(2);
+    second.scripts = vec![script(
+        ScriptKind::BeforeRequest,
+        r"console.log(bru.getEnvVar('token'), bru.hasEnvVar('host'), bru.getCollectionVar('level'), bru.getGlobalEnvVar('region'), bru.getAllGlobalEnvVars().region)",
+    )];
+    let mut collection = Collection::new("C");
+    collection.defaults.variables = vec![Variable::text("level", "file")];
+    let collections = MemoryCollections::new(collection)
+        .with_request("first.yml", first)
+        .with_request("second.yml", second);
+    let report = World::new(collections).run().await;
+    let second = report.steps[1].outcome.as_ref().unwrap();
+    assert_eq!(logged(second), ["new false changed eu eu"]);
+    let kept: Vec<_> = (report.script_changes.iter())
+        .map(|c| (c.name.as_str(), c.value.is_some()))
+        .collect();
+    assert_eq!(
+        kept,
+        [
+            ("token", true),
+            ("host", false),
+            ("level", true),
+            ("region", true)
+        ]
+    );
+}

@@ -86,7 +86,9 @@ pub use runner::{
     RunEvent, RunOptions, RunReport, RunSummary, Selection, Skipped, StepResult, run_collection,
     run_selection,
 };
-pub use script_runs::{ScriptReport, ScriptRun, ScriptSource, apply_script_variables};
+pub use script_runs::{
+    ScriptReport, ScriptRun, ScriptSource, apply_script_variables, keep_script_changes,
+};
 pub use scripts::{
     ConsoleLevel, ConsoleLine, CookieChange, HostFuture, NoScriptHost, RanRequest, RunnerRequest,
     Script, ScriptEngine, ScriptError, ScriptFuture, ScriptHost, ScriptHttpRequest,

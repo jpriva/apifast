@@ -94,6 +94,7 @@ fn view(running: bool) -> RunView {
                 cancelled: false,
                 stopped: false,
                 runtime: Vec::new(),
+                script_changes: Vec::new(),
             })
         }),
         error: None,
