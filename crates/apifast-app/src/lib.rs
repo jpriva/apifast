@@ -84,7 +84,9 @@ pub use runner::{
     run_selection,
 };
 pub use scripts::{
-    ConsoleLevel, ConsoleLine, Script, ScriptEngine, ScriptError, ScriptLimits, ScriptOutcome,
+    ConsoleLevel, ConsoleLine, RunnerRequest, Script, ScriptEngine, ScriptError, ScriptInput,
+    ScriptLimits, ScriptOutcome, ScriptRequest, ScriptResponse, ScriptVariables, TestOutcome,
+    VariableChange, VariableScope,
 };
 pub use use_cases::{
     SendOptions, SendOutcome, SendPorts, load_request, open_collection, resolve_request_variables,

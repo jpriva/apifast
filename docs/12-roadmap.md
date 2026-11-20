@@ -405,7 +405,7 @@ Se cumple: los cuatro modos funcionan contra un servidor local (con `.proto` y p
 ### Tareas
 
 - [x] `apifast-script-js` con QuickJS, límites de tiempo y memoria. Puerto `ScriptEngine` en `apifast-app`, con `CannedScripts` en memoria; `QuickJs` crea un runtime por script, con límite de tiempo (esperas incluidas), de memoria y de pila, y guarda la consola.
-- [ ] API `req`, `res`, `bru`, `test` y `expect`.
+- [x] API `req`, `res`, `bru`, `test` y `expect`. En JavaScript sobre los datos que da el motor (`ScriptInput`), devolviendo la request cambiada, las variables, los tests y lo pedido al runner (`ScriptOutcome`). Pendientes: `bru.sendRequest`/`runRequest`, `require` de librerías, cookies y cuerpos que no son texto.
 - [ ] Scripts de colección, carpeta y request con orden "sándwich".
 - [ ] Editor de scripts con resaltado.
 - [ ] Traducción de scripts de Postman en el importador.

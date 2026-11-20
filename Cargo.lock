@@ -452,7 +452,9 @@ name = "apifast-script-js"
 version = "0.0.0"
 dependencies = [
  "apifast-app",
+ "apifast-domain",
  "rquickjs",
+ "serde_json",
  "tokio",
 ]
 

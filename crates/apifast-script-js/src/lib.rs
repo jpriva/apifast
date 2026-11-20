@@ -10,13 +10,16 @@
 //! time limit (or once cancelled), a deadline stops one that keeps waiting,
 //! and `QuickJS`'s own memory limit bounds its heap.
 
+mod api;
 mod console;
 mod errors;
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use apifast_app::{CancelToken, Script, ScriptEngine, ScriptError, ScriptLimits, ScriptOutcome};
+use apifast_app::{
+    CancelToken, Script, ScriptEngine, ScriptError, ScriptInput, ScriptLimits, ScriptOutcome,
+};
 use rquickjs::context::EvalOptions;
 use rquickjs::{AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Promise, Value};
 
@@ -49,15 +52,21 @@ impl ScriptEngine for QuickJs {
     fn run(
         &self,
         script: Script<'_>,
+        input: &ScriptInput,
         cancel: &CancelToken,
     ) -> impl Future<Output = ScriptOutcome> + Send {
         let (limits, cancel) = (self.limits, cancel.clone());
-        let code = script.code.to_owned();
+        let (code, input) = (script.code.to_owned(), input.clone());
         async move {
             let console = Arc::new(Mutex::new(Console::default()));
-            let error = run(&code, limits, &cancel, &console).await.err();
-            let console = console::take(&console);
-            ScriptOutcome { console, error }
+            let mut outcome = run(&code, &input, limits, &cancel, &console)
+                .await
+                .unwrap_or_else(|error| ScriptOutcome {
+                    error: Some(error),
+                    ..ScriptOutcome::default()
+                });
+            outcome.console = console::take(&console);
+            outcome
         }
     }
 }
@@ -85,12 +94,15 @@ impl Stop {
     }
 }
 
+/// Runs `code`: what it changed, and why it failed; an error only when it
+/// could not start, or was stopped by its limits.
 async fn run(
     code: &str,
+    input: &ScriptInput,
     limits: ScriptLimits,
     cancel: &CancelToken,
     console: &Arc<Mutex<Console>>,
-) -> Result<(), ScriptError> {
+) -> Result<ScriptOutcome, ScriptError> {
     let engine = |e: rquickjs::Error| ScriptError::Engine(e.to_string());
     let stop = Stop {
         cancel: cancel.clone(),
@@ -119,8 +131,23 @@ async fn run(
         .async_with(async |ctx| {
             // Interrupted here too, if cancelled before it started.
             console::install(&ctx, console)
+                .and_then(|()| api::install(&ctx, input))
                 .map_err(|e| stop.reason().unwrap_or_else(|| engine(e)))?;
-            evaluate(&ctx, code, &stop).await
+            let mut outcome = ScriptOutcome {
+                error: evaluate(&ctx, code, &stop).await.err(),
+                ..ScriptOutcome::default()
+            };
+            if let Some(stopped) = outcome.error.as_ref().filter(|e| stopped(e)) {
+                return Err(stopped.clone());
+            }
+            // Its tests may still be waiting.
+            let settled = api::settle(&ctx).catch(&ctx).map_err(|_| ());
+            if let Ok(settled) = settled {
+                wait(&ctx, settled, &stop).await?;
+            }
+            api::read_output(&ctx, &mut outcome)
+                .map_err(|e| stop.reason().unwrap_or_else(|| engine(e)))?;
+            Ok(outcome)
         })
         .await
 }
@@ -143,6 +170,15 @@ async fn evaluate(ctx: &Ctx<'_>, code: &str, stop: &Stop) -> Result<(), ScriptEr
         .eval_with_options(source, options)
         .catch(ctx)
         .map_err(failed)?;
+    wait(ctx, promise, stop).await
+}
+
+/// Waits for `promise`, until the deadline or a cancel.
+async fn wait(ctx: &Ctx<'_>, promise: Promise<'_>, stop: &Stop) -> Result<(), ScriptError> {
+    let failed = |caught| {
+        stop.reason()
+            .unwrap_or_else(|| errors::from_caught(ctx, caught, stop.limits))
+    };
     let finished = promise.into_future::<Value>();
     let deadline = tokio::time::Instant::from_std(stop.deadline);
     tokio::select! {
@@ -150,6 +186,15 @@ async fn evaluate(ctx: &Ctx<'_>, code: &str, stop: &Stop) -> Result<(), ScriptEr
         () = tokio::time::sleep_until(deadline) => Err(ScriptError::TimedOut { ms: stop.limits.time_ms }),
         () = cancelled(&stop.cancel) => Err(ScriptError::Cancelled),
     }
+}
+
+/// Whether `error` stopped the script from outside: then what it changed
+/// is not kept.
+fn stopped(error: &ScriptError) -> bool {
+    matches!(
+        error,
+        ScriptError::TimedOut { .. } | ScriptError::Cancelled | ScriptError::OutOfMemory { .. }
+    )
 }
 
 async fn cancelled(cancel: &CancelToken) {

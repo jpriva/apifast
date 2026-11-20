@@ -845,6 +845,7 @@ impl crate::ScriptEngine for CannedScripts {
     fn run(
         &self,
         script: crate::Script<'_>,
+        _: &crate::ScriptInput,
         _: &CancelToken,
     ) -> impl Future<Output = crate::ScriptOutcome> + Send {
         lock(&self.ran).push(script.code.to_owned());

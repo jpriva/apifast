@@ -464,14 +464,19 @@ Cuando las aserciones declarativas no alcanzan, se podrá escribir JavaScript.
 - **Forma:** el script es el cuerpo de una función `async`, como en Bruno: puede usar `await`, y `return` lo termina. Corre en modo no estricto.
 - **Consola:** `console.log`, `info`, `warn`, `error` y `debug` se guardan con su nivel, también cuando el script falla; las cadenas van tal cual y los demás valores en JSON. Se guarda hasta 1 MB de texto.
 - **Errores:** de sintaxis (antes de ejecutar nada), excepciones y promesas rechazadas, con el tipo y la línea del script (`TypeError: cannot read property 'name' of null at line 3`), tiempo agotado, memoria agotada y cancelación.
-- **API compatible con Bruno** para facilitar la importación:
+- **API compatible con Bruno** para facilitar la importación. El motor recibe la request, la respuesta y las variables como datos (`ScriptInput`) y devuelve lo que el script cambió (`ScriptOutcome`); no llama de vuelta a la aplicación mientras corre.
 
-| Objeto | Funciones principales |
+| Objeto | Funciones |
 |---|---|
-| `req` | Leer y modificar URL, método, headers y body antes del envío |
-| `res` | `getStatus()`, `getHeader()`, `getBody()`, `getResponseTime()` |
-| `bru` | `getVar`/`setVar`, `getEnvVar`/`setEnvVar`, `sleep`, `setNextRequest` |
-| `test`, `expect` | Tests con aserciones estilo chai |
+| `req` | `getName`, `getUrl`/`setUrl`, `getMethod`/`setMethod`, `getHeader`/`getHeaders`/`setHeader`/`setHeaders`/`deleteHeader`, `getBody`/`setBody`, `getTimeout`/`setTimeout`, y las propiedades `url`, `method`, `headers`, `body`, `timeout`. Los textos van sin renderizar (`{{host}}/users`), porque el script corre antes que las plantillas. `getBody` da el JSON ya leído cuando el cuerpo es JSON |
+| `res` | `getStatus`, `getStatusText`, `getHeader`, `getHeaders` (nombres en minúscula), `getBody`/`setBody`, `getResponseTime`, `getUrl`, `getSize`, las propiedades `status`, `statusText`, `headers`, `body`, `responseTime`, `url`, y `res('data.items[0].id')` para leer una ruta del cuerpo. No existe antes del envío |
+| `bru` | `getVar`/`setVar`/`hasVar`/`deleteVar`/`deleteAllVars`/`getAllVars` (runtime), `getEnvVar`/`setEnvVar` (con `{persist: true}` para guardarla en el archivo)/`hasEnvVar`/`deleteEnvVar`, `getRequestVar`, `getFolderVar`, `getCollectionVar`, `getEnvName`, `getCollectionName`, `getProcessEnv`, `interpolate` (con la precedencia de las plantillas), `sleep`, `setNextRequest` y `runner.setNextRequest`/`skipRequest`/`stopExecution` |
+| `test` | `test(nombre, fn)`: pasa salvo que `fn` lance o su promesa se rechace; se esperan los tests asíncronos antes de terminar |
+| `expect` | La parte de chai que usan los scripts, con sus mensajes (`expected 404 to equal 200`): `equal`, `eql`, `a`/`an`, `include`, `above`/`below`/`least`/`most`/`within`/`closeTo`, `lengthOf`, `property` (también `nested` y `own`), `keys`, `members`, `oneOf`, `match`, `string`, `instanceOf`, `throw`, `satisfy`, `ok`, `true`, `false`, `null`, `undefined`, `NaN`, `exist`, `empty`, con `not`, `deep`, `any`/`all` y las palabras de enlace; `expect.fail` |
+
+Las variables conservan su tipo: `bru.getEnvVar('retries') + 1` suma si la variable es un número, y `bru.setVar('user', {…})` la guarda como objeto. Un nombre de variable solo admite letras, dígitos, `_`, `-` y `.`. Lo que hizo un script que falla (variables, tests) se conserva; lo de uno que se detuvo por tiempo, memoria o cancelación, no.
+
+Todavía no están: `bru.sendRequest` y `bru.runRequest`, `require` de librerías (lodash, moment, crypto-js…), el tarro de cookies, `bru.getSecretVar`, y los cuerpos que no son texto (formularios, multipart) en `req.getBody`.
 
 - **Ubicación en el archivo:** el bloque `runtime.scripts` de OpenCollection, que apifast ya conserva desde la fase F1.
 - **Niveles:** scripts de colección, carpeta y request, con el orden "sándwich" de Bruno (antes del envío de afuera hacia adentro; después, de adentro hacia afuera).

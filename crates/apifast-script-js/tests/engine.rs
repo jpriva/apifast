@@ -5,8 +5,8 @@
 use std::time::{Duration, Instant};
 
 use apifast_app::{
-    CancelToken, ConsoleLevel, ConsoleLine, Script, ScriptEngine, ScriptError, ScriptLimits,
-    ScriptOutcome,
+    CancelToken, ConsoleLevel, ConsoleLine, Script, ScriptEngine, ScriptError, ScriptInput,
+    ScriptLimits, ScriptOutcome,
 };
 use apifast_script_js::QuickJs;
 
@@ -20,7 +20,9 @@ async fn run(code: &str) -> ScriptOutcome {
         name: "request",
         code,
     };
-    QuickJs::new(LIMITS).run(script, &CancelToken::new()).await
+    QuickJs::new(LIMITS)
+        .run(script, &ScriptInput::default(), &CancelToken::new())
+        .await
 }
 
 fn log(text: &str) -> ConsoleLine {
@@ -66,13 +68,8 @@ async fn a_script_may_await_and_return() {
         console.log('not reached');
     ")
     .await;
-    assert_eq!(
-        outcome,
-        ScriptOutcome {
-            console: vec![log("5")],
-            error: None
-        }
-    );
+    assert_eq!(outcome.console, [log("5")]);
+    assert_eq!(outcome.error, None);
 }
 
 #[tokio::test]
@@ -194,13 +191,13 @@ async fn cancelling_stops_a_running_script() {
         name: "request",
         code: "while (true) {}",
     };
-    let outcome = engine.run(spin, &cancel).await;
+    let outcome = engine.run(spin, &ScriptInput::default(), &cancel).await;
     assert_eq!(outcome.error, Some(ScriptError::Cancelled));
     let waiting = Script {
         name: "request",
         code: "await new Promise(() => {})",
     };
-    let outcome = engine.run(waiting, &cancel).await;
+    let outcome = engine.run(waiting, &ScriptInput::default(), &cancel).await;
     assert_eq!(outcome.error, Some(ScriptError::Cancelled));
     assert!(started.elapsed() < Duration::from_secs(2));
 }
@@ -227,12 +224,12 @@ async fn nothing_is_kept_between_scripts() {
         name: "a",
         code: "globalThis.kept = 1",
     };
-    engine.run(first, &cancel).await;
+    engine.run(first, &ScriptInput::default(), &cancel).await;
     let second = Script {
         name: "b",
         code: "console.log(typeof kept)",
     };
-    let outcome = engine.run(second, &cancel).await;
+    let outcome = engine.run(second, &ScriptInput::default(), &cancel).await;
     assert_eq!(outcome.console, [log("undefined")]);
 }
 
