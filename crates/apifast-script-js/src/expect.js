@@ -2,6 +2,8 @@
 // messages: `expected 404 to equal 200`. It leaves itself in
 // `__apifast_expect`, for the API to publish.
 (() => {
+    const schemas = globalThis.__apifast_schema;
+
     class AssertionError extends Error {
         constructor(message) {
             super(message);
@@ -282,6 +284,90 @@
             wanted += ` including ${inspect(text)}`;
         }
         return this.assert(ok, `expected #{this} to throw${wanted}`, `expected #{this} to not throw${wanted}`);
+    });
+
+    // Bruno's own: `jsonSchema` (draft-07, as ajv checks it) and
+    // `jsonBody` (Postman's).
+    const SCHEMA_VERSIONS = ['http://json-schema.org/draft-07/schema#', 'http://json-schema.org/draft-07/schema'];
+    method(['jsonSchema'], function (schema, options) {
+        if (schema && schema.$schema && !SCHEMA_VERSIONS.includes(schema.$schema)) {
+            this.assert(
+                false,
+                `Unsupported JSON Schema version: "${schema.$schema}". Only Draft-07 (http://json-schema.org/draft-07/schema#) is supported.`,
+                `Unsupported JSON Schema version: "${schema.$schema}".`,
+            );
+        }
+        let validate;
+        try {
+            validate = schemas.compile(schema, { allErrors: true, ...options });
+        } catch (error) {
+            throw new AssertionError(`JSON schema compile error: ${error.message}`);
+        }
+        const errors = validate(this._object);
+        return this.assert(
+            errors.length === 0,
+            `expected #{this} to match JSON schema, validation errors: ${JSON.stringify(errors)}`,
+            'expected #{this} to not match JSON schema',
+        );
+    });
+    // `a.b`, `items[0]`, `data["a.b"]`, `m[0][1]`: the keys of a path.
+    const pathKeys = (path) => {
+        const keys = [];
+        let i = 0;
+        while (i < path.length) {
+            if (path[i] === '.') {
+                i += 1;
+            } else if (path[i] === '[') {
+                i += 1;
+                let key = '';
+                const quote = path[i] === "'" || path[i] === '"' ? path[i] : null;
+                if (quote) {
+                    i += 1;
+                    while (i < path.length && path[i] !== quote) {
+                        if (path[i] === '\\' && path[i + 1] === quote) { key += quote; i += 2; } else { key += path[i]; i += 1; }
+                    }
+                    i += 1;
+                } else {
+                    while (i < path.length && path[i] !== ']') { key += path[i]; i += 1; }
+                }
+                i += 1;
+                keys.push(key);
+            } else {
+                let key = '';
+                while (i < path.length && path[i] !== '.' && path[i] !== '[') { key += path[i]; i += 1; }
+                keys.push(key);
+            }
+        }
+        return keys;
+    };
+    const atPath = (value, path) => {
+        let current = value;
+        for (const key of pathKeys(path)) {
+            if (current === null || current === undefined || !Object.prototype.hasOwnProperty.call(Object(current), key)) {
+                return { found: false };
+            }
+            current = current[key];
+        }
+        return { found: true, value: current };
+    };
+    method(['jsonBody'], function (...args) {
+        const body = this._object;
+        if (args.length === 0) {
+            return this.assert(typeof body === 'object' && body !== null,
+                'expected value to be a JSON body (object or array)', 'expected value not to be a JSON body');
+        }
+        if (args.length === 1 && typeof args[0] === 'object' && args[0] !== null) {
+            return this.assert(deepEqual(body, args[0]),
+                'expected body to deeply equal given object', 'expected body to not deeply equal given object');
+        }
+        const found = atPath(body, String(args[0]));
+        if (args.length === 1) {
+            return this.assert(found.found,
+                `expected body to have nested property '${args[0]}'`, `expected body to not have nested property '${args[0]}'`);
+        }
+        return this.assert(found.found && deepEqual(found.value, args[1]),
+            `expected body to have nested property '${args[0]}' equal to given value`,
+            `expected body to not have nested property '${args[0]}' equal to given value`);
     });
 
     // `.contain.keys(…)` and `.include.members(…)`: as properties, they

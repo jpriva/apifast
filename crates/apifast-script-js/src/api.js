@@ -8,10 +8,13 @@
     const nativeSleep = globalThis.__apifast_sleep;
     const processEnv = globalThis.__apifast_process_env;
     const dynamicValue = globalThis.__apifast_dynamic;
+    const headerList = globalThis.__apifast_header_list;
     delete globalThis.__apifast_input;
     delete globalThis.__apifast_sleep;
     delete globalThis.__apifast_process_env;
     delete globalThis.__apifast_dynamic;
+    delete globalThis.__apifast_header_list;
+    delete globalThis.__apifast_schema;
 
     const out = { request: null, responseBody: null, variables: [], tests: [], runner: null };
     const pending = [];
@@ -164,6 +167,7 @@
         getTimeout: () => request.timeout_ms ?? undefined,
         setTimeout(ms) { request.timeout_ms = Math.max(0, Math.floor(Number(ms))); touch(); },
     };
+    req.headerList = headerList(() => request.headers, (pairs) => { request.headers = pairs; touch(); });
     for (const [name, get, set] of [
         ['url', req.getUrl, req.setUrl],
         ['method', req.getMethod, req.setMethod],
@@ -207,6 +211,7 @@
                 return { header, body: response.size, total: header + response.size };
             },
         });
+        res.headerList = headerList(() => response.headers);
         for (const [name, get] of [
             ['status', res.getStatus],
             ['statusText', res.getStatusText],

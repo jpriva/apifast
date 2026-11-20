@@ -576,3 +576,142 @@ async fn bru_interpolate_generates_dynamic_variables() {
     .await;
     assert_eq!(logged(&outcome), ["true true true", "{{$nope}}"]);
 }
+
+#[tokio::test]
+async fn the_header_lists_read_and_write_headers_in_any_case() {
+    let outcome = run(r"
+        const list = req.headerList;
+        console.log(list.get('content-type'), list.count(), list.has('CONTENT-TYPE', 'application/json'));
+        console.log(JSON.stringify(list.one('Content-Type')), list.indexOf('content-type'));
+        console.log(list.upsert('X-Trace', '1'), list.upsert('x-trace', '2'), list.get('X-TRACE'));
+        list.add('Accept: */*');
+        list.remove('content-type');
+        console.log(JSON.stringify(list.toObject()), JSON.stringify(req.getHeaders()));
+        console.log(JSON.stringify(res.headerList.all()));
+        try { res.headerList.clear(); } catch (e) { console.log(e.message); }
+    ")
+    .await;
+    assert_eq!(
+        logged(&outcome),
+        [
+            "application/json 1 true",
+            r#"{"key":"Content-Type","value":"application/json"} 0"#,
+            "true false 2",
+            r#"{"x-trace":"2","Accept":"*/*"} {"x-trace":"2","Accept":"*/*"}"#,
+            r#"[{"key":"Content-Type","value":"application/json"}]"#,
+            "HeaderList is read-only (response headers cannot be modified)",
+        ]
+    );
+    let headers = outcome.request.unwrap().headers;
+    assert_eq!(
+        headers,
+        [
+            ("x-trace".to_owned(), "2".to_owned()),
+            ("Accept".to_owned(), "*/*".to_owned())
+        ]
+    );
+}
+
+#[tokio::test]
+async fn json_body_checks_paths_and_values() {
+    let outcome = run(r#"
+        test('ok', () => {
+            expect(res.getBody()).to.have.jsonBody();
+            expect(res.getBody()).to.have.jsonBody('data.items[0].id', 7);
+            expect(res.getBody()).to.have.jsonBody('["ok"]');
+            expect(res.getBody()).to.not.have.jsonBody('data.items[1]');
+            expect({ 'a.b': { c: 1 } }).to.have.jsonBody('["a.b"].c', 1);
+        });
+        test('fails', () => expect(res.getBody()).to.have.jsonBody('data.nope'));
+    "#)
+    .await;
+    assert_eq!(
+        outcome.tests,
+        [
+            TestOutcome {
+                name: "ok".into(),
+                error: None
+            },
+            TestOutcome {
+                name: "fails".into(),
+                error: Some("expected body to have nested property 'data.nope'".into())
+            },
+        ]
+    );
+}
+
+#[tokio::test]
+async fn json_schema_validates_draft_7_as_ajv() {
+    let outcome = run("
+        const user = { name: 'Ana', age: 30, zip: '62701', email: 'ana@x.io', at: '2024-01-15T10:30:00Z',
+            ip: '::1', id: '550e8400-e29b-41d4-a716-446655440000', tags: ['a', 'b'] };
+        const schema = {
+            type: 'object',
+            required: ['name', 'age'],
+            properties: {
+                name: { type: 'string', minLength: 2, pattern: '^[A-Z]' },
+                age: { type: 'integer', minimum: 18, format: 'int32' },
+                email: { type: 'string', format: 'email' },
+                at: { type: 'string', format: 'date-time' },
+                ip: { type: 'string', format: 'ipv6' },
+                id: { type: 'string', format: 'uuid' },
+                tags: { type: 'array', items: { enum: ['a', 'b'] }, uniqueItems: true },
+            },
+            anyOf: [{ required: ['email'] }, { required: ['phone'] }],
+        };
+        test('valid', () => expect(user).to.have.jsonSchema(schema));
+        test('wrong', () => expect({ name: 'ana', age: 'x' }).to.not.have.jsonSchema(schema));
+        test('extra', () => expect(user).to.not.have.jsonSchema({ type: 'object', additionalProperties: false }));
+        test('coerce', () => {
+            const zip = { type: 'object', properties: { zip: { type: 'integer' } } };
+            expect(user).to.not.have.jsonSchema(zip);
+            expect(user).to.have.jsonSchema(zip, { coerceTypes: true });
+        });
+        test('strict', () => {
+            const custom = { type: 'object', properties: { name: { type: 'string', custom: true } } };
+            expect(() => expect(user).to.have.jsonSchema(custom)).to.throw('JSON schema compile error');
+            expect(user).to.have.jsonSchema(custom, { strict: false });
+            expect(() => expect(user).to.have.jsonSchema({ type: 'nope' })).to.throw('JSON schema compile error');
+        });
+        test('ref', () => expect([1, 2]).to.have.jsonSchema({
+            definitions: { n: { type: 'number' } }, type: 'array', items: { $ref: '#/definitions/n' },
+        }));
+        test('message', () => expect({}).to.have.jsonSchema({ required: ['id'] }));
+    ")
+    .await;
+    let failed: Vec<_> = (outcome.tests.iter())
+        .filter_map(|t| Some((t.name.as_str(), t.error.as_deref()?)))
+        .collect();
+    assert_eq!(
+        failed,
+        [(
+            "message",
+            r##"expected {} to match JSON schema, validation errors: [{"instancePath":"","schemaPath":"#/required","keyword":"required","params":{"missingProperty":"id"},"message":"must have required property 'id'"}]"##
+        )]
+    );
+}
+
+#[tokio::test]
+async fn json_schema_formats_reject_what_ajv_rejects() {
+    let outcome = run(r"
+        const valid = (format, value) => {
+            const errors = [];
+            try { expect(value).to.have.jsonSchema({ type: 'string', format }); } catch (e) { errors.push(e); }
+            return errors.length === 0;
+        };
+        console.log(valid('uri', 'https://a.test/x?y=1#z'), valid('uri', '/relative'), valid('uri-reference', '/relative/path'));
+        console.log(valid('uri-reference', '[invalid'), valid('uri-template', 'https://a.test/{user}'), valid('uri-template', 'https://a.test/{x'));
+        console.log(valid('date', '2024-02-30'), valid('date', '2024-02-29'), valid('time', '10:30:00Z'), valid('duration', 'P3Y6M4DT12H30M5S'));
+        console.log(valid('ipv6', '::1'), valid('ipv6', '1::2::3'), valid('ipv4', '256.1.1.1'), valid('regex', '[invalid'));
+    ")
+    .await;
+    assert_eq!(
+        logged(&outcome),
+        [
+            "true false true",
+            "false true false",
+            "false true true true",
+            "true false false false",
+        ]
+    );
+}

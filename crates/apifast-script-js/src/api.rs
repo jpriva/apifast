@@ -1,5 +1,5 @@
 //! The API scripts see (`req`, `res`, `bru`, `test`, `expect`), written in
-//! JavaScript (`api.js`, `expect.js`): it is given the input as JSON, and
+//! JavaScript (`api.js`, `expect.js`, `schema.js`, `header_list.js`): it is given the input as JSON, and
 //! what the script changed is read back as JSON.
 
 use std::time::Duration;
@@ -13,7 +13,9 @@ use rquickjs::prelude::Async;
 use rquickjs::{Ctx, Function, Promise};
 use serde_json::{Value as Json, json};
 
+const SCHEMA: &str = include_str!("schema.js");
 const EXPECT: &str = include_str!("expect.js");
+const HEADER_LIST: &str = include_str!("header_list.js");
 const API: &str = include_str!("api.js");
 
 /// Gives the script of `ctx` the API, over `input`.
@@ -31,7 +33,9 @@ pub(crate) fn install(ctx: &Ctx<'_>, input: &ScriptInput) -> rquickjs::Result<()
         "__apifast_dynamic",
         Function::new(ctx.clone(), |name: String| dynamic(&name))?,
     )?;
+    ctx.eval::<(), _>(SCHEMA)?;
     ctx.eval::<(), _>(EXPECT)?;
+    ctx.eval::<(), _>(HEADER_LIST)?;
     ctx.eval::<(), _>(API)
 }
 
