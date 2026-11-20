@@ -5,8 +5,8 @@ use std::pin::pin;
 use std::task::{Context, Poll, Waker};
 
 use apifast_app::memory::{
-    CountingRandom, FixedClock, MemoryCollections, MemoryEnvironments, MemoryHistory,
-    MemoryResponses, MemorySecrets, MemoryTransport, ScriptedPrompter,
+    CannedScripts, CountingRandom, FixedClock, MemoryCollections, MemoryEnvironments,
+    MemoryHistory, MemoryResponses, MemorySecrets, MemoryTransport, ScriptedPrompter,
 };
 use apifast_app::{
     AppError, CancelToken, HistoryStore, RenderedBody, RequestPath, ResponseStore, SendOptions,
@@ -41,6 +41,8 @@ struct World {
     prompter: ScriptedPrompter,
     secrets: MemorySecrets,
     history: Option<MemoryHistory>,
+    /// Records the scripts it is given; it runs none.
+    scripts: CannedScripts,
 }
 
 impl World {
@@ -55,6 +57,7 @@ impl World {
             prompter: ScriptedPrompter::default(),
             secrets: MemorySecrets::default(),
             history: None,
+            scripts: CannedScripts::default(),
         }
     }
 
@@ -84,7 +87,7 @@ impl World {
                 .map(|h| h as &(dyn HistoryStore + Sync)),
             tokens: None,
             authorizer: None,
-            scripts: None,
+            scripts: Some(&self.scripts),
         };
         block_on(send_request(
             ports,
@@ -860,4 +863,28 @@ fn copying_an_oauth2_request_uses_no_token_but_a_stored_one() {
     assert!(copied.missing_token);
     assert_eq!(header(&copied.request, "authorization"), Vec::<&str>::new());
     assert!(world.transport.sent().is_empty(), "no token was fetched");
+}
+
+#[test]
+fn the_script_engine_is_used_only_by_requests_with_scripts() {
+    use apifast_domain::{ScriptBlock, ScriptKind};
+    let mut scripted = get("http://api/scripted");
+    scripted.scripts = vec![ScriptBlock::new(ScriptKind::Tests, "test('ok', () => {});")];
+    let mut other = get("http://api/other");
+    // A kind apifast does not run needs no engine either.
+    other.scripts = vec![ScriptBlock::new(
+        ScriptKind::Other("onMessage".into()),
+        "console.log(1);",
+    )];
+    let world = World::new(
+        MemoryCollections::new(Collection::new("c"))
+            .with_request("plain.yml", get("http://api/plain"))
+            .with_request("other.yml", other)
+            .with_request("scripted.yml", scripted),
+    );
+    world.send("plain.yml", &SendOptions::default()).unwrap();
+    world.send("other.yml", &SendOptions::default()).unwrap();
+    assert_eq!(world.scripts.ran(), Vec::<String>::new());
+    world.send("scripted.yml", &SendOptions::default()).unwrap();
+    assert_eq!(world.scripts.ran(), ["test('ok', () => {});"]);
 }

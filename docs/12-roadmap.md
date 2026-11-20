@@ -409,11 +409,19 @@ Se cumple: los cuatro modos funcionan contra un servidor local (con `.proto` y p
 - [x] Scripts de colección, carpeta y request con orden "sándwich". Se leen y se escriben en los archivos; los previos cambian la request resuelta antes de renderizarla, y los posteriores y de tests corren después de la respuesta. El runner aplica sus variables y respeta `skipRequest`, `stopExecution` y `setNextRequest`, y sus tests cuentan en la CLI, los reportes y la pestaña Tests. Pendiente: los scripts de gRPC.
 - [x] Editor de scripts con resaltado. Pestaña Scripts en la request y ventana "Scripts…" para carpetas y colección, con un editor por tipo y resaltado de JavaScript.
 - [x] Traducción de scripts de Postman en el importador, con la tabla de reemplazos de Bruno; lo que no tiene equivalente queda comentado y avisado. El importador de `.bru` trae los scripts tal cual. Pendientes: los scripts de Insomnia y la traducción inversa al exportar a Postman.
-- [ ] Carga del motor solo al ejecutar el primer script.
+- [x] Carga del motor solo al ejecutar el primer script. No hay estado global: el runtime se crea al empezar cada script, y una request sin scripts (o solo con scripts de tipos que apifast no ejecuta) no llama al motor. Medido con la CLI: unos 2 MB más de memoria máxima, solo cuando corre un script.
 
 ### Criterio de salida
 
 Las colecciones de prueba de Bruno con scripts se ejecutan con los mismos resultados, y una colección sin scripts no carga el motor.
+
+Estado: la segunda mitad se cumple. La primera todavía no. La colección `bruno-tests` se importó y se corrió con `apifast run --allow-unresolved` contra un servidor local que imita `/ping` y `/api/echo/json` (sin Node no se puede levantar el de Bruno). En `scripting/api` y `scripting/js` pasan 54 de 235 tests. El orden en sándwich, las variables por ámbito, `req` y `res` básicos, `bru.runner` y `expect` funcionan. Lo que falla, por causa:
+
+- API de Bruno que falta: `bru.cookies`, `bru.sendRequest` y `bru.runRequest`, variables globales, `getAllEnvVars` y `deleteAllEnvVars`, variables de colección (`setCollectionVar` y compañía), `isSafeMode`, `req.getHost`, `getPath`, `getPathParams`, `getQueryString` y `getTags`, `req.headerList` y `res.headerList`, `setTimeout`, y `req.setBody` en cuerpos form-urlencoded.
+- Plugins de chai de Bruno: `jsonBody` y `jsonSchema` (este con ajv).
+- Errores: en los tests, `req.getUrl()` devuelve la URL sin interpolar; `res.getResponseTime()` da 0 en un servidor local; `res.setBody` con arrays y `undefined`.
+- Aserciones sobre `req.body.*`.
+- Diferencias de entorno, no de apifast: tests que esperan el entorno Prod o la cabecera `X-Powered-By: Express`.
 
 ---
 
