@@ -369,6 +369,24 @@ Es el camino inverso del importador, así que lo exportado se vuelve a importar 
 - Un entorno que extiende a otro se exporta con las variables de los dos mezcladas. Los secretos van sin valor, de tipo `secret`.
 - Se avisan las aserciones, las capturas, las variables de request y las etiquetas, que Postman no tiene fuera de los scripts, y los scripts, que usan la API de Bruno y no se traducen de vuelta; las de WebSocket y gRPC se dejan fuera. GraphQL va con el modo `graphql` de Postman.
 
+### `apifast git`
+
+```
+apifast git [--collection <carpeta>] status
+apifast git diff [<archivo>...]
+apifast git commit -m <mensaje> (--all | <archivo>...)
+apifast git branches
+apifast git switch <rama>
+```
+
+El repositorio git de la colección (la de `--collection`, por defecto la carpeta actual o la que la contiene), que puede ser una carpeta de un repositorio más grande ([ADR 0014](adr/0014-git-con-gitoxide.md)). Las rutas son relativas a la colección, y solo se ven sus archivos. No hace falta tener `git` instalado.
+
+- `status`: la rama, y los archivos que cambiaron desde el último commit, estén o no en el índice: `A` añadido, `M` modificado, `D` borrado. Respeta `.gitignore`.
+- `diff`: qué cambió en cada archivo, campo a campo: `method: GET → POST`, `header x-team: (none) → X-Team: core`. Un valor de varias líneas (un body, un script) va línea a línea, `-` antes y `+` después. Las requests, los `folder.yml`, `opencollection.yml` y los entornos se leen como los lee apifast, así que un cambio de formato que no cambia nada no aparece; otro archivo se compara como texto. Sin archivos, todos los que cambiaron.
+- `commit`: hace commit de los archivos dados (o de todos los que cambiaron, con `--all`) tal como están, uno borrado como borrado, con la identidad de la configuración de git. Lo demás que estaba en el índice se queda ahí. Una ruta sin cambios es un error, para que una errata no pase desapercibida. No ejecuta hooks ni firma.
+- `branches`: las ramas locales, la actual con `*`.
+- `switch`: cambia a una rama local. Se rechaza mientras un archivo seguido del repositorio (también fuera de la colección) tenga cambios, o si pisaría un archivo no seguido.
+
 ### `apifast run`
 
 ```

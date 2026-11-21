@@ -17,14 +17,14 @@ Hay tres formas de hablar con git:
 
 - La integración usa gix, en un adaptador propio, `apifast-git`. Solo él depende de gix: lo comprueba la prueba de arquitectura.
 - La aplicación habla con un puerto, `GitRepository`. Las rutas son relativas a la raíz de la colección, que puede ser una carpeta dentro de un repositorio más grande; los archivos de fuera no se ven.
-- gix va sin red (ni `fetch` ni `push`) y sin sus funciones por defecto: solo `status`, la escritura del árbol de trabajo y la lectura de revisiones.
+- gix va sin red (ni `fetch` ni `push`) y sin sus funciones por defecto: solo `sha1`, `status` y `parallel` (para que el repositorio se comparta entre hilos).
 - Un cambio se dice frente al último commit (`HEAD`), esté o no en el índice: es lo que una persona que no usa git a diario espera. gix solo encuentra los archivos que pueden haber cambiado; cada uno se clasifica comparando el commit con el disco.
 - El diff por request lo calcula apifast: lee el archivo del commit y el del disco con el mismo lector de OpenCollection, y compara las requests campo a campo (`apifast-domain`, `request_changes` y sus hermanas). Un cambio de formato que no cambia nada (orden de claves, comillas) no aparece. Las variables secretas nunca muestran su valor.
 
 ## Consecuencias
 
 - Ningún binario que encontrar en el `PATH`, y el mismo comportamiento en Linux, macOS y Windows. Sin `git` instalado, la integración funciona igual.
-- La compilación crece: gix es grande, aunque sin sus funciones por defecto. Añade una versión más de `hashbrown` al árbol.
+- La compilación crece: gix es grande, aunque sin sus funciones por defecto. Añade una versión más de `hashbrown` al árbol, y unos 3,7 MB al binario de la CLI en release (de 16,9 a 20,6 MB), casi todo por `status` (recorrido de carpetas, índice y diffs).
 - Los commits no ejecutan los hooks de `.git/hooks`, a diferencia de `git commit`, ni firman (`commit.gpgsign`). Si un equipo depende de ellos, tendrá que hacer esos commits con `git`.
 - Un commit edita el árbol del último commit con los archivos elegidos y deja el resto del índice como estaba: es "commit de estos archivos", no "commit de lo preparado".
 - Cambiar de rama con cambios locales se rechaza en vez de intentar mezclarlos, como `git switch` sin `--merge`. gix no trae el cambio de rama: lo implementa el adaptador sobre sus piezas (recorrido de árboles, índice desde un árbol, edición de referencias). No aplica los filtros de `.gitattributes` (fin de línea, LFS) al escribir los archivos.

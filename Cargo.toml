@@ -33,7 +33,7 @@ base64 = "0.23.1"
 chacha20poly1305 = "0.11.0"
 getrandom = "0.4.3"
 # Pure Rust git (ADR 0014): what the integration needs, without networking.
-gix = { version = "0.90.0", default-features = false, features = ["sha1", "status", "worktree-mutation", "revision", "parallel"] }
+gix = { version = "0.90.0", default-features = false, features = ["sha1", "status", "parallel"] }
 hmac = "0.13.0"
 md-5 = "0.11.0"
 md4 = "0.11.0"

@@ -22,6 +22,7 @@ apifast-vault.workspace = true
 apifast-import.workspace = true
 apifast-ws.workspace = true
 apifast-script-js.workspace = true
+apifast-git.workspace = true
 # gRPC, behind the `grpc` feature (on by default): without it, gRPC
 # requests open and save but say they cannot be called.
 apifast-grpc = { workspace = true, optional = true }
@@ -37,6 +38,7 @@ grpc = ["dep:apifast-grpc"]
 workspace = true
 
 [dev-dependencies]
+apifast-git-contract.workspace = true
 tempfile.workspace = true
 tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }
 # A local gRPC server for the `send` tests.

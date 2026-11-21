@@ -5,6 +5,7 @@
 
 mod describe;
 mod export;
+mod git;
 mod import;
 mod locate;
 mod run;
@@ -73,6 +74,9 @@ enum Command {
     ///
     /// Prints what could not be kept.
     Export(export::ExportArgs),
+    /// The collection's git repository: status, what changed field by
+    /// field, commit, branches.
+    Git(git::GitArgs),
 }
 
 #[derive(clap::Args)]
@@ -171,6 +175,10 @@ fn main() -> ExitCode {
         ),
         Command::Export(args) => (
             export::run(&args).map(|()| ExitCode::SUCCESS),
+            ExitCode::FAILURE,
+        ),
+        Command::Git(args) => (
+            git::run(&args).map(|()| ExitCode::SUCCESS),
             ExitCode::FAILURE,
         ),
     };
