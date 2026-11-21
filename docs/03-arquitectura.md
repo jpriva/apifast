@@ -31,6 +31,7 @@ flowchart TB
         WS[apifast-ws]
         GRPC[apifast-grpc]
         JS[apifast-script-js]
+        GIT[apifast-git]
     end
 
     GUI --> APP
@@ -49,6 +50,7 @@ flowchart TB
     WS -.implementa.-> APP
     GRPC -.implementa.-> APP
     JS -.implementa.-> APP
+    GIT -.implementa.-> APP
 ```
 
 ## Crates
@@ -68,6 +70,8 @@ flowchart TB
 | `apifast-ws` | Adaptador | WebSocket: los frames, sobre el handshake de `apifast-http` | Aplicación, `apifast-http`, tokio-tungstenite |
 | `apifast-grpc` | Adaptador | gRPC: reflection, `.proto` y llamadas, sobre una conexión de `apifast-http` | Aplicación, `apifast-http`, tonic, tonic-reflection, prost-reflect, protox |
 | `apifast-script-js` | Adaptador | Motor JavaScript: un runtime de QuickJS por script | Aplicación, rquickjs |
+| `apifast-git-contract` | Soporte de pruebas | El contrato del puerto `GitRepository`: los escenarios que todo adaptador debe pasar, que sus pruebas corren con una macro. Solo puede ser dependencia de desarrollo | Aplicación |
+| `apifast-git` | Adaptador | El repositorio git de la colección: rama, cambios, archivos del último commit ([ADR 0014](adr/0014-git-con-gitoxide.md)) | Aplicación, gix |
 | `apifast-gui` | Driver | Interfaz egui y composición | Aplicación y todos los adaptadores |
 | `apifast-cli` | Driver | Línea de comandos y composición | Aplicación y los adaptadores que use |
 
@@ -128,6 +132,7 @@ Definidos como traits en `apifast-app`:
 | `SessionStore` | Guardar las pestañas abiertas y sus borradores sin guardar | `apifast-storage-fs` |
 | `WorkspaceRepository` | Leer y editar `workspace.yml`: nombre y colecciones del workspace | `apifast-storage-fs` |
 | `FsWatcher` | Notificar cambios externos en la colección, agrupados en lotes de rutas relativas. No implementa un puerto: el driver lo arranca al abrir la colección y reconcilia cada lote (`ApplyExternalChange`) | `apifast-watch` |
+| `GitRepository` | La rama de la colección, qué archivos cambiaron desde el último commit y cómo era un archivo en él | `apifast-git` |
 | `ScriptEngine` | Ejecutar un script de usuario con límites de tiempo y memoria, y devolver lo que escribió en la consola y por qué falló | `apifast-script-js` |
 | `ScriptHost` | Lo que un script pide a la aplicación mientras corre: enviar una request suelta (`bru.sendRequest`) o una de la colección (`bru.runRequest`), y leer y cambiar el tarro de cookies, que el transporte expone (`HttpTransport::cookies`) | `apifast-app` (el envío en curso) |
 | `Clock` | Hora actual y medición de tiempos | Sistema, o falso en tests |
@@ -238,6 +243,7 @@ apifast/
 │   ├── apifast-ws/
 │   ├── apifast-grpc/
 │   ├── apifast-script-js/
+│   ├── apifast-git/
 │   ├── apifast-gui/
 │   ├── apifast-cli/
 │   └── apifast-arch-tests/ # test de reglas de dependencia

@@ -18,6 +18,7 @@ mod error;
 mod examples;
 mod export;
 mod functions;
+mod git;
 mod graphql;
 mod grpc;
 mod history;
@@ -49,6 +50,7 @@ pub use environments::{
 pub use error::{AppError, RepositoryError, StoreError, TransportError};
 pub use examples::{EXAMPLE_LIMIT, ExampleError, example_from, example_name};
 pub use export::collection_contents;
+pub use git::{ChangedFile, FileChange, GitError, GitRepository, GitStatus};
 pub use graphql::{SchemaCache, cached_schema, fetch_schema, schema_key};
 pub use grpc::{GrpcTransport, NO_GRPC, NoGrpc, call_grpc, describe_grpc};
 pub use history::{

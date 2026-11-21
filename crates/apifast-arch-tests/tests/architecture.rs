@@ -13,6 +13,9 @@ enum Layer {
     Adapter,
     Driver,
     Tooling,
+    /// What the tests of several crates share, such as the contract every
+    /// adapter of a port must pass. Only a dev dependency may use it.
+    TestSupport,
 }
 
 /// Layer of each workspace crate. A new, unclassified crate fails the tests.
@@ -22,9 +25,10 @@ fn layer(name: &str) -> Option<Layer> {
         "apifast-app" => Some(Layer::Application),
         "apifast-storage-fs" | "apifast-http" | "apifast-vault" | "apifast-watch"
         | "apifast-history" | "apifast-import" | "apifast-ws" | "apifast-grpc"
-        | "apifast-script-js" => Some(Layer::Adapter),
+        | "apifast-script-js" | "apifast-git" => Some(Layer::Adapter),
         "apifast-gui" | "apifast-cli" => Some(Layer::Driver),
         "apifast-arch-tests" => Some(Layer::Tooling),
+        "apifast-git-contract" => Some(Layer::TestSupport),
         _ => None,
     }
 }
@@ -53,6 +57,7 @@ const EXCLUSIVE_OWNERS: &[(&str, &[&str])] = &[
     ("tonic-reflection", &["apifast-grpc"]),
     ("protox", &["apifast-grpc"]),
     ("rquickjs", &["apifast-script-js"]),
+    ("gix", &["apifast-git"]),
     ("roxmltree", &["apifast-query"]),
     ("egui", &["apifast-gui"]),
     ("eframe", &["apifast-gui"]),
@@ -103,6 +108,10 @@ fn workspace() -> Vec<Crate> {
 
 /// Whether `from` may depend on the workspace crate `to`.
 fn allowed(from: &str, a: Layer, to: &str, b: Layer) -> bool {
+    // Test support is for tests: dev dependencies, which are not checked.
+    if b == Layer::TestSupport {
+        return false;
+    }
     match a {
         // The domain depends on nothing; template and query may use it.
         Layer::Domain => {
@@ -118,6 +127,7 @@ fn allowed(from: &str, a: Layer, to: &str, b: Layer) -> bool {
         }
         Layer::Driver => b != Layer::Driver && b != Layer::Tooling,
         Layer::Tooling => false,
+        Layer::TestSupport => matches!(b, Layer::Domain | Layer::Application),
     }
 }
 
@@ -236,7 +246,7 @@ fn every_crate_has_a_readme_and_the_project_license() {
 
 #[test]
 fn the_rules_catch_violations() {
-    use Layer::{Adapter, Application, Domain, Driver};
+    use Layer::{Adapter, Application, Domain, Driver, TestSupport};
     // Between workspace crates.
     assert!(!allowed(
         "apifast-domain",
@@ -268,6 +278,30 @@ fn the_rules_catch_violations() {
         Adapter
     ));
     assert!(allowed("apifast-cli", Driver, "apifast-http", Adapter));
+    assert!(!allowed(
+        "apifast-git",
+        Adapter,
+        "apifast-git-contract",
+        TestSupport
+    ));
+    assert!(!allowed(
+        "apifast-cli",
+        Driver,
+        "apifast-git-contract",
+        TestSupport
+    ));
+    assert!(allowed(
+        "apifast-git-contract",
+        TestSupport,
+        "apifast-app",
+        Application
+    ));
+    assert!(!allowed(
+        "apifast-git-contract",
+        TestSupport,
+        "apifast-git",
+        Adapter
+    ));
     assert!(allowed(
         "apifast-template",
         Domain,

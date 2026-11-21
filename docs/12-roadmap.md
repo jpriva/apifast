@@ -442,6 +442,11 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
 ### Tareas
 
 - [ ] Integración con git: estado, diff semántico por request, commit, cambio de rama.
+  - [x] Puerto `GitRepository` y adaptador `apifast-git` con gitoxide ([ADR 0014](adr/0014-git-con-gitoxide.md)): la rama, los archivos que cambiaron frente al último commit (añadidos, modificados, borrados; respeta `.gitignore`) y su contenido en él. Una colección puede ser una carpeta de un repositorio más grande. Lo que el puerto promete es una batería genérica (`apifast-git-contract`) que cualquier adaptador pasa.
+  - [ ] Diff semántico por request.
+  - [ ] Commit.
+  - [ ] Cambio de rama.
+  - [ ] En la CLI y en la interfaz (rama en la barra de estado, panel de cambios).
 - [ ] Empaquetado para Linux (AppImage, Flatpak, paquetes); pulido y empaquetado de macOS y Windows.
 - [ ] Actualizaciones.
 - [ ] Traducciones: español e inglés.

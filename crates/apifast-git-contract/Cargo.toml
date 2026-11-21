@@ -1,0 +1,15 @@
+[package]
+name = "apifast-git-contract"
+description = "What every adapter of apifast's git port must do: tests any GitRepository passes."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+apifast-app.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -25,11 +25,15 @@ apifast-import = { path = "crates/apifast-import" }
 apifast-ws = { path = "crates/apifast-ws" }
 apifast-grpc = { path = "crates/apifast-grpc" }
 apifast-script-js = { path = "crates/apifast-script-js" }
+apifast-git = { path = "crates/apifast-git" }
+apifast-git-contract = { path = "crates/apifast-git-contract" }
 
 # External
 base64 = "0.23.1"
 chacha20poly1305 = "0.11.0"
 getrandom = "0.4.3"
+# Pure Rust git (ADR 0014): what the integration needs, without networking.
+gix = { version = "0.90.0", default-features = false, features = ["sha1", "status", "worktree-mutation", "revision", "parallel"] }
 hmac = "0.13.0"
 md-5 = "0.11.0"
 md4 = "0.11.0"
