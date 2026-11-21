@@ -5,6 +5,7 @@
 //! the files under the collection's root are seen, and paths are relative to
 //! it.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use apifast_app::{ChangedFile, FileChange, GitError, GitRepository, GitStatus};
@@ -206,6 +207,221 @@ impl GitRepository for GixRepository {
             .map_err(failed)?;
         Self::update_index(&repo, &workdir, &written)?;
         Ok(id.shorten_or_id().to_string())
+    }
+
+    fn branches(&self) -> Result<Vec<String>, GitError> {
+        let repo = self.repo.to_thread_local();
+        let references = repo.references().map_err(failed)?;
+        let mut names = Vec::new();
+        for reference in references.local_branches().map_err(failed)? {
+            let reference = reference.map_err(failed)?;
+            names.push(reference.name().shorten().to_str_lossy().into_owned());
+        }
+        names.sort();
+        Ok(names)
+    }
+
+    fn switch_branch(&self, branch: &str) -> Result<(), GitError> {
+        let repo = self.repo.to_thread_local();
+        let full = format!("refs/heads/{branch}");
+        let current = repo.head_name().map_err(failed)?;
+        if current
+            .as_ref()
+            .is_some_and(|name| name.as_bstr() == full.as_str())
+        {
+            return Ok(());
+        }
+        let mut reference = (repo.find_reference(full.as_str()))
+            .map_err(|_| GitError(format!("there is no branch `{branch}`")))?;
+        let target = reference
+            .peel_to_commit()
+            .map_err(failed)?
+            .tree()
+            .map_err(failed)?;
+        let wanted = files_of(&target)?;
+        let had = match Self::head_tree(&repo)? {
+            Some(tree) => files_of(&tree)?,
+            None => BTreeMap::new(),
+        };
+        let workdir = repo.workdir().map(Path::to_path_buf).unwrap_or_default();
+        Self::refuse_losing_work(&repo, &workdir, (&had, &wanted))?;
+
+        // The working tree: what the branch does not have goes, what it has
+        // otherwise is written.
+        for path in had.keys().filter(|path| !wanted.contains_key(*path)) {
+            remove_file(&workdir, path)?;
+        }
+        for (path, (id, mode)) in &wanted {
+            if had.get(path) != Some(&(*id, *mode)) {
+                write_entry(&repo, &workdir.join(path), *id, *mode)?;
+            }
+        }
+        // The index: the branch's tree, with the files' stats.
+        let mut index = repo.index_from_tree(&target.id).map_err(failed)?;
+        let (entries, paths) = index.entries_mut_and_pathbacking();
+        for entry in entries {
+            let path = workdir.join(entry.path_in(paths).to_str_lossy().as_ref());
+            if let Some(stat) = gix::index::fs::Metadata::from_path_no_follow(&path)
+                .ok()
+                .and_then(|m| gix::index::entry::Stat::from_fs(&m).ok())
+            {
+                entry.stat = stat;
+            }
+        }
+        index
+            .write(gix::index::write::Options::default())
+            .map_err(failed)?;
+        // And `HEAD`.
+        let from =
+            current.map_or_else(|| "a detached HEAD".to_owned(), |n| n.shorten().to_string());
+        let edit = gix::refs::transaction::RefEdit {
+            change: gix::refs::transaction::Change::Update {
+                log: gix::refs::transaction::LogChange {
+                    mode: gix::refs::transaction::RefLog::AndReference,
+                    force_create_reflog: false,
+                    message: format!("checkout: moving from {from} to {branch}").into(),
+                },
+                expected: gix::refs::transaction::PreviousValue::Any,
+                new: gix::refs::Target::Symbolic(full.as_str().try_into().map_err(failed)?),
+            },
+            name: "HEAD".try_into().map_err(failed)?,
+            deref: false,
+        };
+        repo.edit_reference(edit).map_err(failed)?;
+        Ok(())
+    }
+}
+
+/// A tree's files (not its folders), by path: their blob and mode.
+type Files = BTreeMap<String, (gix::ObjectId, gix::object::tree::EntryMode)>;
+
+fn files_of(tree: &gix::Tree<'_>) -> Result<Files, GitError> {
+    let mut recorder = gix::traverse::tree::Recorder::default();
+    tree.traverse()
+        .breadthfirst(&mut recorder)
+        .map_err(failed)?;
+    Ok((recorder.records.into_iter())
+        .filter(|entry| !entry.mode.is_tree())
+        .map(|entry| {
+            (
+                entry.filepath.to_str_lossy().into_owned(),
+                (entry.oid, entry.mode),
+            )
+        })
+        .collect())
+}
+
+/// Removes `path` of the working tree, and the folders it leaves empty.
+fn remove_file(workdir: &Path, path: &str) -> Result<(), GitError> {
+    let full = workdir.join(path);
+    match std::fs::remove_file(&full) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(failed(e)),
+    }
+    let mut dir = full.parent();
+    while let Some(folder) = dir.filter(|d| *d != workdir) {
+        // Not empty, or not there: the folders above stay too.
+        if std::fs::remove_dir(folder).is_err() {
+            break;
+        }
+        dir = folder.parent();
+    }
+    Ok(())
+}
+
+/// Writes the blob `id` at `path` as `mode` says: a file (executable or
+/// not) or a link. A submodule is left alone.
+fn write_entry(
+    repo: &gix::Repository,
+    path: &Path,
+    id: gix::ObjectId,
+    mode: gix::object::tree::EntryMode,
+) -> Result<(), GitError> {
+    if mode.is_commit() {
+        return Ok(());
+    }
+    let data = repo.find_object(id).map_err(failed)?.data.clone();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(failed)?;
+    }
+    match std::fs::remove_file(path) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(failed(e)),
+    }
+    #[cfg(unix)]
+    if mode.is_link() {
+        let target = String::from_utf8_lossy(&data).into_owned();
+        return std::os::unix::fs::symlink(target, path).map_err(failed);
+    }
+    std::fs::write(path, &data).map_err(failed)?;
+    #[cfg(unix)]
+    if mode.is_executable() {
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = std::fs::metadata(path).map_err(failed)?.permissions();
+        permissions.set_mode(permissions.mode() | 0o111);
+        std::fs::set_permissions(path, permissions).map_err(failed)?;
+    }
+    Ok(())
+}
+
+impl GixRepository {
+    /// Refuses a switch that would lose work: a tracked file of the
+    /// repository with changes (staged or not), or an untracked one where
+    /// the branch has a file.
+    fn refuse_losing_work(
+        repo: &gix::Repository,
+        workdir: &Path,
+        (had, wanted): (&Files, &Files),
+    ) -> Result<(), GitError> {
+        let index = repo.index_or_empty().map_err(failed)?;
+        let items = (repo.status(gix::progress::Discard).map_err(failed)?)
+            .untracked_files(UntrackedFiles::Files)
+            .into_iter(Vec::<BString>::new())
+            .map_err(failed)?;
+        let mut changed = Vec::new();
+        let mut overwritten = Vec::new();
+        for item in items {
+            let item = item.map_err(failed)?;
+            if let gix::status::Item::IndexWorktree(change) = &item
+                && change.summary().is_none()
+            {
+                continue;
+            }
+            let path = item.location().to_str_lossy().into_owned();
+            let tracked =
+                had.contains_key(&path) || index.entry_by_path(path.as_str().into()).is_some();
+            if tracked {
+                // Changed back to what was committed is no change.
+                let on_disk = std::fs::read(workdir.join(&path)).ok();
+                let committed = had
+                    .get(&path)
+                    .and_then(|(id, _)| repo.find_object(*id).ok().map(|o| o.data.clone()));
+                let staged = index.entry_by_path(path.as_str().into()).map(|e| e.id);
+                let same = on_disk.is_some()
+                    && on_disk == committed
+                    && staged == had.get(&path).map(|(id, _)| *id);
+                if !same && !changed.contains(&path) {
+                    changed.push(path);
+                }
+            } else if wanted.contains_key(&path) && !overwritten.contains(&path) {
+                overwritten.push(path);
+            }
+        }
+        if !changed.is_empty() {
+            return Err(GitError(format!(
+                "commit or discard the changes first: {}",
+                changed.join(", ")
+            )));
+        }
+        if !overwritten.is_empty() {
+            return Err(GitError(format!(
+                "the branch has files that are here untracked; move them first: {}",
+                overwritten.join(", ")
+            )));
+        }
+        Ok(())
     }
 }
 

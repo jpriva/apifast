@@ -41,6 +41,11 @@ macro_rules! git_repository_contract {
                 a_commit_keeps_what_else_was_staged,
                 the_first_commit_starts_the_branch,
                 a_collection_in_a_folder_commits_by_its_own_paths,
+                the_local_branches_are_listed,
+                switching_branches_changes_the_files_the_index_and_head,
+                a_switch_is_refused_while_a_tracked_file_has_changes,
+                a_switch_is_refused_when_it_would_overwrite_an_untracked_file,
+                an_unknown_branch_cannot_be_switched_to,
             );
         }
     };
@@ -320,4 +325,128 @@ pub fn a_collection_in_a_folder_commits_by_its_own_paths(open: Open<'_>) {
         .unwrap();
     assert_eq!(git_output(root, &["status", "--porcelain"]), "M top.txt");
     assert_eq!(git_output(root, &["show", "HEAD:api/a.yml"]), "a: 2");
+}
+
+/// A repository with `main` (a, b, run.sh) and `feature` (a changed, b
+/// deleted, c added, run.sh executable), checked out on `main`.
+fn two_branches() -> tempfile::TempDir {
+    let dir = repo();
+    let root = dir.path();
+    write(root, "a.yml", "a: main\n");
+    write(root, "b.yml", "b: 1\n");
+    write(root, "tools/run.sh", "echo main\n");
+    git(root, &["add", "."]);
+    git(root, &["commit", "-q", "-m", "main"]);
+    git(root, &["switch", "-q", "-c", "feature"]);
+    write(root, "a.yml", "a: feature\n");
+    std::fs::remove_file(root.join("b.yml")).unwrap();
+    write(root, "users/c.yml", "c: 1\n");
+    write(root, "tools/run.sh", "echo feature\n");
+    git(root, &["add", "."]);
+    // After `add`, which would take the mode from disk again; on disk too,
+    // so the working tree matches.
+    git(root, &["update-index", "--chmod=+x", "tools/run.sh"]);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let path = root.join("tools/run.sh");
+        let mut permissions = std::fs::metadata(&path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&path, permissions).unwrap();
+    }
+    git(root, &["commit", "-q", "-m", "feature"]);
+    git(root, &["switch", "-q", "main"]);
+    dir
+}
+
+fn read(root: &Path, path: &str) -> Option<String> {
+    std::fs::read_to_string(root.join(path)).ok()
+}
+
+/// The local branches are listed by name, sorted.
+pub fn the_local_branches_are_listed(open: Open<'_>) {
+    let dir = two_branches();
+    git(dir.path(), &["branch", "a-fix"]);
+    let repo = opened(open, dir.path());
+    assert_eq!(repo.branches().unwrap(), ["a-fix", "feature", "main"]);
+}
+
+/// A switch makes the files, the index and `HEAD` the branch's, and git
+/// agrees; untracked files it does not touch stay.
+pub fn switching_branches_changes_the_files_the_index_and_head(open: Open<'_>) {
+    let dir = two_branches();
+    let root = dir.path();
+    write(root, "notes.txt", "mine");
+    let repo = opened(open, root);
+
+    repo.switch_branch("feature").unwrap();
+    assert_eq!(read(root, "a.yml").as_deref(), Some("a: feature\n"));
+    assert_eq!(read(root, "b.yml"), None);
+    assert_eq!(read(root, "users/c.yml").as_deref(), Some("c: 1\n"));
+    assert_eq!(read(root, "notes.txt").as_deref(), Some("mine"));
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(root.join("tools/run.sh"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_ne!(mode & 0o111, 0, "run.sh is executable on feature");
+    }
+    let status = repo.status().unwrap();
+    assert_eq!(status.branch.as_deref(), Some("feature"));
+    assert_eq!(status.changes, [changed("notes.txt", FileChange::Added)]);
+    assert_eq!(
+        git_output(root, &["rev-parse", "--abbrev-ref", "HEAD"]),
+        "feature"
+    );
+    assert_eq!(git_output(root, &["status", "--porcelain"]), "?? notes.txt");
+
+    repo.switch_branch("main").unwrap();
+    assert_eq!(read(root, "a.yml").as_deref(), Some("a: main\n"));
+    assert_eq!(read(root, "b.yml").as_deref(), Some("b: 1\n"));
+    assert_eq!(read(root, "users/c.yml"), None);
+    assert!(!root.join("users").exists(), "a folder left empty goes too");
+    assert_eq!(git_output(root, &["status", "--porcelain"]), "?? notes.txt");
+}
+
+/// While a tracked file of the repository has changes, even outside the
+/// collection, a switch is refused and nothing changes.
+pub fn a_switch_is_refused_while_a_tracked_file_has_changes(open: Open<'_>) {
+    let dir = two_branches();
+    let root = dir.path();
+    write(root, "tools/run.sh", "echo edited\n");
+    let repo = opened(open, root);
+    assert!(repo.switch_branch("feature").is_err());
+    assert_eq!(read(root, "a.yml").as_deref(), Some("a: main\n"));
+    assert_eq!(read(root, "tools/run.sh").as_deref(), Some("echo edited\n"));
+    assert_eq!(
+        git_output(root, &["rev-parse", "--abbrev-ref", "HEAD"]),
+        "main"
+    );
+}
+
+/// An untracked file the branch has would be overwritten: refused.
+pub fn a_switch_is_refused_when_it_would_overwrite_an_untracked_file(open: Open<'_>) {
+    let dir = two_branches();
+    let root = dir.path();
+    write(root, "users/c.yml", "mine\n");
+    let repo = opened(open, root);
+    assert!(repo.switch_branch("feature").is_err());
+    assert_eq!(read(root, "users/c.yml").as_deref(), Some("mine\n"));
+    assert_eq!(
+        git_output(root, &["rev-parse", "--abbrev-ref", "HEAD"]),
+        "main"
+    );
+}
+
+/// There is no switching to a branch that is not there.
+pub fn an_unknown_branch_cannot_be_switched_to(open: Open<'_>) {
+    let dir = two_branches();
+    let repo = opened(open, dir.path());
+    assert!(repo.switch_branch("nope").is_err());
+    assert_eq!(
+        git_output(dir.path(), &["rev-parse", "--abbrev-ref", "HEAD"]),
+        "main"
+    );
 }

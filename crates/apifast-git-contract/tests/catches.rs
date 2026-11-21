@@ -19,6 +19,14 @@ impl GitRepository for Blind {
     fn commit(&self, _: &[String], _: &str) -> Result<String, GitError> {
         Ok("0".into())
     }
+
+    fn branches(&self) -> Result<Vec<String>, GitError> {
+        Ok(Vec::new())
+    }
+
+    fn switch_branch(&self, _: &str) -> Result<(), GitError> {
+        Ok(())
+    }
 }
 
 #[expect(clippy::unnecessary_wraps, reason = "the contract's `Open`")]

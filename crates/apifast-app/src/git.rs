@@ -75,6 +75,24 @@ pub trait GitRepository: Send + Sync {
     /// If there is no identity configured (`user.name`, `user.email`), or
     /// the repository cannot be written.
     fn commit(&self, paths: &[String], message: &str) -> Result<String, GitError>;
+
+    /// The local branches, by name, sorted.
+    ///
+    /// # Errors
+    ///
+    /// If the repository cannot be read.
+    fn branches(&self) -> Result<Vec<String>, GitError>;
+
+    /// Checks out the local branch `branch`: the working tree, the index and
+    /// `HEAD` become its. Nothing is lost: it is refused while a tracked
+    /// file of the repository (not only of the collection) has changes, or
+    /// an untracked one would be overwritten.
+    ///
+    /// # Errors
+    ///
+    /// If there is no such branch, the switch is refused, or the
+    /// repository cannot be written.
+    fn switch_branch(&self, branch: &str) -> Result<(), GitError>;
 }
 
 /// Commits `paths` of the collection with `message` (see
@@ -190,6 +208,14 @@ mod tests {
 
         fn head_file(&self, _: &str) -> Result<Option<Vec<u8>>, GitError> {
             Ok(None)
+        }
+
+        fn branches(&self) -> Result<Vec<String>, GitError> {
+            Ok(Vec::new())
+        }
+
+        fn switch_branch(&self, _: &str) -> Result<(), GitError> {
+            Ok(())
         }
 
         fn commit(&self, paths: &[String], message: &str) -> Result<String, GitError> {
