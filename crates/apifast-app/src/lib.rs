@@ -50,7 +50,9 @@ pub use environments::{
 pub use error::{AppError, RepositoryError, StoreError, TransportError};
 pub use examples::{EXAMPLE_LIMIT, ExampleError, example_from, example_name};
 pub use export::collection_contents;
-pub use git::{ChangedFile, FileChange, FileDiff, GitError, GitRepository, GitStatus, git_diff};
+pub use git::{
+    ChangedFile, FileChange, FileDiff, GitError, GitRepository, GitStatus, commit_changes, git_diff,
+};
 pub use graphql::{SchemaCache, cached_schema, fetch_schema, schema_key};
 pub use grpc::{GrpcTransport, NO_GRPC, NoGrpc, call_grpc, describe_grpc};
 pub use history::{

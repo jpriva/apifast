@@ -25,6 +25,7 @@ Hay tres formas de hablar con git:
 
 - Ningún binario que encontrar en el `PATH`, y el mismo comportamiento en Linux, macOS y Windows. Sin `git` instalado, la integración funciona igual.
 - La compilación crece: gix es grande, aunque sin sus funciones por defecto. Añade una versión más de `hashbrown` al árbol.
-- Los commits no ejecutan los hooks de `.git/hooks`, a diferencia de `git commit`. Si un equipo depende de ellos, tendrá que hacer esos commits con `git`.
+- Los commits no ejecutan los hooks de `.git/hooks`, a diferencia de `git commit`, ni firman (`commit.gpgsign`). Si un equipo depende de ellos, tendrá que hacer esos commits con `git`.
+- Un commit edita el árbol del último commit con los archivos elegidos y deja el resto del índice como estaba: es "commit de estos archivos", no "commit de lo preparado".
 - Cambiar de rama con cambios locales se rechaza en vez de intentar mezclarlos.
 - Si gix no basta para algo, la decisión se revisa: el puerto deja cambiar de adaptador sin tocar la aplicación. Lo que el puerto promete está en `apifast-git-contract`, una batería de escenarios que cualquier adaptador corre con `git_repository_contract!`; un adaptador nuevo es válido cuando la pasa.

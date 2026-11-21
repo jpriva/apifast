@@ -37,6 +37,10 @@ macro_rules! git_repository_contract {
                 a_collection_in_a_folder_sees_only_its_files_by_its_own_paths,
                 before_the_first_commit_everything_is_added_and_head_has_nothing,
                 a_detached_head_has_no_branch,
+                a_commit_takes_the_files_chosen_as_they_are_on_disk,
+                a_commit_keeps_what_else_was_staged,
+                the_first_commit_starts_the_branch,
+                a_collection_in_a_folder_commits_by_its_own_paths,
             );
         }
     };
@@ -79,11 +83,34 @@ pub fn write(dir: &Path, path: &str, text: &str) {
     std::fs::write(path, text).unwrap();
 }
 
-/// A new repository on branch `main`, in a temporary folder.
+/// A new repository on branch `main`, in a temporary folder, with an
+/// identity to commit as.
 pub fn repo() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
     git(dir.path(), &["init", "-q", "-b", "main"]);
+    git(dir.path(), &["config", "user.name", "Tester"]);
+    git(dir.path(), &["config", "user.email", "tester@example.com"]);
+    git(dir.path(), &["config", "commit.gpgsign", "false"]);
     dir
+}
+
+/// What `git` prints for `args` in `dir`, trimmed.
+pub fn git_output(dir: &Path, args: &[&str]) -> String {
+    let out = Command::new("git")
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "git {args:?}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).trim().to_owned()
+}
+
+fn paths(list: &[&str]) -> Vec<String> {
+    list.iter().map(|p| (*p).to_owned()).collect()
 }
 
 fn changed(path: &str, change: FileChange) -> ChangedFile {
@@ -193,4 +220,104 @@ pub fn a_detached_head_has_no_branch(open: Open<'_>) {
     git(dir.path(), &["checkout", "-q", "--detach"]);
     let repo = opened(open, dir.path());
     assert_eq!(repo.status().unwrap().branch, None);
+}
+
+/// A commit takes the files chosen as they are on disk, a deleted one as
+/// deleted; the others stay changed, and git agrees.
+pub fn a_commit_takes_the_files_chosen_as_they_are_on_disk(open: Open<'_>) {
+    let dir = repo();
+    let root = dir.path();
+    write(root, "a.yml", "a: 1\n");
+    write(root, "b.yml", "b: 1\n");
+    write(root, "c.yml", "c: 1\n");
+    git(root, &["add", "."]);
+    git(root, &["commit", "-q", "-m", "first"]);
+    write(root, "a.yml", "a: 2\n");
+    write(root, "b.yml", "b: 2\n");
+    std::fs::remove_file(root.join("c.yml")).unwrap();
+    write(root, "users/new.yml", "n: 1\n");
+
+    let repo = opened(open, root);
+    let id = repo
+        .commit(
+            &paths(&["a.yml", "c.yml", "users/new.yml"]),
+            "Change a, drop c",
+        )
+        .unwrap();
+    assert!(id.len() >= 4, "an abbreviated id: {id}");
+    assert_eq!(
+        repo.status().unwrap().changes,
+        [changed("b.yml", FileChange::Modified)]
+    );
+    assert_eq!(
+        repo.head_file("a.yml").unwrap().as_deref(),
+        Some(&b"a: 2\n"[..])
+    );
+    assert_eq!(repo.head_file("c.yml").unwrap(), None);
+    assert_eq!(
+        git_output(root, &["log", "-1", "--format=%s|%an|%ae"]),
+        "Change a, drop c|Tester|tester@example.com"
+    );
+    assert_eq!(git_output(root, &["rev-list", "--count", "HEAD"]), "2");
+    assert!(
+        git_output(root, &["rev-parse", "--short", "HEAD"]).starts_with(&id[..7.min(id.len())])
+    );
+    // git sees the same: only b changed, nothing staged.
+    assert_eq!(git_output(root, &["status", "--porcelain"]), "M b.yml");
+    // And what was written is sound.
+    git(root, &["fsck", "--no-progress", "--strict"]);
+}
+
+/// What else was staged stays staged after a commit of other files.
+pub fn a_commit_keeps_what_else_was_staged(open: Open<'_>) {
+    let dir = repo();
+    let root = dir.path();
+    write(root, "a.yml", "a: 1\n");
+    write(root, "b.yml", "b: 1\n");
+    git(root, &["add", "."]);
+    git(root, &["commit", "-q", "-m", "first"]);
+    write(root, "a.yml", "a: 2\n");
+    write(root, "b.yml", "b: 2\n");
+    git(root, &["add", "b.yml"]);
+
+    opened(open, root)
+        .commit(&paths(&["a.yml"]), "Change a")
+        .unwrap();
+    assert_eq!(
+        git_output(root, &["diff", "--cached", "--name-only"]),
+        "b.yml"
+    );
+    assert_eq!(git_output(root, &["status", "--porcelain"]), "M  b.yml");
+}
+
+/// The first commit of a repository starts its branch.
+pub fn the_first_commit_starts_the_branch(open: Open<'_>) {
+    let dir = repo();
+    let root = dir.path();
+    write(root, "a.yml", "a: 1\n");
+    write(root, "users/b.yml", "b: 1\n");
+    let repo = opened(open, root);
+    repo.commit(&paths(&["a.yml", "users/b.yml"]), "First")
+        .unwrap();
+    assert_eq!(repo.status().unwrap().changes, []);
+    assert_eq!(git_output(root, &["log", "--format=%s", "main"]), "First");
+    assert_eq!(git_output(root, &["status", "--porcelain"]), "");
+}
+
+/// A collection in a folder commits its files by its own paths.
+pub fn a_collection_in_a_folder_commits_by_its_own_paths(open: Open<'_>) {
+    let dir = repo();
+    let root = dir.path();
+    write(root, "api/a.yml", "a: 1\n");
+    write(root, "top.txt", "t");
+    git(root, &["add", "."]);
+    git(root, &["commit", "-q", "-m", "first"]);
+    write(root, "api/a.yml", "a: 2\n");
+    write(root, "top.txt", "u");
+
+    opened(open, &root.join("api"))
+        .commit(&paths(&["a.yml"]), "Change a")
+        .unwrap();
+    assert_eq!(git_output(root, &["status", "--porcelain"]), "M top.txt");
+    assert_eq!(git_output(root, &["show", "HEAD:api/a.yml"]), "a: 2");
 }

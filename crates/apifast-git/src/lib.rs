@@ -160,6 +160,115 @@ impl GitRepository for GixRepository {
             None => Ok(None),
         }
     }
+
+    fn commit(&self, paths: &[String], message: &str) -> Result<String, GitError> {
+        let repo = self.repo.to_thread_local();
+        if repo.committer().is_none() || repo.author().is_none() {
+            return Err(GitError(
+                "set your name and email first: git config user.name, git config user.email".into(),
+            ));
+        }
+        let workdir = repo.workdir().map(Path::to_path_buf).unwrap_or_default();
+        let head = Self::head_tree(&repo)?;
+        let parents: Vec<gix::ObjectId> = match &head {
+            Some(_) => vec![repo.head_id().map_err(failed)?.detach()],
+            None => Vec::new(),
+        };
+        let base = head
+            .as_ref()
+            .map_or_else(|| repo.empty_tree().id, |tree| tree.id);
+        let mut editor = repo.edit_tree(base).map_err(failed)?;
+        // What each path is now: a blob and its mode, or gone.
+        let mut written: Vec<(
+            String,
+            Option<(gix::ObjectId, gix::object::tree::EntryKind)>,
+        )> = Vec::new();
+        for path in paths {
+            let in_repo = self.in_repo(path);
+            let on_disk = workdir.join(&in_repo);
+            match std::fs::read(&on_disk) {
+                Ok(bytes) => {
+                    let id = repo.write_blob(bytes).map_err(failed)?.detach();
+                    let kind = entry_kind(&on_disk);
+                    editor.upsert(in_repo.as_str(), kind, id).map_err(failed)?;
+                    written.push((in_repo, Some((id, kind))));
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    editor.remove(in_repo.as_str()).map_err(failed)?;
+                    written.push((in_repo, None));
+                }
+                Err(e) => return Err(failed(e)),
+            }
+        }
+        let tree = editor.write().map_err(failed)?.detach();
+        let id = repo
+            .commit("HEAD", message, tree, parents)
+            .map_err(failed)?;
+        Self::update_index(&repo, &workdir, &written)?;
+        Ok(id.shorten_or_id().to_string())
+    }
+}
+
+/// The mode a file goes into a tree with: executable or not.
+fn entry_kind(path: &Path) -> gix::object::tree::EntryKind {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if std::fs::metadata(path).is_ok_and(|m| m.permissions().mode() & 0o111 != 0) {
+            return gix::object::tree::EntryKind::BlobExecutable;
+        }
+    }
+    let _ = path;
+    gix::object::tree::EntryKind::Blob
+}
+
+impl GixRepository {
+    /// The index after a commit of `written`: those paths as committed,
+    /// everything else as it was staged.
+    fn update_index(
+        repo: &gix::Repository,
+        workdir: &Path,
+        written: &[(
+            String,
+            Option<(gix::ObjectId, gix::object::tree::EntryKind)>,
+        )],
+    ) -> Result<(), GitError> {
+        let mut index = match repo.open_index() {
+            Ok(index) => index,
+            // No index yet: one with what was just committed.
+            Err(_) => gix::index::File::from_state(
+                gix::index::State::new(repo.object_hash()),
+                repo.index_path(),
+            ),
+        };
+        let committed: Vec<&str> = written.iter().map(|(p, _)| p.as_str()).collect();
+        index.remove_entries(|_, path, _| committed.contains(&path.to_str_lossy().as_ref()));
+        for (path, blob) in written {
+            let Some((id, kind)) = blob else { continue };
+            let full = workdir.join(path);
+            let stat = gix::index::fs::Metadata::from_path_no_follow(&full)
+                .ok()
+                .and_then(|m| gix::index::entry::Stat::from_fs(&m).ok())
+                .unwrap_or_default();
+            let mode = match kind {
+                gix::object::tree::EntryKind::BlobExecutable => {
+                    gix::index::entry::Mode::FILE_EXECUTABLE
+                }
+                _ => gix::index::entry::Mode::FILE,
+            };
+            index.dangerously_push_entry(
+                stat,
+                *id,
+                gix::index::entry::Flags::empty(),
+                mode,
+                path.as_str().into(),
+            );
+        }
+        index.sort_entries();
+        index
+            .write(gix::index::write::Options::default())
+            .map_err(failed)
+    }
 }
 
 impl GixRepository {

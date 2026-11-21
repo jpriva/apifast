@@ -15,6 +15,10 @@ impl GitRepository for Blind {
     fn head_file(&self, _: &str) -> Result<Option<Vec<u8>>, GitError> {
         Ok(None)
     }
+
+    fn commit(&self, _: &[String], _: &str) -> Result<String, GitError> {
+        Ok("0".into())
+    }
 }
 
 #[expect(clippy::unnecessary_wraps, reason = "the contract's `Open`")]

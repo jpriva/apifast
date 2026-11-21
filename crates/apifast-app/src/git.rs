@@ -64,6 +64,39 @@ pub trait GitRepository: Send + Sync {
     ///
     /// If the repository cannot be read.
     fn head_file(&self, path: &str) -> Result<Option<Vec<u8>>, GitError>;
+
+    /// Commits `paths` (relative to the collection) as they are on disk,
+    /// a missing one as deleted, on the branch checked out, with `message`
+    /// and the identity git is configured with. What else is staged stays
+    /// staged. Returns the new commit's id, abbreviated.
+    ///
+    /// # Errors
+    ///
+    /// If there is no identity configured (`user.name`, `user.email`), or
+    /// the repository cannot be written.
+    fn commit(&self, paths: &[String], message: &str) -> Result<String, GitError>;
+}
+
+/// Commits `paths` of the collection with `message` (see
+/// [`GitRepository::commit`]).
+///
+/// # Errors
+///
+/// [`AppError::Validation`] without a message or a file; otherwise, the
+/// repository's error.
+pub fn commit_changes(
+    git: &dyn GitRepository,
+    paths: &[String],
+    message: &str,
+) -> Result<String, AppError> {
+    let message = message.trim();
+    if message.is_empty() {
+        return Err(AppError::Validation("a commit needs a message".into()));
+    }
+    if paths.is_empty() {
+        return Err(AppError::Validation("choose the files to commit".into()));
+    }
+    Ok(git.commit(paths, message)?)
 }
 
 /// What changed in a file since the last commit.
@@ -141,5 +174,54 @@ fn kind(file: &CollectionFile) -> &'static str {
         CollectionFile::Collection(_) => "collection",
         CollectionFile::Environment(_) => "environment",
         CollectionFile::Other(_) => "file",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Counting(std::sync::Mutex<Vec<(Vec<String>, String)>>);
+
+    impl GitRepository for Counting {
+        fn status(&self) -> Result<GitStatus, GitError> {
+            Ok(GitStatus::default())
+        }
+
+        fn head_file(&self, _: &str) -> Result<Option<Vec<u8>>, GitError> {
+            Ok(None)
+        }
+
+        fn commit(&self, paths: &[String], message: &str) -> Result<String, GitError> {
+            let mut calls = self
+                .0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            calls.push((paths.to_vec(), message.to_owned()));
+            Ok("abc1234".into())
+        }
+    }
+
+    #[test]
+    fn a_commit_needs_a_message_and_a_file() {
+        let git = Counting(std::sync::Mutex::default());
+        let files = vec!["a.yml".to_owned()];
+        assert!(matches!(
+            commit_changes(&git, &files, "  "),
+            Err(AppError::Validation(_))
+        ));
+        assert!(matches!(
+            commit_changes(&git, &[], "Fix"),
+            Err(AppError::Validation(_))
+        ));
+        assert_eq!(
+            commit_changes(&git, &files, "  Fix it\n").ok().as_deref(),
+            Some("abc1234")
+        );
+        let calls = git
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(*calls, [(files.clone(), "Fix it".to_owned())]);
     }
 }
