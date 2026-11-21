@@ -16,3 +16,5 @@ workspace = true
 
 [dev-dependencies]
 apifast-git-contract.workspace = true
+apifast-domain.workspace = true
+apifast-storage-fs.workspace = true

@@ -18,6 +18,7 @@ mod body;
 mod certificates;
 mod collection;
 mod cookie;
+mod diff;
 mod dns;
 mod environment;
 mod example;
@@ -53,6 +54,9 @@ pub use collection::{Collection, CollectionId, Folder, RequestDefaults, effectiv
 pub use cookie::{
     Cookie, CookieJar, CookieSpec, CookieTarget, SameSite, cookie_from_spec, format_expiry,
     merge_cookie_header, parse_expiry, parse_set_cookie,
+};
+pub use diff::{
+    FieldChange, collection_changes, environment_changes, folder_changes, request_changes,
 };
 pub use dns::{DnsOverride, overridden_addresses};
 pub use environment::{Environment, EnvironmentError, environment_chain};

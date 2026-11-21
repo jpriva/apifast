@@ -19,7 +19,7 @@ Hay tres formas de hablar con git:
 - La aplicación habla con un puerto, `GitRepository`. Las rutas son relativas a la raíz de la colección, que puede ser una carpeta dentro de un repositorio más grande; los archivos de fuera no se ven.
 - gix va sin red (ni `fetch` ni `push`) y sin sus funciones por defecto: solo `status`, la escritura del árbol de trabajo y la lectura de revisiones.
 - Un cambio se dice frente al último commit (`HEAD`), esté o no en el índice: es lo que una persona que no usa git a diario espera. gix solo encuentra los archivos que pueden haber cambiado; cada uno se clasifica comparando el commit con el disco.
-- El diff por request lo calcula apifast: lee el archivo del commit y el del disco con el mismo lector de OpenCollection, y compara las requests.
+- El diff por request lo calcula apifast: lee el archivo del commit y el del disco con el mismo lector de OpenCollection, y compara las requests campo a campo (`apifast-domain`, `request_changes` y sus hermanas). Un cambio de formato que no cambia nada (orden de claves, comillas) no aparece. Las variables secretas nunca muestran su valor.
 
 ## Consecuencias
 

@@ -28,8 +28,8 @@ use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 
 use apifast_app::{
-    CollectionRepository, CollectionTree, EnvironmentRepository, LoadedRequest, Random,
-    RepositoryError, RequestPath, SharedSecretFiles, TreeItem,
+    CollectionFile, CollectionRepository, CollectionTree, EnvironmentRepository, LoadedRequest,
+    Random, RepositoryError, RequestPath, SharedSecretFiles, TreeItem,
 };
 use apifast_domain::{Collection, CollectionId, DnsOverride, Environment, Folder, HttpRequest};
 use oneyaml::Value;
@@ -492,6 +492,39 @@ impl CollectionRepository for FsCollection {
             std::fs::remove_file(&full)
         }
         .map_err(|e| io_error(path, &e))
+    }
+
+    fn parse_file(&self, path: &str, bytes: &[u8]) -> Result<CollectionFile, RepositoryError> {
+        let text = String::from_utf8_lossy(bytes).into_owned();
+        let name = path.rsplit('/').next().unwrap_or(path);
+        let yaml = is_yaml(name) && !path.starts_with(".apifast/");
+        if !yaml {
+            return Ok(CollectionFile::Other(text));
+        }
+        let doc = parse(path, &text)?;
+        let stem = name.rsplit_once('.').map_or(name, |(stem, _)| stem);
+        Ok(if path == "opencollection.yml" {
+            CollectionFile::Collection(Box::new(read::collection(&doc)))
+        } else if name == "folder.yml" {
+            let dir = path.rsplit('/').nth(1).unwrap_or_default();
+            CollectionFile::Folder(Box::new(read::folder(&doc, dir)))
+        } else if path.starts_with("environments/") {
+            CollectionFile::Environment(Box::new(read::environment(&doc, stem)))
+        } else {
+            match read::item(&doc) {
+                read::Item::Http(request) => CollectionFile::Request(Box::new(request)),
+                read::Item::Other { .. } => CollectionFile::Other(text),
+            }
+        })
+    }
+
+    fn file_now(&self, path: &str) -> Result<Option<CollectionFile>, RepositoryError> {
+        let full = self.path(path)?;
+        match std::fs::read(&full) {
+            Ok(bytes) => self.parse_file(path, &bytes).map(Some),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(io_error(path, &e)),
+        }
     }
 }
 

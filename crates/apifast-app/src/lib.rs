@@ -50,7 +50,7 @@ pub use environments::{
 pub use error::{AppError, RepositoryError, StoreError, TransportError};
 pub use examples::{EXAMPLE_LIMIT, ExampleError, example_from, example_name};
 pub use export::collection_contents;
-pub use git::{ChangedFile, FileChange, GitError, GitRepository, GitStatus};
+pub use git::{ChangedFile, FileChange, FileDiff, GitError, GitRepository, GitStatus, git_diff};
 pub use graphql::{SchemaCache, cached_schema, fetch_schema, schema_key};
 pub use grpc::{GrpcTransport, NO_GRPC, NoGrpc, call_grpc, describe_grpc};
 pub use history::{
@@ -66,11 +66,12 @@ pub use organize::{
     Placement, create_folder, create_request, delete_item, move_item, rename_item, slug,
 };
 pub use ports::{
-    Authorization, Authorizer, BodyWriter, CancelToken, Clock, CollectionRepository,
-    CollectionTree, EnvironmentRepository, HttpTransport, ItemPath, LoadedRequest, NoPrompter,
-    NoSecrets, Pause, Prompter, Random, RequestPath, ResponseHead, ResponseId, ResponseStore,
-    SecretStore, Session, SessionStore, SessionTab, SharedSecretFiles, StoredBody, TimelineEvent,
-    TimelineKind, TreeItem, Workspace, WorkspaceEntry, WorkspaceRepository, sort_tree,
+    Authorization, Authorizer, BodyWriter, CancelToken, Clock, CollectionFile,
+    CollectionRepository, CollectionTree, EnvironmentRepository, HttpTransport, ItemPath,
+    LoadedRequest, NoPrompter, NoSecrets, Pause, Prompter, Random, RequestPath, ResponseHead,
+    ResponseId, ResponseStore, SecretStore, Session, SessionStore, SessionTab, SharedSecretFiles,
+    StoredBody, TimelineEvent, TimelineKind, TreeItem, Workspace, WorkspaceEntry,
+    WorkspaceRepository, sort_tree,
 };
 pub use reimport::{
     ImportRecord, ImportRecords, RecordedRequest, ReimportAction, ReimportEntry, ReimportPlan,

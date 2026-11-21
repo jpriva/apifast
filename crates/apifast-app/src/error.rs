@@ -98,6 +98,9 @@ pub enum AppError {
     /// Storing the response failed.
     #[error(transparent)]
     Store(#[from] StoreError),
+    /// The collection's git repository failed.
+    #[error(transparent)]
+    Git(#[from] crate::GitError),
     /// The data does not pass validation; the message says why.
     #[error("{0}")]
     Validation(String),

@@ -202,6 +202,46 @@ pub trait CollectionRepository {
     /// [`RepositoryError::NotFound`] if nothing is at `path`, or the error
     /// of the deletion.
     fn delete_path(&self, path: &str) -> Result<(), RepositoryError>;
+
+    /// The file at `path` (relative to the root) read from `bytes`, as if
+    /// it were there: what git kept of it. By default, as text.
+    ///
+    /// # Errors
+    ///
+    /// If it is a file apifast reads (a request, `folder.yml`…) that is not
+    /// valid.
+    fn parse_file(&self, path: &str, bytes: &[u8]) -> Result<CollectionFile, RepositoryError> {
+        let _ = path;
+        Ok(CollectionFile::Other(
+            String::from_utf8_lossy(bytes).into_owned(),
+        ))
+    }
+
+    /// The file at `path` as it is now; `None` when it is not there. By
+    /// default, there is none.
+    ///
+    /// # Errors
+    ///
+    /// As [`parse_file`](Self::parse_file), or if it cannot be read.
+    fn file_now(&self, path: &str) -> Result<Option<CollectionFile>, RepositoryError> {
+        let _ = path;
+        Ok(None)
+    }
+}
+
+/// A file of a collection, as apifast reads it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CollectionFile {
+    /// A request.
+    Request(Box<HttpRequest>),
+    /// A `folder.yml`.
+    Folder(Box<Folder>),
+    /// The `opencollection.yml`.
+    Collection(Box<Collection>),
+    /// An environment.
+    Environment(Box<Environment>),
+    /// Any other file, as text.
+    Other(String),
 }
 
 /// A workspace: a named group of collections, written in `workspace.yml`

@@ -443,7 +443,7 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
 
 - [ ] Integración con git: estado, diff semántico por request, commit, cambio de rama.
   - [x] Puerto `GitRepository` y adaptador `apifast-git` con gitoxide ([ADR 0014](adr/0014-git-con-gitoxide.md)): la rama, los archivos que cambiaron frente al último commit (añadidos, modificados, borrados; respeta `.gitignore`) y su contenido en él. Una colección puede ser una carpeta de un repositorio más grande. Lo que el puerto promete es una batería genérica (`apifast-git-contract`) que cualquier adaptador pasa.
-  - [ ] Diff semántico por request.
+  - [x] Diff semántico por request: `git_diff` lee el archivo del último commit y el del disco con el mismo lector de OpenCollection (`CollectionRepository::parse_file` y `file_now`) y dice qué campos cambiaron, con su valor antes y después. Las listas con nombre (cabeceras, parámetros, variables, aserciones, capturas, scripts, ejemplos) se comparan elemento a elemento. Vale también para `folder.yml`, `opencollection.yml` y los entornos; otro archivo se compara como texto.
   - [ ] Commit.
   - [ ] Cambio de rama.
   - [ ] En la CLI y en la interfaz (rama en la barra de estado, panel de cambios).

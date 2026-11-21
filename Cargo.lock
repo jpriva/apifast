@@ -332,7 +332,9 @@ name = "apifast-git"
 version = "0.0.0"
 dependencies = [
  "apifast-app",
+ "apifast-domain",
  "apifast-git-contract",
+ "apifast-storage-fs",
  "gix",
 ]
 
