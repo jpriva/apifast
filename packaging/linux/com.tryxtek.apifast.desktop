@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=apifast
+GenericName=API Client
+Comment=Test HTTP, GraphQL, WebSocket and gRPC APIs from collections kept as files
+Exec=apifast-gui
+Icon=com.tryxtek.apifast
+Terminal=false
+Categories=Development;WebDevelopment;
+Keywords=API;REST;HTTP;GraphQL;gRPC;WebSocket;Bruno;Postman;
+StartupNotify=true
+StartupWMClass=com.tryxtek.apifast

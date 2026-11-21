@@ -450,6 +450,12 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
   - [x] Feature de Cargo `git`, activa por defecto en la CLI y la GUI, como `grpc`: sin ella no se compila gix (la CLI pesa 3,6 MB menos y la GUI 3,5 MB menos). El CI ya compila y prueba los drivers sin features.
   - [x] En la interfaz: la rama y los cambios en una barra de estado nueva, que abre la ventana "Git": la lista de cambios con casillas, el diff por campos del archivo elegido, el commit de los marcados y el cambio de rama (rechazado con pestañas sin guardar). El estado se refresca al abrir la colección, con el watcher y tras cada operación.
 - [ ] Empaquetado para Linux (AppImage, Flatpak, paquetes); pulido y empaquetado de macOS y Windows.
+  - [x] Archivos comunes de Linux en `packaging/linux/`: la entrada de menú (`.desktop`), el metainfo de AppStream y el icono, con el id `com.tryxtek.apifast` (el de la ventana también). El icono es un marcador hasta tener el definitivo.
+  - [x] Paquetes `.deb` (cargo-deb) y `.rpm` (cargo-generate-rpm), un `apifast` con la interfaz y la CLI, con `packaging/linux/build.sh`. Solo enlazan la libc: lo que la interfaz carga al ejecutarse (Vulkan o EGL, Wayland o X11) va como recomendado. Construidos y revisados aquí: contenido, metadatos y dependencias; la CLI extraída funciona.
+  - [ ] AppImage y Flatpak, con los mismos archivos comunes.
+  - [ ] Construir los paquetes de release en el sistema más antiguo soportado (Ubuntu 22.04, glibc 2.35), en CI.
+  - [ ] El icono definitivo.
+  - [ ] macOS y Windows.
 - [ ] Actualizaciones.
 - [ ] Traducciones: español e inglés.
 - [ ] Guía de usuario.

@@ -39,7 +39,10 @@ fn run(
         renderer: eframe::Renderer::Wgpu,
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1280.0, 800.0])
-            .with_title("apifast"),
+            .with_title("apifast")
+            // As the desktop file is named (packaging/linux), so the desktop
+            // shows the window with its entry and icon.
+            .with_app_id("com.tryxtek.apifast"),
         wgpu_options: WgpuConfiguration {
             wgpu_setup: WgpuSetup::CreateNew(setup),
             ..WgpuConfiguration::default()

@@ -2666,7 +2666,7 @@ fn collection_scripts_are_saved_in_its_file() {
     use apifast_domain::{ScriptBlock, ScriptKind};
     let dir = collection(server(Duration::ZERO));
     let (core, _, _data) = start();
-    let snapshot = open(&core, dir.path());
+    open(&core, dir.path());
     core.send(Command::SaveScripts {
         root: root(&core),
         folder: None,
@@ -2675,9 +2675,13 @@ fn collection_scripts_are_saved_in_its_file() {
             "console.log(1)",
         )],
     });
-    let snapshot = next(&core, snapshot.version);
-    let tree = &snapshot.collection.as_ref().unwrap().tree;
-    assert_eq!(tree.collection.defaults.scripts.len(), 1);
+    // The next snapshot may be another message's (the history loaded):
+    // wait for the scripts.
+    wait(&core, "the collection's scripts", |s| {
+        s.collection
+            .as_ref()
+            .is_some_and(|c| c.tree.collection.defaults.scripts.len() == 1)
+    });
     let file = std::fs::read_to_string(dir.path().join("opencollection.yml")).unwrap();
     assert!(file.contains("console.log(1)"), "{file}");
 }

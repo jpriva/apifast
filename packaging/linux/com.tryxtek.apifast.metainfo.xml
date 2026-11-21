@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.tryxtek.apifast</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>apifast</name>
+  <summary>Test APIs from collections kept as files</summary>
+  <description>
+    <p>
+      apifast is a native, lightweight client for testing APIs. Collections are
+      plain YAML files, one per request, compatible with Bruno, so they live in
+      git like code.
+    </p>
+    <ul>
+      <li>HTTP, GraphQL, WebSocket and gRPC requests</li>
+      <li>Environments and variables, with an encrypted vault for secrets</li>
+      <li>Assertions, captures and JavaScript scripts, and a collection runner</li>
+      <li>Import from Postman, Insomnia, OpenAPI and Bruno</li>
+      <li>The collection's git repository: what changed, field by field, and commits</li>
+      <li>The same engine from the command line: apifast send and apifast run</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">com.tryxtek.apifast.desktop</launchable>
+  <url type="homepage">https://github.com/jpriva/apifast</url>
+  <url type="bugtracker">https://github.com/jpriva/apifast/issues</url>
+  <developer id="com.tryxtek">
+    <name>tryxtek</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
+  <provides>
+    <binary>apifast-gui</binary>
+    <binary>apifast</binary>
+  </provides>
+  <releases>
+    <release version="0.0.0" date="2026-11-21"/>
+  </releases>
+</component>

@@ -1,6 +1,7 @@
 [package]
 name = "apifast-gui"
-description = "Desktop interface of apifast (egui) and composition root."
+# Also the summary of the Linux packages (packaging/linux).
+description = "Test APIs from collections kept as files: desktop interface and command line"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -38,6 +39,66 @@ tokio = { version = "1.54.1", features = ["rt", "sync", "time", "macros"] }
 default = ["grpc", "git"]
 grpc = ["dep:apifast-grpc"]
 git = ["dep:apifast-git"]
+
+# Linux packages (packaging/linux/README.md): one `apifast` package with
+# the interface and the command line, built by packaging/linux/build.sh.
+# What the interface loads at run time (Vulkan or EGL, Wayland or X11,
+# xkbcommon) is recommended: it links only the C library.
+[package.metadata.deb]
+name = "apifast"
+maintainer = "tryxtek <apifast@tryxtek.com>"
+copyright = "apifast contributors"
+license-file = ["../../LICENSE-MIT", "0"]
+extended-description = """\
+A native, lightweight client for testing HTTP, GraphQL, WebSocket and gRPC \
+APIs. Collections are plain YAML files, compatible with Bruno, so they live \
+in git like code. Includes the apifast command line."""
+section = "devel"
+priority = "optional"
+# Release builds are made on the oldest supported system (Ubuntu 22.04,
+# glibc 2.35); a package built elsewhere needs that system's glibc.
+depends = "libc6 (>= 2.35), libxkbcommon0"
+recommends = "libvulkan1 | libegl1, libwayland-client0 | libx11-6, libwayland-egl1, libx11-xcb1, libxcursor1, libxi6, libxkbcommon-x11-0"
+assets = [
+    ["target/release/apifast-gui", "usr/bin/", "755"],
+    ["target/release/apifast", "usr/bin/", "755"],
+    ["../../packaging/linux/com.tryxtek.apifast.desktop", "usr/share/applications/", "644"],
+    ["../../packaging/linux/com.tryxtek.apifast.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["../../packaging/linux/icons/hicolor/scalable/apps/com.tryxtek.apifast.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["../../LICENSE-MIT", "usr/share/doc/apifast/", "644"],
+    ["../../LICENSE-APACHE", "usr/share/doc/apifast/", "644"],
+]
+
+[package.metadata.generate-rpm]
+name = "apifast"
+# cargo-generate-rpm takes one text for the summary and the description.
+summary = "Test APIs from collections kept as files"
+license = "MIT OR Apache-2.0"
+url = "https://github.com/jpriva/apifast"
+assets = [
+    { source = "target/release/apifast-gui", dest = "/usr/bin/apifast-gui", mode = "755" },
+    { source = "target/release/apifast", dest = "/usr/bin/apifast", mode = "755" },
+    { source = "../../packaging/linux/com.tryxtek.apifast.desktop", dest = "/usr/share/applications/com.tryxtek.apifast.desktop", mode = "644" },
+    { source = "../../packaging/linux/com.tryxtek.apifast.metainfo.xml", dest = "/usr/share/metainfo/com.tryxtek.apifast.metainfo.xml", mode = "644" },
+    { source = "../../packaging/linux/icons/hicolor/scalable/apps/com.tryxtek.apifast.svg", dest = "/usr/share/icons/hicolor/scalable/apps/com.tryxtek.apifast.svg", mode = "644" },
+    { source = "../../LICENSE-MIT", dest = "/usr/share/licenses/apifast/LICENSE-MIT", mode = "644", doc = true },
+    { source = "../../LICENSE-APACHE", dest = "/usr/share/licenses/apifast/LICENSE-APACHE", mode = "644", doc = true },
+]
+
+[package.metadata.generate-rpm.requires]
+glibc = "*"
+libxkbcommon = "*"
+
+[package.metadata.generate-rpm.recommends]
+vulkan-loader = "*"
+mesa-libEGL = "*"
+libwayland-client = "*"
+libwayland-egl = "*"
+libX11 = "*"
+libX11-xcb = "*"
+libXcursor = "*"
+libXi = "*"
+libxkbcommon-x11 = "*"
 
 [lints]
 workspace = true
