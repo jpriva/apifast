@@ -23,6 +23,21 @@ desktop-file-validate packaging/linux/com.tryxtek.apifast.desktop
 appstreamcli validate --no-net packaging/linux/com.tryxtek.apifast.metainfo.xml
 ```
 
+## On this machine
+
+To build apifast and use it, without root or a package:
+
+```sh
+packaging/linux/install-local.sh              # ~/.local/bin/apifast-gui and apifast, menu entry and icon
+packaging/linux/install-local.sh --uninstall
+```
+
+`PREFIX` changes where (default: `~/.local`). Built here, it runs here: no
+need for the glibc rules of the packages below. The `.rpm` (or `.deb`) built
+by `build.sh` installs on this same system too (`sudo dnf install
+./target/packages/apifast-<v>-1.x86_64.rpm`), and so does the AppImage, which
+needs no installing.
+
 ## Packages
 
 One package, `apifast`, holds the interface (`/usr/bin/apifast-gui`) and the
@@ -54,12 +69,41 @@ fails if it is newer than `max` (2.35 by default).
 
 `.github/workflows/packages.yml` builds the packages on Ubuntu 22.04 (glibc
 2.35), checks the desktop entry, the metainfo and the glibc the binaries need,
-and keeps the packages as an artifact. It runs on changes to the packaging,
-by hand, and on a tag `v<version>`: then the tag must match the workspace's
-version, and the packages are attached to that GitHub release.
+and keeps the packages as an artifact of the run. It runs on changes to the
+packaging, by hand, and on a tag `v<version>`, which must match the
+workspace's version. Nothing is published anywhere.
+
+## AppImage
+
+```sh
+eval "$(packaging/linux/appimage/tools.sh)"      # appimagetool and the runtime, pinned and checked
+export APPIMAGETOOL APPIMAGE_RUNTIME
+packaging/linux/appimage/build.sh                # target/packages/apifast-<v>-x86_64.AppImage
+packaging/linux/appimage/build.sh --appdir-only  # only target/appimage/AppDir
+```
+
+- One file with the interface and the command line, and the same desktop
+  entry, metainfo and icon. Nothing else is bundled: the binaries link only the
+  C library, and the graphics libraries (Vulkan or EGL, Wayland or X11) must be
+  the system's, as its drivers are.
+- `AppRun` runs the interface, with its arguments (a collection folder). Called
+  through a link named `apifast`, it runs the command line:
+  `ln -s ~/Apps/apifast-x86_64.AppImage ~/.local/bin/apifast`.
+- `tools.sh` fetches [appimagetool](https://github.com/AppImage/appimagetool)
+  1.9.1 and the [AppImage runtime](https://github.com/AppImage/type2-runtime)
+  20251108 into `target/appimage/tools`, and checks their SHA-256 before they
+  can run. Both are the newest numbered releases; the `continuous` ones are
+  rebuilt in place, so they cannot be pinned. The runtime is given to
+  appimagetool, which then downloads nothing. To update, change the versions
+  and hashes in `tools.sh` (each release asset lists its digest on GitHub).
+- The metainfo is validated offline by `build.sh`; appimagetool's own check
+  (`--no-appstream` turns it off) would also need its URLs to answer. It looks
+  for the metainfo by its former name, `com.tryxtek.apifast.appdata.xml`, a
+  link to it in the AppDir.
+- Without FUSE, set `APPIMAGE_EXTRACT_AND_RUN=1`. As the other packages, a
+  release AppImage is built on Ubuntu 22.04.
 
 ## Other formats
 
-AppImage and Flatpak use the same desktop file, metainfo and icons; each gets
-its own folder here (`appimage/`, `flatpak/`) with its build files when it is
-added.
+Flatpak will use the same desktop file, metainfo and icons, with its build
+files in `flatpak/` when it is added.

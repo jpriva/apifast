@@ -1,8 +1,8 @@
 name: Packages
 
 # The Linux packages (packaging/linux): built on the oldest system they
-# support, so they run on it and anything newer. A tag `v<version>` also
-# attaches them to its GitHub release.
+# support, so they run on it and anything newer, and kept as an artifact of
+# the run. Nothing is published.
 on:
   push:
     tags: ["v*"]
@@ -25,7 +25,7 @@ env:
 
 jobs:
   linux:
-    name: Linux (.deb, .rpm)
+    name: Linux (.deb, .rpm, AppImage)
     # Ubuntu 22.04: glibc 2.35, the oldest the packages promise.
     runs-on: ubuntu-22.04
     steps:
@@ -51,25 +51,19 @@ jobs:
           desktop-file-validate packaging/linux/com.tryxtek.apifast.desktop
           appstreamcli validate --no-net packaging/linux/com.tryxtek.apifast.metainfo.xml
       - run: packaging/linux/build.sh
+      - name: AppImage
+        env:
+          # The runners may have no FUSE for appimagetool, an AppImage itself.
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          eval "$(packaging/linux/appimage/tools.sh)"
+          export APPIMAGETOOL APPIMAGE_RUNTIME
+          packaging/linux/appimage/build.sh
+          ln -s "$PWD"/target/packages/apifast-*-x86_64.AppImage target/apifast
+          target/apifast --version
       - run: packaging/linux/check-glibc.sh 2.35
       - uses: actions/upload-artifact@v4
         with:
           name: linux-packages
           path: target/packages/*
           if-no-files-found: error
-
-  release:
-    name: Attach to the release
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: linux
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: linux-packages
-          path: packages
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: packages/*

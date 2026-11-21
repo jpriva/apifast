@@ -1,0 +1,10 @@
+#!/bin/sh
+# Entry point of the apifast AppImage. It runs the interface; called through
+# a link named `apifast` (ln -s apifast-x86_64.AppImage ~/.local/bin/apifast),
+# it runs the command line instead.
+here=$(dirname "$(readlink -f "$0")")
+name=$(basename "${ARGV0:-$0}")
+case "$name" in
+    apifast) exec "$here/usr/bin/apifast" "$@" ;;
+    *) exec "$here/usr/bin/apifast-gui" "$@" ;;
+esac
