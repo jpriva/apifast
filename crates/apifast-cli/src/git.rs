@@ -55,9 +55,16 @@ enum GitCommand {
 
 /// Opens the repository of the collection at `root`: the one place that
 /// says which adapter of the git port the CLI uses.
+#[cfg(feature = "git")]
 fn open_git(root: &Path) -> Result<Option<Box<dyn GitRepository>>> {
     Ok(apifast_git::GixRepository::discover(root)?
         .map(|repo| Box::new(repo) as Box<dyn GitRepository>))
+}
+
+/// Without the `git` feature there is no adapter: say so.
+#[cfg(not(feature = "git"))]
+fn open_git(_: &Path) -> Result<Option<Box<dyn GitRepository>>> {
+    bail!("this build of apifast has no git: build it with the `git` feature")
 }
 
 /// Runs the subcommand.

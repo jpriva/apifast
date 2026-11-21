@@ -22,7 +22,9 @@ apifast-vault.workspace = true
 apifast-import.workspace = true
 apifast-ws.workspace = true
 apifast-script-js.workspace = true
-apifast-git.workspace = true
+# git, behind the `git` feature (on by default): without it, gix is not
+# built and the collection's repository is not read.
+apifast-git = { workspace = true, optional = true }
 # gRPC, behind the `grpc` feature (on by default): without it, gRPC
 # requests open and save but say they cannot be called.
 apifast-grpc = { workspace = true, optional = true }
@@ -31,8 +33,9 @@ anyhow = "1.0.104"
 tokio = { version = "1.54.1", features = ["rt", "time", "signal", "macros"] }
 
 [features]
-default = ["grpc"]
+default = ["grpc", "git"]
 grpc = ["dep:apifast-grpc"]
+git = ["dep:apifast-git"]
 
 [lints]
 workspace = true

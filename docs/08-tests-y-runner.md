@@ -379,7 +379,7 @@ apifast git branches
 apifast git switch <rama>
 ```
 
-El repositorio git de la colección (la de `--collection`, por defecto la carpeta actual o la que la contiene), que puede ser una carpeta de un repositorio más grande ([ADR 0014](adr/0014-git-con-gitoxide.md)). Las rutas son relativas a la colección, y solo se ven sus archivos. No hace falta tener `git` instalado.
+El repositorio git de la colección (la de `--collection`, por defecto la carpeta actual o la que la contiene), que puede ser una carpeta de un repositorio más grande ([ADR 0014](adr/0014-git-con-gitoxide.md)). Las rutas son relativas a la colección, y solo se ven sus archivos. No hace falta tener `git` instalado. Va con la feature `git`, activa por defecto; una build sin ella lo dice ([docs/10](10-rendimiento-y-memoria.md#funciones-opcionales)).
 
 - `status`: la rama, y los archivos que cambiaron desde el último commit, estén o no en el índice: `A` añadido, `M` modificado, `D` borrado. Respeta `.gitignore`.
 - `diff`: qué cambió en cada archivo, campo a campo: `method: GET → POST`, `header x-team: (none) → X-Team: core`. Un valor de varias líneas (un body, un script) va línea a línea, `-` antes y `+` después. Las requests, los `folder.yml`, `opencollection.yml` y los entornos se leen como los lee apifast, así que un cambio de formato que no cambia nada no aparece; otro archivo se compara como texto. Sin archivos, todos los que cambiaron.

@@ -47,9 +47,17 @@ pub enum GitCommand {
 /// Opens the repository of the collection at `root`: the one place that
 /// says which adapter of the git port the interface uses. `None` when the
 /// collection is in no repository, or it cannot be read.
+#[cfg(feature = "git")]
 pub(super) fn open_git(root: &Path) -> Option<Arc<dyn GitRepository>> {
     let repo = apifast_git::GixRepository::discover(root).ok()??;
     Some(Arc::new(repo))
+}
+
+/// Without the `git` feature no repository is read: the interface shows
+/// nothing of git.
+#[cfg(not(feature = "git"))]
+pub(super) fn open_git(_: &Path) -> Option<Arc<dyn GitRepository>> {
+    None
 }
 
 /// The status and branches of `git`, keeping what `view` showed besides.

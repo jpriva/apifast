@@ -1,5 +1,7 @@
-//! `apifast git` on a collection in a real repository.
+//! `apifast git` on a collection in a real repository. Runs only in a build
+//! with the `git` feature (the default).
 
+#![cfg(feature = "git")]
 #![allow(clippy::unwrap_used, reason = "test: a failure fails the test")]
 
 mod common;

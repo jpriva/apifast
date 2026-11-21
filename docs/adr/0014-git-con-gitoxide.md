@@ -24,6 +24,7 @@ Hay tres formas de hablar con git:
 ## Consecuencias
 
 - Ningún binario que encontrar en el `PATH`, y el mismo comportamiento en Linux, macOS y Windows. Sin `git` instalado, la integración funciona igual.
+- La integración va detrás de la feature de Cargo `git`, activa por defecto en la CLI y la GUI, como `grpc`: quien compila puede dejarla fuera. Sin ella, la CLI pesa 3,6 MB menos y la GUI 3,5 MB menos. Un sistema de plugins en tiempo de ejecución (por ejemplo, git como un ejecutable aparte que implementa el puerto por un protocolo) queda para cuando se evalúen los plugins, después de la 1.0.
 - La compilación crece: gix es grande, aunque sin sus funciones por defecto. Añade una versión más de `hashbrown` al árbol, y unos 3,7 MB al binario de la CLI en release (de 16,9 a 20,6 MB), casi todo por `status` (recorrido de carpetas, índice y diffs).
 - Los commits no ejecutan los hooks de `.git/hooks`, a diferencia de `git commit`, ni firman (`commit.gpgsign`). Si un equipo depende de ellos, tendrá que hacer esos commits con `git`.
 - Un commit edita el árbol del último commit con los archivos elegidos y deja el resto del índice como estaba: es "commit de estos archivos", no "commit de lo preparado".

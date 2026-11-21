@@ -18,7 +18,9 @@ Referencia medida en el spike, con egui y wgpu: 35 MB con la ventana vacía y 47
 | Abrir colección de 1000 requests | < 200 ms hasta ver el árbol | Marca de tiempo interna |
 | Sobrecarga de envío (sin red) | < 2 ms | Benchmark contra servidor local |
 | CPU en reposo | ~0 % | Sin repintados sin eventos |
-| Tamaño del binario (release) | < 25 MB | Tamaño en disco |
+| Tamaño del binario (release) | < 60 MB | Tamaño en disco |
+
+La memoria manda: si hay que elegir, se gasta disco para ahorrar RAM, nunca al revés. Por eso el presupuesto del binario subió en F10 de 25 MB a 60 MB (la GUI estaba en 36,2 MB con git y gRPC), y los de RAM no se tocan.
 
 Como referencia, las aplicaciones sobre Electron o webview suelen consumir varios cientos de MB en reposo. Las cifras de Bruno y Yaak se medirán en F0 en la misma máquina para tener una comparación real.
 
@@ -63,6 +65,7 @@ Como referencia, las aplicaciones sobre Electron o webview suelen consumir vario
 
 - **Inicialización al primer uso** para gRPC y el motor JavaScript. gRPC no tiene estado global: el transporte se crea en cada llamada o descripción, y nada de tonic, prost-reflect ni protox corre hasta entonces. Medido con la CLI en release: un envío HTTP ocupa lo mismo con gRPC compilado que sin él (unos 9,5 MB de memoria residual máxima, dentro del ruido entre ejecuciones). El motor JavaScript tampoco tiene estado global: cada script crea su runtime de QuickJS al empezar y lo descarta al terminar. Medido en release: el runtime vacío cuesta de 0,1 a 0,3 ms y 105 KB de heap; con la API (`req`, `res`, `bru`, `test`, `expect`) cargada, un script corto tarda alrededor de 1 ms. Una request sin scripts no llama al motor (lo comprueba una prueba de `apifast-app`); con la CLI en release, un envío sin scripts tuvo unos 13,3 MB de memoria residual máxima y el mismo envío con un script de tests unos 15,5 MB: el motor cuesta unos 2 MB, solo cuando un script corre.
 - **Features de Cargo** para compilar la CLI sin dependencias de la interfaz y, si se desea, sin gRPC: la feature `grpc` (activa por defecto) de `apifast-cli` y `apifast-gui` trae `apifast-grpc`. Sin ella (`--no-default-features`) no se compilan tonic, prost ni protox, y el binario de la CLI baja de 15,2 MB a 12,9 MB; las requests gRPC se abren y se guardan igual, y llamarlas dice que la build no tiene gRPC (`NoGrpc`, de `apifast-app`). El CI compila y prueba los dos drivers sin la feature.
+- **Feature `git`** (activa por defecto) de `apifast-cli` y `apifast-gui`: trae `apifast-git` y con él gix ([ADR 0014](adr/0014-git-con-gitoxide.md)). Sin ella no se compila gix: `apifast git` dice que la build no lo tiene, y la interfaz no muestra la barra de estado ni la ventana Git. Medido en release: la CLI pasa de 20,6 a 17,0 MB y la GUI de 36,2 a 32,7 MB. Para quitar solo git: `--no-default-features --features grpc`. Las dos quedan dentro del presupuesto de 60 MB.
 
 ### Arranque
 
@@ -111,6 +114,7 @@ Medido el 2026-11-16 en la misma máquina y de la misma forma que F2, tras F3, l
 - El binario release pasa de 22,7 MiB a 24,6 MiB: dentro del presupuesto de 25 MB, pero con poco margen. Han entrado la bóveda (cifrado y keyring, que trae el cliente D-Bus) y `regex`. Falta ver qué parte aporta cada uno antes de añadir más dependencias.
 - Con JSONPath y XPath (`apifast-query` y `roxmltree`) pasa a 24,8 MiB. Queda muy poco margen: el análisis por crate con `cargo bloat` es necesario antes de la próxima dependencia.
 - Con F5 hasta los certificados (Digest, NTLM, AWS SigV4, OAuth 2.0 con su servidor de *callback*, proxy con SOCKS, certificados de cliente y las pantallas de ajustes) llega a **25,6 MiB: por encima del presupuesto de 25 MB**. La CLI está en 11,2 MiB. Las dependencias nuevas son pequeñas (`md-5`, `md4`, `hmac` y `sha2` ya estaban en el árbol, y SOCKS va dentro de reqwest), así que el crecimiento viene sobre todo del código propio y de su monomorfización. Antes de seguir añadiendo funciones hay que medir con `cargo bloat` y recortar: candidatos son las funciones genéricas de envío (`send_request` se instancia por cada combinación de puertos) y los `Debug` y formatos que solo usan las pruebas.
+- En F10 el presupuesto del binario sube a 60 MB, porque importa más la memoria que el disco. Con F9 y la integración con git, la GUI está en 36,2 MB y la CLI en 20,6 MB.
 
 ## Perfil de compilación
 
