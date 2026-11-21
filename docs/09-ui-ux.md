@@ -46,7 +46,7 @@ La interfaz se construye con egui (eframe). El objetivo es que resulte familiar 
 | Barra de URL | Método, URL con resaltado de variables, botón de enviar o cancelar. Pegar un comando cURL convierte la request (ver abajo) |
 | Panel de request | Pestañas de edición |
 | Panel de respuesta | Estado, tiempo, tamaño y pestañas de visualización |
-| Barra de estado | Rama de git, cambios sin guardar, estado de la bóveda |
+| Barra de estado | La rama de git de la colección enfocada y cuántos de sus archivos cambiaron desde el último commit (`Branch: main · 3 changed`); un clic abre la ventana "Git". Solo aparece si la colección está en un repositorio |
 
 Los paneles de request y respuesta se pueden disponer uno encima del otro o lado a lado (`Ctrl+J`).
 
@@ -212,6 +212,16 @@ En los ajustes de la aplicación, la sección TLS tiene un archivo de CA adicion
 - Cada cambio se guarda enseguida, sellado.
 
 Los ajustes de la aplicación tienen una sección Cookies con "Send cookies" y "Store cookies".
+
+## Git
+
+La ventana "Git" (barra de estado, o "Git…" en la paleta) es el repositorio de la colección enfocada ([ADR 0014](adr/0014-git-con-gitoxide.md)):
+
+- Arriba, la rama y un selector con las demás, con "Switch" para cambiar, y "Refresh" para leer el repositorio de nuevo. Lo último que pasó (`Committed 2 file(s): 1a2b3c4`, `Switched to feature`) o por qué falló queda debajo.
+- La lista de archivos que cambiaron desde el último commit (`A`, `M`, `D`), cada uno con su casilla, marcada por defecto. Al elegir uno, al lado sale qué cambió en él campo a campo: cada campo con sus líneas de antes (`-`) y de después (`+`). Un archivo nuevo o borrado lo dice sin detallar.
+- El mensaje y "Commit (n)", para los archivos marcados.
+
+El estado se refresca solo al abrir la colección, cuando cambian sus archivos (también al guardar desde apifast) y tras un commit o un cambio de rama; un commit hecho con `git` desde fuera se ve al pulsar "Refresh" o al volver a abrir la ventana. Cambiar de rama se rechaza mientras una pestaña de la colección tenga cambios sin guardar, o un archivo seguido del repositorio tenga cambios; después, el árbol y las pestañas siguen a los archivos como con cualquier cambio externo.
 
 ## Runner
 

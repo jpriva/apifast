@@ -61,6 +61,8 @@ pub enum Action {
     CollectionKey,
     /// Open the cookie editor.
     Cookies,
+    /// Open the git window.
+    Git,
     /// Copy the active request as a cURL command.
     CopyAsCurl,
     /// Copy the active request as JavaScript (`fetch`).
@@ -111,6 +113,7 @@ pub const ALL: &[Action] = &[
     Action::Settings,
     Action::CollectionKey,
     Action::Cookies,
+    Action::Git,
     Action::CopyAsCurl,
     Action::CopyAsJavaScript,
     Action::CopyAsPython,
@@ -155,6 +158,7 @@ impl Action {
             Self::Settings => "settings".into(),
             Self::CollectionKey => "collection_key".into(),
             Self::Cookies => "cookies".into(),
+            Self::Git => "git".into(),
             Self::CopyAsCurl => "copy_as_curl".into(),
             Self::CopyAsJavaScript => "copy_as_javascript".into(),
             Self::CopyAsPython => "copy_as_python".into(),
@@ -197,6 +201,7 @@ impl Action {
             Self::Settings => strings.action_settings,
             Self::CollectionKey => strings.action_collection_key,
             Self::Cookies => strings.action_cookies,
+            Self::Git => strings.action_git,
             Self::CopyAsCurl => strings.copy_as_curl,
             Self::CopyAsJavaScript => strings.copy_as_javascript,
             Self::CopyAsPython => strings.copy_as_python,
@@ -250,6 +255,7 @@ impl Action {
             | Self::ThemeDark
             | Self::CollectionKey
             | Self::Cookies
+            | Self::Git
             | Self::CopyAsCurl
             | Self::CopyAsJavaScript
             | Self::CopyAsPython

@@ -91,6 +91,8 @@ pub struct MainScreen {
     pub vault_window: VaultWindow,
     /// The cookie editor.
     pub cookies_window: CookiesWindow,
+    /// The collection's git repository.
+    pub git_window: crate::organisms::GitWindow,
     /// The import of a collection.
     pub import_window: crate::organisms::ImportWindow,
     /// Importing again into an imported collection.
@@ -217,18 +219,12 @@ impl MainScreen {
         let mut create_here = None;
         let (
             (environment, edit_environments),
+            open_git,
             (tree_event, picked, asked),
             (tab_event, (url_event, edited)),
         ) = layout::workbench(
             ui,
-            |ui| {
-                top_bar(
-                    ui,
-                    collection.map(|c| c.tree.collection.name.as_str()),
-                    snapshot,
-                    strings,
-                )
-            },
+            bars(snapshot, strings),
             (!self.sidebar_hidden).then_some(|ui: &mut egui::Ui| {
                 sidebar_area(ui, (sidebar, tree, history), snapshot, strings)
             }),
@@ -269,6 +265,9 @@ impl MainScreen {
             && let Some(tab) = active
         {
             commands.push(Command::FetchSchema(tab.key()));
+        }
+        if open_git {
+            commands.push(Command::Git(self.git_window.open()));
         }
         if edit_environments {
             self.environments.open = !self.environments.open;
@@ -540,6 +539,8 @@ impl MainScreen {
         let cookies =
             (self.cookies_window).show(&ctx, collection, &snapshot.cookies, now_ms(), strings);
         commands.extend(cookies.into_iter().map(Command::Cookies));
+        let git = self.git_window.show(&ctx, snapshot.git.as_ref(), strings);
+        commands.extend(git.into_iter().map(Command::Git));
         let import = self
             .import_window
             .show(&ctx, snapshot.import.as_ref(), strings);
@@ -639,6 +640,7 @@ impl MainScreen {
             return Vec::new();
         }
         match action {
+            Action::Git => vec![Command::Git(self.git_window.open())],
             Action::Send if active.is_some() && !sending => self.send_commands(),
             Action::Send => Vec::new(),
             Action::Cancel => one(sending.then_some(Command::Cancel)),
@@ -1174,6 +1176,47 @@ fn conflict_banner(ui: &mut egui::Ui, strings: &Strings) -> Option<bool> {
 /// The top bar: the collection's name, then the environment, its color and
 /// the button of the editor. Returns the environment chosen and whether the
 /// editor was asked for.
+/// The top bar and, for a collection in a git repository, the status bar.
+#[expect(
+    clippy::type_complexity,
+    reason = "closures: an `impl Trait` cannot be named by a type alias on stable"
+)]
+fn bars<'a>(
+    snapshot: &'a Snapshot,
+    strings: &'a Strings,
+) -> (
+    impl FnOnce(&mut egui::Ui) -> (Option<Command>, bool) + 'a,
+    Option<impl FnOnce(&mut egui::Ui) -> bool + 'a>,
+) {
+    let name = (snapshot.collection.as_ref()).map(|c| c.tree.collection.name.as_str());
+    (
+        move |ui: &mut egui::Ui| top_bar(ui, name, snapshot, strings),
+        (snapshot.git.as_ref()).map(|git| move |ui: &mut egui::Ui| status_bar(ui, git, strings)),
+    )
+}
+
+/// The status bar: the focused collection's branch and how many of its
+/// files changed. Returns whether it was clicked, to open the git window.
+fn status_bar(ui: &mut egui::Ui, git: &crate::core::GitView, strings: &Strings) -> bool {
+    ui.horizontal(|ui| {
+        let branch = git.branch.as_deref().unwrap_or(strings.git_detached);
+        let text = if git.changes.is_empty() {
+            format!("{}: {branch}", strings.git_branch)
+        } else {
+            let changed = strings.git_changed;
+            format!(
+                "{}: {branch} · {} {changed}",
+                strings.git_branch,
+                git.changes.len()
+            )
+        };
+        ui.add(egui::Button::new(RichText::new(text).small()).frame(false))
+            .on_hover_text(strings.action_git)
+            .clicked()
+    })
+    .inner
+}
+
 fn top_bar(
     ui: &mut egui::Ui,
     name: Option<&str>,

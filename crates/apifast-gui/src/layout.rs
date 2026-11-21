@@ -9,19 +9,30 @@ const SIDEBAR_WIDTH: f32 = 260.0;
 /// Narrowest the sidebar can be resized to, in points.
 const SIDEBAR_MIN_WIDTH: f32 = 180.0;
 
-/// The main window: a top bar across the window, a resizable sidebar on the
-/// left (when `sidebar` is given; hidden otherwise) and the content in the
-/// rest. Returns what each part returns.
-pub fn workbench<T, S: Default, C>(
+/// The main window: a top bar across the window, a status bar across its
+/// foot (when `bottom` is given), a resizable sidebar on the left (when
+/// `sidebar` is given; hidden otherwise) and the content in the rest.
+/// Returns what each part returns.
+pub fn workbench<T, B: Default, S: Default, C>(
     ui: &mut egui::Ui,
-    top: impl FnOnce(&mut egui::Ui) -> T,
+    (top, bottom): (
+        impl FnOnce(&mut egui::Ui) -> T,
+        Option<impl FnOnce(&mut egui::Ui) -> B>,
+    ),
     sidebar: Option<impl FnOnce(&mut egui::Ui) -> S>,
     content: impl FnOnce(&mut egui::Ui) -> C,
-) -> (T, S, C) {
+) -> (T, B, S, C) {
     let top = egui::Panel::top("top-bar")
         .frame(egui::Frame::side_top_panel(ui.style()).inner_margin(theme::space::M))
         .show(ui, top)
         .inner;
+    // The status bar, only when it has something to say.
+    let bottom = bottom.map_or_else(B::default, |bottom| {
+        egui::Panel::bottom("status-bar")
+            .frame(egui::Frame::side_top_panel(ui.style()).inner_margin(theme::space::S))
+            .show(ui, bottom)
+            .inner
+    });
     // Hidden, it gives what it gives when there is nothing to report.
     let sidebar = sidebar.map_or_else(S::default, |sidebar| {
         egui::Panel::left("sidebar")
@@ -32,7 +43,7 @@ pub fn workbench<T, S: Default, C>(
             .inner
     });
     let content = egui::CentralPanel::default().show(ui, content).inner;
-    (top, sidebar, content)
+    (top, bottom, sidebar, content)
 }
 
 /// A single centered column, for screens with little content.

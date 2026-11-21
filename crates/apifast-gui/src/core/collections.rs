@@ -71,6 +71,10 @@ pub(super) struct Open {
     pub(super) schemas: HashMap<String, super::schema::SchemaView>,
     /// The methods of its gRPC requests, by [`super::methods::key_of`].
     pub(super) methods: HashMap<String, super::methods::MethodsView>,
+    /// Its git repository, if it is in one.
+    pub(super) git: Option<Arc<dyn apifast_app::GitRepository>>,
+    /// What the interface sees of its repository.
+    pub(super) git_view: Option<super::GitView>,
     /// Watches its folder. `None` if the system refused: changes made
     /// outside then show after loading it again.
     pub(super) _watcher: Option<FsWatcher>,
@@ -146,6 +150,7 @@ impl State {
             snapshot.history = open.entries.clone();
             snapshot.vault = open.vault_view.clone();
             snapshot.cookies = open.cookie_view.clone();
+            snapshot.git.clone_from(&open.git_view);
             snapshot.captured = open.captured.as_ref().map(super::captures::Captured::view);
         } else {
             snapshot.captured = None;
@@ -155,6 +160,7 @@ impl State {
             snapshot.environment = None;
             snapshot.history = Arc::default();
             snapshot.cookies = Arc::default();
+            snapshot.git = None;
             snapshot.vault = VaultView {
                 master_in_file: snapshot.vault.master_in_file,
                 ..VaultView::default()
@@ -346,6 +352,8 @@ impl State {
                 schema_cache: Arc::new(schema_cache),
                 schemas: HashMap::new(),
                 methods: HashMap::new(),
+                git: super::git::open_git(root),
+                git_view: None,
                 _watcher: watcher,
             },
         );
@@ -353,6 +361,7 @@ impl State {
             self.snapshot.error = error;
         }
         self.refresh_vault_of(root);
+        self.refresh_git(root);
         Ok(())
     }
 
@@ -587,6 +596,8 @@ impl State {
         let Some(repo) = self.open.get(root).map(|open| open.repo.clone()) else {
             return;
         };
+        // What changed in the files may be a change for git too.
+        self.refresh_git(root);
         // A changed path is a file, or a folder renamed or removed whole.
         let touched = |path: &str| {
             changes.rescan

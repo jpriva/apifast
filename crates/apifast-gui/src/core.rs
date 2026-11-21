@@ -14,6 +14,7 @@ mod collections;
 mod cookies;
 mod copy;
 mod export;
+mod git;
 mod import;
 mod methods;
 mod proxy;
@@ -32,6 +33,7 @@ use workspace::ActiveWorkspace;
 pub use cookies::{CookieCommand, CookieSlot};
 pub use copy::Copied;
 pub use export::Exported;
+pub use git::{GitCommand, GitView};
 pub use import::ImportView;
 pub use methods::MethodsView;
 pub use reimport::ReimportView;
@@ -499,6 +501,8 @@ pub enum Command {
     Vault(VaultCommand),
     /// A change to the focused collection's cookie jar.
     Cookies(CookieCommand),
+    /// Something asked of the focused collection's git repository.
+    Git(GitCommand),
     /// Renders the request as cURL, for the clipboard (see
     /// [`Snapshot::copied`]).
     CopyAs(TabKey, apifast_import::CodeLanguage),
@@ -585,6 +589,8 @@ pub struct Snapshot {
     pub vault: VaultView,
     /// The cookies of the focused collection's jar, in its order.
     pub cookies: Arc<Vec<apifast_domain::Cookie>>,
+    /// The focused collection's git repository, if it is in one.
+    pub git: Option<GitView>,
     /// The last text for the clipboard, such as a request as cURL.
     pub copied: Option<Copied>,
     /// The import being reviewed, if any.
@@ -1206,6 +1212,7 @@ impl State {
             | Command::SaveCollectionSettings { .. } => self.handle_settings(command),
             Command::Vault(command) => self.vault_command(command),
             Command::Cookies(command) => self.cookie_command(command),
+            Command::Git(command) => self.git_command(command),
             Command::CopyAs(key, language) => self.copy_as(&key, language),
             Command::FetchSchema(key) => self.fetch_schema(key),
             Command::LoadMethods(key) => self.load_methods(key),

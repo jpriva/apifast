@@ -441,13 +441,13 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
 
 ### Tareas
 
-- [ ] Integración con git: estado, diff semántico por request, commit, cambio de rama.
+- [x] Integración con git: estado, diff semántico por request, commit, cambio de rama.
   - [x] Puerto `GitRepository` y adaptador `apifast-git` con gitoxide ([ADR 0014](adr/0014-git-con-gitoxide.md)): la rama, los archivos que cambiaron frente al último commit (añadidos, modificados, borrados; respeta `.gitignore`) y su contenido en él. Una colección puede ser una carpeta de un repositorio más grande. Lo que el puerto promete es una batería genérica (`apifast-git-contract`) que cualquier adaptador pasa.
   - [x] Diff semántico por request: `git_diff` lee el archivo del último commit y el del disco con el mismo lector de OpenCollection (`CollectionRepository::parse_file` y `file_now`) y dice qué campos cambiaron, con su valor antes y después. Las listas con nombre (cabeceras, parámetros, variables, aserciones, capturas, scripts, ejemplos) se comparan elemento a elemento. Vale también para `folder.yml`, `opencollection.yml` y los entornos; otro archivo se compara como texto.
   - [x] Commit de los archivos elegidos, tal como están en disco (uno borrado, como borrado), en la rama actual y con la identidad de la configuración de git. Lo demás que estaba en el índice se queda ahí. El índice se actualiza para que `git status` vea lo mismo, y `git fsck --strict` acepta lo escrito. Sin identidad configurada, el error dice cómo configurarla.
   - [x] Cambio de rama: lista de ramas locales y cambio a una de ellas. gix no lo trae (solo el checkout inicial de un clon); el adaptador recorre los árboles de las dos ramas, borra lo que sobra (y las carpetas que quedan vacías), escribe lo que cambia (con su modo: ejecutable, enlace), rehace el índice y mueve `HEAD`, con su entrada en el reflog. Se rechaza mientras un archivo seguido del repositorio, aunque esté fuera de la colección, tenga cambios, o si pisaría un archivo no seguido; los no seguidos que no toca se quedan. La batería tiene 14 escenarios.
   - [x] En la CLI: `apifast git status`, `diff`, `commit`, `branches` y `switch`. gix añade unos 3,7 MB al binario de la CLI en release (de 16,9 a 20,6 MB), dentro del presupuesto de 25 MB.
-  - [ ] En la interfaz: la rama en la barra de estado, un panel de cambios con el diff por campos, commit y cambio de rama.
+  - [x] En la interfaz: la rama y los cambios en una barra de estado nueva, que abre la ventana "Git": la lista de cambios con casillas, el diff por campos del archivo elegido, el commit de los marcados y el cambio de rama (rechazado con pestañas sin guardar). El estado se refresca al abrir la colección, con el watcher y tras cada operación.
 - [ ] Empaquetado para Linux (AppImage, Flatpak, paquetes); pulido y empaquetado de macOS y Windows.
 - [ ] Actualizaciones.
 - [ ] Traducciones: español e inglés.

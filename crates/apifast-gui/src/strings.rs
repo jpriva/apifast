@@ -410,6 +410,42 @@ pub struct Strings {
     pub cookies: &'static str,
     /// Title of the cookie editor.
     pub cookies_title: &'static str,
+    /// Title of the git window.
+    pub git_title: &'static str,
+    /// The git window, for a collection in no repository.
+    pub git_no_repository: &'static str,
+    /// The branch, when HEAD is on none.
+    pub git_detached: &'static str,
+    /// Before the branch, in the git window.
+    pub git_branch: &'static str,
+    /// The branch chooser, before one is chosen.
+    pub git_branch_pick: &'static str,
+    /// Button: check out the branch chosen.
+    pub git_switch: &'static str,
+    /// Button: read the repository again.
+    pub git_refresh: &'static str,
+    /// The git window, with no change.
+    pub git_nothing_changed: &'static str,
+    /// The git window's diff, before a file is picked.
+    pub git_pick_file: &'static str,
+    /// Hint of the commit message.
+    pub git_message: &'static str,
+    /// Button: commit the files checked.
+    pub git_commit: &'static str,
+    /// The box of a file, for screen readers: whether it goes in the commit.
+    pub git_include: &'static str,
+    /// Diff of a new file.
+    pub git_added: &'static str,
+    /// Diff of a deleted file.
+    pub git_deleted: &'static str,
+    /// Diff of a file whose content changed but not what apifast reads.
+    pub git_same: &'static str,
+    /// A field that was not there, or is not anymore.
+    pub git_none: &'static str,
+    /// Status bar: how many files changed.
+    pub git_changed: &'static str,
+    /// Action: open the git window.
+    pub action_git: &'static str,
     /// Root menu and palette: open the cookie editor.
     pub cookies_menu: &'static str,
     /// Action: open the cookie editor.
@@ -1334,6 +1370,24 @@ pub const EN: Strings = Strings {
     body_file_hint: "Read from disk as it is sent. A path inside the collection is kept relative to it; without a content type, application/octet-stream goes.",
     cookies: "Cookies",
     cookies_title: "Cookies",
+    git_title: "Git",
+    git_no_repository: "This collection is not in a git repository.",
+    git_detached: "detached HEAD",
+    git_branch: "Branch",
+    git_branch_pick: "Branch…",
+    git_switch: "Switch",
+    git_refresh: "Refresh",
+    git_nothing_changed: "Nothing changed since the last commit.",
+    git_pick_file: "Pick a file to see what changed in it.",
+    git_message: "Commit message",
+    git_commit: "Commit",
+    git_include: "Include in the commit",
+    git_added: "A new file: all of it is new.",
+    git_deleted: "Deleted.",
+    git_same: "Only its formatting changed.",
+    git_none: "(none)",
+    git_changed: "changed",
+    action_git: "Git…",
     cookies_menu: "Cookies…",
     action_cookies: "Cookies",
     cookies_no_collection: "Open a collection to see its cookies.",
