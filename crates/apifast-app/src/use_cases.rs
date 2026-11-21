@@ -20,7 +20,7 @@ use crate::{
     EnvironmentRepository, HttpTransport, LoadedRequest, Prompter, Random, RenderOutcome,
     RequestPath, ResponseHead, ResponseStore, SecretStore, StoredBody, render_request, sort_tree,
 };
-use crate::{AssertionOutcome, CaptureOutcome, ResponseFacts};
+use crate::{AssertionOutcome, CaptureOutcome, RenderedRequest, ResponseFacts};
 use crate::{HistoryEntry, HistoryStore, ResponseId, TransportError};
 
 /// Loads the collection tree, sorted by `seq` and name.
@@ -329,7 +329,7 @@ where
         (&head, &body),
         &mut variables,
         &mut host,
-        rendered.request.secrets(),
+        &rendered.request,
     )?;
     if let (Some(scripts), Some(engine)) = (&mut scripts, ports.scripts) {
         let response = (&head, text.as_deref());
@@ -577,7 +577,7 @@ fn checks_after(
     (head, body): (&ResponseHead, &StoredBody),
     variables: &mut ResolvedVariables,
     host: &mut AppHost<'_>,
-    secrets: &[Secret],
+    sent: &RenderedRequest,
 ) -> Result<(Vec<CaptureOutcome>, Vec<AssertionOutcome>), AppError> {
     if !has_checks(request) {
         return Ok((Vec::new(), Vec::new()));
@@ -588,8 +588,8 @@ fn checks_after(
     } else {
         None
     };
-    let facts = ResponseFacts::new(head, body.size, bytes.as_deref());
-    Ok(run_checks(request, &facts, variables, host, secrets))
+    let facts = ResponseFacts::new(head, body.size, bytes.as_deref()).with_request(sent);
+    Ok(run_checks(request, &facts, variables, host, sent.secrets()))
 }
 
 /// Renders the request, sending first the requests its `response(...)`

@@ -1512,7 +1512,7 @@ pub const EN: Strings = Strings {
     no_expected: "no value",
     capture_variable: "Variable",
     capture_scope: "Scope",
-    tests_hint: "Checked after every send, captures first. Expressions: res.status, res.headers.<name>, res.body.<path> (JSONPath too), res.responseTime, res.size.",
+    tests_hint: "Checked after every send, captures first. Expressions: res.status, res.headers.<name>, res.body.<path> (JSONPath too), res.responseTime, res.size, and req.method, req.url, req.headers.<name>, req.body.<path> for the request as sent.",
     tests_none: "No assertions, captures or scripts ran. Responses from the history do not keep their results.",
     captured_as: "=",
     script_tests: "Script tests",

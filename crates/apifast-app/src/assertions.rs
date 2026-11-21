@@ -6,12 +6,13 @@
 //! that is not possible, the assertion fails with both types in its message.
 
 use std::cmp::Ordering;
+use std::fmt::Write as _;
 
 use apifast_domain::{Assertion, Json, Operator};
 use apifast_query::JsonPath;
 use regex::RegexBuilder;
 
-use crate::ResponseHead;
+use crate::{RenderedBody, RenderedRequest, ResponseHead};
 
 /// How much of a value a message shows.
 const SHOWN: usize = 120;
@@ -27,6 +28,17 @@ pub struct ResponseFacts {
     elapsed_ms: u64,
     size: u64,
     body: Body,
+    /// The request as it was sent, for `req.*`.
+    request: Option<SentRequest>,
+}
+
+/// A request as `req.*` expressions read it.
+#[derive(Debug)]
+struct SentRequest {
+    method: String,
+    url: String,
+    headers: Vec<(String, String)>,
+    body: Body,
 }
 
 #[derive(Debug)]
@@ -40,8 +52,10 @@ enum Body {
 /// Why an expression has no value.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ExpressionError {
-    /// Not one of the `res.*` expressions.
-    #[error("unknown expression `{0}`; use res.status, res.headers.<name>, res.body.<path>…")]
+    /// Not one of the `res.*` or `req.*` expressions.
+    #[error(
+        "unknown expression `{0}`; use res.status, res.headers.<name>, res.body.<path>, req.body.<path>…"
+    )]
     Unknown(String),
     /// A path into a body that is not JSON.
     #[error("the body is not JSON")]
@@ -68,13 +82,29 @@ impl ResponseFacts {
             size,
             body: match body {
                 None => Body::NotLoaded,
-                Some(bytes) => {
-                    let text = String::from_utf8_lossy(bytes).into_owned();
-                    let json = Json::parse(&text).ok();
-                    Body::Loaded(text, json)
-                }
+                Some(bytes) => Body::of(&String::from_utf8_lossy(bytes)),
             },
+            request: None,
         }
+    }
+
+    /// These facts, and the request `sent` for `req.method`, `req.url`,
+    /// `req.headers.<name>` and `req.body.<path>`. A body that is not text
+    /// (multipart, a file) reads as empty.
+    #[must_use]
+    pub fn with_request(mut self, sent: &RenderedRequest) -> Self {
+        let body = match sent.body() {
+            RenderedBody::Text(text) => text.clone(),
+            RenderedBody::Form(fields) => form_text(fields),
+            _ => String::new(),
+        };
+        self.request = Some(SentRequest {
+            method: sent.method().as_str().to_owned(),
+            url: sent.url().to_owned(),
+            headers: sent.headers().to_vec(),
+            body: Body::of(&body),
+        });
+        self
     }
 
     /// The value of `expression`; `None` when it is not there (a missing
@@ -111,41 +141,89 @@ impl ResponseFacts {
             return Ok(self.header(name).map(Json::String));
         }
         if let Some(path) = expression.strip_prefix("res.body") {
-            let (text, json) = match &self.body {
-                Body::NotLoaded => return Err(ExpressionError::BodyTooLarge),
-                Body::Loaded(text, json) => (text, json),
-            };
-            if path.is_empty() {
-                return Ok(Some(
-                    json.clone().unwrap_or_else(|| Json::String(text.clone())),
-                ));
+            return self.body.value_at(path, expression);
+        }
+        if let Some(request) = &self.request {
+            match expression {
+                "req.method" => return Ok(Some(Json::String(request.method.clone()))),
+                "req.url" => return Ok(Some(Json::String(request.url.clone()))),
+                _ => {}
             }
-            let json = json.as_ref().ok_or(ExpressionError::NotJson)?;
-            if is_json_path(path) {
-                return json_path(json, path, expression);
+            if let Some(name) = expression.strip_prefix("req.headers.") {
+                return Ok(header_of(&request.headers, name).map(Json::String));
             }
-            let path = path.strip_prefix('.').unwrap_or(path);
-            if path.is_empty() {
-                return Err(ExpressionError::Path(expression.to_owned()));
+            if let Some(path) = expression.strip_prefix("req.body") {
+                return request.body.value_at(path, expression);
             }
-            return json
-                .at(path)
-                .map(Option::<&Json>::cloned)
-                .map_err(|_| ExpressionError::Path(expression.to_owned()));
         }
         Err(ExpressionError::Unknown(expression.to_owned()))
     }
 
     /// A header's values, joined by `, `; names ignore case.
     fn header(&self, name: &str) -> Option<String> {
-        let values: Vec<&str> = self
-            .headers
-            .iter()
-            .filter(|(n, _)| n.eq_ignore_ascii_case(name))
-            .map(|(_, v)| v.as_str())
-            .collect();
-        (!values.is_empty()).then(|| values.join(", "))
+        header_of(&self.headers, name)
     }
+}
+
+/// The values of header `name` in `headers`, joined by `, `; names ignore
+/// case.
+fn header_of(headers: &[(String, String)], name: &str) -> Option<String> {
+    let values: Vec<&str> = (headers.iter())
+        .filter(|(n, _)| n.eq_ignore_ascii_case(name))
+        .map(|(_, v)| v.as_str())
+        .collect();
+    (!values.is_empty()).then(|| values.join(", "))
+}
+
+impl Body {
+    /// `text`, and its JSON when it is JSON.
+    fn of(text: &str) -> Self {
+        Self::Loaded(text.to_owned(), Json::parse(text).ok())
+    }
+
+    /// The value at `path` (after `res.body` or `req.body`) of `expression`.
+    fn value_at(&self, path: &str, expression: &str) -> Result<Option<Json>, ExpressionError> {
+        let (text, json) = match self {
+            Self::NotLoaded => return Err(ExpressionError::BodyTooLarge),
+            Self::Loaded(text, json) => (text, json),
+        };
+        if path.is_empty() {
+            return Ok(Some(
+                json.clone().unwrap_or_else(|| Json::String(text.clone())),
+            ));
+        }
+        let json = json.as_ref().ok_or(ExpressionError::NotJson)?;
+        if is_json_path(path) {
+            return json_path(json, path, expression);
+        }
+        let path = path.strip_prefix('.').unwrap_or(path);
+        if path.is_empty() {
+            return Err(ExpressionError::Path(expression.to_owned()));
+        }
+        json.at(path)
+            .map(Option::<&Json>::cloned)
+            .map_err(|_| ExpressionError::Path(expression.to_owned()))
+    }
+}
+
+/// A form's fields as they go, URL-encoded.
+fn form_text(fields: &[(String, String)]) -> String {
+    let encode = |text: &str| -> String {
+        let mut out = String::with_capacity(text.len());
+        for byte in text.bytes() {
+            if byte.is_ascii_alphanumeric() || b"-_.~".contains(&byte) {
+                out.push(char::from(byte));
+            } else {
+                // Writing to a String cannot fail.
+                let _ = write!(out, "%{byte:02X}");
+            }
+        }
+        out
+    };
+    (fields.iter())
+        .map(|(name, value)| format!("{}={}", encode(name), encode(value)))
+        .collect::<Vec<_>>()
+        .join("&")
 }
 
 /// Whether a path after `res.body` needs JSONPath: wildcards, descendants,
@@ -545,6 +623,48 @@ mod tests {
             timeline: Vec::new(),
         };
         ResponseFacts::new(&head, body.len() as u64, Some(body.as_bytes()))
+    }
+
+    #[test]
+    fn req_expressions_read_the_request_as_sent() {
+        let sent = |body| {
+            RenderedRequest::own(
+                apifast_domain::Method::Post,
+                "https://api.test/users".into(),
+                vec![("X-Trace".into(), "1".into())],
+                body,
+                Vec::new(),
+            )
+        };
+        let json = facts("{}").with_request(&sent(RenderedBody::Text(
+            r#"{"flag":false,"n":0,"none":null,"list":[1,2]}"#.into(),
+        )));
+        let value = |f: &ResponseFacts, e: &str| f.value_of(e).unwrap().map(|j| j.to_string());
+        assert_eq!(value(&json, "req.method").as_deref(), Some(r#""POST""#));
+        assert_eq!(
+            value(&json, "req.url").as_deref(),
+            Some(r#""https://api.test/users""#)
+        );
+        assert_eq!(
+            value(&json, "req.headers.x-trace").as_deref(),
+            Some(r#""1""#)
+        );
+        assert_eq!(value(&json, "req.body.flag").as_deref(), Some("false"));
+        assert_eq!(value(&json, "req.body.none").as_deref(), Some("null"));
+        assert_eq!(value(&json, "req.body.list[1]").as_deref(), Some("2"));
+        assert_eq!(value(&json, "req.body.nope"), None);
+        let form = facts("{}").with_request(&sent(RenderedBody::Form(vec![(
+            "a b".into(),
+            "1&2".into(),
+        )])));
+        assert_eq!(
+            value(&form, "req.body").as_deref(),
+            Some(r#""a%20b=1%262""#)
+        );
+        assert!(matches!(
+            facts("{}").value_of("req.body.x"),
+            Err(ExpressionError::Unknown(_))
+        ));
     }
 
     const BODY: &str = r#"{"id":7,"name":"Ana","ok":true,"none":null,"price":"9.5","items":[1,2,3],"tags":["a","b"],"user":{"id":1,"role":"admin"},"empty":"","zero":0}"#;

@@ -19,6 +19,11 @@ const EXPRESSIONS: &[&str] = &[
     "res.body.",
     "res.responseTime",
     "res.size",
+    "req.method",
+    "req.url",
+    "req.headers.",
+    "req.body",
+    "req.body.",
 ];
 
 /// Height of the open operator menu: most of the 28 at once.

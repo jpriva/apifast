@@ -36,6 +36,9 @@ runtime:
 | `res.body.<ruta>` | Campo del cuerpo JSON; admite índices (`items[0].id`) y JSONPath (`items[*].id`, `..id`, `items[?@.ok]`) |
 | `res.responseTime` | Duración en milisegundos |
 | `res.size` | Tamaño del cuerpo en bytes |
+| `req.method`, `req.url` | Método y URL de la request, tal como se envió |
+| `req.headers.<nombre>` | Header de la request enviada |
+| `req.body`, `req.body.<ruta>` | Cuerpo de la request enviada, y sus campos si es JSON, como en `res.body`; un formulario se lee codificado |
 
 El valor esperado admite plantillas (`{{expected_id}}`).
 

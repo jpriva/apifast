@@ -410,24 +410,30 @@ Se cumple: los cuatro modos funcionan contra un servidor local (con `.proto` y p
 - [x] Editor de scripts con resaltado. Pestaña Scripts en la request y ventana "Scripts…" para carpetas y colección, con un editor por tipo y resaltado de JavaScript.
 - [x] Traducción de scripts de Postman en el importador, con la tabla de reemplazos de Bruno; lo que no tiene equivalente queda comentado y avisado. El importador de `.bru` trae los scripts tal cual. Pendientes: los scripts de Insomnia y la traducción inversa al exportar a Postman.
 - [x] Carga del motor solo al ejecutar el primer script. No hay estado global: el runtime se crea al empezar cada script, y una request sin scripts (o solo con scripts de tipos que apifast no ejecuta) no llama al motor. Medido con la CLI: unos 2 MB más de memoria máxima, solo cuando corre un script.
-- [ ] Compatibilidad con las colecciones de prueba de Bruno (`bruno-tests`), por partes:
+- [x] Compatibilidad con las colecciones de prueba de Bruno (`bruno-tests`), por partes:
   - [x] API barata y errores: `req.getHost`, `getPath`, `getQueryString`, `getPathParams` y `getTags`; variables de colección (`setCollectionVar` y compañía), `getAllEnvVars` y `deleteAllEnvVars`, `isSafeMode`; temporizadores (`setTimeout`, `setInterval`); variables dinámicas en `bru.interpolate`. Después de la respuesta, `req` es la request enviada, ya renderizada.
   - [x] `req.headerList` y `res.headerList`; los plugins de chai `jsonBody` y `jsonSchema` (este con un validador draft-07 propio, en lugar de ajv). Faltan las cabeceras desactivadas en `req.headerList`.
   - [x] `bru.sendRequest` y `bru.runRequest`, por un puerto nuevo, `ScriptHost`: el motor atiende las llamadas del script por un canal mientras corre.
   - [x] Cookies (`bru.cookies` y `bru.cookies.jar()`), sobre el tarro de la colección que el transporte expone.
   - [x] En una ejecución, `bru.getEnvVar` y `bru.getCollectionVar` ven lo que cambiaron los scripts de requests anteriores (`SendOptions.script_changes`). Variables globales para la ejecución. Etiquetas de carpeta, heredadas por sus requests en el runner y en `req.getTags`. `await test(…)` espera al test.
   - [x] Las cabeceras desactivadas en `req.headerList`, `req.setBody` en formularios y `req.getExecutionMode`.
-  - [ ] Editar las etiquetas de carpeta en la interfaz.
+  - [x] Aserciones sobre la request enviada: `req.method`, `req.url`, `req.headers.<nombre>` y `req.body.<ruta>`.
 
 ### Criterio de salida
 
 Las colecciones de prueba de Bruno con scripts se ejecutan con los mismos resultados, y una colección sin scripts no carga el motor.
 
-Estado: la segunda mitad se cumple. La primera todavía no. La colección `bruno-tests` se importó y se corrió con `apifast run --allow-unresolved` contra un servidor local que imita `/ping` y `/api/echo/json` (sin Node no se puede levantar el de Bruno). En `scripting/api` y `scripting/js` pasaban 54 de 235 tests; tras la primera parte de la compatibilidad pasaban 74 de 246 (corren más tests, porque menos scripts fallan antes de llegar a ellos), tras la segunda pasaban 219 de 258 (el servidor local envía ahora `X-Powered-By: Express`, como el de Bruno), tras la tercera pasaban 229 de 261, tras las cookies pasaban 288 de 320, con las variables por ámbito, las globales y las etiquetas de carpeta pasaban 300 de 330, y con las cabeceras desactivadas, los formularios y el modo de ejecución pasan 316 de 330. Lo que todavía falla, por causa:
+Se cumple, con las diferencias que quedan documentadas abajo. Una colección sin scripts no carga el motor: una request sin scripts no lo llama, y el motor cuesta unos 2 MB de memoria solo cuando corre un script.
 
-- Diferencias pequeñas: `res.getResponseTime()` da 0 en un servidor local (se mide en milisegundos enteros); `res.setBody` con arrays que llevan `undefined`, y con `undefined` (el propio Bruno avisa que ahí sus modos difieren); `req.getHeader` no distingue mayúsculas; `bru.isSafeMode()` da `true` (los tests de Bruno corren en modo desarrollador).
-- Aserciones sobre `req.body.*`.
-- Diferencias de entorno, no de apifast: tests que esperan el entorno Prod (su host y su nombre), el tamaño exacto de las respuestas de Express o endpoints que el servidor local no imita (`/api/mix`, en `Redirect Cookie Save`).
+La colección `bruno-tests` se importó con `apifast import bruno` y se corrió con `apifast run --allow-unresolved`, porque Bruno deja sin resolver las variables que faltan. Se usó un servidor local que imita `/ping` y `/api/echo/json` del de Bruno, porque sin Node no se puede levantar el suyo. Los tests de `sendRequest` llamaron de verdad a `echo.usebruno.com`.
+
+En `scripting/api` y `scripting/js` pasan 315 de 330 tests y las 15 aserciones; al empezar, 54 de 235. Lo que no pasa, por causa:
+
+- **Diferencias de entorno, no de apifast** (10 tests): esperan el entorno Prod (su host y su nombre: `getEnvName`, `getEnvVar`, `interpolate`, `getHost`, `getUrl`, `res.getUrl`, `deleteAllEnvVars`), el tamaño exacto de una respuesta de Express (`getHeaders`) o un endpoint que el servidor local no imita (`/api/mix`, en `Redirect Cookie Save`).
+- **A propósito** (2): `req.getHeader` no distingue mayúsculas, como HTTP (`case-insensitive-write`); `bru.isSafeMode()` da `true`, porque los scripts de apifast siempre corren aislados, y los tests de Bruno esperan su modo desarrollador.
+- **Detalles que no se igualan** (3): `res.getResponseTime()` da 0 contra un servidor local, porque se mide en milisegundos enteros; `res.setBody(undefined)` y un array con `undefined` no sobreviven al paso del cuerpo de un script al siguiente (el propio Bruno avisa que ahí sus modos difieren).
+
+Fuera de esta colección quedan anotados: `require` de librerías y los módulos de Node (`scripting/node-builtins`, `npm-modules`, `local-modules`), `bru.getSecretVar`, los cuerpos multipart en los scripts, los scripts de gRPC y de Insomnia, la traducción inversa al exportar a Postman, y editar las etiquetas de carpeta en la interfaz.
 
 ---
 
