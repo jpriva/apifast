@@ -47,6 +47,17 @@ packaging/linux/build.sh      # target/packages/apifast_<v>-1_amd64.deb and apif
 - The `.rpm` has one text for its summary and description: cargo-generate-rpm
   takes no longer description.
 
+`packaging/linux/check-glibc.sh [max]` says which glibc each binary needs and
+fails if it is newer than `max` (2.35 by default).
+
+## In CI
+
+`.github/workflows/packages.yml` builds the packages on Ubuntu 22.04 (glibc
+2.35), checks the desktop entry, the metainfo and the glibc the binaries need,
+and keeps the packages as an artifact. It runs on changes to the packaging,
+by hand, and on a tag `v<version>`: then the tag must match the workspace's
+version, and the packages are attached to that GitHub release.
+
 ## Other formats
 
 AppImage and Flatpak use the same desktop file, metainfo and icons; each gets

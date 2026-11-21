@@ -453,7 +453,7 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
   - [x] Archivos comunes de Linux en `packaging/linux/`: la entrada de menú (`.desktop`), el metainfo de AppStream y el icono, con el id `com.tryxtek.apifast` (el de la ventana también). El icono es un marcador hasta tener el definitivo.
   - [x] Paquetes `.deb` (cargo-deb) y `.rpm` (cargo-generate-rpm), un `apifast` con la interfaz y la CLI, con `packaging/linux/build.sh`. Solo enlazan la libc: lo que la interfaz carga al ejecutarse (Vulkan o EGL, Wayland o X11) va como recomendado. Construidos y revisados aquí: contenido, metadatos y dependencias; la CLI extraída funciona.
   - [ ] AppImage y Flatpak, con los mismos archivos comunes.
-  - [ ] Construir los paquetes de release en el sistema más antiguo soportado (Ubuntu 22.04, glibc 2.35), en CI.
+  - [x] Construir los paquetes de release en el sistema más antiguo soportado (Ubuntu 22.04, glibc 2.35), en CI: `.github/workflows/packages.yml` valida la entrada de menú y el metainfo, construye, comprueba la glibc que piden los binarios (`check-glibc.sh`) y guarda los paquetes; con un tag `v<versión>` (que debe coincidir con la del workspace) los adjunta a la release de GitHub.
   - [ ] El icono definitivo.
   - [ ] macOS y Windows.
 - [ ] Actualizaciones.
