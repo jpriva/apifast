@@ -464,6 +464,8 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
 - [ ] Guía de usuario.
 - [ ] Auditoría de seguridad de la bóveda.
 - [ ] Revisión final de presupuestos de rendimiento.
+  - [x] RAM en reposo, arranque, apertura del árbol, CPU en reposo y tamaño, medidos ([docs/10](10-rendimiento-y-memoria.md#mediciones-de-f10)). Los presupuestos de RAM pasan a ser de la memoria propia de apifast, sin la pila gráfica del sistema (con RADV, LLVM aporta de 9 a 24 MB según quién más la use): 30–33 MB.
+  - [ ] Medir en la ventana real la RAM extra al recibir 100 MB, la CPU por tecla en un body de 200 KB y la sobrecarga de envío.
 
 ### Criterio de salida
 

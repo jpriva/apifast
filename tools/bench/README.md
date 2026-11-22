@@ -6,7 +6,7 @@ Scripts that measure the budgets of [docs/10-rendimiento-y-memoria.md](../../doc
 |---|---|
 | `make_collection.py DIR N` | Writes a synthetic collection of `N` requests |
 | `measure.py BINARY COLLECTION` | Startup times, PSS after 10 s idle, idle CPU |
-| `breakdown.py BINARY [COLLECTION]` | PSS by mapping, to see where memory goes |
+| `breakdown.py BINARY [COLLECTION]` | PSS by mapping, to see where memory goes; apifast's own memory (what the budgets measure) apart from the system's graphics stack |
 
 ```sh
 cargo build --release -p apifast-gui

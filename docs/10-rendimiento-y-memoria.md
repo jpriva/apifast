@@ -6,12 +6,14 @@ El bajo consumo es un objetivo de producto, no una optimización tardía. Este d
 
 La memoria se mide en **PSS** (memoria proporcional, de `/proc/<pid>/smaps_rollup`), no en RSS. RSS cuenta enteras las bibliotecas del driver de GPU que el sistema ya tiene cargadas y exagera el consumo en unos 45 MB ([spike 3](spikes/02-interfaz-egui-vs-iced.md)).
 
+Desde F10, los presupuestos de RAM son de la **memoria propia de apifast**: su binario, su heap, su memoria anónima y su pila. Se deja fuera la pila gráfica del sistema (Mesa y su LLVM, los drivers y cargadores de Vulkan y EGL), que depende de la máquina y no de la aplicación: con una Radeon, RADV carga `libLLVM` (23,6 MB de PSS cuando ningún otro proceso la usa, 8,8 MB cuando otra aplicación también la tiene abierta), y el cargador de Vulkan abre además los drivers por software (lavapipe y Dozen, unos 4 MB). `tools/bench/breakdown.py` da las dos cifras; el total también se registra.
+
 Referencia medida en el spike, con egui y wgpu: 35 MB con la ventana vacía y 47 MB con un árbol de 5000 filas y un body de 100 KB.
 
 | Métrica | Objetivo | Cómo se mide |
 |---|---|---|
-| RAM en reposo, colección de 100 requests | < 60 MB PSS | `/proc/<pid>/smaps_rollup` tras 10 s inactivo |
-| RAM con colección de 5000 requests | < 120 MB PSS | Igual, con colección sintética |
+| RAM propia en reposo, colección de 100 requests | < 60 MB PSS | `tools/bench/breakdown.py` tras 10 s inactivo, sin la pila gráfica |
+| RAM propia con colección de 5000 requests | < 120 MB PSS | Igual, con colección sintética |
 | RAM extra al recibir 100 MB de respuesta | < 10 MB | Diferencia de PSS durante la descarga |
 | CPU por tecla en un body de 200 KB | < 10 ms | Escenario automático como el del spike |
 | Arranque en frío hasta primera ventana | < 300 ms | Marca de tiempo interna |
@@ -115,6 +117,25 @@ Medido el 2026-11-16 en la misma máquina y de la misma forma que F2, tras F3, l
 - Con JSONPath y XPath (`apifast-query` y `roxmltree`) pasa a 24,8 MiB. Queda muy poco margen: el análisis por crate con `cargo bloat` es necesario antes de la próxima dependencia.
 - Con F5 hasta los certificados (Digest, NTLM, AWS SigV4, OAuth 2.0 con su servidor de *callback*, proxy con SOCKS, certificados de cliente y las pantallas de ajustes) llega a **25,6 MiB: por encima del presupuesto de 25 MB**. La CLI está en 11,2 MiB. Las dependencias nuevas son pequeñas (`md-5`, `md4`, `hmac` y `sha2` ya estaban en el árbol, y SOCKS va dentro de reqwest), así que el crecimiento viene sobre todo del código propio y de su monomorfización. Antes de seguir añadiendo funciones hay que medir con `cargo bloat` y recortar: candidatos son las funciones genéricas de envío (`send_request` se instancia por cada combinación de puertos) y los `Debug` y formatos que solo usan las pruebas.
 - En F10 el presupuesto del binario sube a 60 MB, porque importa más la memoria que el disco. Con F9 y la integración con git, la GUI está en 36,2 MB y la CLI en 20,6 MB.
+
+## Mediciones de F10
+
+Medido el 2026-11-21 en la misma máquina (Ryzen 7 8700G, Radeon 780M, Mesa con RADV, Vulkan), ahora con Fedora 45, binario release con todo (git, gRPC, scripts). Tres ejecuciones de cada caso; la primera, con la caché fría, se descarta.
+
+| Métrica | Objetivo | Medido |
+|---|---|---|
+| RAM propia en reposo, 100 requests | < 60 MB PSS | 30–31 MB |
+| RAM propia en reposo, 5000 requests | < 120 MB PSS | 32–33 MB |
+| RAM total en reposo, 100 requests (con la pila gráfica) | — | 48–71 MB, según quién más tenga `libLLVM` abierta |
+| Arranque hasta primera ventana | < 300 ms | 42–58 ms |
+| Abrir 1000 requests (árbol visible, contando el arranque) | < 200 ms | 66–96 ms |
+| Abrir 5000 requests | — | 120–139 ms |
+| CPU en reposo | ~0 % | 0,0 % |
+| Tamaño del binario | < 60 MB | 36,2 MB (GUI), 20,6 MB (CLI) |
+
+- De la memoria propia, unos 21 MB son el código del binario residente: páginas limpias del archivo, que el kernel puede soltar. El heap es de 4,5 MB y la memoria anónima de 3,8 MB.
+- Se probaron dos recortes que no se aplicaron (se prefirió no cambiar el comportamiento ni la compilación): compilar con `opt-level = "s"` bajaba el código residente de 20,9 a 15,9 MB y el binario de 36,2 a 26,6 MB; y que el cargador de Vulkan no abriera lavapipe ni Dozen (`VK_LOADER_DRIVERS_DISABLE`) quitaba unos 4 MB de la pila gráfica. Quedan como opciones si la memoria propia se acerca al presupuesto.
+- Siguen sin medir en la ventana real la RAM extra al recibir 100 MB, la CPU por tecla en un body de 200 KB y la sobrecarga de envío.
 
 ## Perfil de compilación
 
