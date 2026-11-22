@@ -24,7 +24,7 @@ pub struct GixRepository {
 }
 
 fn failed(error: impl std::fmt::Display) -> GitError {
-    GitError(error.to_string())
+    GitError::Failed(error.to_string())
 }
 
 impl GixRepository {
@@ -165,9 +165,7 @@ impl GitRepository for GixRepository {
     fn commit(&self, paths: &[String], message: &str) -> Result<String, GitError> {
         let repo = self.repo.to_thread_local();
         if repo.committer().is_none() || repo.author().is_none() {
-            return Err(GitError(
-                "set your name and email first: git config user.name, git config user.email".into(),
-            ));
+            return Err(GitError::NoIdentity);
         }
         let workdir = repo.workdir().map(Path::to_path_buf).unwrap_or_default();
         let head = Self::head_tree(&repo)?;
@@ -232,7 +230,7 @@ impl GitRepository for GixRepository {
             return Ok(());
         }
         let mut reference = (repo.find_reference(full.as_str()))
-            .map_err(|_| GitError(format!("there is no branch `{branch}`")))?;
+            .map_err(|_| GitError::NoBranch(branch.to_owned()))?;
         let target = reference
             .peel_to_commit()
             .map_err(failed)?
@@ -410,16 +408,10 @@ impl GixRepository {
             }
         }
         if !changed.is_empty() {
-            return Err(GitError(format!(
-                "commit or discard the changes first: {}",
-                changed.join(", ")
-            )));
+            return Err(GitError::Uncommitted(changed));
         }
         if !overwritten.is_empty() {
-            return Err(GitError(format!(
-                "the branch has files that are here untracked; move them first: {}",
-                overwritten.join(", ")
-            )));
+            return Err(GitError::Untracked(overwritten));
         }
         Ok(())
     }

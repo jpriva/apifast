@@ -1,6 +1,7 @@
 //! Creating, renaming, saving and deleting environments, keeping the
 //! `extends` links between them valid.
 
+use crate::Invalid;
 use apifast_domain::{Environment, environment_chain};
 
 use crate::{AppError, EnvironmentRepository};
@@ -8,12 +9,10 @@ use crate::{AppError, EnvironmentRepository};
 fn valid_name(name: &str, environments: &[Environment]) -> Result<String, AppError> {
     let name = name.trim();
     if name.is_empty() {
-        return Err(AppError::Validation("an environment needs a name".into()));
+        return Err(Invalid::EnvironmentNameEmpty.into());
     }
     if environments.iter().any(|e| e.name == name) {
-        return Err(AppError::Validation(format!(
-            "an environment named `{name}` already exists"
-        )));
+        return Err(Invalid::EnvironmentExists(name.to_owned()).into());
     }
     Ok(name.to_owned())
 }
@@ -98,10 +97,11 @@ pub fn delete_environment(repo: &impl EnvironmentRepository, name: &str) -> Resu
         .map(|e| format!("`{}`", e.name))
         .collect();
     if !children.is_empty() {
-        return Err(AppError::Validation(format!(
-            "`{name}` cannot be deleted: {} extend it",
-            children.join(", ")
-        )));
+        return Err(Invalid::EnvironmentExtended {
+            name: name.to_owned(),
+            children,
+        }
+        .into());
     }
     repo.delete_environment(name)?;
     Ok(())

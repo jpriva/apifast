@@ -1,6 +1,8 @@
 //! OAuth 2.0 tokens in the interface: what is stored for a tab's request,
 //! getting a new one in the background, and forgetting it.
 
+use crate::messages::Say as _;
+use crate::strings::Strings;
 use std::sync::Arc;
 
 use apifast_app::{
@@ -14,14 +16,19 @@ use super::{Message, State, TabKey, TokenState};
 use crate::system::{SystemClock, SystemRandom};
 
 /// The token stored for `request` of the tab `key`.
-pub(super) fn token_state(open: &Open, key: &TabKey, request: &HttpRequest) -> TokenState {
+pub(super) fn token_state(
+    open: &Open,
+    key: &TabKey,
+    request: &HttpRequest,
+    strings: &Strings,
+) -> TokenState {
     let result = with_ports(open, |ports| {
         stored_token(ports, &key.path, &options(open, request))
     });
     match result {
         Ok(Some(info)) => TokenState::Stored(info),
         Ok(None) => TokenState::Missing,
-        Err(e) => TokenState::Unreadable(e.to_string()),
+        Err(e) => TokenState::Unreadable(e.say(strings)),
     }
 }
 
@@ -97,6 +104,7 @@ impl State {
         let options = options(open, &request);
         self.snapshot.getting_token = Some(key.clone());
         let messages = self.messages.clone();
+        let strings = self.strings;
         tokio::spawn(async move {
             let authorizer = apifast_http::LoopbackAuthorizer::system();
             let (clock, random) = (SystemClock, SystemRandom::default());
@@ -118,7 +126,7 @@ impl State {
             let result = get_new_token(ports, &key.path, &options, &CancelToken::new())
                 .await
                 .map(|_| ())
-                .map_err(|e| e.to_string());
+                .map_err(|e| e.say(strings));
             if let Some(messages) = messages.upgrade() {
                 let _ = messages.send(Message::TokenObtained(key, result));
             }
@@ -146,7 +154,7 @@ impl State {
             forget_token(ports, &key.path, &options(open, &request))
         });
         if let Err(e) = result {
-            self.snapshot.error = Some(e.to_string());
+            self.snapshot.error = Some(e.say(self.strings));
         }
         self.refresh_variables(Some(key));
     }

@@ -7,6 +7,7 @@
 
 mod parse;
 
+use apifast_app::ImportNote;
 use std::path::Path;
 
 use apifast_app::{ImportWarning, ImportedCollection, ImportedItem};
@@ -88,7 +89,10 @@ fn read_bru(path: &Path, at: &str, warnings: &mut Vec<ImportWarning>) -> Option<
         Err(e) => {
             warnings.push(ImportWarning::new(
                 at,
-                format!("cannot be read (line {}: {}): left out", e.line, e.message),
+                ImportNote::Unparsable {
+                    line: e.line,
+                    message: e.message.clone(),
+                },
             ));
             None
         }
@@ -172,7 +176,7 @@ fn folder_items(
         {
             warnings.push(ImportWarning::new(
                 at,
-                format!("`{kind}` requests are not supported yet: left out"),
+                ImportNote::RequestKindUnsupported(kind.to_owned()),
             ));
             continue;
         }
@@ -388,7 +392,7 @@ fn body(file: &BruFile, mode: &str, at: &str, warnings: &mut Vec<ImportWarning>)
         other => {
             warnings.push(ImportWarning::new(
                 at,
-                format!("a `{other}` body is not supported"),
+                ImportNote::BodyUnsupported(other.to_owned()),
             ));
             Body::None
         }
@@ -485,7 +489,7 @@ fn auth(file: &BruFile, mode: &str, at: &str, warnings: &mut Vec<ImportWarning>)
         other => {
             warnings.push(ImportWarning::new(
                 at,
-                format!("`{other}` auth is not supported: left without auth"),
+                ImportNote::AuthUnsupported(other.to_owned()),
             ));
             AuthScheme::None
         }
@@ -493,13 +497,13 @@ fn auth(file: &BruFile, mode: &str, at: &str, warnings: &mut Vec<ImportWarning>)
     Setting::Set(scheme)
 }
 
-fn oauth2(get: &dyn Fn(&str) -> String) -> Result<OAuth2Auth, String> {
+fn oauth2(get: &dyn Fn(&str) -> String) -> Result<OAuth2Auth, ImportNote> {
     let flow = match get("grant_type").as_str() {
         "client_credentials" | "" => OAuth2Flow::ClientCredentials,
         "password" => OAuth2Flow::Password,
         "authorization_code" => OAuth2Flow::AuthorizationCode,
         "implicit" => OAuth2Flow::Implicit,
-        other => return Err(format!("OAuth 2.0 grant `{other}` is not supported")),
+        other => return Err(ImportNote::GrantUnsupported(other.to_owned())),
     };
     let or = |key: &str, default: &str| {
         Some(get(key))
@@ -589,10 +593,7 @@ fn environments(dir: &Path, warnings: &mut Vec<ImportWarning>) -> Vec<Environmen
             if !secrets.is_empty() {
                 warnings.push(ImportWarning::new(
                     at,
-                    format!(
-                        "{} secrets: Bruno keeps their values apart; set them in the vault",
-                        secrets.len()
-                    ),
+                    ImportNote::SecretsApart(secrets.len()),
                 ));
             }
         }

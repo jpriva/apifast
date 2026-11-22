@@ -50,7 +50,7 @@ fn find<'a>(items: &'a [ImportedItem], name: &str) -> &'a HttpRequest {
 }
 
 fn warned(collection: &ImportedCollection, at: &str, part: &str) -> bool {
-    (collection.warnings.iter()).any(|w| w.at == at && w.message.contains(part))
+    (collection.warnings.iter()).any(|w| w.at == at && w.message.to_string().contains(part))
 }
 
 #[test]

@@ -2,6 +2,7 @@
 //! trees and environments, changes made outside apifast, and what the
 //! snapshot shows of them.
 
+use crate::messages::Say as _;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -193,7 +194,7 @@ impl State {
     pub(super) fn create_collection(&mut self, folder: &Path, name: String) {
         match FsCollection::create(folder, &Collection::new(name)) {
             Ok(_) => self.open_or_report(folder),
-            Err(e) => self.snapshot.error = Some(e.to_string()),
+            Err(e) => self.snapshot.error = Some(e.say(self.strings)),
         }
     }
 
@@ -280,9 +281,9 @@ impl State {
     }
 
     fn try_load(&mut self, root: &Path) -> Result<(), String> {
-        let repo = Arc::new(FsCollection::open(root).map_err(|e| e.to_string())?);
-        let tree = open_collection(&*repo).map_err(|e| e.to_string())?;
-        let environment_files = repo.environments().map_err(|e| e.to_string())?;
+        let repo = Arc::new(FsCollection::open(root).map_err(|e| e.say(self.strings))?);
+        let tree = open_collection(&*repo).map_err(|e| e.say(self.strings))?;
+        let environment_files = repo.environments().map_err(|e| e.say(self.strings))?;
         let id = tree
             .collection
             .id
@@ -305,7 +306,7 @@ impl State {
 
         let (session, error) = match sessions.load() {
             Ok(session) => (session, cookie_error),
-            Err(e) => (Session::default(), Some(e.to_string())),
+            Err(e) => (Session::default(), Some(e.say(self.strings))),
         };
         let parked: HashMap<RequestPath, HttpRequest> = (session.tabs.into_iter())
             .filter_map(|tab| Some((tab.path, tab.draft?)))
@@ -414,7 +415,7 @@ impl State {
                     if let Some(Err(e)) =
                         (open.vault.clone()).map(|vault| vault.rename_environment(&from, to))
                     {
-                        self.snapshot.error = Some(e.to_string());
+                        self.snapshot.error = Some(e.say(self.strings));
                     }
                     if was_active {
                         open.environment = Some(to.clone());
@@ -446,7 +447,7 @@ impl State {
         };
         match change(&repo) {
             Ok(()) => self.snapshot.error = None,
-            Err(e) => self.snapshot.error = Some(e.to_string()),
+            Err(e) => self.snapshot.error = Some(e.say(self.strings)),
         }
         self.reload_environments(root);
     }
@@ -466,7 +467,7 @@ impl State {
                 }
                 open.environment_files = Arc::new(environments);
             }
-            Err(e) => self.snapshot.error = Some(e.to_string()),
+            Err(e) => self.snapshot.error = Some(e.say(self.strings)),
         }
         self.refresh_vault_of(root);
     }
@@ -506,7 +507,7 @@ impl State {
         };
         match open_collection(&*open.repo) {
             Ok(tree) => open.tree = Arc::new(tree),
-            Err(e) => self.snapshot.error = Some(e.to_string()),
+            Err(e) => self.snapshot.error = Some(e.say(self.strings)),
         }
     }
 
@@ -528,7 +529,7 @@ impl State {
                 Some(value)
             }
             Err(e) => {
-                self.snapshot.error = Some(e.to_string());
+                self.snapshot.error = Some(e.say(self.strings));
                 None
             }
         }
@@ -581,7 +582,7 @@ impl State {
                     }
                     tab.saved = loaded.request;
                 }
-                Err(e) => self.snapshot.error = Some(e.to_string()),
+                Err(e) => self.snapshot.error = Some(e.say(self.strings)),
             }
             tab.path = to;
             tab.revision = revision;

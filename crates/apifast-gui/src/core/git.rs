@@ -2,6 +2,8 @@
 //! its branch and what changed, refreshed when the collection's files
 //! change; the field-by-field diff of a file; commits and branch switches.
 
+use crate::messages::Say as _;
+use crate::strings::Strings;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -89,18 +91,18 @@ pub(super) fn open_git(_: &Path) -> Option<Arc<dyn GitRepository>> {
 }
 
 /// The status and branches of `git`, keeping what `view` showed besides.
-fn read(git: &dyn GitRepository, view: Option<&GitView>) -> GitView {
+fn read(git: &dyn GitRepository, view: Option<&GitView>, strings: &Strings) -> GitView {
     let mut next = view.cloned().unwrap_or_default();
     match git.status() {
         Ok(status) => {
             next.branch = status.branch;
             next.changes = status.changes;
         }
-        Err(e) => next.error = Some(GitProblem::Failed(e.to_string())),
+        Err(e) => next.error = Some(GitProblem::Failed(e.say(strings))),
     }
     match git.branches() {
         Ok(branches) => next.branches = branches,
-        Err(e) => next.error = Some(GitProblem::Failed(e.to_string())),
+        Err(e) => next.error = Some(GitProblem::Failed(e.say(strings))),
     }
     // A diff of a file that no longer changed is gone.
     if let Some(diff) = &next.diff
@@ -120,7 +122,7 @@ impl State {
         let Some(git) = open.git.clone() else {
             return;
         };
-        open.git_view = Some(read(&*git, open.git_view.as_ref()));
+        open.git_view = Some(read(&*git, open.git_view.as_ref(), self.strings));
     }
 
     /// Does `command` in the focused collection's repository.
@@ -147,7 +149,7 @@ impl State {
                 if let Some(file) = file {
                     match git_diff(&*open.repo, &*git, &file) {
                         Ok(diff) => view.diff = Some(diff),
-                        Err(e) => view.error = Some(GitProblem::Failed(e.to_string())),
+                        Err(e) => view.error = Some(GitProblem::Failed(e.say(self.strings))),
                     }
                 }
             }
@@ -159,7 +161,7 @@ impl State {
                             id,
                         });
                     }
-                    Err(e) => view.error = Some(GitProblem::Failed(e.to_string())),
+                    Err(e) => view.error = Some(GitProblem::Failed(e.say(self.strings))),
                 }
             }
             GitCommand::Switch(branch) if drafts > 0 => {
@@ -170,11 +172,11 @@ impl State {
             }
             GitCommand::Switch(branch) => match git.switch_branch(&branch) {
                 Ok(()) => view.notice = Some(GitNotice::Switched(branch)),
-                Err(e) => view.error = Some(GitProblem::Failed(e.to_string())),
+                Err(e) => view.error = Some(GitProblem::Failed(e.say(self.strings))),
             },
         }
         let error = view.error.take();
-        let mut view = read(&*git, Some(&view));
+        let mut view = read(&*git, Some(&view), self.strings);
         if error.is_some() {
             view.error = error;
         }

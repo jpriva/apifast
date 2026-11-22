@@ -2,6 +2,7 @@
 //! workspaces, its list of collections in `workspace.yml`, and what this
 //! machine keeps of it (expanded collections, open tabs).
 
+use crate::messages::Say as _;
 use std::path::{Path, PathBuf};
 
 use apifast_app::{Workspace, WorkspaceRepository};
@@ -66,7 +67,7 @@ impl State {
     fn default_workspace(&self) -> Result<PathBuf, String> {
         let folder = apifast_history::dirs::default_workspace_in(&self.data_dir);
         if !folder.join(WORKSPACE_FILE).is_file() {
-            FsWorkspace::create(&folder, DEFAULT_NAME).map_err(|e| e.to_string())?;
+            FsWorkspace::create(&folder, DEFAULT_NAME).map_err(|e| e.say(self.strings))?;
         }
         Ok(canonical(&folder))
     }
@@ -74,7 +75,7 @@ impl State {
     pub(super) fn handle_workspace(&mut self, command: Command) {
         let result = match command {
             Command::CreateWorkspace { folder, name } => FsWorkspace::create(&folder, &name)
-                .map_err(|e| e.to_string())
+                .map_err(|e| e.say(self.strings))
                 .and_then(|_| self.switch_to(&canonical(&folder))),
             Command::OpenWorkspace(folder) => self.switch_to(&canonical(&folder)),
             Command::RenameWorkspace(name) => self.rename_workspace(&name),
@@ -89,8 +90,8 @@ impl State {
 
     /// Leaves the active workspace as it was and opens the one in `folder`.
     fn switch_to(&mut self, folder: &Path) -> Result<(), String> {
-        let repo = FsWorkspace::open(folder).map_err(|e| e.to_string())?;
-        let workspace = repo.workspace().map_err(|e| e.to_string())?;
+        let repo = FsWorkspace::open(folder).map_err(|e| e.say(self.strings))?;
+        let workspace = repo.workspace().map_err(|e| e.say(self.strings))?;
         // Leave the current one as it was.
         if self.workspace.is_some() {
             self.write_session();
@@ -163,7 +164,7 @@ impl State {
         }
         known.active = Some(folder.to_path_buf());
         if let Err(e) = store.save(&known) {
-            self.snapshot.error = Some(e.to_string());
+            self.snapshot.error = Some(e.say(self.strings));
         }
         self.refresh_known(&known);
     }
@@ -185,12 +186,12 @@ impl State {
 
     fn rename_workspace(&mut self, name: &str) -> Result<(), String> {
         let active = self.workspace.as_ref().ok_or("no workspace is open")?;
-        let mut workspace = active.repo.workspace().map_err(|e| e.to_string())?;
+        let mut workspace = active.repo.workspace().map_err(|e| e.say(self.strings))?;
         name.trim().clone_into(&mut workspace.name);
         active
             .repo
             .save_workspace(&workspace)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| e.say(self.strings))?;
         if let Some(view) = &mut self.snapshot.workspace {
             view.name.clone_from(&workspace.name);
         }
@@ -206,12 +207,12 @@ impl State {
             .as_ref()
             .is_some_and(|w| w.folder == folder)
         {
-            return Err("the active workspace cannot be forgotten: switch first".into());
+            return Err(self.strings.errors.workspace_active.to_owned());
         }
         let store = self.known();
         let mut known = store.load().unwrap_or_default();
         known.known.retain(|k| k != folder);
-        store.save(&known).map_err(|e| e.to_string())?;
+        store.save(&known).map_err(|e| e.say(self.strings))?;
         self.refresh_known(&known);
         Ok(())
     }
@@ -241,7 +242,7 @@ impl State {
             active.repo.save_workspace(&workspace)
         });
         if let Err(e) = result {
-            self.snapshot.error = Some(e.to_string());
+            self.snapshot.error = Some(e.say(self.strings));
         }
     }
 
@@ -256,7 +257,7 @@ impl State {
             active.repo.save_workspace(&workspace)
         });
         if let Err(e) = result {
-            self.snapshot.error = Some(e.to_string());
+            self.snapshot.error = Some(e.say(self.strings));
         }
     }
 
@@ -307,7 +308,7 @@ impl State {
             active: (self.snapshot.active.as_ref()).map(|key| (key.root.clone(), key.path.clone())),
         };
         if let Err(e) = active.state.save(&state) {
-            self.snapshot.error = Some(e.to_string());
+            self.snapshot.error = Some(e.say(self.strings));
         }
     }
 }

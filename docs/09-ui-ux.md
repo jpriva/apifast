@@ -337,15 +337,25 @@ La interfaz está en inglés y en español. Por defecto sigue el idioma del sist
 Cada idioma es un archivo de `crates/apifast-gui/src/strings/` con el nombre de su código (`en.rs`, `es.rs`; uno regional, `pt_br.rs`). Añadir uno es copiar `en.rs` con el nombre nuevo y traducir sus textos:
 
 - `NAME` es el nombre del idioma en él mismo ("Español"), y así aparece en los ajustes.
-- `STRINGS` tiene todos los textos. El compilador rechaza el archivo mientras falte uno.
+- `STRINGS` tiene todos los textos, también los de los errores de las otras capas (`errors`). El compilador rechaza el archivo mientras falte uno.
 - Los textos con datos son plantillas: `"History of {name}"` se traduce `"Historial de {name}"`, en el orden que pida el idioma, sin cambiar los nombres entre llaves. Una prueba comprueba que cada idioma tiene, en cada texto, los mismos `{marcadores}` que el inglés y ningún texto vacío.
 - Los textos con un número son plurales: `Plural::two("{n} file", "{n} files")`, con la forma de uno y la del resto. `plural_rule` dice qué forma toma cada número; `PluralRule::ONE_OTHER` vale para el inglés, el español y muchos más. Un idioma con más formas (polaco, ruso, árabe) escribe su regla, `PluralRule(|n| …)`, y usa las cuatro formas de `Plural`.
 
 No hay que registrarlo en ningún otro sitio: el script de compilación de `apifast-gui` lista los archivos de esa carpeta. `cargo fmt` no llega a ellos, así que se formatean con `rustfmt --edition 2024 crates/apifast-gui/src/strings/*.rs` (el CI lo comprueba).
 
+### Errores y avisos de las otras capas
+
+Las capas que no son la interfaz (la aplicación, el dominio, la red, la bóveda, los importadores, git) no devuelven frases: devuelven un error con sus datos, como `Invalid::EnvironmentExists("dev")` o `ImportNote::SettingNotKept("timeout")`. Su `Display` lo dice en inglés, para la línea de comandos y los informes. La interfaz lo dice otra vez en su idioma (`apifast-gui/src/messages.rs`), con las plantillas de `errors` de cada archivo de idioma: "ya existe un entorno llamado `dev`". El núcleo de la interfaz sabe el idioma (`Command::Language`) y dice en él los errores que publica.
+
+- Una prueba comprueba que, en inglés, cada error dice exactamente lo que dice su `Display`: la plantilla inglesa no se separa del original.
+- Un error añadido después, que la interfaz todavía no conoce, se muestra en inglés, con su `Display`.
+- Lo que dicen dentro de un error el sistema o una biblioteca (un error de E/S, el motivo de un analizador YAML o JSON, lo que respondió un servidor, lo que dijo gix) queda como lo dicen.
+- El historial guarda el error de un envío fallido en inglés: es un dato, y no cambia de idioma.
+
 Lo que no está traducido todavía:
 
-- Los mensajes de error y los avisos que llegan de las capas que no son la interfaz (la aplicación, el dominio, la red, el almacenamiento, la bóveda, los importadores y git), por ejemplo "`x.yml` does not exist". Se muestran tal como los escriben, en inglés.
+- Los resultados de las aserciones ("expected eq 201, got 200") y los fallos de los scripts. Se guardan como texto, enmascarado para no mostrar secretos, y van a los informes JUnit y JSON.
+- Algunos detalles internos que llegan como texto: los errores del almacén de respuestas, de los archivos de datos del runner y de la clave de colección.
 - La línea de comandos, que queda en inglés, como `git` o `cargo`.
 
 ## Organización del código de la interfaz

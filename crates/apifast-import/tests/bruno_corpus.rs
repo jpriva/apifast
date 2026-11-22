@@ -26,7 +26,7 @@ fn brunos_test_collection_imports_whole() {
     let collection = import_bruno(&dir).unwrap();
     assert_eq!(collection.name, "bruno-testbench");
     let unreadable: Vec<_> = (collection.warnings.iter())
-        .filter(|w| w.message.contains("cannot be read"))
+        .filter(|w| w.message.to_string().contains("cannot be read"))
         .collect();
     assert!(unreadable.is_empty(), "{unreadable:#?}");
     let mut names = Vec::new();

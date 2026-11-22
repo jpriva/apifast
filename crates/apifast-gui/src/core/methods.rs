@@ -2,6 +2,7 @@
 //! reflection, or read from its `.proto`, in the background, and kept by
 //! its URL, `.proto` and environment while the collection is open.
 
+use crate::messages::Say as _;
 use std::sync::Arc;
 
 use apifast_app::{
@@ -88,6 +89,7 @@ impl State {
         };
         let messages = self.messages.clone();
         let root = key.root.clone();
+        let strings = self.strings;
         tokio::spawn(async move {
             let (clock, random) = (SystemClock, SystemRandom::default());
             let ports = SendPorts {
@@ -108,7 +110,7 @@ impl State {
             let grpc = grpc_transport((*transport).clone());
             let result = describe_grpc(ports, &grpc, &key.path, &options, &CancelToken::new())
                 .await
-                .map_err(|e| e.to_string());
+                .map_err(|e| e.say(strings));
             if let Some(messages) = messages.upgrade() {
                 let _ = messages.send(Message::MethodsLoaded(root, methods_key, result));
             }

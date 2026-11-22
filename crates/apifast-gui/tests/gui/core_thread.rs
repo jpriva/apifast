@@ -983,6 +983,15 @@ fn environments_are_created_renamed_saved_and_deleted() {
     assert!(snapshot.error.as_ref().unwrap().contains("already exists"));
     assert_eq!(snapshot.environment.as_deref(), Some("dev"));
 
+    // In the interface's language, once the core is told it.
+    core.send(Command::Language("es"));
+    core.send(Command::CreateEnvironment("dev".into()));
+    let snapshot = wait(&core, "the error in Spanish", |s| {
+        s.error.as_deref() == Some("ya existe un entorno llamado `dev`")
+    });
+    assert_eq!(snapshot.environment.as_deref(), Some("dev"));
+    core.send(Command::Language("en"));
+
     // Deleting the active environment leaves none active.
     core.send(Command::DeleteEnvironment("dev".into()));
     let snapshot = wait(&core, "dev gone", |s| {

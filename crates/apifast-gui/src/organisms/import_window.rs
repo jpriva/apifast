@@ -2,6 +2,7 @@
 //! review the plan (what is created, and what is not kept) and the folder
 //! it goes in, then import. Only the reviewed plan can be imported.
 
+use crate::messages::Say as _;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
 
@@ -247,7 +248,11 @@ impl ImportWindow {
                                     warning.at.as_str()
                                 };
                                 ui.label(
-                                    RichText::new(format!("{at}: {}", warning.message)).small(),
+                                    RichText::new(format!(
+                                        "{at}: {}",
+                                        warning.message.say(strings)
+                                    ))
+                                    .small(),
                                 );
                             }
                         });

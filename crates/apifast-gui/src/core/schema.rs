@@ -2,6 +2,7 @@
 //! read once from the collection's cache, and asking the server for it
 //! again in the background.
 
+use crate::messages::Say as _;
 use std::sync::Arc;
 
 use apifast_app::{
@@ -53,7 +54,7 @@ impl State {
                 ..SchemaView::default()
             },
             Err(e) => SchemaView {
-                error: Some(e.to_string()),
+                error: Some(e.say(self.strings)),
                 ..SchemaView::default()
             },
         };
@@ -97,6 +98,7 @@ impl State {
         };
         let messages = self.messages.clone();
         let root = key.root.clone();
+        let strings = self.strings;
         tokio::spawn(async move {
             let (clock, random) = (SystemClock, SystemRandom::default());
             let ports = SendPorts {
@@ -121,7 +123,7 @@ impl State {
                 &CancelToken::new(),
             )
             .await
-            .map_err(|e| e.to_string());
+            .map_err(|e| e.say(strings));
             if let Some(messages) = messages.upgrade() {
                 let _ = messages.send(Message::SchemaFetched(root, schema_key, result));
             }

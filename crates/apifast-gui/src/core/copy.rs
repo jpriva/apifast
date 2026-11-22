@@ -1,6 +1,7 @@
 //! "Copy as cURL": a request rendered as its send would render it, without
 //! sending, as a command for the interface to put in the clipboard.
 
+use crate::messages::Say as _;
 use std::sync::Arc;
 
 use apifast_app::{
@@ -73,7 +74,7 @@ impl State {
                 id,
                 language,
                 text: String::new(),
-                note: Some(e.to_string()),
+                note: Some(e.say(self.strings)),
             },
         };
         self.snapshot.copied = Some(copied);

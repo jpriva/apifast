@@ -30,6 +30,26 @@ pub struct Language {
     pub strings: &'static Strings,
 }
 
+/// English, the language that is always there.
+#[must_use]
+pub fn english() -> &'static Language {
+    const ENGLISH: Language = Language {
+        code: "en",
+        name: en::NAME,
+        strings: &EN,
+    };
+    LANGUAGES
+        .iter()
+        .find(|l| l.code == "en")
+        .unwrap_or(&ENGLISH)
+}
+
+/// The language `code` names, or English if apifast does not have it.
+#[must_use]
+pub fn english_or(code: &str) -> &'static Language {
+    language(code).unwrap_or_else(english)
+}
+
 /// The language `code` names (`es`, `es_CO`, `es-CO.UTF-8`, `pt_BR`): the
 /// one for its region if there is one, otherwise the one for its language.
 /// `None` if neither is there.
@@ -167,20 +187,27 @@ impl Text for PluralRule {
     fn visit(&self, _: &'static str, _: &mut dyn FnMut(&'static str, &'static str)) {}
 }
 
-/// The struct of every text, and [`Strings::each`] over them.
+/// A struct of texts, with `each` over them; it is a [`Text`] too, so one
+/// can hold another.
 macro_rules! texts {
     (
         $(#[$meta:meta])*
-        pub struct Strings { $($(#[$field_meta:meta])* pub $field:ident: $ty:ty,)* }
+        pub struct $name:ident { $($(#[$field_meta:meta])* pub $field:ident: $ty:ty,)* }
     ) => {
         $(#[$meta])*
-        pub struct Strings { $($(#[$field_meta])* pub $field: $ty,)* }
+        pub struct $name { $($(#[$field_meta])* pub $field: $ty,)* }
 
-        impl Strings {
+        impl $name {
             /// Calls `visit` with each text and its field's name; each form
-            /// of a [`Plural`].
+            /// of a [`Plural`], and the texts of a struct it holds.
             pub fn each(&self, mut visit: impl FnMut(&'static str, &'static str)) {
-                $(Text::visit(&self.$field, stringify!($field), &mut visit);)*
+                Text::visit(self, "", &mut visit);
+            }
+        }
+
+        impl Text for $name {
+            fn visit(&self, _: &'static str, visit: &mut dyn FnMut(&'static str, &'static str)) {
+                $(Text::visit(&self.$field, stringify!($field), visit);)*
             }
         }
     };
@@ -192,6 +219,8 @@ texts! {
 pub struct Strings {
     /// How this language picks the form of a count.
     pub plural_rule: PluralRule,
+    /// The errors and notices of the layers under the interface.
+    pub errors: Errors,
     /// Shown in the sidebar while no collection is open.
     pub no_collection: &'static str,
     /// Button and action that create a collection.
@@ -1368,6 +1397,369 @@ pub struct Strings {
     pub yes: &'static str,
     /// A setting that is off.
     pub no: &'static str,
+}
+}
+
+texts! {
+/// The errors and notices of the layers under the interface (the
+/// application, the vault, the importers, git), in the interface's language.
+/// Each is filled with what the error carries: [`crate::messages`].
+#[derive(Debug, Clone, Copy)]
+pub struct Errors {
+    /// English: {path} does not exist.
+    pub not_found: &'static str,
+    /// English: {path} is not valid: {message}.
+    pub invalid_file: &'static str,
+    /// English: {path}: {what} is not supported yet.
+    pub unsupported_file: &'static str,
+    /// English: cannot access {path}: {message}.
+    pub cannot_access: &'static str,
+    /// English: invalid URL: {why}.
+    pub invalid_url: &'static str,
+    /// English: invalid request: {why}.
+    pub invalid_request: &'static str,
+    /// English: TLS error: {why}.
+    pub tls_failed: &'static str,
+    /// English: protocol error: {why}.
+    pub protocol_failed: &'static str,
+    /// English: stopped after {n} redirects.
+    pub too_many_redirects: Plural,
+    /// English: timed out after {ms} ms.
+    pub timed_out: &'static str,
+    /// English: cancelled.
+    pub send_cancelled: &'static str,
+    /// English: response store: {why}.
+    pub response_store: &'static str,
+    /// English: environment {name} does not exist.
+    pub environment_not_found: &'static str,
+    /// English: cycle in extends: {chain}.
+    pub environment_cycle: &'static str,
+    /// English: variable {name} is not defined.
+    pub variable_undefined: &'static str,
+    /// English: secret {name} has no value available.
+    pub secret_unavailable: &'static str,
+    /// English: variables reference each other in a loop: {chain}.
+    pub variables_cycle: &'static str,
+    /// English: variable {name} nests more than {max} levels deep.
+    pub variable_too_deep: &'static str,
+    /// English: unknown dynamic variable ${name}.
+    pub dynamic_unknown: &'static str,
+    /// English: process variable {name} is not set.
+    pub process_env_missing: &'static str,
+    /// English: no value given for prompt {name}.
+    pub prompt_missing: &'static str,
+    /// English: function {name} failed: {message}.
+    pub function_failed: &'static str,
+    /// English: git: set your name and email first: git config user.name, git config user.email.
+    pub git_no_identity: &'static str,
+    /// English: git: there is no branch {branch}.
+    pub git_no_branch: &'static str,
+    /// English: git: commit or discard the changes first: {files}.
+    pub git_uncommitted: &'static str,
+    /// English: git: the branch has files that are here untracked; move them first: {files}.
+    pub git_untracked: &'static str,
+    /// English: git: {why}.
+    pub git_failed: &'static str,
+    /// English: an environment needs a name.
+    pub environment_name_empty: &'static str,
+    /// English: an environment named {name} already exists.
+    pub environment_exists: &'static str,
+    /// English: {name} cannot be deleted: {children} extend it.
+    pub environment_extended: &'static str,
+    /// English: a folder cannot go inside itself.
+    pub folder_into_itself: &'static str,
+    /// English: {name} already exists in that folder.
+    pub exists_in_folder: &'static str,
+    /// English: the name cannot be empty.
+    pub name_empty: &'static str,
+    /// English: the request needs a name.
+    pub request_name_empty: &'static str,
+    /// English: {path} is not a folder of the collection.
+    pub not_a_folder: &'static str,
+    /// English: the server answered {status} to the introspection query.
+    pub introspection_status: &'static str,
+    /// English: the schema is larger than {mb} MB.
+    pub schema_too_large: &'static str,
+    /// English: the answer is not JSON: {why}.
+    pub schema_not_json: &'static str,
+    /// English: the server refused the introspection: {why}.
+    pub introspection_refused: &'static str,
+    /// English: the answer is not an introspection result.
+    pub not_introspection: &'static str,
+    /// English: a commit needs a message.
+    pub commit_message_empty: &'static str,
+    /// English: choose the files to commit.
+    pub commit_nothing_chosen: &'static str,
+    /// English: AWS Signature v4 needs the {field}.
+    pub aws_missing: &'static str,
+    /// English: access key id.
+    pub aws_access_key_id: &'static str,
+    /// English: secret access key.
+    pub aws_secret_access_key: &'static str,
+    /// English: service.
+    pub aws_service: &'static str,
+    /// English: region.
+    pub aws_region: &'static str,
+    /// English: an OAuth 2.0 request is rendered with its token, when it is sent.
+    pub oauth2_rendered_alone: &'static str,
+    /// English: auth scheme {kind} is not supported yet.
+    pub auth_scheme_unsupported: &'static str,
+    /// English: this auth scheme is not supported yet.
+    pub auth_scheme_not_yet: &'static str,
+    /// English: this body kind is not supported yet.
+    pub body_kind_not_yet: &'static str,
+    /// English: the GraphQL variables are not valid JSON: {why}.
+    pub graphql_variables_not_json: &'static str,
+    /// English: the GraphQL variables must be a JSON object.
+    pub graphql_variables_not_object: &'static str,
+    /// English: OAuth 2.0 needs the access token URL.
+    pub oauth2_no_token_url: &'static str,
+    /// English: OAuth 2.0 needs the {field}.
+    pub oauth2_missing: &'static str,
+    /// English: authorization URL.
+    pub oauth2_field_authorization_url: &'static str,
+    /// English: callback URL.
+    pub oauth2_field_callback_url: &'static str,
+    /// English: the token request failed ({status}): {reason}.
+    pub token_request_failed: &'static str,
+    /// English: the answer is not JSON.
+    pub token_answer_not_json: &'static str,
+    /// English: status {status}.
+    pub token_status: &'static str,
+    /// English: the token response has no `access_token`.
+    pub no_access_token: &'static str,
+    /// English: the token response has no `id_token`.
+    pub no_id_token: &'static str,
+    /// English: the implicit grant is deprecated and not supported.
+    pub implicit_grant: &'static str,
+    /// English: the authorization code grant needs a browser, which is not available here.
+    pub no_browser: &'static str,
+    /// English: the authorization was refused: {error}.
+    pub authorization_refused: &'static str,
+    /// English: the authorization answer has another state; try again.
+    pub authorization_state: &'static str,
+    /// English: the authorization answer has no code.
+    pub authorization_no_code: &'static str,
+    /// English: nobody authorized in the browser in time.
+    pub authorization_timed_out: &'static str,
+    /// English: the token cannot be refreshed.
+    pub no_refresh_token: &'static str,
+    /// English: the OAuth 2.0 token has expired.
+    pub token_expired: &'static str,
+    /// English: there is no OAuth 2.0 token, and getting one automatically is off.
+    pub no_token: &'static str,
+    /// English: this request does not use OAuth 2.0.
+    pub not_oauth2: &'static str,
+    /// English: the OAuth 2.0 callback URL {url} {problem}.
+    pub callback_url: &'static str,
+    /// English: is not a URL.
+    pub callback_not_url: &'static str,
+    /// English: must be http://localhost:‹port›/… or http://127.0.0.1:‹port›/…, so apifast can catch the redirect.
+    pub callback_not_local: &'static str,
+    /// English: cannot be listened on: {why}.
+    pub callback_cannot_listen: &'static str,
+    /// English: cannot open the browser: {why}; open this URL: {url}.
+    pub browser_failed: &'static str,
+    /// English: the OAuth 2.0 callback failed: {why}.
+    pub callback_failed: &'static str,
+    /// English: requests depend on each other: {chain}.
+    pub dependency_cycle: &'static str,
+    /// English: too many requests chained with `response()`.
+    pub too_many_chained: &'static str,
+    /// English: {dependency}, used by `response()`: {error}.
+    pub dependency_failed: &'static str,
+    /// English: {path} {kind}.
+    pub wrong_kind: &'static str,
+    /// English: is a WebSocket request: it connects, it is not sent.
+    pub is_websocket: &'static str,
+    /// English: is not a WebSocket request.
+    pub not_websocket: &'static str,
+    /// English: is a gRPC request: it is called, not sent.
+    pub is_grpc: &'static str,
+    /// English: is not a gRPC request.
+    pub not_grpc: &'static str,
+    /// English: the system keyring cannot be used: {why}.
+    pub keyring_failed: &'static str,
+    /// English: cannot use {path}: {message}.
+    pub cannot_use: &'static str,
+    /// English: the stored master key is damaged.
+    pub master_key_damaged: &'static str,
+    /// English: this collection already shares secrets: ask your team for its key.
+    pub collection_shares_already: &'static str,
+    /// English: secret {name} is shared with the team, and this machine does not have the collection's key.
+    pub shared_without_key: &'static str,
+    /// English: that is not this collection's key.
+    pub wrong_collection_key: &'static str,
+    /// English: this is not an apifast collection key (AFK- and 54 characters).
+    pub key_format: &'static str,
+    /// English: the key has a typo: its check does not match.
+    pub key_check: &'static str,
+    /// English: not an encrypted value.
+    pub not_an_envelope: &'static str,
+    /// English: encrypted with a newer version ({version}).
+    pub newer_envelope: &'static str,
+    /// English: cannot be decrypted: wrong key, or the value was changed or moved.
+    pub decryption_rejected: &'static str,
+    /// English: no randomness available: {why}.
+    pub no_randomness: &'static str,
+    /// English: {path} has no bruno.json: not a Bruno collection.
+    pub bruno_not_collection: &'static str,
+    /// English: cannot read {path}: {why}.
+    pub cannot_read: &'static str,
+    /// English: cannot write {path}: {why}.
+    pub cannot_write: &'static str,
+    /// English: not an Insomnia export (v4 or v5).
+    pub not_insomnia: &'static str,
+    /// English: not an OpenAPI document.
+    pub not_openapi: &'static str,
+    /// English: Swagger 2.0 is not supported yet; convert it to OpenAPI 3 first.
+    pub swagger2: &'static str,
+    /// English: not JSON: {why}.
+    pub not_json: &'static str,
+    /// English: not a Postman collection (v2.0 or v2.1).
+    pub not_postman_collection: &'static str,
+    /// English: not a Postman environment.
+    pub not_postman_environment: &'static str,
+    /// English: no environment {name}; the collection has: {known}.
+    pub export_no_environment: &'static str,
+    /// English: cannot import into {path}: {why}.
+    pub import_into_failed: &'static str,
+    /// English: not a curl command.
+    pub not_curl: &'static str,
+    /// English: a {quote} quote is not closed.
+    pub curl_unclosed: &'static str,
+    /// English: the curl command has no URL.
+    pub curl_no_url: &'static str,
+    /// English: {option} needs a value.
+    pub curl_missing_value: &'static str,
+    /// English: invalid {language} {expression}: {reason} at character {at}.
+    pub query_syntax: &'static str,
+    /// English: the body is not JSON.
+    pub body_not_json: &'static str,
+    /// English: the body is not XML: {why}.
+    pub body_not_xml: &'static str,
+    /// English: the query visits more than {max} values; make it narrower.
+    pub query_too_expensive: &'static str,
+    /// English: invalid regular expression {expression}.
+    pub bad_regex: &'static str,
+    /// English: the body is larger than {kb} KB, too large for an example.
+    pub example_too_large: &'static str,
+    /// English: the body is not text; binary bodies cannot be saved as an example yet.
+    pub example_binary: &'static str,
+    /// English: cannot move this collection's data: {why}.
+    pub data_not_moved: &'static str,
+    /// English: the vault cannot be opened.
+    pub vault_unavailable: &'static str,
+    /// English: the active workspace cannot be forgotten: switch first.
+    pub workspace_active: &'static str,
+    /// English: {path} is not a Postman collection (v2.0 or v2.1), an Insomnia export nor an OpenAPI 3 spec.
+    pub not_importable: &'static str,
+    /// English: {path} is not open.
+    pub not_open: &'static str,
+    /// English: {path}: {why}.
+    pub file_problem: &'static str,
+    /// English: the collection is not loaded.
+    pub collection_not_loaded: &'static str,
+    /// English: {path}: the data file must end in .csv or .json.
+    pub data_file_extension: &'static str,
+    /// English: this collection has no secrets yet.
+    pub no_secrets_yet: &'static str,
+    /// English: no collection is open.
+    pub no_collection_open: &'static str,
+    /// English: the environment {name} no longer exists.
+    pub environment_gone: &'static str,
+    /// English: a secret: its value is not imported; set it in the vault.
+    pub note_secret_not_imported: &'static str,
+    /// English: {n} secrets: Bruno keeps their values apart; set them in the vault.
+    pub note_secrets_apart: Plural,
+    /// English: a {mode} body is not supported.
+    pub note_body_unsupported: &'static str,
+    /// English: the {key} setting is not kept.
+    pub note_setting_not_kept: &'static str,
+    /// English: a {event} script is not imported: apifast does not run it.
+    pub note_script_not_imported: &'static str,
+    /// English: {n} lines of the {script} script use Postman's API that has no counterpart: they are commented out.
+    pub note_script_lines_commented: Plural,
+    /// English: scripts are not imported: they arrive with the JavaScript engine.
+    pub note_scripts_not_imported: &'static str,
+    /// English: {{${name}}} is not a variable apifast generates: sends with it fail until it is replaced.
+    pub note_unknown_dynamic: &'static str,
+    /// English: cannot be read (line {line}: {message}): left out.
+    pub note_unparsable: &'static str,
+    /// English: {kind} requests are not supported yet: left out.
+    pub note_request_kind_unsupported: &'static str,
+    /// English: a {kind} is not supported yet: left out.
+    pub note_resource_unsupported: &'static str,
+    /// English: {kind} auth is not supported: left without auth.
+    pub note_auth_unsupported: &'static str,
+    /// English: OAuth 2.0 grant {grant} is not supported.
+    pub note_grant_unsupported: &'static str,
+    /// English: OAuth 2.0 flow {flow} is not supported.
+    pub note_flow_unsupported: &'static str,
+    /// English: HTTP {scheme} security is not supported.
+    pub note_http_security_unsupported: &'static str,
+    /// English: an API key in {place} is not supported.
+    pub note_api_key_in_unsupported: &'static str,
+    /// English: {kind} security is not supported.
+    pub note_security_unsupported: &'static str,
+    /// English: security scheme {name} is not defined.
+    pub note_security_scheme_undefined: &'static str,
+    /// English: an OAuth 2.0 scheme without flows.
+    pub note_oauth2_without_flows: &'static str,
+    /// English: the spec has no servers: set baseUrl.
+    pub note_no_servers: &'static str,
+    /// English: its $ref cannot be followed.
+    pub note_ref_not_followed: &'static str,
+    /// English: a parameter's $ref cannot be followed.
+    pub note_parameter_ref_not_followed: &'static str,
+    /// English: the {location} parameter {name} is not imported.
+    pub note_parameter_not_imported: &'static str,
+    /// English: an XML body: written empty, as its schema is not turned into XML.
+    pub note_xml_body_empty: &'static str,
+    /// English: Insomnia template tags ({% … %}) are not imported: requests that use them need a variable instead.
+    pub note_template_tags: &'static str,
+    /// English: a GraphQL body that is not {"query": …}: imported as JSON.
+    pub note_graphql_as_json: &'static str,
+    /// English: the Postman environments were not read: a Bruno collection has its own.
+    pub note_environments_ignored: &'static str,
+    /// English: the folder variable {name} has the name of another one: not exported.
+    pub note_folder_variable_clash: &'static str,
+    /// English: {why}: exported with its own variables only.
+    pub note_environment_alone: &'static str,
+    /// English: it extends another environment: exported with the variables of both merged.
+    pub note_environment_merged: &'static str,
+    /// English: a secret: exported without its value.
+    pub note_secret_without_value: &'static str,
+    /// English: folder variables are moved to the collection: Postman has none.
+    pub note_folder_variables_moved: &'static str,
+    /// English: its headers are copied into each of its requests: Postman does not inherit headers.
+    pub note_headers_copied: &'static str,
+    /// English: its scripts are not exported: they use Bruno's API, not Postman's.
+    pub note_scripts_not_exported: &'static str,
+    /// English: its assertions are not exported: Postman checks responses in test scripts.
+    pub note_assertions_not_exported: &'static str,
+    /// English: its captures are not exported: Postman sets variables in scripts.
+    pub note_captures_not_exported: &'static str,
+    /// English: its variables are not exported: Postman requests have none.
+    pub note_variables_not_exported: &'static str,
+    /// English: its tags are not exported.
+    pub note_tags_not_exported: &'static str,
+    /// English: a SPARQL body: exported as text.
+    pub note_sparql_as_text: &'static str,
+    /// English: its body cannot be exported yet: left out.
+    pub note_body_not_exported: &'static str,
+    /// English: the AWS profile is not exported: Postman takes the keys.
+    pub note_aws_profile_not_exported: &'static str,
+    /// English: {kind} auth cannot be exported: left without auth.
+    pub note_auth_not_exportable: &'static str,
+    /// English: its auth cannot be exported yet: left without auth.
+    pub note_auth_not_exported: &'static str,
+    /// English: its timeout is not exported: Postman has one for all requests.
+    pub note_timeout_not_exported: &'static str,
+    /// English: a {kind} request cannot be exported yet: left out.
+    pub note_request_not_exported: &'static str,
+    /// English: cannot be read: {why}.
+    pub note_unreadable: &'static str,
 }
 }
 

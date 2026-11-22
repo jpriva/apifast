@@ -2,6 +2,7 @@
 //! open the authorization URL in the system's browser and catch the
 //! redirect to a callback on this machine.
 
+use apifast_app::{CallbackProblem, Invalid};
 use std::time::Duration;
 
 use apifast_app::{AppError, Authorizer, CancelToken};
@@ -45,30 +46,32 @@ impl LoopbackAuthorizer {
     }
 
     async fn catch(&self, url: &str, callback: &str) -> Result<Vec<(String, String)>, AppError> {
-        let invalid = |reason: &str| {
-            AppError::Validation(format!("the OAuth 2.0 callback URL `{callback}` {reason}"))
+        let invalid = |problem: CallbackProblem| {
+            AppError::from(Invalid::Callback {
+                url: callback.to_owned(),
+                problem,
+            })
         };
-        let parsed = Url::parse(callback).map_err(|_| invalid("is not a URL"))?;
+        let parsed = Url::parse(callback).map_err(|_| invalid(CallbackProblem::NotUrl))?;
         let local = matches!(parsed.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"));
         if parsed.scheme() != "http" || !local {
-            return Err(invalid(
-                "must be http://localhost:<port>/… or http://127.0.0.1:<port>/…, so apifast can catch the redirect",
-            ));
+            return Err(invalid(CallbackProblem::NotLocal));
         }
         let port = parsed.port().unwrap_or(80);
         let listener = TcpListener::bind(("127.0.0.1", port))
             .await
-            .map_err(|e| invalid(&format!("cannot be listened on: {e}")))?;
+            .map_err(|e| invalid(CallbackProblem::CannotListen(e.to_string())))?;
         (self.open)(url).map_err(|e| {
-            AppError::Validation(format!(
-                "cannot open the browser: {e}; open this URL: {url}"
-            ))
+            AppError::from(Invalid::BrowserFailed {
+                error: e.to_string(),
+                url: url.to_owned(),
+            })
         })?;
         loop {
             let (mut stream, _) = listener
                 .accept()
                 .await
-                .map_err(|e| AppError::Validation(format!("the OAuth 2.0 callback failed: {e}")))?;
+                .map_err(|e| AppError::from(Invalid::CallbackFailed(e.to_string())))?;
             let mut head = Vec::new();
             let mut chunk = [0u8; 2048];
             while !head.windows(4).any(|w| w == b"\r\n\r\n") && head.len() < 16 * 1024 {
@@ -113,9 +116,7 @@ impl Authorizer for LoopbackAuthorizer {
         Box::pin(async move {
             tokio::select! {
                 result = tokio::time::timeout(self.wait, self.catch(url, callback)) => {
-                    result.unwrap_or_else(|_| Err(AppError::Validation(
-                        "nobody authorized in the browser in time".into(),
-                    )))
+                    result.unwrap_or_else(|_| Err(Invalid::AuthorizationTimedOut.into()))
                 }
                 () = crate::cancelled(cancel) => Err(AppError::Transport(
                     apifast_app::TransportError::Cancelled,

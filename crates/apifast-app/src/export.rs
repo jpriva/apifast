@@ -2,6 +2,7 @@
 //! ([`ImportedCollection`]), with its folders and requests loaded, in the
 //! tree's order. What cannot be loaded is listed as a warning.
 
+use crate::ImportNote;
 use crate::import::{ImportWarning, ImportedCollection, ImportedItem};
 use crate::{AppError, CollectionRepository, EnvironmentRepository, TreeItem};
 use apifast_domain::RequestKind;
@@ -49,7 +50,7 @@ fn contents(
             } => {
                 warnings.push(ImportWarning::new(
                     path.as_str(),
-                    "a `websocket` request cannot be exported yet: left out",
+                    ImportNote::RequestNotExported("websocket".into()),
                 ));
                 None
             }
@@ -60,7 +61,7 @@ fn contents(
             } => {
                 warnings.push(ImportWarning::new(
                     path.as_str(),
-                    "a `grpc` request cannot be exported yet: left out",
+                    ImportNote::RequestNotExported("grpc".into()),
                 ));
                 None
             }
@@ -72,7 +73,7 @@ fn contents(
                 Err(e) => {
                     warnings.push(ImportWarning::new(
                         path.as_str(),
-                        format!("cannot be read: {e}"),
+                        ImportNote::Unreadable(e.to_string()),
                     ));
                     None
                 }
@@ -80,14 +81,14 @@ fn contents(
             TreeItem::Other { path, kind, .. } => {
                 warnings.push(ImportWarning::new(
                     path.as_str(),
-                    format!("a `{kind}` request cannot be exported yet: left out"),
+                    ImportNote::RequestNotExported(kind.clone()),
                 ));
                 None
             }
             TreeItem::Invalid { path, message } => {
                 warnings.push(ImportWarning::new(
                     path.as_str(),
-                    format!("cannot be read: {message}"),
+                    ImportNote::Unreadable(message.clone()),
                 ));
                 None
             }
@@ -163,7 +164,9 @@ mod tests {
         apply_import((&collections, &environments), &source, "").unwrap();
         let read = collection_contents(&collections, &environments).unwrap();
         assert_eq!(read.items.len(), 0);
-        let mut warned: Vec<&str> = (read.warnings.iter()).map(|w| w.message.as_str()).collect();
+        let mut warned: Vec<String> = (read.warnings.iter())
+            .map(|w| w.message.to_string())
+            .collect();
         warned.sort_unstable();
         assert_eq!(
             warned,

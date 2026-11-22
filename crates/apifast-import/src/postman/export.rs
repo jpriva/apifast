@@ -6,6 +6,7 @@
 //! moved to where Postman reads them: headers into each request, folder
 //! variables to the collection's.
 
+use apifast_app::ImportNote;
 use apifast_app::{ImportWarning, ImportedCollection, ImportedItem};
 use apifast_domain::{
     ApiKeyPlacement, Auth, AuthScheme, Body, CredentialsPlacement, Environment, Example, Header,
@@ -38,10 +39,7 @@ pub fn export_postman(collection: &ImportedCollection) -> (Value, Vec<ImportWarn
     let mut variables = exporter.variables(&defaults.variables, "");
     for (name, value, at) in std::mem::take(&mut exporter.hoisted) {
         if variables.iter().any(|v| v["key"] == name) {
-            exporter.warn(
-                &at,
-                format!("the folder variable `{name}` has the name of another one: not exported"),
-            );
+            exporter.warn(&at, ImportNote::FolderVariableClash(name.clone()));
         } else {
             variables.push(json!({"key": name, "value": value, "type": "string"}));
         }
@@ -63,14 +61,14 @@ pub fn export_postman_environment(
     let chain = environment_chain(&environment.name, all).unwrap_or_else(|e| {
         warnings.push(ImportWarning::new(
             environment.name.as_str(),
-            format!("{e}: exported with its own variables only"),
+            ImportNote::EnvironmentAlone(e),
         ));
         vec![environment]
     });
     if chain.len() > 1 {
         warnings.push(ImportWarning::new(
             environment.name.as_str(),
-            "it extends another environment: exported with the variables of both merged",
+            ImportNote::EnvironmentMerged,
         ));
     }
     let mut merged: Vec<&Variable> = Vec::new();
@@ -83,10 +81,7 @@ pub fn export_postman_environment(
         .map(|variable| {
             let at = format!("{} / {}", environment.name, variable.name);
             if variable.secret {
-                warnings.push(ImportWarning::new(
-                    at,
-                    "a secret: exported without its value",
-                ));
+                warnings.push(ImportWarning::new(at, ImportNote::SecretWithoutValue));
             }
             json!({
                 "key": variable.name,
@@ -210,7 +205,7 @@ struct Exporter {
 }
 
 impl Exporter {
-    fn warn(&mut self, at: &str, message: impl Into<String>) {
+    fn warn(&mut self, at: &str, message: ImportNote) {
         self.warnings.push(ImportWarning::new(at, message));
     }
 
@@ -242,10 +237,7 @@ impl Exporter {
                         }
                     }
                     if !folder.defaults.variables.is_empty() {
-                        self.warn(
-                            &at,
-                            "folder variables are moved to the collection: Postman has none",
-                        );
+                        self.warn(&at, ImportNote::FolderVariablesMoved);
                     }
                     Value::Object(node)
                 }
@@ -268,10 +260,7 @@ impl Exporter {
         at: &str,
     ) -> Vec<Header> {
         if !defaults.headers.is_empty() {
-            self.warn(
-                at,
-                "its headers are copied into each of its requests: Postman does not inherit headers",
-            );
+            self.warn(at, ImportNote::HeadersCopied);
         }
         merge_headers(parent, &defaults.headers)
     }
@@ -286,10 +275,7 @@ impl Exporter {
             node.insert("protocolProfileBehavior".into(), behavior);
         }
         if !defaults.scripts.is_empty() {
-            self.warn(
-                at,
-                "its scripts are not exported: they use Bruno's API, not Postman's",
-            );
+            self.warn(at, ImportNote::ScriptsNotExported);
         }
     }
 
@@ -339,21 +325,18 @@ impl Exporter {
         let lost = [
             (
                 !request.assertions.is_empty(),
-                "its assertions are not exported: Postman checks responses in test scripts",
+                ImportNote::AssertionsNotExported,
             ),
             (
                 !request.captures.is_empty(),
-                "its captures are not exported: Postman sets variables in scripts",
+                ImportNote::CapturesNotExported,
             ),
             (
                 !request.variables.is_empty(),
-                "its variables are not exported: Postman requests have none",
+                ImportNote::VariablesNotExported,
             ),
-            (!request.tags.is_empty(), "its tags are not exported"),
-            (
-                !request.scripts.is_empty(),
-                "its scripts are not exported: they use Bruno's API, not Postman's",
-            ),
+            (!request.tags.is_empty(), ImportNote::TagsNotExported),
+            (!request.scripts.is_empty(), ImportNote::ScriptsNotExported),
         ];
         for (_, message) in lost.into_iter().filter(|(lost, _)| *lost) {
             self.warn(at, message);
@@ -368,7 +351,7 @@ impl Exporter {
             Body::Xml(text) => raw(text, "xml"),
             Body::Text(text) => raw(text, "text"),
             Body::Sparql(text) => {
-                self.warn(at, "a SPARQL body: exported as text");
+                self.warn(at, ImportNote::SparqlAsText);
                 raw(text, "text")
             }
             Body::FormUrlEncoded(fields) => json!({
@@ -405,7 +388,7 @@ impl Exporter {
                 "graphql": {"query": query, "variables": variables},
             }),
             _ => {
-                self.warn(at, "its body cannot be exported yet: left out");
+                self.warn(at, ImportNote::BodyNotExported);
                 return None;
             }
         })
@@ -457,10 +440,7 @@ impl Exporter {
             ),
             AuthScheme::AwsV4(aws) => {
                 if !aws.profile_name.is_empty() {
-                    self.warn(
-                        at,
-                        "the AWS profile is not exported: Postman takes the keys",
-                    );
+                    self.warn(at, ImportNote::AwsProfileNotExported);
                 }
                 (
                     "awsv4",
@@ -475,14 +455,11 @@ impl Exporter {
             }
             AuthScheme::OAuth2(oauth) => ("oauth2", oauth2_fields(oauth)),
             AuthScheme::Unsupported(kind) => {
-                self.warn(
-                    at,
-                    format!("`{kind}` auth cannot be exported: left without auth"),
-                );
+                self.warn(at, ImportNote::AuthNotExportable(kind.clone()));
                 return Some(json!({"type": "noauth"}));
             }
             _ => {
-                self.warn(at, "its auth cannot be exported yet: left without auth");
+                self.warn(at, ImportNote::AuthNotExported);
                 return Some(json!({"type": "noauth"}));
             }
         };
@@ -513,10 +490,7 @@ impl Exporter {
             behavior.insert("disableUrlEncoding".into(), json!(!encode));
         }
         if let Setting::Set(_) = settings.timeout_ms {
-            self.warn(
-                at,
-                "its timeout is not exported: Postman has one for all requests",
-            );
+            self.warn(at, ImportNote::TimeoutNotExported);
         }
         (!behavior.is_empty()).then_some(Value::Object(behavior))
     }
@@ -532,7 +506,7 @@ impl Exporter {
                     } else {
                         format!("{at} / {}", variable.name)
                     };
-                    self.warn(&at, "a secret: exported without its value");
+                    self.warn(&at, ImportNote::SecretWithoutValue);
                 }
                 let mut value = json!({
                     "key": variable.name,

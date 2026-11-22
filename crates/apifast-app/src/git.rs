@@ -8,6 +8,7 @@
 //! folder, the collection or an environment, read as apifast reads them
 //! both from the last commit and from disk.
 
+use crate::Invalid;
 use apifast_domain::{
     FieldChange, collection_changes, environment_changes, folder_changes, request_changes,
 };
@@ -45,8 +46,24 @@ pub struct GitStatus {
 
 /// Why git could not do what was asked.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("git: {0}")]
-pub struct GitError(pub String);
+#[non_exhaustive]
+pub enum GitError {
+    /// A commit without a name and an email for its author.
+    #[error("git: set your name and email first: git config user.name, git config user.email")]
+    NoIdentity,
+    /// A switch to a branch that is not there.
+    #[error("git: there is no branch `{0}`")]
+    NoBranch(String),
+    /// A switch refused while these tracked files have changes.
+    #[error("git: commit or discard the changes first: {}", .0.join(", "))]
+    Uncommitted(Vec<String>),
+    /// A switch refused because it would overwrite these untracked files.
+    #[error("git: the branch has files that are here untracked; move them first: {}", .0.join(", "))]
+    Untracked(Vec<String>),
+    /// git itself failed: what it said.
+    #[error("git: {0}")]
+    Failed(String),
+}
 
 /// The repository of a collection.
 pub trait GitRepository: Send + Sync {
@@ -109,10 +126,10 @@ pub fn commit_changes(
 ) -> Result<String, AppError> {
     let message = message.trim();
     if message.is_empty() {
-        return Err(AppError::Validation("a commit needs a message".into()));
+        return Err(Invalid::CommitMessageEmpty.into());
     }
     if paths.is_empty() {
-        return Err(AppError::Validation("choose the files to commit".into()));
+        return Err(Invalid::CommitNothingChosen.into());
     }
     Ok(git.commit(paths, message)?)
 }

@@ -1,6 +1,7 @@
 //! Use cases of the sidebar: create, rename, move and delete requests and
 //! folders, and keep their order (`seq`).
 
+use crate::Invalid;
 use apifast_domain::{Folder, HttpRequest, Method};
 
 use crate::{AppError, CollectionRepository, ItemPath, RequestPath, TreeItem, open_collection};
@@ -171,9 +172,7 @@ pub fn move_item(
         Placement::Inside(folder) => folder.as_str(),
     };
     if matches!(item, ItemPath::Folder(_)) && crate::ports::is_within(folder, item.as_str()) {
-        return Err(AppError::Validation(
-            "a folder cannot go inside itself".into(),
-        ));
+        return Err(Invalid::FolderIntoItself.into());
     }
     let tree = open_collection(repo)?;
     let moved = find_tree_item(&tree.items, item)
@@ -186,10 +185,7 @@ pub fn move_item(
     } else {
         let to = join(folder, item.file_name());
         if repo.exists(&to)? {
-            return Err(AppError::Validation(format!(
-                "`{}` already exists in that folder",
-                item.file_name()
-            )));
+            return Err(Invalid::ExistsInFolder(item.file_name().to_owned()).into());
         }
         repo.rename_path(item.as_str(), &to)?;
         match item {
@@ -258,7 +254,7 @@ fn write_seq(
 fn valid_name(name: &str) -> Result<&str, AppError> {
     let name = name.trim();
     if name.is_empty() {
-        return Err(AppError::Validation("the name cannot be empty".into()));
+        return Err(Invalid::NameEmpty.into());
     }
     Ok(name)
 }

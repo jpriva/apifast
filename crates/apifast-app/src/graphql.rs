@@ -3,6 +3,7 @@
 //! environment, inherited headers, auth and settings), and kept in a local
 //! cache so it is there the next time without asking again.
 
+use crate::Invalid;
 use apifast_domain::{Body, GraphQlSchema, HttpRequest, INTROSPECTION_QUERY, Json, Method};
 
 use crate::{
@@ -85,24 +86,18 @@ where
     };
     let outcome = send_request(ports, path, &options, cancel).await?;
     if !(200..300).contains(&outcome.head.status) {
-        return Err(AppError::Validation(format!(
-            "the server answered {} to the introspection query",
-            outcome.head.status
-        )));
+        return Err(Invalid::IntrospectionStatus(outcome.head.status).into());
     }
     if outcome.body.size > MAX_SCHEMA_BYTES {
-        return Err(AppError::Validation(format!(
-            "the schema is larger than {} MB",
-            MAX_SCHEMA_BYTES / 1024 / 1024
-        )));
+        return Err(Invalid::SchemaTooLarge(MAX_SCHEMA_BYTES / 1024 / 1024).into());
     }
     let size = usize::try_from(outcome.body.size).unwrap_or(usize::MAX);
     let bytes = ports.responses.read(&outcome.body.id, 0, size)?;
     let answer = String::from_utf8_lossy(&bytes);
-    let json = Json::parse(&answer)
-        .map_err(|e| AppError::Validation(format!("the answer is not JSON: {e}")))?;
-    let schema = GraphQlSchema::from_introspection(&json)
-        .map_err(|e| AppError::Validation(e.to_string()))?;
+    let json =
+        Json::parse(&answer).map_err(|e| AppError::from(Invalid::SchemaNotJson(e.to_string())))?;
+    let schema =
+        GraphQlSchema::from_introspection(&json).map_err(|e| AppError::from(Invalid::Schema(e)))?;
     cache.save_schema(key, &answer)?;
     Ok(schema)
 }

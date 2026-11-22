@@ -3,6 +3,7 @@
 //! rendered. The token then goes in as a header or a query parameter,
 //! through a secret variable, so it is masked wherever the request shows.
 
+use crate::{Invalid, OAuth2Field, TokenFailure};
 use std::fmt::Write as _;
 
 use apifast_domain::{
@@ -177,9 +178,7 @@ async fn request_token<T: HttpTransport + Sync>(
     cancel: &CancelToken,
 ) -> Result<OAuth2Token, AppError> {
     if url.trim().is_empty() {
-        return Err(AppError::Validation(
-            "OAuth 2.0 needs the access token URL".into(),
-        ));
+        return Err(Invalid::OAuth2NoTokenUrl.into());
     }
     let mut url = url.to_owned();
     let mut headers = vec![("Accept".to_owned(), "application/json".to_owned())];
@@ -241,17 +240,13 @@ fn read_token(status: u16, body: &[u8], now_ms: i64) -> Result<OAuth2Token, AppE
     let field = |name: &str| json.as_ref().and_then(|j| j.get(name)).map(Json::to_text);
     if status >= 400 || json.is_none() {
         let reason = match (field("error"), field("error_description")) {
-            (Some(error), Some(description)) => format!("{error}: {description}"),
-            (Some(error), None) => error,
-            _ if json.is_none() => "the answer is not JSON".into(),
-            _ => format!("status {status}"),
+            (Some(error), description) => TokenFailure::Error { error, description },
+            _ if json.is_none() => TokenFailure::NotJson,
+            _ => TokenFailure::Status(status),
         };
-        return Err(AppError::Validation(format!(
-            "the token request failed ({status}): {reason}"
-        )));
+        return Err(Invalid::TokenRequestFailed { status, reason }.into());
     }
-    let access_token = field("access_token")
-        .ok_or_else(|| AppError::Validation("the token response has no access_token".into()))?;
+    let access_token = field("access_token").ok_or(Invalid::NoAccessToken)?;
     let expires_at_ms = field("expires_in")
         .and_then(|s| s.parse::<i64>().ok())
         .map(|seconds| now_ms.saturating_add(seconds.saturating_mul(1000)));
@@ -286,9 +281,7 @@ async fn fetch<T: HttpTransport + Sync>(
             fields = authorization_code(ports, rendered, cancel).await?;
         }
         OAuth2Flow::Implicit => {
-            return Err(AppError::Validation(
-                "the implicit grant is deprecated and not supported".into(),
-            ));
+            return Err(Invalid::ImplicitGrant.into());
         }
     }
     if !rendered.scope.is_empty() {
@@ -339,17 +332,13 @@ async fn authorization_code<T>(
     rendered: &Rendered,
     cancel: &CancelToken,
 ) -> Result<Vec<(String, String)>, AppError> {
-    let authorizer = ports.authorizer.ok_or_else(|| {
-        AppError::Validation(
-            "the authorization code grant needs a browser, which is not available here".into(),
-        )
-    })?;
+    let authorizer = ports.authorizer.ok_or(Invalid::NoBrowser)?;
     for (name, value) in [
-        ("authorization URL", &rendered.authorization_url),
-        ("callback URL", &rendered.callback_url),
+        (OAuth2Field::AuthorizationUrl, &rendered.authorization_url),
+        (OAuth2Field::CallbackUrl, &rendered.callback_url),
     ] {
         if value.trim().is_empty() {
-            return Err(AppError::Validation(format!("OAuth 2.0 needs the {name}")));
+            return Err(Invalid::OAuth2Missing(name).into());
         }
     }
     let state = if rendered.state.is_empty() {
@@ -394,22 +383,18 @@ async fn authorization_code<T>(
             .map(|(_, v)| v.clone())
     };
     if let Some(error) = get("error") {
-        let detail = get("error_description")
-            .map(|d| format!(": {d}"))
-            .unwrap_or_default();
-        return Err(AppError::Validation(format!(
-            "the authorization was refused: {error}{detail}"
-        )));
+        return Err(Invalid::AuthorizationRefused {
+            error,
+            description: get("error_description"),
+        }
+        .into());
     }
     // The state ties the answer to this request: another one is an attack
     // or a stale tab.
     if get("state").as_deref() != Some(state.as_str()) {
-        return Err(AppError::Validation(
-            "the authorization answer has another state; try again".into(),
-        ));
+        return Err(Invalid::AuthorizationState.into());
     }
-    let code = get("code")
-        .ok_or_else(|| AppError::Validation("the authorization answer has no code".into()))?;
+    let code = get("code").ok_or(Invalid::AuthorizationNoCode)?;
     let mut fields = vec![
         ("grant_type".to_owned(), "authorization_code".to_owned()),
         ("code".to_owned(), code),
@@ -431,7 +416,7 @@ async fn refresh<T: HttpTransport + Sync>(
     cancel: &CancelToken,
 ) -> Result<OAuth2Token, AppError> {
     let Some(refresh_token) = &old.refresh_token else {
-        return Err(AppError::Validation("the token cannot be refreshed".into()));
+        return Err(Invalid::NoRefreshToken.into());
     };
     let mut fields = vec![
         ("grant_type".to_owned(), "refresh_token".to_owned()),
@@ -516,15 +501,11 @@ async fn token<T: HttpTransport + Sync>(
                 Err(e) => return Err(e),
             }
         } else if !oauth.auto_fetch {
-            return Err(AppError::Validation(
-                "the OAuth 2.0 token has expired".into(),
-            ));
+            return Err(Invalid::TokenExpired.into());
         }
     }
     if !oauth.auto_fetch {
-        return Err(AppError::Validation(
-            "there is no OAuth 2.0 token, and getting one automatically is off".into(),
-        ));
+        return Err(Invalid::NoToken.into());
     }
     let token = fetch(ports, rendered, cancel).await?;
     save(&token)?;
@@ -591,10 +572,7 @@ fn apply_token(
     variables: &mut ResolvedVariables,
 ) -> Result<ResolvedRequest, AppError> {
     let value = if oauth.token_source == "id_token" {
-        token
-            .id_token
-            .clone()
-            .ok_or_else(|| AppError::Validation("the token response has no id_token".into()))?
+        token.id_token.clone().ok_or(Invalid::NoIdToken)?
     } else {
         token.access_token.clone()
     };
@@ -739,7 +717,7 @@ where
 }
 
 fn no_oauth2() -> AppError {
-    AppError::Validation("this request does not use OAuth 2.0".into())
+    Invalid::NotOAuth2.into()
 }
 
 /// The token stored for the request at `path`, as the interface shows it.

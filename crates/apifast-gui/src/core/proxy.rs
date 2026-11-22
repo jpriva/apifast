@@ -2,6 +2,7 @@
 //! its password kept sealed apart, or each collection's own), the trust in
 //! servers, and the collection's client certificates.
 
+use crate::messages::Say as _;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -49,12 +50,12 @@ impl State {
         ) {
             Ok(transport) => transport,
             Err(e) => {
-                self.snapshot.error = Some(e.to_string());
+                self.snapshot.error = Some(e.say(self.strings));
                 // Without the trust and the certificates, but with the
                 // collection's DNS overrides.
                 let dns = &collection.dns_overrides;
                 ReqwestTransport::configured(root, proxy, &TlsTrust::default(), &[], dns)
-                    .map_err(|e| e.to_string())?
+                    .map_err(|e| e.say(self.strings))?
             }
         };
         Ok(transport.with_cookies(cookies))
@@ -110,7 +111,7 @@ impl State {
                 self.rebuild_transports();
                 self.snapshot.error = None;
             }
-            Err(e) => self.snapshot.error = Some(e.to_string()),
+            Err(e) => self.snapshot.error = Some(e.say(self.strings)),
         }
     }
 
@@ -125,7 +126,7 @@ impl State {
                     password.is_some_and(|p| !p.expose().is_empty());
                 self.rebuild_transports();
             }
-            Err(e) => self.snapshot.error = Some(e.to_string()),
+            Err(e) => self.snapshot.error = Some(e.say(self.strings)),
         }
     }
 }

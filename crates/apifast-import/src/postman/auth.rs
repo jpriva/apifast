@@ -2,6 +2,7 @@
 //! (`bruno-converters/src/postman/postman-to-bruno.js`). v2.1 keeps each
 //! field as `{key, value}` in a list; v2.0 as an object.
 
+use apifast_app::ImportNote;
 use apifast_domain::{
     ApiKeyAuth, ApiKeyPlacement, Auth, AuthScheme, AwsV4Auth, BasicAuth, BearerAuth,
     CredentialsPlacement, DigestAuth, NtlmAuth, OAuth2Auth, OAuth2Flow, OAuth2Parameter,
@@ -34,7 +35,7 @@ impl Fields<'_> {
 
 /// The auth `value` describes, or why it is left out. `None` (no `auth`)
 /// inherits, as in Postman.
-pub(crate) fn auth(value: Option<&Value>) -> Result<Auth, String> {
+pub(crate) fn auth(value: Option<&Value>) -> Result<Auth, ImportNote> {
     let Some(value) = value.filter(|v| !v.is_null()) else {
         return Ok(Setting::Inherit);
     };
@@ -81,22 +82,20 @@ pub(crate) fn auth(value: Option<&Value>) -> Result<Auth, String> {
         })),
         "oauth2" => AuthScheme::OAuth2(Box::new(oauth2(&fields)?)),
         other => {
-            return Err(format!(
-                "`{other}` auth is not supported: left without auth"
-            ));
+            return Err(ImportNote::AuthUnsupported(other.to_owned()));
         }
     };
     Ok(Setting::Set(scheme))
 }
 
-fn oauth2(fields: &Fields<'_>) -> Result<OAuth2Auth, String> {
+fn oauth2(fields: &Fields<'_>) -> Result<OAuth2Auth, ImportNote> {
     let grant = fields.text("grant_type");
     let flow = match grant.as_str() {
         "authorization_code" | "authorization_code_with_pkce" => OAuth2Flow::AuthorizationCode,
         "password_credentials" => OAuth2Flow::Password,
         "implicit" => OAuth2Flow::Implicit,
         "" | "client_credentials" => OAuth2Flow::ClientCredentials,
-        other => return Err(format!("OAuth 2.0 grant `{other}` is not supported")),
+        other => return Err(ImportNote::GrantUnsupported(other.to_owned())),
     };
     let token_placement = if fields.text("addTokenTo") == "queryParams" {
         TokenPlacement::Query("access_token".into())

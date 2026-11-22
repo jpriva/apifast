@@ -1,3 +1,4 @@
+use crate::{Invalid, WrongKind};
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::pin::Pin;
@@ -58,7 +59,7 @@ pub fn save_request(
     request: &HttpRequest,
 ) -> Result<(), AppError> {
     if request.name.trim().is_empty() {
-        return Err(AppError::Validation("the request needs a name".into()));
+        return Err(Invalid::RequestNameEmpty.into());
     }
     Ok(repo.save_request(path, request)?)
 }
@@ -257,10 +258,7 @@ where
         if context.chain.contains(path) {
             let mut names: Vec<String> = context.chain.iter().map(ToString::to_string).collect();
             names.push(path.to_string());
-            return Err(AppError::Validation(format!(
-                "requests depend on each other: {}",
-                names.join(" → ")
-            )));
+            return Err(Invalid::DependencyCycle(names).into());
         }
         context.chain.push(path.clone());
         let result = send_one(ports, path, options, cancel, context).await;
@@ -463,14 +461,16 @@ where
     };
     if kind != expected {
         let why = match (kind, expected) {
-            (RequestKind::WebSocket, RequestKind::Http) => {
-                "is a WebSocket request: it connects, it is not sent"
-            }
-            (_, RequestKind::WebSocket) => "is not a WebSocket request",
-            (RequestKind::Grpc, _) => "is a gRPC request: it is called, not sent",
-            _ => "is not a gRPC request",
+            (RequestKind::WebSocket, RequestKind::Http) => WrongKind::IsWebSocket,
+            (_, RequestKind::WebSocket) => WrongKind::NotWebSocket,
+            (RequestKind::Grpc, _) => WrongKind::IsGrpc,
+            _ => WrongKind::NotGrpc,
         };
-        return Err(AppError::Validation(format!("`{path}` {why}")));
+        return Err(Invalid::WrongKind {
+            path: path.to_string(),
+            kind: why,
+        }
+        .into());
     }
     let collection = ports.collections.collection()?;
     let mut variables = resolve_request_variables(
@@ -631,9 +631,7 @@ where
             }
         }
     }
-    Err(AppError::Validation(
-        "too many requests chained with response()".into(),
-    ))
+    Err(Invalid::TooManyChained.into())
 }
 
 /// Sends `dependency` for a `response(...)` of the current request, with
@@ -663,11 +661,13 @@ where
     let outcome = send_in_chain(ports, dependency, &dependency_options, cancel, context)
         .await
         .map_err(|error| match error {
-            AppError::Transport(TransportError::Cancelled) => error,
-            AppError::Validation(message) if message.starts_with("requests depend") => {
-                AppError::Validation(message)
+            AppError::Transport(TransportError::Cancelled)
+            | AppError::Validation(Invalid::DependencyCycle(_)) => error,
+            other => Invalid::Dependency {
+                dependency: dependency.to_string(),
+                error: Box::new(other),
             }
-            other => AppError::Validation(format!("`{dependency}`, used by response(): {other}")),
+            .into(),
         })?;
     let read = |id: &ResponseId, len: usize| ports.responses.read(id, 0, len);
     Ok(Arc::new(Fetched::sent(

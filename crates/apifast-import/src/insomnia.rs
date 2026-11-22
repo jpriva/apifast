@@ -9,6 +9,7 @@
 //! - Environments: the base one, and one per sub-environment merged over
 //!   it. A nested value is an object variable, read with `{{user.name}}`.
 
+use apifast_app::ImportNote;
 use apifast_app::{ImportWarning, ImportedCollection, ImportedItem};
 use apifast_domain::{
     ApiKeyAuth, ApiKeyPlacement, Auth, AuthScheme, AwsV4Auth, BasicAuth, BearerAuth, Body,
@@ -67,10 +68,7 @@ pub fn import_insomnia(export: &Value) -> Result<ImportedCollection, InsomniaErr
         return Err(InsomniaError::NotInsomnia);
     };
     if tags_used(export) {
-        warnings.push(ImportWarning::new(
-            "",
-            "Insomnia template tags (`{% … %}`) are not imported: requests that use them need a variable instead",
-        ));
+        warnings.push(ImportWarning::new("", ImportNote::TemplateTags));
     }
     Ok(ImportedCollection {
         name,
@@ -150,7 +148,7 @@ fn v4(
         if matches!(kind.as_str(), "grpc_request" | "websocket_request") {
             warnings.push(ImportWarning::new(
                 text(resource, "name"),
-                format!("a `{kind}` is not supported yet: left out"),
+                ImportNote::ResourceUnsupported(kind.clone()),
             ));
         }
     }
@@ -332,10 +330,7 @@ fn body(value: Option<&Value>, at: &str, warnings: &mut Vec<ImportWarning>) -> B
         },
         // Insomnia keeps it as the JSON it sends.
         "application/graphql" => graphql_body(&content).unwrap_or_else(|| {
-            warnings.push(ImportWarning::new(
-                at,
-                "a GraphQL body that is not `{\"query\": …}`: imported as JSON",
-            ));
+            warnings.push(ImportWarning::new(at, ImportNote::GraphQlAsJson));
             Body::Json(content)
         }),
         m if m.contains("json") => Body::Json(content),
@@ -425,7 +420,7 @@ fn auth(value: Option<&Value>, at: &str, warnings: &mut Vec<ImportWarning>) -> A
         other => {
             warnings.push(ImportWarning::new(
                 at,
-                format!("`{other}` auth is not supported: left without auth"),
+                ImportNote::AuthUnsupported(other.to_owned()),
             ));
             AuthScheme::None
         }
@@ -490,10 +485,7 @@ fn scripts(item: &Value, at: &str, warnings: &mut Vec<ImportWarning>) {
         .flatten()
         .any(|c| c.as_str().is_some_and(|c| !c.trim().is_empty()))
     {
-        warnings.push(ImportWarning::new(
-            at,
-            "scripts are not imported: they arrive with the JavaScript engine",
-        ));
+        warnings.push(ImportWarning::new(at, ImportNote::ScriptsNotImported));
     }
 }
 

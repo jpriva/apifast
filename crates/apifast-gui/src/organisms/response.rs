@@ -7,6 +7,7 @@
 //! small enough to load whole, and otherwise "raw", by windows, whatever its
 //! size.
 
+use crate::messages::Say as _;
 use apifast_app::{TimelineEvent, TimelineKind};
 use apifast_domain::{
     SseEvent, WsLogEntry, human_size, is_event_stream, is_grpc_response, is_websocket_handshake,
@@ -354,7 +355,7 @@ impl ResponseView {
         }
         let key = (body.key().to_owned(), expression);
         if self.filtered.as_ref().is_none_or(|f| f.key != key) {
-            let result = filter(body, &key.1);
+            let result = filter(body, &key.1, strings);
             self.filtered = Some(Filtered { key, result });
         }
         let Some(filtered) = &self.filtered else {
@@ -408,12 +409,13 @@ impl ResponseView {
 fn filter(
     body: &BodyHandle,
     expression: &str,
+    strings: &Strings,
 ) -> Result<(BodyHandle, Option<Language>, usize), String> {
     let bytes = body.read(0, usize::try_from(body.len()).unwrap_or(usize::MAX))?;
     let text = String::from_utf8_lossy(&bytes);
     let json = apifast_domain::Json::parse(&text).ok();
     let values =
-        apifast_query::select(expression, &text, json.as_ref()).map_err(|e| e.to_string())?;
+        apifast_query::select(expression, &text, json.as_ref()).map_err(|e| e.say(strings))?;
     let count = values.len();
     let key = format!("{}#filter#{expression}", body.key());
     if apifast_query::Language::of(expression) == apifast_query::Language::XPath {

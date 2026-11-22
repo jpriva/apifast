@@ -1,6 +1,7 @@
 //! The main screen: collection tree, environment, tabs, URL bar, request
 //! panel and response.
 
+use crate::messages::Say as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -841,7 +842,7 @@ fn editor_area(
     if std::mem::take(&mut response.example_requested)
         && let ResponseState::Received(received) = &tab.response
     {
-        response.example_note = Some(match save_example(request, received) {
+        response.example_note = Some(match save_example(request, received, strings) {
             Ok(name) => {
                 edited = true;
                 format!("{} “{name}”", strings.example_saved)
@@ -953,21 +954,25 @@ fn paste_curl(request: &mut HttpRequest, command: &str, strings: &Strings) -> Op
             (!import.ignored.is_empty())
                 .then(|| format!("{} {}", strings.curl_ignored, import.ignored.join(", ")))
         }
-        Err(e) => Some(format!("{}: {e}", strings.curl_failed)),
+        Err(e) => Some(format!("{}: {}", strings.curl_failed, e.say(strings))),
     }
 }
 
 /// Adds the response `received` to `request` as an example. Returns its
 /// name, or why it cannot be one.
-fn save_example(request: &mut HttpRequest, received: &Received) -> Result<String, String> {
+fn save_example(
+    request: &mut HttpRequest,
+    received: &Received,
+    strings: &Strings,
+) -> Result<String, String> {
     let body = &received.body;
     if body.len() > apifast_app::EXAMPLE_LIMIT as u64 {
-        return Err(apifast_app::ExampleError::TooLarge.to_string());
+        return Err(apifast_app::ExampleError::TooLarge.say(strings));
     }
     let bytes = body.read(0, usize::try_from(body.len()).unwrap_or(usize::MAX))?;
     let name = apifast_app::example_name(received.head.status, &request.examples);
     let example = apifast_app::example_from(&name, request, &received.head, &bytes)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.say(strings))?;
     request.examples.push(example);
     Ok(name)
 }
@@ -1454,9 +1459,9 @@ fn exported_text(exported: &crate::core::Exported, strings: &Strings) -> String 
         let named: Vec<String> = (warnings.iter().take(NAMED))
             .map(|w| {
                 if w.at.is_empty() {
-                    w.message.clone()
+                    w.message.say(strings)
                 } else {
-                    format!("{}: {}", w.at, w.message)
+                    format!("{}: {}", w.at, w.message.say(strings))
                 }
             })
             .collect();
@@ -1508,7 +1513,7 @@ mod tests {
         use crate::core::Exported;
         use crate::strings::EN;
 
-        let warning = |at: &str| ImportWarning::new(at, "lost");
+        let warning = |at: &str| ImportWarning::new(at, apifast_app::ImportNote::TagsNotExported);
         let mut exported = Exported {
             id: 1,
             file: "/tmp/shop.json".into(),
@@ -1517,7 +1522,7 @@ mod tests {
         };
         assert_eq!(
             exported_text(&exported, &EN),
-            "Exported to /tmp/shop.json (+2 environments next to it). Not kept: lost; a: lost; b: lost (+1)"
+            "Exported to /tmp/shop.json (+2 environments next to it). Not kept: its tags are not exported; a: its tags are not exported; b: its tags are not exported (+1)"
         );
         exported.result = Err("disk full".into());
         assert_eq!(exported_text(&exported, &EN), "Cannot export: disk full");

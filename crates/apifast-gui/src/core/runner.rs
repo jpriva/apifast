@@ -1,6 +1,8 @@
 //! The collection runner in the interface (docs/08): one run at a time, in
 //! the background, its progress published as it goes.
 
+use crate::messages::Say as _;
+use crate::strings::{Strings, fill};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -113,12 +115,14 @@ impl Pause for TokioPause {
     }
 }
 
-fn read_data(file: &Path) -> Result<Vec<Vec<apifast_domain::Variable>>, String> {
+fn read_data(file: &Path, strings: &Strings) -> Result<Vec<Vec<apifast_domain::Variable>>, String> {
+    let e = &strings.errors;
     let name = file.to_string_lossy();
-    let format = DataFormat::of(&name)
-        .ok_or_else(|| format!("`{name}`: the data file must end in .csv or .json"))?;
-    let text = std::fs::read_to_string(file).map_err(|e| format!("cannot read `{name}`: {e}"))?;
-    parse_data(&text, format).map_err(|e| format!("`{name}`: {e}"))
+    let format =
+        DataFormat::of(&name).ok_or_else(|| fill(e.data_file_extension, &[("path", &name)]))?;
+    let text = std::fs::read_to_string(file)
+        .map_err(|why| fill(e.cannot_read, &[("path", &name), ("why", &why)]))?;
+    parse_data(&text, format).map_err(|why| fill(e.file_problem, &[("path", &name), ("why", &why)]))
 }
 
 impl State {
@@ -134,7 +138,12 @@ impl State {
         let Some(open) = self.open.get(root) else {
             return;
         };
-        let data = match settings.data.as_deref().map(read_data).transpose() {
+        let data = match settings
+            .data
+            .as_deref()
+            .map(|file| read_data(file, self.strings))
+            .transpose()
+        {
             Ok(data) => data.unwrap_or_default(),
             Err(message) => {
                 self.snapshot.error = Some(message);
@@ -191,7 +200,14 @@ impl State {
         self.snapshot.run = Some(view);
         self.run = Some((id, cancel.clone()));
 
-        spawn_run(id, ports, options, cancel, self.messages.clone());
+        spawn_run(
+            id,
+            ports,
+            options,
+            cancel,
+            self.messages.clone(),
+            self.strings,
+        );
     }
 
     /// Stops the run that is going.
@@ -302,6 +318,7 @@ fn spawn_run(
     options: RunOptions,
     cancel: CancelToken,
     messages: tokio::sync::mpsc::WeakUnboundedSender<Message>,
+    strings: &'static Strings,
 ) {
     tokio::spawn(async move {
         let Ports {
@@ -360,7 +377,7 @@ fn spawn_run(
         };
         let result = run_collection(send, &TokioPause, &options, &cancel, &on_event)
             .await
-            .map_err(|e| e.to_string());
+            .map_err(|e| e.say(strings));
         tell(RunMessage::Done(result));
     });
 }

@@ -12,6 +12,7 @@ pub use export::{
     ExportError, PostmanFiles, export_postman, export_postman_environment, write_postman,
 };
 
+use apifast_app::ImportNote;
 use std::fmt::Write as _;
 
 use apifast_app::{ImportWarning, ImportedCollection, ImportedItem};
@@ -95,7 +96,7 @@ pub fn import_postman_environment(
         if text(item, "type") == "secret" {
             warnings.push(ImportWarning::new(
                 format!("{name} / {key}"),
-                "a secret: its value is not imported; set it in the vault",
+                ImportNote::SecretNotImported,
             ));
             variables.push(Variable {
                 enabled,
@@ -384,7 +385,7 @@ fn body(
         other => {
             warnings.push(ImportWarning::new(
                 at,
-                format!("a `{other}` body is not supported"),
+                ImportNote::BodyUnsupported(other.to_owned()),
             ));
             Body::None
         }
@@ -437,7 +438,7 @@ fn behavior(item: &Value, request: &mut HttpRequest, at: &str, warnings: &mut Ve
             ("disableBodyPruning", _) => {}
             _ => warnings.push(ImportWarning::new(
                 at,
-                format!("the `{key}` setting is not kept"),
+                ImportNote::SettingNotKept(key.clone()),
             )),
         }
     }
@@ -472,19 +473,19 @@ fn scripts(node: &Value, at: &str, warnings: &mut Vec<ImportWarning>) -> Vec<Scr
             _ => {
                 warnings.push(ImportWarning::new(
                     at,
-                    format!("a `{listen}` script is not imported: apifast does not run it"),
+                    ImportNote::ScriptNotImported(listen.clone()),
                 ));
                 continue;
             }
         };
         let (code, commented) = scripts::translate(&code);
         if commented > 0 {
-            let lines = if commented == 1 { "line" } else { "lines" };
             warnings.push(ImportWarning::new(
                 at,
-                format!(
-                    "{commented} {lines} of the `{listen}` script use Postman's API that has no counterpart: they are commented out"
-                ),
+                ImportNote::ScriptLinesCommented {
+                    script: listen.clone(),
+                    lines: commented,
+                },
             ));
         }
         scripts.push(ScriptBlock::new(kind, code));
@@ -549,12 +550,7 @@ fn unknown_dynamic(json: &str) -> Vec<ImportWarning> {
     }
     names
         .into_iter()
-        .map(|name| {
-            ImportWarning::new(
-                "",
-                format!("`{{{{${name}}}}}` is not a variable apifast generates: sends with it fail until it is replaced"),
-            )
-        })
+        .map(|name| ImportWarning::new("", ImportNote::UnknownDynamic(name.clone())))
         .collect()
 }
 

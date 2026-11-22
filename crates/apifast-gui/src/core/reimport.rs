@@ -3,6 +3,7 @@
 //! request, chooses, and applies. The source read is kept until they apply,
 //! so what is written is what they saw.
 
+use crate::messages::Say as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -51,7 +52,7 @@ impl State {
                 ((!record.source.is_empty()).then_some(file), None)
             }
             Some(Ok(None)) => (None, Some(Err(not_imported(&root)))),
-            Some(Err(e)) => (None, Some(Err(e.to_string()))),
+            Some(Err(e)) => (None, Some(Err(e.say(self.strings)))),
             None => (None, Some(Err(format!("`{}` is not open", root.display())))),
         };
         self.snapshot.reimport = Some(ReimportView {
@@ -73,10 +74,11 @@ impl State {
                 .get(&view.root)
                 .ok_or_else(|| not_imported(&view.root))?;
             let record = (open.repo.import_record())
-                .map_err(|e| e.to_string())?
+                .map_err(|e| e.say(self.strings))?
                 .ok_or_else(|| not_imported(&view.root))?;
-            let imported = super::import::read_source(file, &[])?;
-            let plan = plan_reimport(&*open.repo, &record, &imported).map_err(|e| e.to_string())?;
+            let imported = super::import::read_source(file, &[], self.strings)?;
+            let plan =
+                plan_reimport(&*open.repo, &record, &imported).map_err(|e| e.say(self.strings))?;
             Ok::<_, String>((imported, plan))
         })();
         view.file = Some(file.to_path_buf());

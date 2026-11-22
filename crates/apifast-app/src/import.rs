@@ -55,17 +55,185 @@ pub struct ImportWarning {
     /// the collection.
     pub at: String,
     /// What happened to it.
-    pub message: String,
+    pub message: ImportNote,
 }
 
 impl ImportWarning {
     /// A warning about `at`.
-    pub fn new(at: impl Into<String>, message: impl Into<String>) -> Self {
+    pub fn new(at: impl Into<String>, message: ImportNote) -> Self {
         Self {
             at: at.into(),
-            message: message.into(),
+            message,
         }
     }
+}
+
+/// What an importer or an exporter could not keep as it was. Each variant
+/// carries what its message needs, so an interface can say it in its own
+/// language; `Display` says it in English.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum ImportNote {
+    /// A secret variable, imported without its value.
+    #[error("a secret: its value is not imported; set it in the vault")]
+    SecretNotImported,
+    /// Secrets whose values Bruno keeps apart: how many.
+    #[error("{0} secrets: Bruno keeps their values apart; set them in the vault")]
+    SecretsApart(usize),
+    /// A body of this mode, not imported.
+    #[error("a `{0}` body is not supported")]
+    BodyUnsupported(String),
+    /// A request setting, not kept.
+    #[error("the `{0}` setting is not kept")]
+    SettingNotKept(String),
+    /// A script of this event, not imported.
+    #[error("a `{0}` script is not imported: apifast does not run it")]
+    ScriptNotImported(String),
+    /// Lines of a script that use an API without counterpart, commented out.
+    #[error(
+        "{lines} {} of the `{script}` script use Postman's API that has no counterpart: they are commented out",
+        if *lines == 1 { "line" } else { "lines" }
+    )]
+    ScriptLinesCommented {
+        /// The script's event.
+        script: String,
+        /// How many lines.
+        lines: usize,
+    },
+    /// Scripts, not imported.
+    #[error("scripts are not imported: they arrive with the JavaScript engine")]
+    ScriptsNotImported,
+    /// A `{{$name}}` apifast does not generate.
+    #[error(
+        "`{{{{${0}}}}}` is not a variable apifast generates: sends with it fail until it is replaced"
+    )]
+    UnknownDynamic(String),
+    /// A file that cannot be read, left out.
+    #[error("cannot be read (line {line}: {message}): left out")]
+    Unparsable {
+        /// The line.
+        line: usize,
+        /// What is wrong.
+        message: String,
+    },
+    /// Requests of this kind, left out.
+    #[error("`{0}` requests are not supported yet: left out")]
+    RequestKindUnsupported(String),
+    /// An Insomnia resource of this kind, left out.
+    #[error("a `{0}` is not supported yet: left out")]
+    ResourceUnsupported(String),
+    /// Auth of this kind, left without auth.
+    #[error("`{0}` auth is not supported: left without auth")]
+    AuthUnsupported(String),
+    /// An OAuth 2.0 grant this version does not know.
+    #[error("OAuth 2.0 grant `{0}` is not supported")]
+    GrantUnsupported(String),
+    /// An OpenAPI OAuth 2.0 flow this version does not know.
+    #[error("OAuth 2.0 flow `{0}` is not supported")]
+    FlowUnsupported(String),
+    /// An OpenAPI HTTP security scheme this version does not know.
+    #[error("HTTP `{0}` security is not supported")]
+    HttpSecurityUnsupported(String),
+    /// An OpenAPI API key in this place.
+    #[error("an API key in `{0}` is not supported")]
+    ApiKeyInUnsupported(String),
+    /// An OpenAPI security scheme of this type.
+    #[error("`{0}` security is not supported")]
+    SecurityUnsupported(String),
+    /// An OpenAPI security requirement naming a scheme that is not defined.
+    #[error("security scheme `{0}` is not defined")]
+    SecuritySchemeUndefined(String),
+    /// An OpenAPI OAuth 2.0 scheme without flows.
+    #[error("an OAuth 2.0 scheme without flows")]
+    OAuth2WithoutFlows,
+    /// An OpenAPI spec without servers.
+    #[error("the spec has no servers: set `baseUrl`")]
+    NoServers,
+    /// A path whose `$ref` leads nowhere.
+    #[error("its `$ref` cannot be followed")]
+    RefNotFollowed,
+    /// A parameter whose `$ref` leads nowhere.
+    #[error("a parameter's `$ref` cannot be followed")]
+    ParameterRefNotFollowed,
+    /// A parameter in a place apifast has not, by its place and name.
+    #[error("the `{location}` parameter `{name}` is not imported")]
+    ParameterNotImported {
+        /// Where it goes: `cookie`.
+        location: String,
+        /// Its name.
+        name: String,
+    },
+    /// An XML body, written empty.
+    #[error("an XML body: written empty, as its schema is not turned into XML")]
+    XmlBodyEmpty,
+    /// Insomnia's template tags.
+    #[error(
+        "Insomnia template tags (`{{% … %}}`) are not imported: requests that use them need a variable instead"
+    )]
+    TemplateTags,
+    /// A GraphQL body that is not a query, imported as JSON.
+    #[error("a GraphQL body that is not `{{\"query\": …}}`: imported as JSON")]
+    GraphQlAsJson,
+    /// Postman environments given with a Bruno collection, not read.
+    #[error("the Postman environments were not read: a Bruno collection has its own")]
+    EnvironmentsIgnored,
+    /// A folder variable with the name of another, not exported.
+    #[error("the folder variable `{0}` has the name of another one: not exported")]
+    FolderVariableClash(String),
+    /// An environment whose chain is broken, exported alone: why.
+    #[error("{0}: exported with its own variables only")]
+    EnvironmentAlone(apifast_domain::EnvironmentError),
+    /// An environment that extends another, merged.
+    #[error("it extends another environment: exported with the variables of both merged")]
+    EnvironmentMerged,
+    /// A secret, exported without its value.
+    #[error("a secret: exported without its value")]
+    SecretWithoutValue,
+    /// Folder variables, moved to the collection.
+    #[error("folder variables are moved to the collection: Postman has none")]
+    FolderVariablesMoved,
+    /// Folder headers, copied into each request.
+    #[error("its headers are copied into each of its requests: Postman does not inherit headers")]
+    HeadersCopied,
+    /// Scripts, not exported.
+    #[error("its scripts are not exported: they use Bruno's API, not Postman's")]
+    ScriptsNotExported,
+    /// Assertions, not exported.
+    #[error("its assertions are not exported: Postman checks responses in test scripts")]
+    AssertionsNotExported,
+    /// Captures, not exported.
+    #[error("its captures are not exported: Postman sets variables in scripts")]
+    CapturesNotExported,
+    /// Request variables, not exported.
+    #[error("its variables are not exported: Postman requests have none")]
+    VariablesNotExported,
+    /// Tags, not exported.
+    #[error("its tags are not exported")]
+    TagsNotExported,
+    /// A SPARQL body, exported as text.
+    #[error("a SPARQL body: exported as text")]
+    SparqlAsText,
+    /// A body that cannot be exported yet, left out.
+    #[error("its body cannot be exported yet: left out")]
+    BodyNotExported,
+    /// The AWS profile, not exported.
+    #[error("the AWS profile is not exported: Postman takes the keys")]
+    AwsProfileNotExported,
+    /// Auth of this kind, exported without auth.
+    #[error("`{0}` auth cannot be exported: left without auth")]
+    AuthNotExportable(String),
+    /// Auth that cannot be exported yet.
+    #[error("its auth cannot be exported yet: left without auth")]
+    AuthNotExported,
+    /// The timeout, not exported.
+    #[error("its timeout is not exported: Postman has one for all requests")]
+    TimeoutNotExported,
+    /// A request of this kind, not exported.
+    #[error("a `{0}` request cannot be exported yet: left out")]
+    RequestNotExported(String),
+    /// A file that cannot be read: why.
+    #[error("cannot be read: {0}")]
+    Unreadable(String),
 }
 
 /// What importing would create.
@@ -282,7 +450,7 @@ mod tests {
             environments: vec![Environment::new("local", Vec::new())],
             warnings: vec![ImportWarning::new(
                 "Users / Get user",
-                "scripts are not imported",
+                ImportNote::ScriptsNotImported,
             )],
             ..ImportedCollection::default()
         }

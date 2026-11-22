@@ -425,7 +425,7 @@ fn the_import_window_reviews_then_imports_only_what_was_reviewed() {
             environments: Vec::new(),
             warnings: vec![ImportWarning::new(
                 "Users",
-                "a `test` script is not imported",
+                apifast_app::ImportNote::ScriptNotImported("test".into()),
             )],
         })),
     });

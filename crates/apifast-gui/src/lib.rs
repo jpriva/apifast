@@ -15,6 +15,7 @@ pub mod body;
 pub mod code;
 pub mod core;
 pub mod layout;
+pub mod messages;
 pub mod molecules;
 pub mod organisms;
 pub mod screens;

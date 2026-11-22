@@ -27,6 +27,7 @@ mod tokens;
 mod vault;
 mod workspace;
 
+use crate::messages::Say as _;
 use collections::{Listed, Open};
 use workspace::ActiveWorkspace;
 
@@ -424,6 +425,9 @@ pub enum Command {
         /// responses set are stored.
         cookies: (bool, bool),
     },
+    /// The interface's language, by its code: what the core says (errors,
+    /// notices) is said in it. English until told.
+    Language(&'static str),
     /// Keeps the application proxy's password, sealed; `None` forgets it.
     SetProxyPassword(Option<apifast_domain::Secret>),
     /// Creates an empty environment in the focused collection.
@@ -545,6 +549,14 @@ pub enum Command {
         /// The collection's file.
         file: PathBuf,
     },
+}
+
+impl Command {
+    /// Whether it works in a workspace: all but the settings and the
+    /// language, which come before one is restored.
+    fn needs_workspace(&self) -> bool {
+        !matches!(self, Self::Configure { .. } | Self::Language(_))
+    }
 }
 
 /// Everything the interface shows, as of one moment.
@@ -974,6 +986,7 @@ impl Core {
                     sealed,
                     shown: 0,
                     keyring,
+                    strings: &crate::strings::EN,
                 };
                 runtime.block_on(state.run(receiver));
             });
@@ -1058,6 +1071,8 @@ struct State {
     /// Numbers what the vault shows, so hiding it later does not hide
     /// something shown since.
     shown: u64,
+    /// The interface's language, for what the core says.
+    strings: &'static crate::strings::Strings,
     /// The keyring the vault keeps the master key in.
     keyring: SystemKeyring,
     /// To post the results of spawned tasks back to the loop. Weak: a strong
@@ -1140,11 +1155,12 @@ impl State {
 
     fn handle(&mut self, command: Command) {
         // Every command but the settings works in a workspace.
-        if self.workspace.is_none() && !matches!(command, Command::Configure { .. }) {
+        if self.workspace.is_none() && command.needs_workspace() {
             self.restore();
         }
         match command {
             Command::Restore => {}
+            Command::Language(code) => self.strings = crate::strings::english_or(code).strings,
             Command::OpenCollection(root) => self.open_or_report(&root),
             Command::CreateCollection { folder, name } => self.create_collection(&folder, name),
             Command::FocusCollection(root) => self.focus_on(&root),
@@ -1392,7 +1408,7 @@ impl State {
                 self.snapshot.active = Some(key.clone());
                 self.snapshot.error = None;
             }
-            Err(e) => self.snapshot.error = Some(e.to_string()),
+            Err(e) => self.snapshot.error = Some(e.say(self.strings)),
         }
     }
 
@@ -1426,7 +1442,7 @@ impl State {
             return;
         };
         if let Err(e) = save_request(&*repo, &key.path, &draft) {
-            self.snapshot.error = Some(e.to_string());
+            self.snapshot.error = Some(e.say(self.strings));
             return;
         }
         let revision = self.next_revision();
@@ -1507,7 +1523,7 @@ impl State {
             (Setting::Set(AuthScheme::OAuth2(_)), _) | (Setting::Inherit, AuthScheme::OAuth2(_))
         );
         let token = if uses_oauth2 {
-            token_state(open, key, request)
+            token_state(open, key, request, self.strings)
         } else {
             TokenState::NotUsed
         };
@@ -1672,7 +1688,7 @@ impl State {
                 ResponseState::Received(received)
             }
             Err(AppError::Transport(TransportError::Cancelled)) => ResponseState::Cancelled,
-            Err(e) => ResponseState::Failed(e.to_string()),
+            Err(e) => ResponseState::Failed(e.say(self.strings)),
         };
         if let Some(tab) = self.tab_mut(&key) {
             tab.response = response;
@@ -1807,7 +1823,7 @@ impl State {
             environment: open.environment.clone(),
         };
         if let Err(e) = open.sessions.save(&session) {
-            self.snapshot.error = Some(e.to_string());
+            self.snapshot.error = Some(e.say(self.strings));
         }
     }
 }

@@ -16,6 +16,7 @@
 mod schema;
 mod security;
 
+use apifast_app::ImportNote;
 use apifast_app::{ImportWarning, ImportedCollection, ImportedItem};
 use apifast_domain::{
     Auth, Body, Environment, Example, ExampleBody, ExampleResponse, FormField, Header, HttpRequest,
@@ -101,10 +102,7 @@ pub fn import_openapi(spec: &Value) -> Result<ImportedCollection, OpenApiError> 
             .unwrap_or_default(),
     ));
     if servers.is_empty() {
-        warnings.push(ImportWarning::new(
-            "",
-            "the spec has no servers: set `baseUrl`",
-        ));
+        warnings.push(ImportWarning::new("", ImportNote::NoServers));
     }
     let global_security = spec.get("security");
     if let Some(security) = global_security {
@@ -137,7 +135,7 @@ pub fn import_openapi(spec: &Value) -> Result<ImportedCollection, OpenApiError> 
         let Some(item) = doc.resolve(item) else {
             warnings.push(ImportWarning::new(
                 path.as_str(),
-                "its `$ref` cannot be followed",
+                ImportNote::RefNotFollowed,
             ));
             continue;
         };
@@ -243,10 +241,7 @@ fn operation_request(
     for list in [item.get("parameters"), operation.get("parameters")] {
         for parameter in list.and_then(Value::as_array).into_iter().flatten() {
             let Some(parameter) = doc.resolve(parameter) else {
-                warnings.push(ImportWarning::new(
-                    &at,
-                    "a parameter's `$ref` cannot be followed",
-                ));
+                warnings.push(ImportWarning::new(&at, ImportNote::ParameterRefNotFollowed));
                 continue;
             };
             let key = (text(parameter, "name"), text(parameter, "in"));
@@ -279,7 +274,10 @@ fn operation_request(
             }),
             other => warnings.push(ImportWarning::new(
                 &at,
-                format!("the `{other}` parameter `{name}` is not imported"),
+                ImportNote::ParameterNotImported {
+                    location: other.to_owned(),
+                    name: name.clone(),
+                },
             )),
         }
     }
@@ -400,10 +398,7 @@ fn request_body(
                 .collect(),
         )
     } else if lower.contains("xml") {
-        warnings.push(ImportWarning::new(
-            at,
-            "an XML body: written empty, as its schema is not turned into XML",
-        ));
+        warnings.push(ImportWarning::new(at, ImportNote::XmlBodyEmpty));
         Body::Xml(String::new())
     } else if lower == "application/octet-stream" {
         Body::File {

@@ -219,15 +219,20 @@ impl Settings {
         ]
     }
 
-    /// The texts of [`Self::language`]; for `system`, those of `system`
-    /// (the system's language, if apifast has it), else English.
-    pub fn strings(&self, system: Option<&'static Language>) -> &'static Strings {
+    /// The language [`Self::language`] chooses; for `system`, `system`
+    /// (the system's language, if apifast has it). English if neither is.
+    pub fn chosen_language(&self, system: Option<&'static Language>) -> &'static Language {
         let chosen = if self.language == SYSTEM_LANGUAGE {
             system
         } else {
             crate::strings::language(&self.language)
         };
-        chosen.map_or(&crate::strings::EN, |language| language.strings)
+        chosen.unwrap_or_else(crate::strings::english)
+    }
+
+    /// The texts of [`Self::chosen_language`].
+    pub fn strings(&self, system: Option<&'static Language>) -> &'static Strings {
+        self.chosen_language(system).strings
     }
 
     /// The application's proxy, without its password.

@@ -87,7 +87,7 @@ fn request<'a>(collection: &'a ImportedCollection, name: &str) -> &'a HttpReques
 }
 
 fn warned(collection: &ImportedCollection, at: &str, part: &str) -> bool {
-    (collection.warnings.iter()).any(|w| w.at == at && w.message.contains(part))
+    (collection.warnings.iter()).any(|w| w.at == at && w.message.to_string().contains(part))
 }
 
 #[test]

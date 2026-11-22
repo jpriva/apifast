@@ -2,6 +2,7 @@
 //! folder in order, carrying captured values from one to the next, and
 //! gathers their results.
 
+use crate::Invalid;
 use apifast_domain::{RequestKind, Variable};
 
 use crate::ports::is_within;
@@ -224,9 +225,8 @@ pub fn run_selection(
         .filter(|f| !f.is_empty());
     let start = match folder {
         None => items,
-        Some(path) => find_folder(items, path).ok_or_else(|| {
-            AppError::Validation(format!("`{path}` is not a folder of the collection"))
-        })?,
+        Some(path) => find_folder(items, path)
+            .ok_or_else(|| AppError::from(Invalid::NotAFolder(path.to_string())))?,
     };
     let mut runnable = Vec::new();
     let mut skipped = Vec::new();

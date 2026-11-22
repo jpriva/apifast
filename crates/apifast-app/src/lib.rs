@@ -47,7 +47,10 @@ pub use data::{DataError, DataFormat, parse_data};
 pub use environments::{
     create_environment, delete_environment, rename_environment, save_environment,
 };
-pub use error::{AppError, RepositoryError, StoreError, TransportError};
+pub use error::{
+    AppError, AwsField, CallbackProblem, Invalid, OAuth2Field, RepositoryError, StoreError,
+    TokenFailure, TransportError, WrongKind,
+};
 pub use examples::{EXAMPLE_LIMIT, ExampleError, example_from, example_name};
 pub use export::collection_contents;
 pub use git::{
@@ -60,8 +63,8 @@ pub use history::{
 };
 pub use host::AppHost;
 pub use import::{
-    ImportPlan, ImportReport, ImportWarning, ImportedCollection, ImportedItem, PlannedEntry,
-    apply_import, plan_import,
+    ImportNote, ImportPlan, ImportReport, ImportWarning, ImportedCollection, ImportedItem,
+    PlannedEntry, apply_import, plan_import,
 };
 pub use oauth2::{OAuth2Token, TokenInfo, TokenStore, forget_token, get_new_token, stored_token};
 pub use organize::{

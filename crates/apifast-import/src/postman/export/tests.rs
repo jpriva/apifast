@@ -160,7 +160,7 @@ fn round_trip(collection: &ImportedCollection) -> (ImportedCollection, Vec<Impor
 fn warned(warnings: &[ImportWarning], at: &str, part: &str) -> bool {
     warnings
         .iter()
-        .any(|w| w.at == at && w.message.contains(part))
+        .any(|w| w.at == at && w.message.to_string().contains(part))
 }
 
 #[test]

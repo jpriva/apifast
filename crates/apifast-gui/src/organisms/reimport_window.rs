@@ -2,6 +2,7 @@
 //! source's new version, review what happens to each request and choose,
 //! then apply. Only the reviewed plan can be applied.
 
+use crate::messages::Say as _;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -208,7 +209,10 @@ impl ReimportWindow {
                         } else {
                             warning.at.as_str()
                         };
-                        ui.label(RichText::new(format!("{at}: {}", warning.message)).small());
+                        ui.label(
+                            RichText::new(format!("{at}: {}", warning.message.say(strings)))
+                                .small(),
+                        );
                     }
                 });
         }

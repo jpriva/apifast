@@ -2,6 +2,7 @@
 //! once, and written to the active environment only when the user agrees.
 //! A value for a secret variable goes to the vault, never to the file.
 
+use crate::messages::Say as _;
 use std::path::{Path, PathBuf};
 
 use apifast_app::{CaptureOutcome, VariableChange, VariableScope, save_environment};
@@ -100,12 +101,15 @@ impl State {
     }
 
     fn write_captures(&mut self, root: &Path, pending: &Captured) -> Result<(), String> {
-        let open = self.open.get(root).ok_or("the collection is not loaded")?;
+        let errors = &self.strings.errors;
+        let open = (self.open.get(root)).ok_or(errors.collection_not_loaded)?;
         let repo = open.repo.clone();
         let mut environment = (open.environment_files.iter())
             .find(|e| e.name == pending.environment)
             .cloned()
-            .ok_or_else(|| format!("the environment `{}` no longer exists", pending.environment))?;
+            .ok_or_else(|| {
+                crate::strings::fill(errors.environment_gone, &[("name", &pending.environment)])
+            })?;
         let declared_secret = |name: &str| {
             environment
                 .variables
@@ -127,7 +131,7 @@ impl State {
                     }),
                 }
             }
-            save_environment(&*repo, &environment).map_err(|e| e.to_string())?;
+            save_environment(&*repo, &environment).map_err(|e| e.say(self.strings))?;
         }
         if !secret.is_empty() {
             // The vault belongs to the focused collection.
@@ -136,7 +140,7 @@ impl State {
             for (name, value, _) in secret {
                 vault
                     .set_local(&pending.environment, &name, &value.data)
-                    .map_err(|e| e.to_string())?;
+                    .map_err(|e| e.say(self.strings))?;
             }
         }
         self.reload_environments(root);

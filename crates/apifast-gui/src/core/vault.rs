@@ -1,6 +1,8 @@
 //! The vault in the core: what the interface sees of it (without opening any
 //! value) and the commands that store, show and forget secrets and keys.
 
+use crate::messages::Say as _;
+use crate::strings::Strings;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -135,8 +137,9 @@ pub(super) fn view(
     vault: &VaultSecrets,
     environments: &[Environment],
     master_in_file: bool,
+    strings: &Strings,
 ) -> Result<VaultView, String> {
-    let error = |e: apifast_vault::KeyStoreError| e.to_string();
+    let error = |e: apifast_vault::KeyStoreError| e.say(strings);
     let stored = vault.stored().map_err(error)?;
     let has_key = vault.has_collection_key();
     let secrets = environments
@@ -196,7 +199,7 @@ impl State {
             open.vault_view.shareable_key.take(),
         );
         let view = match &open.vault {
-            Some(vault) => view(vault, &open.environment_files, master_in_file),
+            Some(vault) => view(vault, &open.environment_files, master_in_file, self.strings),
             // No vault yet: every secret is without value.
             None => Ok(VaultView {
                 secrets: missing(&open.environment_files),
@@ -225,8 +228,9 @@ impl State {
     }
 
     fn try_vault_command(&mut self, command: VaultCommand) -> Result<(), String> {
-        let error = |e: apifast_vault::KeyStoreError| e.to_string();
-        let none = "this collection has no secrets yet";
+        let strings = self.strings;
+        let error = |e: apifast_vault::KeyStoreError| e.say(strings);
+        let none = strings.errors.no_secrets_yet;
         match command {
             VaultCommand::Set {
                 environment,
@@ -300,11 +304,12 @@ impl State {
         if let Some(vault) = self.vault() {
             return Ok(vault);
         }
-        let root: PathBuf = self.focus.clone().ok_or("no collection is open")?;
-        let repo = self.focused().ok_or("no collection is open")?.repo.clone();
+        let none = self.strings.errors.no_collection_open;
+        let root: PathBuf = self.focus.clone().ok_or(none)?;
+        let repo = self.focused().ok_or(none)?.repo.clone();
         let id = repo
             .ensure_id(&SystemRandom::default())
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| e.say(self.strings))?;
         // Its tabs come back after loading it again.
         let tabs: Vec<TabKey> = (self.snapshot.tabs.iter())
             .filter(|tab| tab.root == root)
@@ -312,8 +317,9 @@ impl State {
             .collect();
         let active = self.snapshot.active.clone();
         self.unload(&root);
-        apifast_history::dirs::move_to_id(&self.data_dir, &root, id.as_str())
-            .map_err(|e| format!("cannot move this collection's data: {e}"))?;
+        apifast_history::dirs::move_to_id(&self.data_dir, &root, id.as_str()).map_err(|why| {
+            crate::strings::fill(self.strings.errors.data_not_moved, &[("why", &why)])
+        })?;
         self.load(&root)?;
         for key in &tabs {
             self.restore_tab(key);
@@ -323,7 +329,7 @@ impl State {
         }
         self.focus = Some(root);
         self.vault()
-            .ok_or_else(|| "the vault cannot be opened".to_owned())
+            .ok_or_else(|| self.strings.errors.vault_unavailable.to_owned())
     }
 
     /// Hides what is shown after [`SHOWN_FOR`].

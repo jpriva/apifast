@@ -1,6 +1,7 @@
 //! From a [`ResolvedRequest`] (inheritance applied, templates unrendered) to a
 //! [`RenderedRequest`] (ready to send).
 
+use crate::{AwsField, Invalid};
 use std::fmt;
 
 use apifast_domain::{
@@ -368,15 +369,13 @@ fn apply_auth(
                 region: r.text(&aws.region)?,
             };
             for (name, value) in [
-                ("access key id", &credentials.access_key_id),
-                ("secret access key", &credentials.secret_access_key),
-                ("service", &credentials.service),
-                ("region", &credentials.region),
+                (AwsField::AccessKeyId, &credentials.access_key_id),
+                (AwsField::SecretAccessKey, &credentials.secret_access_key),
+                (AwsField::Service, &credentials.service),
+                (AwsField::Region, &credentials.region),
             ] {
                 if value.trim().is_empty() {
-                    return Err(AppError::Validation(format!(
-                        "AWS Signature v4 needs the {name}"
-                    )));
+                    return Err(Invalid::AwsMissing(name).into());
                 }
             }
             auth = TransportAuth::AwsV4(credentials);
@@ -427,22 +426,16 @@ fn apply_auth(
         // The send gets the token first and swaps this auth for it; here
         // only when rendering on its own.
         AuthScheme::OAuth2(_) => {
-            return Err(AppError::Validation(
-                "an OAuth 2.0 request is rendered with its token, when it is sent".into(),
-            ));
+            return Err(Invalid::OAuth2RenderedAlone.into());
         }
         AuthScheme::None => {}
         AuthScheme::Unsupported(kind) => {
-            return Err(AppError::Validation(format!(
-                "auth scheme `{kind}` is not supported yet"
-            )));
+            return Err(Invalid::AuthUnsupported(kind.clone()).into());
         }
         // Error out rather than silently sending without auth. The message
         // does not include the scheme's fields.
         _ => {
-            return Err(AppError::Validation(
-                "this auth scheme is not supported yet".into(),
-            ));
+            return Err(Invalid::AuthNotYet.into());
         }
     }
     Ok(auth)
@@ -529,9 +522,7 @@ impl Renderer<'_, '_> {
                 (RenderedBody::File(self.text(path)?), Some(content_type))
             }
             _ => {
-                return Err(AppError::Validation(
-                    "this body kind is not supported yet".into(),
-                ));
+                return Err(Invalid::BodyNotYet.into());
             }
         })
     }
@@ -549,13 +540,10 @@ fn graphql_json(query: &str, variables: &str) -> Result<String, AppError> {
     if variables.trim().is_empty() {
         return Ok(format!("{{\"query\":{query}}}"));
     }
-    let parsed = apifast_domain::Json::parse(variables).map_err(|e| {
-        AppError::Validation(format!("the GraphQL variables are not valid JSON: {e}"))
-    })?;
+    let parsed = apifast_domain::Json::parse(variables)
+        .map_err(|e| AppError::from(Invalid::GraphQlVariablesNotJson(e.to_string())))?;
     if !matches!(parsed, apifast_domain::Json::Object(_)) {
-        return Err(AppError::Validation(
-            "the GraphQL variables must be a JSON object".into(),
-        ));
+        return Err(Invalid::GraphQlVariablesNotObject.into());
     }
     Ok(format!("{{\"query\":{query},\"variables\":{parsed}}}"))
 }

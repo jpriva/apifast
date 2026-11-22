@@ -20,6 +20,8 @@ pub struct App {
     /// The system's language, if apifast has it: what the `system`
     /// language setting shows. `None` shows English.
     system_language: Option<&'static strings::Language>,
+    /// The language the core was told last.
+    told: Option<&'static str>,
     main: MainScreen,
     /// Where the keymap is kept, if anywhere.
     keymap_store: Option<FsKeymapStore>,
@@ -49,6 +51,7 @@ impl App {
         Self {
             core,
             system_language: None,
+            told: None,
             main: MainScreen::default(),
             keymap_store: None,
             settings_store: None,
@@ -62,12 +65,26 @@ impl App {
     #[must_use]
     pub fn with_system_language(mut self, language: Option<&'static strings::Language>) -> Self {
         self.system_language = language;
+        self.tell_language();
         self
     }
 
     /// The texts of the language the settings choose.
     fn strings(&self) -> &'static Strings {
         self.main.settings.strings(self.system_language)
+    }
+
+    /// Tells the core the language, when it is not the one it has.
+    fn tell_language(&mut self) {
+        let code = self
+            .main
+            .settings
+            .chosen_language(self.system_language)
+            .code;
+        if self.told != Some(code) {
+            self.told = Some(code);
+            self.core.send(Command::Language(code));
+        }
     }
 
     /// Reads the shortcuts from `store`, and saves them there when the user
@@ -143,6 +160,7 @@ impl App {
             Err(e) => self.main.notice = Some(e.to_string()),
         }
         self.configure_core();
+        self.tell_language();
         self.settings_store = Some(store);
         self
     }
@@ -195,6 +213,7 @@ impl App {
             self.main.notice = result.err();
         }
         self.main.apply_appearance(ui.ctx());
+        self.tell_language();
         let snapshot = self.core.snapshot();
         for command in self.main.show(ui, &snapshot, self.strings()) {
             self.core.send(command);
