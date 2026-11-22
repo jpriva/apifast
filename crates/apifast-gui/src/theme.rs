@@ -22,9 +22,11 @@ pub mod space {
 /// Corner radii, in points.
 pub mod radius {
     /// Badges and chips.
-    pub const SMALL: u8 = 3;
+    pub const SMALL: u8 = 4;
     /// Buttons, inputs and panels.
-    pub const MEDIUM: u8 = 5;
+    pub const MEDIUM: u8 = 6;
+    /// Windows, menus and popups.
+    pub const LARGE: u8 = 10;
 }
 
 /// Font sizes, in points.
@@ -211,6 +213,7 @@ pub fn visuals(theme: Theme) -> egui::Visuals {
     // field cannot be seen.
     visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, p.border);
     for widget in [
+        &mut visuals.widgets.noninteractive,
         &mut visuals.widgets.inactive,
         &mut visuals.widgets.hovered,
         &mut visuals.widgets.active,
@@ -218,6 +221,9 @@ pub fn visuals(theme: Theme) -> egui::Visuals {
     ] {
         widget.corner_radius = CornerRadius::same(radius::MEDIUM);
     }
+    // Windows, menus and popups: rounder than what is inside them.
+    visuals.window_corner_radius = CornerRadius::same(radius::LARGE);
+    visuals.menu_corner_radius = CornerRadius::same(radius::LARGE);
     visuals
 }
 

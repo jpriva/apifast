@@ -10,7 +10,11 @@ cd "$(dirname "$0")/../.."
 id=com.tryxtek.apifast
 linux=packaging/linux
 prefix=${PREFIX:-$HOME/.local}
+sizes="16 24 32 48 64 128 256 512"
 files="bin/apifast-gui bin/apifast share/applications/$id.desktop share/metainfo/$id.metainfo.xml share/icons/hicolor/scalable/apps/$id.svg"
+for size in $sizes; do
+    files="$files share/icons/hicolor/${size}x${size}/apps/$id.png"
+done
 
 refresh() {
     # The menu picks the change up. No icon cache is written: a stale one in
@@ -60,6 +64,10 @@ install -Dm755 "$built/apifast" "$prefix/bin/apifast"
 install -Dm644 "$linux/$id.desktop" "$prefix/share/applications/$id.desktop"
 install -Dm644 "$linux/$id.metainfo.xml" "$prefix/share/metainfo/$id.metainfo.xml"
 install -Dm644 "$linux/icons/hicolor/scalable/apps/$id.svg" "$prefix/share/icons/hicolor/scalable/apps/$id.svg"
+for size in $sizes; do
+    icon=icons/hicolor/${size}x${size}/apps/$id.png
+    install -Dm644 "$linux/$icon" "$prefix/share/$icon"
+done
 refresh
 to=$(version_of "$prefix/bin/apifast")
 if [ -n "$from" ]; then

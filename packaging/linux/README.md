@@ -10,6 +10,7 @@ and how the packages are built.
 | `com.tryxtek.apifast.desktop` | `/usr/share/applications/` | The menu entry. Runs `apifast-gui`. |
 | `com.tryxtek.apifast.metainfo.xml` | `/usr/share/metainfo/` | AppStream metadata, for software centers and Flathub. |
 | `icons/hicolor/scalable/apps/com.tryxtek.apifast.svg` | `/usr/share/icons/hicolor/scalable/apps/` | The icon: the source of every other size and format. |
+| `icons/hicolor/<n>x<n>/apps/com.tryxtek.apifast.png` | `/usr/share/icons/hicolor/<n>x<n>/apps/` | The icon in 16 to 512 px, for desktops that do not draw SVG; made from the SVG by `packaging/icons.sh`, which also makes the Windows `.ico` and the macOS 1024 px PNG. The 128 px one is also the window's icon. |
 
 The application id is `com.tryxtek.apifast`: the desktop file, the AppStream id
 and the window's app id (`with_app_id` in `apifast-gui`) all use it, so the

@@ -229,3 +229,24 @@ impl eframe::App for App {
         self.show(ui);
     }
 }
+
+/// The icon, 128 px, made from the SVG by `packaging/icons.sh`.
+const ICON_PNG: &[u8] =
+    include_bytes!("../../../packaging/linux/icons/hicolor/128x128/apps/com.tryxtek.apifast.png");
+
+/// The window's own icon, for desktops that do not take it from the menu
+/// entry (X11, Windows). `None` if it cannot be read, and the window goes
+/// without one.
+#[must_use]
+pub fn window_icon() -> Option<egui::IconData> {
+    eframe::icon_data::from_png_bytes(ICON_PNG).ok()
+}
+
+#[cfg(test)]
+mod icon_tests {
+    #[test]
+    fn the_window_icon_is_a_128_px_image() {
+        let icon = super::window_icon();
+        assert_eq!(icon.map(|i| (i.width, i.height)), Some((128, 128)));
+    }
+}

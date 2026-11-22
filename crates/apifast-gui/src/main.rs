@@ -85,14 +85,18 @@ fn run(
 ) -> eframe::Result {
     let mut setup = WgpuSetupCreateNew::without_display_handle();
     setup.instance_descriptor.backends = backends;
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_inner_size([1280.0, 800.0])
+        .with_title("apifast")
+        // As the desktop file is named (packaging/linux), so the desktop
+        // shows the window with its entry and icon.
+        .with_app_id("com.tryxtek.apifast");
+    if let Some(icon) = apifast_gui::app::window_icon() {
+        viewport = viewport.with_icon(icon);
+    }
     let options = eframe::NativeOptions {
         renderer: eframe::Renderer::Wgpu,
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1280.0, 800.0])
-            .with_title("apifast")
-            // As the desktop file is named (packaging/linux), so the desktop
-            // shows the window with its entry and icon.
-            .with_app_id("com.tryxtek.apifast"),
+        viewport,
         wgpu_options: WgpuConfiguration {
             wgpu_setup: WgpuSetup::CreateNew(setup),
             ..WgpuConfiguration::default()

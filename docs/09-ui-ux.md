@@ -327,6 +327,9 @@ Mientras la paleta está abierta o el editor espera una combinación, los demás
 - Las ventanas usan el color de fondo y los campos el de superficie, con borde, para que un campo se distinga siempre de lo que lo rodea.
 - Las tablas con campos editables se componen fila a fila con anchos repartidos, no con `egui::Grid`: en una celda de grid un campo solo recibe el ancho que su columna midió el frame anterior y no crece.
 - Escala de interfaz configurable en los ajustes (`Ctrl+,`), que también siguen `Ctrl+=`, `Ctrl+-` y `Ctrl+0`; la escala aumenta el texto con todo lo demás.
+- Esquinas redondeadas (`theme::radius`): 4 en badges, 6 en botones, campos y paneles, y 10 en ventanas, menús y popups.
+- En Wayland la ventana dibuja su barra de título (GNOME no la dibuja por ella): la de Adwaita de winit, con esquinas redondeadas y los botones que pide `org.gnome.desktop.wm.preferences button-layout`. GNOME trae por defecto solo el de cerrar; `gsettings set org.gnome.desktop.wm.preferences button-layout 'appmenu:minimize,maximize,close'` añade los otros dos, en todas las aplicaciones.
+- La ventana lleva su icono (el PNG de 128 px), para los escritorios que no lo toman de la entrada de menú.
 - Los colores de método y de estado nunca son el único indicador: siempre van con texto.
 - Contraste WCAG AA (4,5:1) en ambos temas, comprobado por un test sobre los tokens de `theme/`: cada color de texto sobre cada fondo, y el texto de los badges sobre su propio tinte.
 

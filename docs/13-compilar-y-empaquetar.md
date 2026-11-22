@@ -219,7 +219,7 @@ Para usarlo, se descomprime donde se quiera. Para lanzar `apifast` desde cualqui
 ### Pendiente en Windows
 
 - `apifast-gui` compilado en release no abre ventana de consola (`windows_subsystem = "windows"`); en debug sí, para ver lo que escribe. Por eso, en release, `APIFAST_TIMINGS` no muestra nada en Windows.
-- No tiene icono en el `.exe` ni entrada en el menú Inicio. Tampoco hay instalador (MSI o MSIX) ni firma de código; sin firma, SmartScreen puede avisar la primera vez.
+- El `.exe` no lleva todavía `packaging/windows/apifast.ico` como recurso, así que el Explorador lo muestra sin icono (la ventana sí lo tiene). No tiene entrada en el menú Inicio. Tampoco hay instalador (MSI o MSIX) ni firma de código; sin firma, SmartScreen puede avisar la primera vez.
 
 ## macOS
 
@@ -288,13 +288,13 @@ codesign --force --deep --sign - "$app"                 # firma ad hoc, sin cuen
 open "$app"
 ```
 
-El icono va en `Contents/Resources/apifast.icns`, con `<key>CFBundleIconFile</key><string>apifast</string>` en el `Info.plist`. Se genera desde un PNG de 1024×1024 cuando exista el icono definitivo:
+El icono va en `Contents/Resources/apifast.icns`, con `<key>CFBundleIconFile</key><string>apifast</string>` en el `Info.plist`. Se genera desde `packaging/macos/icon-1024.png` (ver [El icono](#el-icono)):
 
 ```sh
 mkdir apifast.iconset
 for size in 16 32 128 256 512; do
-  sips -z $size $size icon-1024.png --out apifast.iconset/icon_${size}x${size}.png
-  sips -z $((size*2)) $((size*2)) icon-1024.png --out apifast.iconset/icon_${size}x${size}@2x.png
+  sips -z $size $size packaging/macos/icon-1024.png --out apifast.iconset/icon_${size}x${size}.png
+  sips -z $((size*2)) $((size*2)) packaging/macos/icon-1024.png --out apifast.iconset/icon_${size}x${size}@2x.png
 done
 iconutil -c icns apifast.iconset -o "$app/Contents/Resources/apifast.icns"
 ```
@@ -311,6 +311,25 @@ hdiutil create -volname apifast -srcfolder target/packages/apifast.app \
 
 - **Sin firma de desarrollador ni notarización**, Gatekeeper bloquea la aplicación al abrirla desde un archivo descargado. Para usarla igual: clic derecho y "Abrir", o `xattr -dr com.apple.quarantine apifast.app`. Firmar y notarizar requiere una cuenta de Apple Developer.
 - No tiene icono hasta que exista el definitivo.
+
+## El icono
+
+La fuente es `packaging/linux/icons/hicolor/scalable/apps/com.tryxtek.apifast.svg`. Lo demás se genera desde ella, y queda en git: compilar apifast no necesita estas herramientas.
+
+```sh
+sudo dnf install ImageMagick      # magick, con librsvg
+packaging/icons.sh
+```
+
+Escribe:
+
+- `packaging/linux/icons/hicolor/<n>x<n>/apps/com.tryxtek.apifast.png`, de 16 a 512 px: para los escritorios que no dibujan SVG. Van en los paquetes y en `install-local.sh`. El de 128 px va además dentro de `apifast-gui`, como icono de la ventana (X11, Windows).
+- `packaging/windows/apifast.ico`, de 16 a 256 px.
+- `packaging/macos/icon-1024.png`, del que sale el `.icns` de macOS.
+
+Los PNG salen iguales byte a byte con el mismo SVG. Después de cambiar el SVG se ejecuta de nuevo y se hace commit de lo que cambie.
+
+El icono del `.exe` en el Explorador de Windows necesita además meter el `.ico` como recurso al compilar en Windows; está pendiente, con el resto del empaquetado de Windows. Mientras tanto, la ventana y la barra de tareas usan el icono de la ventana.
 
 ## Versiones y actualizaciones
 
