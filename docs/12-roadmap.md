@@ -219,7 +219,7 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
     - La ventana "Collection key" (desde la paleta) muestra la clave con un botón para copiarla, y la rota tras confirmar lo que implica. Sin secretos compartidos, explica que la clave se crea al compartir el primero.
     - La barra superior avisa cuando la clave maestra está en el archivo de respaldo y no en el keyring.
 - [x] CLI: `apifast vault` y `APIFAST_COLLECTION_KEY`. `vault set` (local o `--shared`), `status`, y `key show`, `import` y `rotate`; valores y claves solo por la entrada estándar. `APIFAST_COLLECTION_KEY` abre los secretos compartidos en una ejecución sin guardar la clave, y `APIFAST_NO_KEYRING=1` deja la clave maestra en su archivo.
-- [ ] ~~Cifrado del tarro de cookies.~~ Pasa a F5: apifast todavía no guarda cookies, y el tarro llega allí ("Tarro de cookies con editor"). Se cifrará con la clave maestra al crearlo.
+- [x] ~~Cifrado del tarro de cookies.~~ Pasa a F5, donde está hecho: apifast todavía no guarda cookies, y el tarro llega allí ("Tarro de cookies con editor"). Se cifrará con la clave maestra al crearlo.
 
 ### Criterio de salida
 
@@ -405,14 +405,14 @@ Se cumple: los cuatro modos funcionan contra un servidor local (con `.proto` y p
 ### Tareas
 
 - [x] `apifast-script-js` con QuickJS, límites de tiempo y memoria. Puerto `ScriptEngine` en `apifast-app`, con `CannedScripts` en memoria; `QuickJs` crea un runtime por script, con límite de tiempo (esperas incluidas), de memoria y de pila, y guarda la consola.
-- [x] API `req`, `res`, `bru`, `test` y `expect`. En JavaScript sobre los datos que da el motor (`ScriptInput`), devolviendo la request cambiada, las variables, los tests y lo pedido al runner (`ScriptOutcome`). Pendientes: `bru.sendRequest`/`runRequest`, `require` de librerías, cookies y cuerpos que no son texto.
+- [x] API `req`, `res`, `bru`, `test` y `expect`. En JavaScript sobre los datos que da el motor (`ScriptInput`), devolviendo la request cambiada, las variables, los tests y lo pedido al runner (`ScriptOutcome`). Pendientes: `require` de librerías y los cuerpos multipart y de archivo (`bru.sendRequest`, `runRequest` y las cookies llegaron con la compatibilidad con Bruno).
 - [x] Scripts de colección, carpeta y request con orden "sándwich". Se leen y se escriben en los archivos; los previos cambian la request resuelta antes de renderizarla, y los posteriores y de tests corren después de la respuesta. El runner aplica sus variables y respeta `skipRequest`, `stopExecution` y `setNextRequest`, y sus tests cuentan en la CLI, los reportes y la pestaña Tests. Pendiente: los scripts de gRPC.
 - [x] Editor de scripts con resaltado. Pestaña Scripts en la request y ventana "Scripts…" para carpetas y colección, con un editor por tipo y resaltado de JavaScript.
 - [x] Traducción de scripts de Postman en el importador, con la tabla de reemplazos de Bruno; lo que no tiene equivalente queda comentado y avisado. El importador de `.bru` trae los scripts tal cual. Pendientes: los scripts de Insomnia y la traducción inversa al exportar a Postman.
 - [x] Carga del motor solo al ejecutar el primer script. No hay estado global: el runtime se crea al empezar cada script, y una request sin scripts (o solo con scripts de tipos que apifast no ejecuta) no llama al motor. Medido con la CLI: unos 2 MB más de memoria máxima, solo cuando corre un script.
 - [x] Compatibilidad con las colecciones de prueba de Bruno (`bruno-tests`), por partes:
   - [x] API barata y errores: `req.getHost`, `getPath`, `getQueryString`, `getPathParams` y `getTags`; variables de colección (`setCollectionVar` y compañía), `getAllEnvVars` y `deleteAllEnvVars`, `isSafeMode`; temporizadores (`setTimeout`, `setInterval`); variables dinámicas en `bru.interpolate`. Después de la respuesta, `req` es la request enviada, ya renderizada.
-  - [x] `req.headerList` y `res.headerList`; los plugins de chai `jsonBody` y `jsonSchema` (este con un validador draft-07 propio, en lugar de ajv). Faltan las cabeceras desactivadas en `req.headerList`.
+  - [x] `req.headerList` y `res.headerList`; los plugins de chai `jsonBody` y `jsonSchema` (este con un validador draft-07 propio, en lugar de ajv). Las cabeceras desactivadas llegaron en una parte posterior.
   - [x] `bru.sendRequest` y `bru.runRequest`, por un puerto nuevo, `ScriptHost`: el motor atiende las llamadas del script por un canal mientras corre.
   - [x] Cookies (`bru.cookies` y `bru.cookies.jar()`), sobre el tarro de la colección que el transporte expone.
   - [x] En una ejecución, `bru.getEnvVar` y `bru.getCollectionVar` ven lo que cambiaron los scripts de requests anteriores (`SendOptions.script_changes`). Variables globales para la ejecución. Etiquetas de carpeta, heredadas por sus requests en el runner y en `req.getTags`. `await test(…)` espera al test.
@@ -459,7 +459,7 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
   - [x] Construir los paquetes de release en el sistema más antiguo soportado (Ubuntu 22.04, glibc 2.35), en CI: `.github/workflows/packages.yml` valida la entrada de menú y el metainfo, construye, comprueba la glibc que piden los binarios (`check-glibc.sh`) y guarda los paquetes como artefacto; un tag `v<versión>` debe coincidir con la del workspace. No se publica nada.
   - [ ] El icono definitivo.
   - [ ] macOS y Windows.
-- [ ] Actualizaciones.
+- [x] Actualizaciones.
   - [x] Versiones: `tools/release.sh <versión>` la pone en el workspace y en el metainfo, hace el commit y el tag `v<versión>`, sin publicar nada. `apifast --version` y la ventana de ajustes dicen la versión y el commit compilado.
   - [x] Actualizar lo instalado: `packaging/linux/update.sh` compila el tag más nuevo (o el pedido) en un worktree aparte e instala con su `install-local.sh`; `install-local.sh --rollback` vuelve a la versión anterior, que guarda. Paquetes y AppImage, en [docs/13](13-compilar-y-empaquetar.md#versiones-y-actualizaciones).
   - [x] Migraciones de datos: `last-version` en la carpeta de datos; al arrancar una versión más nueva, las migraciones intermedias corren una vez, tras copiar lo que tocan; una más vieja avisa y no cambia nada. Todavía no hay ninguna.
