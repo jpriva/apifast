@@ -213,7 +213,7 @@ Para usarlo, se descomprime donde se quiera. Para lanzar `apifast` desde cualqui
 
 ### Pendiente en Windows
 
-- **La interfaz abre también una ventana de consola**: `apifast-gui` no declara `windows_subsystem = "windows"` todavía.
+- `apifast-gui` compilado en release no abre ventana de consola (`windows_subsystem = "windows"`); en debug sí, para ver lo que escribe. Por eso, en release, `APIFAST_TIMINGS` no muestra nada en Windows.
 - No tiene icono en el `.exe` ni entrada en el menú Inicio. Tampoco hay instalador (MSI o MSIX) ni firma de código; sin firma, SmartScreen puede avisar la primera vez.
 
 ## macOS

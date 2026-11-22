@@ -1,5 +1,9 @@
 //! The `apifast-gui` binary. `apifast-gui <folder>` opens that collection.
 
+// On Windows, a release build is a windowed program: it opens no console
+// window beside the interface. Debug builds keep theirs, for what they print.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 use std::path::PathBuf;
 use std::time::Instant;
 
