@@ -272,7 +272,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "apifast-app"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "apifast-domain",
  "apifast-query",
@@ -284,7 +284,7 @@ dependencies = [
 
 [[package]]
 name = "apifast-arch-tests"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "cargo_metadata",
  "toml",
@@ -292,7 +292,7 @@ dependencies = [
 
 [[package]]
 name = "apifast-cli"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "apifast-app",
@@ -323,7 +323,7 @@ dependencies = [
 
 [[package]]
 name = "apifast-domain"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "thiserror 2.0.21",
  "zeroize",
@@ -331,7 +331,7 @@ dependencies = [
 
 [[package]]
 name = "apifast-git"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "apifast-app",
  "apifast-domain",
@@ -342,7 +342,7 @@ dependencies = [
 
 [[package]]
 name = "apifast-git-contract"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "apifast-app",
  "tempfile",
@@ -350,7 +350,7 @@ dependencies = [
 
 [[package]]
 name = "apifast-grpc"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "apifast-app",
  "apifast-domain",
@@ -376,7 +376,7 @@ dependencies = [
 
 [[package]]
 name = "apifast-gui"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "apifast-app",
  "apifast-domain",
@@ -409,7 +409,7 @@ dependencies = [
 
 [[package]]
 name = "apifast-history"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "apifast-app",
  "apifast-domain",
@@ -420,7 +420,7 @@ dependencies = [
 
 [[package]]
 name = "apifast-http"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "apifast-app",
  "apifast-domain",
@@ -451,7 +451,7 @@ dependencies = [
 
 [[package]]
 name = "apifast-import"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "apifast-app",
  "apifast-domain",
@@ -465,7 +465,7 @@ dependencies = [
 
 [[package]]
 name = "apifast-query"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "apifast-domain",
  "proptest",
@@ -476,7 +476,7 @@ dependencies = [
 
 [[package]]
 name = "apifast-script-js"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "apifast-app",
  "apifast-domain",
@@ -488,7 +488,7 @@ dependencies = [
 
 [[package]]
 name = "apifast-storage-fs"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "apifast-app",
  "apifast-domain",
@@ -500,7 +500,7 @@ dependencies = [
 
 [[package]]
 name = "apifast-template"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "apifast-domain",
  "proptest",
@@ -509,7 +509,7 @@ dependencies = [
 
 [[package]]
 name = "apifast-vault"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "apifast-app",
  "apifast-domain",
@@ -525,7 +525,7 @@ dependencies = [
 
 [[package]]
 name = "apifast-watch"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "notify",
  "tempfile",
@@ -534,7 +534,7 @@ dependencies = [
 
 [[package]]
 name = "apifast-ws"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "apifast-app",
  "apifast-domain",

@@ -32,6 +32,7 @@
     <binary>apifast</binary>
   </provides>
   <releases>
+    <release version="0.1.0" date="2026-11-22"/>
     <release version="0.0.0" date="2026-11-21"/>
   </releases>
 </component>
