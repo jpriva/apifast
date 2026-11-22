@@ -5,6 +5,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Instant;
 
 use apifast_gui::app::App;
@@ -16,60 +17,112 @@ use eframe::wgpu::Backends;
 
 fn main() -> eframe::Result {
     let started = Instant::now();
-    if !prepare_data() {
+    // The data first: the log goes into its folder, which a migration may
+    // change.
+    let prepared = prepare_data();
+    let (logging, log_file) = start_log();
+    tracing::info!(version = apifast_gui::VERSION, "apifast starting");
+    if !report(prepared) {
         std::process::exit(1);
     }
     let timings = std::env::var_os("APIFAST_TIMINGS").is_some();
     let folder = std::env::args_os().nth(1).map(PathBuf::from);
+    let log = (logging, log_file);
     // The native backends first (Vulkan, Metal, DirectX 12). With OpenGL
     // as well, wgpu also starts the OpenGL driver, which on Linux loads
     // Mesa and LLVM: about 14 MB more at rest (docs/10). OpenGL is the
     // fallback for systems without the others; `WGPU_BACKEND` overrides
     // both.
     match Backends::from_env() {
-        Some(backends) => run(backends, folder, started, timings),
-        None => run(Backends::PRIMARY, folder.clone(), started, timings)
-            .or_else(|_| run(Backends::PRIMARY | Backends::GL, folder, started, timings)),
+        Some(backends) => run(backends, folder, started, timings, log),
+        None => run(
+            Backends::PRIMARY,
+            folder.clone(),
+            started,
+            timings,
+            log.clone(),
+        )
+        .or_else(|error| {
+            tracing::warn!(%error, "no native graphics backend; trying OpenGL");
+            run(
+                Backends::PRIMARY | Backends::GL,
+                folder,
+                started,
+                timings,
+                log,
+            )
+        }),
     }
 }
 
+/// The log, and its file (docs/14, "El registro"): `logs/apifast.log` in
+/// the data folder, and the terminal. `APIFAST_LOG` sets the filter; else
+/// the level setting does, once the settings are read. If the file cannot
+/// be opened, only the terminal; if nothing can be set up, no log.
+fn start_log() -> (Option<Arc<apifast_log::Logging>>, Option<PathBuf>) {
+    let file = apifast_history::dirs::data_dir().join("logs/apifast.log");
+    let mut options = apifast_log::LogOptions {
+        env: std::env::var("APIFAST_LOG").ok(),
+        stderr: true,
+        file: Some(file.clone()),
+        ..apifast_log::LogOptions::default()
+    };
+    let (logging, file) = match apifast_log::init(&options) {
+        Ok(logging) => (Some(logging), Some(file)),
+        Err(apifast_log::LogError::File { .. }) => {
+            options.file = None;
+            (apifast_log::init(&options).ok(), None)
+        }
+        Err(apifast_log::LogError::AlreadySet) => (None, None),
+    };
+    if let Some(problem) = logging.as_ref().and_then(|l| l.problem()) {
+        tracing::warn!("{problem}");
+    }
+    if file.is_none() {
+        tracing::warn!("the log has no file: only the terminal gets it");
+    }
+    (logging.map(Arc::new), file)
+}
+
 /// Readies apifast's data for this version (docs/13, "Actualizar"), as the
-/// command line does: the migrations since the last version, once. What it
-/// did, or why it could not, goes to stderr. Returns whether to go on.
-fn prepare_data() -> bool {
-    use apifast_history::migrations::{Dirs, Outcome, prepare};
-    use std::io::Write as _;
+/// command line does: the migrations since the last version, once.
+fn prepare_data() -> Result<apifast_history::migrations::Outcome, String> {
+    use apifast_history::migrations::{Dirs, prepare};
     let dirs = Dirs {
         data: apifast_history::dirs::data_dir(),
         config: apifast_history::dirs::config_dir(),
     };
+    prepare(&dirs, env!("CARGO_PKG_VERSION")).map_err(|e| e.to_string())
+}
+
+/// Logs what [`prepare_data`] did. Returns whether to go on.
+fn report(prepared: Result<apifast_history::migrations::Outcome, String>) -> bool {
+    use apifast_history::migrations::Outcome;
     let version = env!("CARGO_PKG_VERSION");
-    let mut stderr = std::io::stderr();
-    match prepare(&dirs, version) {
-        Ok(Outcome::Older { newest }) => {
-            let _ = writeln!(
-                stderr,
-                "warning: apifast {version} runs on data of {newest}, a newer version: what only that one knows may be lost"
-            );
-        }
+    match prepared {
+        Ok(Outcome::Older { newest }) => tracing::warn!(
+            "apifast {version} runs on data of {newest}, a newer version: what only that one knows may be lost"
+        ),
         Ok(Outcome::Updated {
             from,
             ran,
             backup: Some(backup),
-        }) => {
-            let _ = writeln!(
-                stderr,
-                "apifast: data updated from {from}: {}; a copy of what changed is in {}",
-                ran.join(", "),
-                backup.display()
-            );
-        }
+        }) => tracing::warn!(
+            "data updated from {from}: {}; a copy of what changed is in {}",
+            ran.join(", "),
+            backup.display()
+        ),
         Ok(_) => {}
         Err(error) => {
-            let _ = writeln!(
-                stderr,
-                "error: readying apifast's data for this version: {error}"
-            );
+            tracing::error!("readying apifast's data for this version: {error}");
+            // Without a log, at least the terminal.
+            if !tracing::dispatcher::has_been_set() {
+                use std::io::Write as _;
+                let _ = writeln!(
+                    std::io::stderr(),
+                    "error: readying apifast's data for this version: {error}"
+                );
+            }
             return false;
         }
     }
@@ -82,7 +135,9 @@ fn run(
     folder: Option<PathBuf>,
     started: Instant,
     timings: bool,
+    (logging, log_file): (Option<Arc<apifast_log::Logging>>, Option<PathBuf>),
 ) -> eframe::Result {
+    tracing::info!(?backends, "opening the window");
     let mut setup = WgpuSetupCreateNew::without_display_handle();
     setup.instance_descriptor.backends = backends;
     let mut viewport = egui::ViewportBuilder::default()
@@ -122,6 +177,9 @@ fn run(
                 .with_system_language(system)
                 .with_settings(settings)
                 .with_keymap(keymap);
+            if let Some(logging) = logging {
+                app = app.with_logging(logging, log_file, std::env::var("APIFAST_LOG").ok());
+            }
             if timings {
                 app = app.with_timings(started);
             }

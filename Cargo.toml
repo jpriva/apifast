@@ -19,6 +19,7 @@ apifast-storage-fs = { path = "crates/apifast-storage-fs" }
 apifast-http = { path = "crates/apifast-http" }
 apifast-history = { path = "crates/apifast-history" }
 apifast-watch = { path = "crates/apifast-watch" }
+apifast-log = { path = "crates/apifast-log" }
 apifast-vault = { path = "crates/apifast-vault" }
 apifast-query = { path = "crates/apifast-query" }
 apifast-import = { path = "crates/apifast-import" }
@@ -48,6 +49,10 @@ roxmltree = "0.21.2"
 # properties, and files written as JSON the order they were built in.
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
 thiserror = "2.0.21"
+# The log: events everywhere through `tracing`; only apifast-log sets where
+# they go (docs/14).
+tracing = { version = "0.1.44", default-features = false, features = ["std"] }
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["std", "fmt", "ansi", "registry", "tracing-log"] }
 
 # Tests
 proptest = "1.12.0"

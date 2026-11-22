@@ -22,6 +22,7 @@ apifast-vault.workspace = true
 apifast-import.workspace = true
 apifast-ws.workspace = true
 apifast-script-js.workspace = true
+apifast-log.workspace = true
 # git, behind the `git` feature (on by default): without it, gix is not
 # built and the collection's repository is not read.
 apifast-git = { workspace = true, optional = true }

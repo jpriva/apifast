@@ -476,11 +476,12 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
   - [x] Los 4 MB que quedan tras una respuesta grande no son una fuga: en 8 vueltas la memoria no crece; son código del visor usado por primera vez (páginas que el kernel suelta), lo que el asignador guarda y memoria de los hilos del envío.
   - [ ] Medir en macOS y Windows.
 - [ ] Experiencia de escritorio: lo que traen las demás aplicaciones.
-  - [ ] Registro con niveles (`error`, `warn`, `info`, `debug`, `trace`), con `tracing`:
-    - El nivel sale de `APIFAST_LOG` (también por módulo: `APIFAST_LOG=apifast_http=debug`) o de un ajuste, y por defecto es `warn`.
-    - Escribe en la terminal y en un archivo de la carpeta de datos (`logs/apifast.log`) con tamaño máximo y rotación, para adjuntarlo a un reporte.
-    - Nunca escribe secretos, valores de variables secretas ni la query de una URL, como ya cumplen los errores.
-    - Hay que medir su coste en el binario y en la RAM con el nivel por defecto: no debe notarse.
+  - [x] Registro con niveles (`error`, `warn`, `info`, `debug`, `trace`), con `tracing` ([docs/14](14-desarrollo.md#el-registro)):
+    - El crate adaptador `apifast-log` es el único que usa `tracing-subscriber`; el resto solo emite eventos. Los mensajes del crate `log` (wgpu, winit, reqwest) llegan también.
+    - El nivel sale de `APIFAST_LOG` (con la sintaxis de `tracing`, también por crate: `apifast_http=debug`) o del ajuste "Registro" (por defecto `warn`), que cambia en el momento; las bibliotecas quedan en `warn`.
+    - La interfaz escribe en la terminal y en `logs/apifast.log` de la carpeta de datos, que rota a `apifast.log.1` a los 5 MB. La CLI escribe en la terminal y solo con `APIFAST_LOG`: sin ella, su salida no cambia.
+    - Eventos: arranque y backend gráfico, migraciones, colecciones abiertas, envíos (ruta de la request, estado, tiempo y tamaño; el adaptador HTTP en `debug`, solo con el host), errores que muestra la interfaz, commits y cambios de rama. Nunca la URL completa ni valores secretos.
+    - Coste: +1,8 MB en el binario de la GUI ([docs/10](10-rendimiento-y-memoria.md)). La RAM no se midió.
   - [ ] Preferencias completas: la ventana de ajustes (`Ctrl+,`) pasa a tener secciones.
     - General: idioma, abrir el último espacio de trabajo, confirmar al cerrar con cambios sin guardar.
     - Apariencia: tema, color de acento, escala, densidad.

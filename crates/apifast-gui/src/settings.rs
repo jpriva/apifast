@@ -8,6 +8,8 @@ use apifast_app::HistoryLimits;
 use apifast_domain::{ProxyChoice, ProxyConfig, ProxyProtocol};
 use apifast_history::Limits;
 
+use apifast_log::LogLevel;
+
 use crate::strings::{Language, Strings};
 use crate::theme::ThemeChoice;
 
@@ -58,6 +60,8 @@ pub struct Settings {
     pub send_cookies: bool,
     /// Keep in the jar the cookies that responses set.
     pub store_cookies: bool,
+    /// How much of its work apifast logs, unless `APIFAST_LOG` says.
+    pub log_level: LogLevel,
 }
 
 /// The application's proxy mode.
@@ -88,6 +92,7 @@ impl Default for Settings {
             tls_insecure: false,
             send_cookies: true,
             store_cookies: true,
+            log_level: LogLevel::default(),
         }
     }
 }
@@ -172,6 +177,7 @@ impl Settings {
                     .parse::<bool>()
                     .ok()
                     .map(|b| settings.store_cookies = b),
+                "log_level" => LogLevel::parse(value).map(|level| settings.log_level = level),
                 _ => None,
             };
             if ok.is_none() {
@@ -216,6 +222,7 @@ impl Settings {
             ("tls_insecure".into(), self.tls_insecure.to_string()),
             ("send_cookies".into(), self.send_cookies.to_string()),
             ("store_cookies".into(), self.store_cookies.to_string()),
+            ("log_level".into(), self.log_level.as_str().into()),
         ]
     }
 
@@ -319,6 +326,7 @@ mod tests {
             tls_insecure: true,
             send_cookies: false,
             store_cookies: false,
+            log_level: LogLevel::Debug,
         };
         let (read, problems) = Settings::from_entries(&settings.entries());
         assert_eq!(read, settings);

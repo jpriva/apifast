@@ -26,6 +26,8 @@ pub struct SettingsWindow {
     pub password_change: Option<Option<apifast_domain::Secret>>,
     /// The system's file picker for the CA file, while it is open.
     picking: Option<std::sync::mpsc::Receiver<Option<std::path::PathBuf>>>,
+    /// Where the log goes, to show it.
+    pub log: LogInfo,
 }
 
 fn theme_label(theme: ThemeChoice, strings: &Strings) -> &str {
@@ -34,6 +36,15 @@ fn theme_label(theme: ThemeChoice, strings: &Strings) -> &str {
         ThemeChoice::Light => strings.theme_light,
         ThemeChoice::Dark => strings.theme_dark,
     }
+}
+
+/// Where the log goes, for the settings to show it.
+#[derive(Debug, Clone, Default)]
+pub struct LogInfo {
+    /// The log's file, if it has one.
+    pub file: Option<std::path::PathBuf>,
+    /// `APIFAST_LOG`, when it sets the filter instead of the level setting.
+    pub env_filter: Option<String>,
 }
 
 impl SettingsWindow {
@@ -75,6 +86,7 @@ impl SettingsWindow {
                 changed |= self.proxy(ui, settings, strings);
                 changed |= self.tls(ui, settings, strings);
                 changed |= cookies(ui, settings, strings);
+                changed |= log(ui, settings, &self.log, strings);
                 ui.add_space(theme::space::M);
                 ui.horizontal(|ui| {
                     if ui.button(strings.settings_reset).clicked() {
@@ -369,4 +381,58 @@ fn number(
         drag = drag.suffix(format!(" {unit}"));
     }
     ui.add(drag).accessible_name(name).changed()
+}
+
+/// The log: its level, its file, or that `APIFAST_LOG` sets it.
+fn log(ui: &mut egui::Ui, settings: &mut Settings, info: &LogInfo, strings: &Strings) -> bool {
+    use apifast_log::LogLevel;
+    let name = |level: LogLevel| match level {
+        LogLevel::Error => strings.log_error,
+        LogLevel::Warn => strings.log_warn,
+        LogLevel::Info => strings.log_info,
+        LogLevel::Debug => strings.log_debug,
+        LogLevel::Trace => strings.log_trace,
+    };
+    let muted = theme::palette(ui).text_muted;
+    let mut changed = false;
+    section(ui, strings.settings_log);
+    ui.horizontal(|ui| {
+        ui.label(strings.settings_log_level);
+        ui.add_enabled_ui(info.env_filter.is_none(), |ui| {
+            egui::ComboBox::from_id_salt("settings-log-level")
+                .selected_text(name(settings.log_level))
+                .show_ui(ui, |ui| {
+                    for level in LogLevel::ALL {
+                        changed |= ui
+                            .selectable_value(&mut settings.log_level, level, name(level))
+                            .changed();
+                    }
+                })
+                .response
+                .on_hover_text(strings.settings_log_level);
+        });
+    });
+    if let Some(filter) = &info.env_filter {
+        let text = crate::strings::fill(strings.settings_log_env, &[("filter", filter)]);
+        ui.label(RichText::new(text).small().color(muted));
+    }
+    if let Some(file) = &info.file {
+        ui.horizontal(|ui| {
+            ui.label(strings.settings_log_file);
+            ui.add(
+                egui::Label::new(
+                    RichText::new(file.display().to_string())
+                        .monospace()
+                        .small(),
+                )
+                .selectable(true),
+            );
+        });
+    }
+    ui.label(
+        RichText::new(strings.settings_log_hint)
+            .small()
+            .color(muted),
+    );
+    changed
 }

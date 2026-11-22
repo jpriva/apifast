@@ -1397,6 +1397,26 @@ pub struct Strings {
     pub yes: &'static str,
     /// A setting that is off.
     pub no: &'static str,
+    /// Settings: the section of the log.
+    pub settings_log: &'static str,
+    /// Settings: how much is logged.
+    pub settings_log_level: &'static str,
+    /// Settings: the log's file.
+    pub settings_log_file: &'static str,
+    /// Settings: `APIFAST_LOG` sets the log, with `{filter}`.
+    pub settings_log_env: &'static str,
+    /// Settings: what the log is for.
+    pub settings_log_hint: &'static str,
+    /// The log level: errors.
+    pub log_error: &'static str,
+    /// The log level: warnings.
+    pub log_warn: &'static str,
+    /// The log level: information.
+    pub log_info: &'static str,
+    /// The log level: debug.
+    pub log_debug: &'static str,
+    /// The log level: everything.
+    pub log_trace: &'static str,
 }
 }
 

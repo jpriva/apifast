@@ -22,6 +22,8 @@ pub struct App {
     system_language: Option<&'static strings::Language>,
     /// The language the core was told last.
     told: Option<&'static str>,
+    /// The log, to change its level with the settings.
+    logging: Option<std::sync::Arc<apifast_log::Logging>>,
     main: MainScreen,
     /// Where the keymap is kept, if anywhere.
     keymap_store: Option<FsKeymapStore>,
@@ -52,6 +54,7 @@ impl App {
             core,
             system_language: None,
             told: None,
+            logging: None,
             main: MainScreen::default(),
             keymap_store: None,
             settings_store: None,
@@ -72,6 +75,24 @@ impl App {
     /// The texts of the language the settings choose.
     fn strings(&self) -> &'static Strings {
         self.main.settings.strings(self.system_language)
+    }
+
+    /// Changes the level of `logging` with the settings, and shows in them
+    /// where it goes: `file`, if it has one.
+    #[must_use]
+    pub fn with_logging(
+        mut self,
+        logging: std::sync::Arc<apifast_log::Logging>,
+        file: Option<std::path::PathBuf>,
+        env_filter: Option<String>,
+    ) -> Self {
+        logging.set_level(self.main.settings.log_level);
+        self.main.settings_window.log = crate::organisms::LogInfo {
+            file,
+            env_filter: logging.from_env().then_some(env_filter).flatten(),
+        };
+        self.logging = Some(logging);
+        self
     }
 
     /// Tells the core the language, when it is not the one it has.
@@ -167,6 +188,9 @@ impl App {
 
     fn configure_core(&self) {
         let settings = &self.main.settings;
+        if let Some(logging) = &self.logging {
+            logging.set_level(settings.log_level);
+        }
         self.core.send(Command::Configure {
             history: settings.history_limits(),
             responses: settings.response_limits(),

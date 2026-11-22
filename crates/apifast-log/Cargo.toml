@@ -1,0 +1,19 @@
+[package]
+name = "apifast-log"
+description = "Where apifast's log goes, and at which level: the terminal, and a file that rotates."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

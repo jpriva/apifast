@@ -70,9 +70,39 @@ Las variables:
 | `APIFAST_CONFIG_DIR` | Dónde van `settings.yml` y `keymap.yml`. | `target/dev/config` |
 | `APIFAST_DEV_RELEASE` | `1`: compila optimizado, como `--release`. | `0` |
 | `APIFAST_NO_KEYRING` | `1`: la clave maestra de la bóveda va en un archivo de la carpeta de datos, no en el llavero del sistema. Así las pruebas no llenan el llavero de claves. | `1` |
+| `APIFAST_LOG` | El filtro del registro: un nivel, o `objetivo=nivel` separados por comas. Manda sobre el ajuste "Registro". Ver [El registro](#el-registro). | comentada |
 | `APIFAST_TIMINGS` | `1`: escribe en la terminal cuánto tardaron el primer frame y el árbol de la colección. | comentada |
 | `LC_MESSAGES` | El idioma de la interfaz cuando su ajuste dice "el del sistema": `en_US.UTF-8`, `es_CO.UTF-8`. No sirve `LANG`: la terminal siempre lo tiene, y gana. | comentada |
 | `APIFAST_COLLECTION_KEY` | CLI: abre los secretos compartidos de una colección sin guardar su clave. | comentada |
+
+## El registro
+
+apifast escribe lo que hace, con niveles: `error`, `warn`, `info`, `debug` y `trace`. Todos los crates emiten eventos con `tracing` (`tracing::info!(…)`); solo `apifast-log` decide adónde van. También llegan los mensajes de las bibliotecas que usan el crate `log`, como wgpu, winit y reqwest.
+
+**Adónde va:**
+
+- **La interfaz** escribe en la terminal (con colores si es una) y en `logs/apifast.log`, dentro de la carpeta de datos. El archivo se mueve a `apifast.log.1` al pasar de 5 MB, así que nunca ocupa más de unos 10 MB. Con el `.env` de ejemplo queda en `target/dev/data/logs/apifast.log`; en la instalación, en `~/.local/share/apifast/logs/apifast.log`.
+- **La CLI** solo escribe en la terminal, y solo si `APIFAST_LOG` tiene valor. Sin ella, su salida no cambia.
+
+**Qué nivel:**
+
+- Por defecto, `warn`: los errores y lo que puede ir mal.
+- En la interfaz, Ajustes (`Ctrl+,`) → "Registro" cambia el nivel de los crates de apifast en el momento, y muestra la ruta del archivo. Las bibliotecas quedan en `warn`.
+- `APIFAST_LOG` manda sobre el ajuste, y el ajuste se desactiva. Acepta un nivel (`APIFAST_LOG=debug`, que vale también para las bibliotecas) o una lista `objetivo=nivel` (`APIFAST_LOG=warn,apifast_gui=debug,apifast_http=trace`). Los objetivos son los nombres de los crates con `_`. Si no se entiende, se avisa y se usa el ajuste.
+
+```sh
+APIFAST_LOG=debug tools/dev.sh                          # todo en debug, también wgpu y reqwest
+APIFAST_LOG=warn,apifast_http=debug tools/dev.sh cli send ping.yml
+tail -f target/dev/data/logs/apifast.log                # lo que escribe la interfaz
+```
+
+**Qué escribe:**
+
+- `info`: el arranque y el backend gráfico, las migraciones, las colecciones abiertas, cada envío (la ruta de la request, el estado, el tiempo y el tamaño), los commits y los cambios de rama.
+- `warn`: los errores que muestra la interfaz (en su idioma), los envíos fallidos y las colecciones que no se pueden abrir.
+- `debug`: cada envío en el adaptador HTTP, con el método y el host.
+
+**Lo que no escribe:** valores secretos, ni la URL completa de un envío (su query y su ruta pueden llevar tokens). Quien añade un evento cuida esto: los errores de apifast ya cumplen la regla, y se registra la ruta de la request o el host, no la URL. Las bibliotecas no siguen la regla: en `debug` o `trace`, reqwest y hyper pueden escribir URLs. Para un reporte de error, mejor subir solo los crates de apifast, con el ajuste o nombrándolos en `APIFAST_LOG`.
 
 ## Datos separados de la instalación
 

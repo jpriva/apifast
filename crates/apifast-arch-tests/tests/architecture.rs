@@ -25,7 +25,7 @@ fn layer(name: &str) -> Option<Layer> {
         "apifast-app" => Some(Layer::Application),
         "apifast-storage-fs" | "apifast-http" | "apifast-vault" | "apifast-watch"
         | "apifast-history" | "apifast-import" | "apifast-ws" | "apifast-grpc"
-        | "apifast-script-js" | "apifast-git" => Some(Layer::Adapter),
+        | "apifast-script-js" | "apifast-git" | "apifast-log" => Some(Layer::Adapter),
         "apifast-gui" | "apifast-cli" => Some(Layer::Driver),
         "apifast-arch-tests" => Some(Layer::Tooling),
         "apifast-git-contract" => Some(Layer::TestSupport),
@@ -58,6 +58,7 @@ const EXCLUSIVE_OWNERS: &[(&str, &[&str])] = &[
     ("protox", &["apifast-grpc"]),
     ("rquickjs", &["apifast-script-js"]),
     ("gix", &["apifast-git"]),
+    ("tracing-subscriber", &["apifast-log"]),
     ("roxmltree", &["apifast-query"]),
     ("egui", &["apifast-gui"]),
     ("eframe", &["apifast-gui"]),

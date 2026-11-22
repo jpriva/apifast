@@ -164,6 +164,7 @@ fn main() -> ExitCode {
             };
         }
     };
+    start_log();
     if let Err(error) = prepare_data() {
         eprintln!("error: {error:#}");
         return ExitCode::FAILURE;
@@ -196,6 +197,28 @@ fn main() -> ExitCode {
             eprintln!("error: {error:#}");
             failure
         }
+    }
+}
+
+/// The log, to the terminal, only when `APIFAST_LOG` asks for it
+/// (`APIFAST_LOG=debug apifast send …`): without it, what the command line
+/// writes stays as it is.
+fn start_log() {
+    let Some(env) = std::env::var("APIFAST_LOG")
+        .ok()
+        .filter(|e| !e.trim().is_empty())
+    else {
+        return;
+    };
+    let options = apifast_log::LogOptions {
+        env: Some(env),
+        stderr: true,
+        ..apifast_log::LogOptions::default()
+    };
+    if let Ok(logging) = apifast_log::init(&options)
+        && let Some(problem) = logging.problem()
+    {
+        eprintln!("warning: {problem}");
     }
 }
 

@@ -156,6 +156,7 @@ impl State {
             GitCommand::Commit { paths, message } => {
                 match commit_changes(&*git, &paths, &message) {
                     Ok(id) => {
+                        tracing::info!(files = paths.len(), commit = %id, "git commit");
                         view.notice = Some(GitNotice::Committed {
                             files: paths.len(),
                             id,
@@ -171,7 +172,10 @@ impl State {
                 });
             }
             GitCommand::Switch(branch) => match git.switch_branch(&branch) {
-                Ok(()) => view.notice = Some(GitNotice::Switched(branch)),
+                Ok(()) => {
+                    tracing::info!(%branch, "git branch switched");
+                    view.notice = Some(GitNotice::Switched(branch));
+                }
                 Err(e) => view.error = Some(GitProblem::Failed(e.say(self.strings))),
             },
         }

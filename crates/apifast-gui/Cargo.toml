@@ -31,6 +31,8 @@ apifast-watch.workspace = true
 apifast-vault.workspace = true
 apifast-app.workspace = true
 apifast-query.workspace = true
+apifast-log.workspace = true
+tracing.workspace = true
 eframe = { version = "0.37.0", default-features = false, features = ["default_fonts", "wayland", "x11", "accesskit", "clipboard", "wgpu"] }
 rfd = "0.18.0"
 tokio = { version = "1.54.1", features = ["rt", "sync", "time", "macros"] }

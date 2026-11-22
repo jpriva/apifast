@@ -434,6 +434,11 @@ impl HttpTransport for ReqwestTransport {
         // timeout no longer applies, and cancelling ends the stream with
         // what arrived instead of failing the send.
         let streaming = AtomicBool::new(false);
+        // The host only: the path and the query may carry secrets.
+        let host = (parse_url(request.url()).ok())
+            .and_then(|url| url.host_str().map(str::to_owned))
+            .unwrap_or_default();
+        tracing::debug!(method = request.method().as_str(), %host, "sending");
         let exchange = self.exchange(ntlm, request, body, (started, cancel, &streaming));
         let expired = async {
             if timeout_ms == 0 {
@@ -449,11 +454,18 @@ impl HttpTransport for ReqwestTransport {
                 tokio::time::sleep(CANCEL_POLL).await;
             }
         };
-        tokio::select! {
+        let result = tokio::select! {
             result = exchange => result,
             () = expired => Err(TransportError::Timeout(timeout_ms)),
             () = cancelled => Err(TransportError::Cancelled),
+        };
+        match &result {
+            Ok(head) => {
+                tracing::debug!(%host, status = head.status, ms = head.elapsed_ms, "answered");
+            }
+            Err(error) => tracing::debug!(%host, %error, "not answered"),
         }
+        result
     }
 }
 

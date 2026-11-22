@@ -987,6 +987,7 @@ impl Core {
                     shown: 0,
                     keyring,
                     strings: &crate::strings::EN,
+                    logged_error: None,
                 };
                 runtime.block_on(state.run(receiver));
             });
@@ -1073,6 +1074,8 @@ struct State {
     shown: u64,
     /// The interface's language, for what the core says.
     strings: &'static crate::strings::Strings,
+    /// The last error written to the log, so each is written once.
+    logged_error: Option<String>,
     /// The keyring the vault keeps the master key in.
     keyring: SystemKeyring,
     /// To post the results of spawned tasks back to the loop. Weak: a strong
@@ -1142,6 +1145,13 @@ impl State {
 
     fn publish(&mut self) {
         self.mirror();
+        // Each error the interface shows, once, in the log too.
+        if self.snapshot.error != self.logged_error {
+            if let Some(error) = &self.snapshot.error {
+                tracing::warn!("{error}");
+            }
+            self.logged_error.clone_from(&self.snapshot.error);
+        }
         self.snapshot.version += 1;
         *self.shared.lock().unwrap_or_else(PoisonError::into_inner) =
             Arc::new(self.snapshot.clone());
@@ -1674,6 +1684,21 @@ impl State {
             return;
         };
         self.sending.remove(&key);
+        // The path, never the URL: its query may carry secrets.
+        let path = key.path.as_str();
+        match &result {
+            Ok(received) => tracing::info!(
+                path,
+                status = received.head.status,
+                ms = received.head.elapsed_ms,
+                bytes = received.size,
+                "sent"
+            ),
+            Err(AppError::Transport(TransportError::Cancelled)) => {
+                tracing::debug!(path, "send cancelled");
+            }
+            Err(error) => tracing::warn!(path, %error, "send failed"),
+        }
         let response = match result {
             Ok(received) => {
                 let checks = &received.checks;

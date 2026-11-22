@@ -274,6 +274,10 @@ impl State {
             return Ok(());
         }
         let result = self.try_load(root);
+        match &result {
+            Ok(()) => tracing::info!(collection = %root.display(), "collection opened"),
+            Err(error) => tracing::warn!(collection = %root.display(), "cannot open: {error}"),
+        }
         if let Some(listed) = self.listed.iter_mut().find(|l| l.root == root) {
             listed.error = result.as_ref().err().cloned();
         }
