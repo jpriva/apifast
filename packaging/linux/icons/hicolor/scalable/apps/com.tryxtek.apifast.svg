@@ -1,5 +1,140 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!-- PLACEHOLDER: replace with the real apifast icon (see packaging/linux/README.md). -->
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-  <rect x="8" y="8" width="112" height="112" rx="24" fill="#6b7280"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    
+    <clipPath id="iconClip">
+      <rect x="0" y="0" width="512" height="512" rx="115" ry="115" />
+    </clipPath>
+
+    
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="65%">
+      <stop offset="0%" stop-color="#223249" />
+      <stop offset="58%" stop-color="#1F1F28" />
+      <stop offset="100%" stop-color="#16161D" />
+    </radialGradient>
+
+    
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#7FB4CA" />
+      <stop offset="48%" stop-color="#7E9CD8" />
+      <stop offset="100%" stop-color="#957FB8" />
+    </linearGradient>
+
+    
+    <linearGradient id="textStrokeGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#DCD7BA" />
+      <stop offset="55%" stop-color="#9CABCA" />
+      <stop offset="100%" stop-color="#957FB8" />
+    </linearGradient>
+
+    
+    <linearGradient id="boltGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#E6C384" />
+      <stop offset="52%" stop-color="#FFA066" />
+      <stop offset="100%" stop-color="#FF9E3B" />
+    </linearGradient>
+
+    
+    <path id="letterA" fill-rule="evenodd" d="M 114,168 L 154,168 L 216,342 L 175,342 L 162,304 L 106,304 L 93,342 L 52,342 Z
+         M 134,212 L 117,271 L 151,271 Z" />
+
+    <path id="letterP" fill-rule="evenodd" d="M 228,168 L 304,168 C 342,168 360,188 360,224 C 360,260 342,282 302,282 L 267,282 L 267,342 L 228,342 Z
+         M 267,201 L 297,201 C 314,201 322,209 322,225 C 322,241 314,249 297,249 L 267,249 Z" />
+
+    <path id="bolt" d="M 396,168 L 452,168 L 422,220 L 450,220 L 420,270 L 446,270 L 374,366 L 398,292 L 372,292 L 398,242 L 374,242 Z" />
+  </defs>
+
+  <g clip-path="url(#iconClip)">
+    
+    <rect x="0" y="0" width="512" height="512" fill="url(#bgGrad)" />
+
+    
+    <g fill="none" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.88">
+      
+      <path stroke="#7AA89F" d="M 64,64 L 138,138 L 138,185" />
+      <path stroke="#54546D" d="M 118,0 L 118,52 L 166,100 L 166,185" />
+      <path stroke="#7E9CD8" d="M 196,0 L 196,104 L 228,136 L 228,180" />
+      <path stroke="#7AA89F" d="M 272,0 L 272,62" />
+      <path stroke="#E6C384" d="M 348,36 L 348,74 L 296,126 L 296,175" />
+      <path stroke="#7E9CD8" d="M 404,0 L 404,54 L 354,104 L 354,175" />
+      <path stroke="#54546D" d="M 464,26 L 408,82 L 408,124 L 372,160" />
+
+      
+      <path stroke="#7E9CD8" d="M 48,112 L 84,112 L 120,148 L 120,185" />
+      <path stroke="#E6C384" d="M 0,148 L 68,148 L 90,170" />
+      <path stroke="#54546D" d="M 0,200 L 42,200" />
+      <path stroke="#7AA89F" d="M 0,264 L 54,264" />
+      <path stroke="#7E9CD8" d="M 0,348 L 42,348 L 80,310" />
+      <path stroke="#54546D" d="M 0,412 L 58,412 L 112,358 L 144,358" />
+
+      
+      <path stroke="#7E9CD8" d="M 512,116 L 446,116 L 414,148" />
+      <path stroke="#7AA89F" d="M 512,182 L 478,182 L 478,216" />
+      <path stroke="#54546D" d="M 512,256 L 464,256" />
+      <path stroke="#7E9CD8" d="M 512,324 L 452,324" />
+      <path stroke="#E6C384" d="M 512,392 L 472,392" />
+      <path stroke="#54546D" d="M 512,432 L 456,432 L 392,368" />
+
+      
+      <path stroke="#7AA89F" d="M 96,476 L 142,430 L 142,396 L 174,364" />
+      <path stroke="#7E9CD8" d="M 176,512 L 176,448 L 198,426" />
+      <path stroke="#54546D" d="M 232,512 L 232,444 L 252,424 L 252,340" />
+      <path stroke="#7AA89F" d="M 284,512 L 284,386" />
+      <path stroke="#E6C384" d="M 342,512 L 342,432 L 310,400 L 310,340" />
+      <path stroke="#7E9CD8" d="M 392,512 L 392,448" />
+      <path stroke="#7AA89F" d="M 442,446 L 386,390" />
+    </g>
+
+    
+    <g>
+      
+      <circle cx="64" cy="64" r="5.5" fill="#7AA89F" />
+      <circle cx="272" cy="62" r="5.5" fill="#7AA89F" />
+      <circle cx="348" cy="36" r="6" fill="#E6C384" />
+      <circle cx="464" cy="26" r="5.5" fill="#54546D" />
+
+      
+      <circle cx="48" cy="112" r="5.5" fill="#7E9CD8" />
+      <circle cx="90" cy="170" r="6" fill="#E6C384" />
+      <circle cx="42" cy="200" r="5.5" fill="#54546D" />
+      <circle cx="54" cy="264" r="5.5" fill="#7AA89F" />
+      <circle cx="144" cy="358" r="5.5" fill="#54546D" />
+
+      
+      <circle cx="414" cy="148" r="5.5" fill="#7E9CD8" />
+      <circle cx="478" cy="216" r="5.5" fill="#7AA89F" />
+      <circle cx="464" cy="256" r="5.5" fill="#54546D" />
+      <circle cx="452" cy="324" r="5.5" fill="#7E9CD8" />
+      <circle cx="472" cy="392" r="6" fill="#E6C384" />
+
+      
+      <circle cx="96" cy="476" r="5.5" fill="#7AA89F" />
+      <circle cx="198" cy="426" r="5.5" fill="#7E9CD8" />
+      <circle cx="284" cy="386" r="5.5" fill="#7AA89F" />
+      <circle cx="392" cy="448" r="5.5" fill="#7E9CD8" />
+      <circle cx="442" cy="446" r="5.5" fill="#7AA89F" />
+    </g>
+
+    
+    <g transform="translate(0, 10)" fill="#16161D" stroke="#16161D" stroke-width="18" stroke-linejoin="round">
+      <use href="#letterA" />
+      <use href="#letterP" />
+      <use href="#bolt" />
+    </g>
+
+    
+    <g fill="none" stroke="#1F1F28" stroke-width="16" stroke-linejoin="round">
+      <use href="#letterA" />
+      <use href="#letterP" />
+      <use href="#bolt" />
+    </g>
+
+    
+    <g fill="url(#textGrad)" stroke="url(#textStrokeGrad)" stroke-width="3.5" stroke-linejoin="round">
+      <use href="#letterA" />
+      <use href="#letterP" />
+    </g>
+
+    
+    <use href="#bolt" fill="url(#boltGrad)" stroke="#DCD7BA" stroke-width="3.5" stroke-linejoin="round" />
+  </g>
 </svg>

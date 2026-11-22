@@ -451,13 +451,13 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
   - [x] En la interfaz: la rama y los cambios en una barra de estado nueva, que abre la ventana "Git": la lista de cambios con casillas, el diff por campos del archivo elegido, el commit de los marcados y el cambio de rama (rechazado con pestañas sin guardar). El estado se refresca al abrir la colección, con el watcher y tras cada operación.
 - [ ] Empaquetado para Linux (AppImage, Flatpak, paquetes); pulido y empaquetado de macOS y Windows.
   - [x] Instalar en la propia máquina sin root: `packaging/linux/install-local.sh` compila e instala en `~/.local` (binarios, entrada de menú, metainfo e icono), y `--uninstall` lo quita. No se publica nada.
-  - [x] Archivos comunes de Linux en `packaging/linux/`: la entrada de menú (`.desktop`), el metainfo de AppStream y el icono, con el id `com.tryxtek.apifast` (el de la ventana también). El icono es un marcador hasta tener el definitivo.
+  - [x] Archivos comunes de Linux en `packaging/linux/`: la entrada de menú (`.desktop`), el metainfo de AppStream y el icono, con el id `com.tryxtek.apifast` (el de la ventana también).
   - [x] Paquetes `.deb` (cargo-deb) y `.rpm` (cargo-generate-rpm), un `apifast` con la interfaz y la CLI, con `packaging/linux/build.sh`. Solo enlazan la libc: lo que la interfaz carga al ejecutarse (Vulkan o EGL, Wayland o X11) va como recomendado. Construidos y revisados aquí: contenido, metadatos y dependencias; la CLI extraída funciona.
   - [ ] AppImage y Flatpak, con los mismos archivos comunes.
     - [x] AppImage: `packaging/linux/appimage/build.sh` arma el AppDir (interfaz, CLI, entrada de menú, metainfo, icono; sin bibliotecas del sistema) y lo empaqueta con appimagetool. `AppRun` lanza la interfaz, o la CLI si se invoca con un enlace llamado `apifast`. appimagetool 1.9.1 y el runtime 20251108 (las últimas versiones numeradas) se descargan con su hash fijado (`appimage/tools.sh`), y appimagetool no descarga nada más. El workflow de paquetes lo construye también, en Ubuntu 22.04. Probado: el AppImage arranca la CLI con FUSE y sin él.
     - [ ] Flatpak: no por ahora; sin publicar en Flathub no aporta frente al `.rpm` o el AppImage.
   - [x] Construir los paquetes de release en el sistema más antiguo soportado (Ubuntu 22.04, glibc 2.35), en CI: `.github/workflows/packages.yml` valida la entrada de menú y el metainfo, construye, comprueba la glibc que piden los binarios (`check-glibc.sh`) y guarda los paquetes como artefacto; un tag `v<versión>` debe coincidir con la del workspace. No se publica nada.
-  - [ ] El icono definitivo.
+  - [x] El icono definitivo: `packaging/linux/icons/hicolor/scalable/apps/com.tryxtek.apifast.svg`.
   - [ ] macOS y Windows.
 - [x] Actualizaciones.
   - [x] Versiones: `tools/release.sh <versión>` la pone en el workspace y en el metainfo, hace el commit y el tag `v<versión>`, sin publicar nada. `apifast --version` y la ventana de ajustes dicen la versión y el commit compilado.
