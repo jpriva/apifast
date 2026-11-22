@@ -17,7 +17,7 @@ for n in 100 1000 5000; do python3 tools/bench/measure.py target/release/apifast
 Three more need the real window or the core, and run as an example of `apifast-gui`:
 
 ```sh
-cargo run --release -p apifast-gui --example bench -- response   # memory to receive and show 100 MB
+cargo run --release -p apifast-gui --example bench -- response   # memory to receive and show 100 MB, 3 rounds (APIFAST_BENCH_ROUNDS)
 cargo run --release -p apifast-gui --example bench -- typing     # CPU per keystroke in a 200 KB body
 cargo run --release -p apifast-gui --example bench -- send       # time of a send to a local server
 ```

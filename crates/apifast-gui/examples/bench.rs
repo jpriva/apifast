@@ -34,6 +34,14 @@ use eframe::wgpu::Backends;
 
 /// The size of the response of `response`.
 const RESPONSE_BYTES: usize = 100 << 20;
+/// How many times `response` opens, sends, shows and closes it, unless
+/// `APIFAST_BENCH_ROUNDS` says.
+fn rounds() -> u32 {
+    std::env::var("APIFAST_BENCH_ROUNDS")
+        .ok()
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(3)
+}
 /// The size of the body of `typing`.
 const BODY_BYTES: usize = 200 << 10;
 /// Keystrokes measured, after the ones that warm up.
@@ -42,15 +50,22 @@ const WARMUP: u32 = 30;
 
 fn main() -> eframe::Result {
     let scenario = std::env::args().nth(1).unwrap_or_default();
-    let options = || {
+    // `response` also runs with the window out of sight: with vsync, a hidden
+    // window on Wayland never gets its frame presented, and the scenario,
+    // which moves on in each frame, would stop.
+    let options = |present_mode| {
         let mut setup = WgpuSetupCreateNew::without_display_handle();
         setup.instance_descriptor.backends = Backends::PRIMARY;
         eframe::NativeOptions {
             renderer: eframe::Renderer::Wgpu,
             viewport: egui::ViewportBuilder::default().with_inner_size([1280.0, 800.0]),
-            wgpu_options: WgpuConfiguration {
-                wgpu_setup: WgpuSetup::CreateNew(setup),
-                ..WgpuConfiguration::default()
+            wgpu_options: {
+                let mut wgpu = WgpuConfiguration {
+                    wgpu_setup: WgpuSetup::CreateNew(setup),
+                    ..WgpuConfiguration::default()
+                };
+                wgpu.surface.present_mode = present_mode;
+                wgpu
             },
             ..Default::default()
         }
@@ -58,12 +73,12 @@ fn main() -> eframe::Result {
     match scenario.as_str() {
         "response" => eframe::run_native(
             "apifast bench",
-            options(),
+            options(eframe::wgpu::PresentMode::AutoNoVsync),
             Box::new(|cc| Ok(Box::new(ResponseBench::new(&cc.egui_ctx)))),
         ),
         "typing" => eframe::run_native(
             "apifast bench",
-            options(),
+            options(eframe::wgpu::PresentMode::AutoVsync),
             Box::new(|cc| {
                 apifast_gui::theme::install(&cc.egui_ctx);
                 Ok(Box::new(TypingBench::new()))
@@ -129,6 +144,46 @@ fn pss() -> (u64, u64) {
         }
     }
     (total, total - drivers)
+}
+
+/// The heap and the anonymous memory of the process, in KiB: where its own
+/// allocations live (small ones on the heap, large ones in anonymous maps).
+fn heap_and_anon() -> (u64, u64) {
+    let smaps = std::fs::read_to_string("/proc/self/smaps").unwrap_or_default();
+    let (mut heap, mut anon, mut kind) = (0, 0, "");
+    for line in smaps.lines() {
+        let mut parts = line.split_whitespace();
+        let first = parts.next().unwrap_or_default();
+        if first.contains('-') && !first.ends_with(':') {
+            kind = match parts.nth(4) {
+                Some("[heap]") => "heap",
+                None => "anon",
+                Some(_) => "",
+            };
+        } else if first == "Pss:" {
+            let kb: u64 = parts.next().and_then(|n| n.parse().ok()).unwrap_or(0);
+            match kind {
+                "heap" => heap += kb,
+                "anon" => anon += kb,
+                _ => {}
+            }
+        }
+    }
+    (heap, anon)
+}
+
+/// A line of the memory now, against `before` (apifast's own).
+fn memory_line(what: &str, before: u64) -> String {
+    let (total, own) = pss();
+    let (heap, anon) = heap_and_anon();
+    format!(
+        "{what}: own {} (+{}), heap {}, anon {}, total {}",
+        mb(own),
+        mb(own.saturating_sub(before)),
+        mb(heap),
+        mb(anon),
+        mb(total)
+    )
 }
 
 fn mb(kb: u64) -> String {
@@ -279,6 +334,7 @@ struct ResponseBench {
     tab: Option<TabKey>,
     phase: Phase,
     before: u64,
+    round: u32,
 }
 
 impl ResponseBench {
@@ -297,6 +353,7 @@ impl ResponseBench {
             tab: None,
             phase: Phase::Opening,
             before: 0,
+            round: 1,
         }
     }
 
@@ -314,9 +371,13 @@ impl ResponseBench {
                 None => Phase::Opening,
             },
             Phase::Idle(since) if since.elapsed() > wait => {
-                let (total, own) = pss();
-                self.before = own;
-                say(&format!("before: own {}, total {}", mb(own), mb(total)));
+                if self.round == 1 {
+                    self.before = pss().1;
+                }
+                say(&memory_line(
+                    &format!("round {} before", self.round),
+                    self.before,
+                ));
                 self.app.core().send(Command::Send);
                 Phase::Sending(Instant::now())
             }
@@ -339,12 +400,9 @@ impl ResponseBench {
                 }
             }
             Phase::Showing(since) if since.elapsed() > wait => {
-                let (total, own) = pss();
-                say(&format!(
-                    "showing: own {} (+{}), total {}",
-                    mb(own),
-                    mb(own.saturating_sub(self.before)),
-                    mb(total)
+                say(&memory_line(
+                    &format!("round {} showing", self.round),
+                    self.before,
                 ));
                 if let Some(tab) = self.tab.clone() {
                     self.app.core().send(Command::CloseTab(tab));
@@ -352,15 +410,21 @@ impl ResponseBench {
                 Phase::Closed(Instant::now())
             }
             Phase::Closed(since) if since.elapsed() > wait => {
-                let (total, own) = pss();
-                say(&format!(
-                    "closed: own {} (+{}), total {}",
-                    mb(own),
-                    mb(own.saturating_sub(self.before)),
-                    mb(total)
+                say(&memory_line(
+                    &format!("round {} closed", self.round),
+                    self.before,
                 ));
-                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                Phase::Done
+                if self.round >= rounds() {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    Phase::Done
+                } else {
+                    // Again: the same request, in a new tab.
+                    self.round += 1;
+                    if let Some(tab) = self.tab.clone() {
+                        self.app.core().send(Command::OpenRequest(tab));
+                    }
+                    Phase::Idle(Instant::now())
+                }
             }
             phase => phase,
         };
