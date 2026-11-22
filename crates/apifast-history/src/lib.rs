@@ -10,6 +10,7 @@
 
 pub mod dirs;
 mod history;
+pub mod migrations;
 mod schemas;
 
 pub use history::FsHistoryStore;

@@ -1,8 +1,9 @@
 #!/usr/bin/env sh
 # Builds apifast and installs it for the current user, without root: the
 # interface and the command line in ~/.local/bin, and the menu entry, metainfo
-# and icon in ~/.local/share. `--uninstall` removes them. PREFIX changes where
-# (default: ~/.local).
+# and icon in ~/.local/share. The binaries it replaces are kept as
+# apifast-gui.prev and apifast.prev; `--rollback` puts them back.
+# `--uninstall` removes everything. PREFIX changes where (default: ~/.local).
 set -eu
 
 cd "$(dirname "$0")/../.."
@@ -18,23 +19,54 @@ refresh() {
     command -v update-desktop-database >/dev/null && update-desktop-database -q "$prefix/share/applications" || true
 }
 
-if [ "${1:-}" = "--uninstall" ]; then
-    for file in $files; do
-        rm -f "$prefix/$file"
-    done
-    refresh
-    echo "apifast removed from $prefix"
-    exit 0
-fi
+version_of() { # binary
+    "$1" --version 2>/dev/null | cut -d' ' -f2- || echo "?"
+}
+
+case "${1:-}" in
+    --uninstall)
+        for file in $files bin/apifast-gui.prev bin/apifast.prev; do
+            rm -f "$prefix/$file"
+        done
+        refresh
+        echo "apifast removed from $prefix"
+        exit 0
+        ;;
+    --rollback)
+        if [ ! -x "$prefix/bin/apifast.prev" ] || [ ! -x "$prefix/bin/apifast-gui.prev" ]; then
+            echo "no earlier version kept in $prefix/bin" >&2
+            exit 1
+        fi
+        from=$(version_of "$prefix/bin/apifast")
+        for bin in apifast apifast-gui; do
+            mv -f "$prefix/bin/$bin.prev" "$prefix/bin/$bin"
+        done
+        echo "apifast $from -> $(version_of "$prefix/bin/apifast") (rolled back)"
+        exit 0
+        ;;
+esac
 
 cargo build --release --locked -p apifast-cli -p apifast-gui
-install -Dm755 target/release/apifast-gui "$prefix/bin/apifast-gui"
-install -Dm755 target/release/apifast "$prefix/bin/apifast"
+from=""
+if [ -x "$prefix/bin/apifast" ] && [ -x "$prefix/bin/apifast-gui" ]; then
+    # What it replaces, to roll back to.
+    from=$(version_of "$prefix/bin/apifast")
+    cp -f "$prefix/bin/apifast" "$prefix/bin/apifast.prev"
+    cp -f "$prefix/bin/apifast-gui" "$prefix/bin/apifast-gui.prev"
+fi
+built=${CARGO_TARGET_DIR:-target}/release
+install -Dm755 "$built/apifast-gui" "$prefix/bin/apifast-gui"
+install -Dm755 "$built/apifast" "$prefix/bin/apifast"
 install -Dm644 "$linux/$id.desktop" "$prefix/share/applications/$id.desktop"
 install -Dm644 "$linux/$id.metainfo.xml" "$prefix/share/metainfo/$id.metainfo.xml"
 install -Dm644 "$linux/icons/hicolor/scalable/apps/$id.svg" "$prefix/share/icons/hicolor/scalable/apps/$id.svg"
 refresh
-echo "apifast installed in $prefix: run apifast-gui, or open it from the menu"
+to=$(version_of "$prefix/bin/apifast")
+if [ -n "$from" ]; then
+    echo "apifast $from -> $to in $prefix (the earlier one is kept: --rollback)"
+else
+    echo "apifast $to installed in $prefix: run apifast-gui, or open it from the menu"
+fi
 case ":$PATH:" in
     *":$prefix/bin:"*) ;;
     *) echo "note: $prefix/bin is not on your PATH" ;;

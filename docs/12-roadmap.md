@@ -460,6 +460,9 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
   - [ ] El icono definitivo.
   - [ ] macOS y Windows.
 - [ ] Actualizaciones.
+  - [x] Versiones: `tools/release.sh <versión>` la pone en el workspace y en el metainfo, hace el commit y el tag `v<versión>`, sin publicar nada. `apifast --version` y la ventana de ajustes dicen la versión y el commit compilado.
+  - [x] Actualizar lo instalado: `packaging/linux/update.sh` compila el tag más nuevo (o el pedido) en un worktree aparte e instala con su `install-local.sh`; `install-local.sh --rollback` vuelve a la versión anterior, que guarda. Paquetes y AppImage, en [docs/13](13-compilar-y-empaquetar.md#versiones-y-actualizaciones).
+  - [x] Migraciones de datos: `last-version` en la carpeta de datos; al arrancar una versión más nueva, las migraciones intermedias corren una vez, tras copiar lo que tocan; una más vieja avisa y no cambia nada. Todavía no hay ninguna.
 - [ ] Traducciones: español e inglés.
 - [ ] Guía de usuario.
 - [ ] Auditoría de seguridad de la bóveda.

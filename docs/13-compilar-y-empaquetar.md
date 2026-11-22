@@ -307,6 +307,70 @@ hdiutil create -volname apifast -srcfolder target/packages/apifast.app \
 - **Sin firma de desarrollador ni notarización**, Gatekeeper bloquea la aplicación al abrirla desde un archivo descargado. Para usarla igual: clic derecho y "Abrir", o `xattr -dr com.apple.quarantine apifast.app`. Firmar y notarizar requiere una cuenta de Apple Developer.
 - No tiene icono hasta que exista el definitivo.
 
+## Versiones y actualizaciones
+
+Una versión de apifast es un tag `v<major.minor.patch>` de este repositorio. No se publica en ningún sitio: actualizar es compilar el tag nuevo e instalarlo encima.
+
+### Hacer una versión nueva
+
+```sh
+tools/release.sh 0.2.0
+```
+
+Pone la versión en `Cargo.toml` (y en `Cargo.lock`) y una entrada en el metainfo de AppStream, hace el commit `release: v0.2.0` y lo marca con el tag `v0.2.0`. No empuja nada (`git push --follow-tags` lo sube, si se quiere). Se niega si la versión no es más nueva que la actual o si hay cambios sin commitear. La versión sube también la de los paquetes: `dnf` y `apt` solo actualizan a un número mayor.
+
+### Qué versión corre
+
+```sh
+apifast --version          # apifast 0.2.0 (abc123456): la versión y el commit compilado
+```
+
+La interfaz lo muestra al pie de la ventana de ajustes. Compilado fuera de git (desde un tar), el commit dice `unknown`.
+
+### Actualizar lo instalado con `install-local.sh`
+
+```sh
+packaging/linux/update.sh --check     # lo instalado y la versión más nueva
+packaging/linux/update.sh             # a la versión más nueva
+packaging/linux/update.sh v0.1.0      # a una versión dada, más nueva o más vieja
+```
+
+Trae los tags del remoto si hay uno, y compila la versión en un worktree de git aparte (`target/update/<tag>`): la copia de trabajo, su rama y sus cambios no se tocan. Después instala con el `install-local.sh` de esa misma versión. Las compilaciones de las actualizaciones comparten `target/update-build`, así cada una reutiliza lo que compiló la anterior. Sin argumentos solo va hacia adelante: si lo instalado ya es la última versión, o una más nueva que el último tag, no hace nada. `PREFIX` dice dónde está instalado (por defecto, `~/.local`).
+
+Volver atrás:
+
+```sh
+packaging/linux/install-local.sh --rollback
+```
+
+`install-local.sh` guarda los binarios que reemplaza como `apifast.prev` y `apifast-gui.prev`, y `--rollback` los pone de vuelta.
+
+### Actualizar los paquetes y el AppImage
+
+```sh
+git checkout v0.2.0 && packaging/linux/build.sh
+sudo dnf upgrade ./target/packages/apifast-0.2.0-1.x86_64.rpm      # Fedora
+sudo apt install ./target/packages/apifast_0.2.0-1_amd64.deb       # Ubuntu/Debian
+sudo dnf downgrade ./apifast-0.1.0-1.x86_64.rpm                    # volver atrás, con el paquete anterior
+```
+
+El AppImage se reemplaza por el nuevo. Si se guarda siempre con el mismo nombre (por ejemplo `~/Apps/apifast.AppImage`), el enlace `apifast` de la CLI sigue funcionando.
+
+En Windows y macOS es lo mismo a mano: `git checkout <tag>`, compilar y reemplazar el `.zip` o el `.app`.
+
+### Los datos al actualizar
+
+Las colecciones son carpetas del usuario, y los datos (`~/.local/share/apifast`) y los ajustes (`~/.config/apifast`) están fuera de los binarios: actualizar no los toca. Los formatos toleran versiones distintas: el historial salta las líneas que no entiende, y el escritor de colecciones conserva las claves que no conoce.
+
+Cuando una versión necesite cambiar el formato de algo, lo hace una migración (`apifast-history`, `migrations::MIGRATIONS`, con la versión que la necesita):
+
+- La carpeta de datos guarda en `last-version` la versión más nueva que arrancó.
+- Al arrancar una más nueva, la CLI y la interfaz ejecutan una vez las migraciones de las versiones intermedias, en orden, después de copiar lo que tocan a `backups/<de>-<a>/` en la carpeta de datos. Dicen qué hicieron y dónde está la copia.
+- Si una migración falla, apifast no arranca, y la marca no cambia: la próxima vez se intenta de nuevo. La copia está en `backups/`.
+- Una versión más vieja que la última que arrancó no cambia nada y avisa: lo que solo conoce la más nueva puede perderse.
+
+Todavía no hay ninguna migración.
+
 ## Comprobar lo construido
 
 ```sh

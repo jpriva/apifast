@@ -16,6 +16,9 @@ use eframe::wgpu::Backends;
 
 fn main() -> eframe::Result {
     let started = Instant::now();
+    if !prepare_data() {
+        std::process::exit(1);
+    }
     let timings = std::env::var_os("APIFAST_TIMINGS").is_some();
     let folder = std::env::args_os().nth(1).map(PathBuf::from);
     // The native backends first (Vulkan, Metal, DirectX 12). With OpenGL
@@ -28,6 +31,49 @@ fn main() -> eframe::Result {
         None => run(Backends::PRIMARY, folder.clone(), started, timings)
             .or_else(|_| run(Backends::PRIMARY | Backends::GL, folder, started, timings)),
     }
+}
+
+/// Readies apifast's data for this version (docs/13, "Actualizar"), as the
+/// command line does: the migrations since the last version, once. What it
+/// did, or why it could not, goes to stderr. Returns whether to go on.
+fn prepare_data() -> bool {
+    use apifast_history::migrations::{Dirs, Outcome, prepare};
+    use std::io::Write as _;
+    let dirs = Dirs {
+        data: apifast_history::dirs::data_dir(),
+        config: apifast_history::dirs::config_dir(),
+    };
+    let version = env!("CARGO_PKG_VERSION");
+    let mut stderr = std::io::stderr();
+    match prepare(&dirs, version) {
+        Ok(Outcome::Older { newest }) => {
+            let _ = writeln!(
+                stderr,
+                "warning: apifast {version} runs on data of {newest}, a newer version: what only that one knows may be lost"
+            );
+        }
+        Ok(Outcome::Updated {
+            from,
+            ran,
+            backup: Some(backup),
+        }) => {
+            let _ = writeln!(
+                stderr,
+                "apifast: data updated from {from}: {}; a copy of what changed is in {}",
+                ran.join(", "),
+                backup.display()
+            );
+        }
+        Ok(_) => {}
+        Err(error) => {
+            let _ = writeln!(
+                stderr,
+                "error: readying apifast's data for this version: {error}"
+            );
+            return false;
+        }
+    }
+    true
 }
 
 /// Runs the window with wgpu on `backends`, until it closes.

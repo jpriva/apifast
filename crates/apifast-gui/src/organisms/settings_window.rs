@@ -75,10 +75,20 @@ impl SettingsWindow {
                 changed |= self.tls(ui, settings, strings);
                 changed |= cookies(ui, settings, strings);
                 ui.add_space(theme::space::M);
-                if ui.button(strings.settings_reset).clicked() {
-                    *settings = Settings::default();
-                    changed = true;
-                }
+                ui.horizontal(|ui| {
+                    if ui.button(strings.settings_reset).clicked() {
+                        *settings = Settings::default();
+                        changed = true;
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let muted = theme::palette(ui).text_muted;
+                        ui.label(
+                            RichText::new(format!("apifast {}", crate::VERSION))
+                                .small()
+                                .color(muted),
+                        );
+                    });
+                });
             });
         self.open = open;
         changed

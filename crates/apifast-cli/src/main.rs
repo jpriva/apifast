@@ -38,8 +38,11 @@ const EXIT_ASSERTION_FAILED: u8 = 1;
 /// Window used to copy the stored body to stdout.
 const COPY_WINDOW: usize = 64 * 1024;
 
+/// The version and the commit it is built from: `0.1.0 (abc123456)`.
+const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", env!("APIFAST_COMMIT"), ")");
+
 #[derive(Parser)]
-#[command(name = "apifast", version, about = "A fast, file-based API client")]
+#[command(name = "apifast", version = VERSION, about = "A fast, file-based API client")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -161,6 +164,10 @@ fn main() -> ExitCode {
             };
         }
     };
+    if let Err(error) = prepare_data() {
+        eprintln!("error: {error:#}");
+        return ExitCode::FAILURE;
+    }
     let (result, failure) = match cli.command {
         Command::Send(args) => (run_send(&args), ExitCode::FAILURE),
         Command::Run(args) => (run::run(&args), ExitCode::from(run::EXIT_RUN_ERROR)),
@@ -190,6 +197,38 @@ fn main() -> ExitCode {
             failure
         }
     }
+}
+
+/// Readies apifast's data for this version (docs/13, "Actualizar"): the
+/// migrations of the versions since the last one, once. Says what ran, and
+/// warns when an older version runs on a newer one's data.
+///
+/// # Errors
+///
+/// If the data could not be readied: then nothing else runs.
+fn prepare_data() -> Result<()> {
+    use apifast_history::migrations::{Dirs, Outcome, prepare};
+    let dirs = Dirs {
+        data: apifast_history::dirs::data_dir(),
+        config: apifast_history::dirs::config_dir(),
+    };
+    let version = env!("CARGO_PKG_VERSION");
+    match prepare(&dirs, version).context("readying apifast's data for this version")? {
+        Outcome::Older { newest } => eprintln!(
+            "warning: apifast {version} runs on data of {newest}, a newer version: what only that one knows may be lost"
+        ),
+        Outcome::Updated {
+            from,
+            ran,
+            backup: Some(backup),
+        } => eprintln!(
+            "apifast: data updated from {from}: {}; a copy of what changed is in {}",
+            ran.join(", "),
+            backup.display()
+        ),
+        _ => {}
+    }
+    Ok(())
 }
 
 /// The adapters of one collection, as both `send` and `run` need them.

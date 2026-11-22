@@ -329,9 +329,12 @@ fn usage_errors_exit_with_3_and_version_works() {
     let out = apifast(data.path(), data.path(), &[]);
     assert_eq!(out.status.code(), Some(3));
     let out = apifast(data.path(), data.path(), &["--version"]);
-    assert_eq!(
-        text(&out.stdout),
-        format!("apifast {}\n", env!("CARGO_PKG_VERSION"))
+    // The version, and the commit it is built from.
+    let version = text(&out.stdout);
+    assert!(
+        version.starts_with(&format!("apifast {} (", env!("CARGO_PKG_VERSION")))
+            && version.ends_with(")\n"),
+        "{version}"
     );
 }
 

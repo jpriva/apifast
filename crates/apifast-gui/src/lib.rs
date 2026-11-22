@@ -5,6 +5,9 @@
 //! by [`layout`] and filled with data by [`screens`]. [`app`] ties the
 //! screens to the [`core`].
 
+/// The version and the commit it is built from: `0.1.0 (abc123456)`.
+pub const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", env!("APIFAST_COMMIT"), ")");
+
 pub mod actions;
 pub mod app;
 pub mod atoms;
