@@ -45,6 +45,7 @@ The design documents and ADRs are written in Spanish.
 11. [Quality and clean code](docs/11-calidad-y-clean-code.md)
 12. [Roadmap](docs/12-roadmap.md)
 13. [Building and packaging](docs/13-compilar-y-empaquetar.md): the commands to build apifast and make its .rpm, .deb and AppImage, and the app on Windows and macOS
+14. [Development](docs/14-desarrollo.md): running apifast from the source with `tools/dev.sh` and a `.env`, kept apart from an installed one, and the checks before a commit
 
 Architecture decisions live in [docs/adr/](docs/adr/).
 

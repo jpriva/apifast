@@ -1,0 +1,165 @@
+# Desarrollo
+
+Cómo ejecutar apifast desde el código, probarlo sin tocar los datos de una instalación, y qué comprobar antes de un commit. Para compilar en release y armar paquetes, ver [docs/13](13-compilar-y-empaquetar.md).
+
+## Requisitos
+
+- Las dependencias del sistema de [docs/13, "Dependencias del sistema"](13-compilar-y-empaquetar.md#dependencias-del-sistema).
+- [rustup](https://rustup.rs). La versión de Rust la fija `rust-toolchain.toml`, y `rustup` la instala sola la primera vez que se compila.
+- Para las comprobaciones: `cargo install --locked cargo-deny`.
+
+## Ejecutar desde el código
+
+```sh
+cp .env.example .env                  # una vez: las variables de desarrollo (ver abajo)
+tools/dev.sh                          # la interfaz, en debug
+tools/dev.sh gui ~/mi-coleccion       # la interfaz, abriendo esa colección
+tools/dev.sh --release                # la interfaz, optimizada
+tools/dev.sh cli run ~/mi-coleccion   # la CLI, con sus argumentos
+tools/dev.sh cli --help
+```
+
+`tools/dev.sh` carga el `.env` y ejecuta `cargo run` del paquete que toca (`apifast-gui` o `apifast-cli`). Se puede lanzar desde cualquier carpeta: las rutas que se le pasan son relativas a donde se está.
+
+Al arrancar, dice en la terminal qué `.env` cargó y qué carpetas de datos y de ajustes usa:
+
+```
+dev.sh: env file: /home/…/apifast/.env
+dev.sh: data: /home/…/apifast/target/dev/data
+dev.sh: settings: /home/…/apifast/target/dev/config
+```
+
+**Debug o release.** La compilación debug tarda menos, pero la aplicación va más lenta: se nota en cuerpos grandes, en el resaltado y en los scripts. Para ver cómo se siente instalada, o para medir, se usa `--release` (o `APIFAST_DEV_RELEASE=1` en el `.env`).
+
+Sin el script funciona igual, pero sin el `.env`:
+
+```sh
+cargo run -p apifast-gui                   # la interfaz
+cargo run -p apifast-gui -- ~/mi-coleccion
+cargo run -p apifast-cli -- --help         # la CLI
+```
+
+## El archivo `.env`
+
+Guarda las variables con las que se ejecuta apifast en desarrollo. Se crea copiando `.env.example`, que documenta cada una. git ignora `.env`, así que cada uno tiene el suyo.
+
+```sh
+cp .env.example .env
+```
+
+Formato:
+
+- Una variable por línea: `CLAVE=valor`. También se acepta `export CLAVE=valor`.
+- El valor puede ir entre comillas, simples o dobles. Las comillas se quitan.
+- Las líneas vacías y las que empiezan por `#` se ignoran.
+- Una línea que no sea `CLAVE=valor` detiene el script y dice cuál es.
+
+Reglas:
+
+- **La terminal gana.** Si una variable ya tiene valor en la terminal, el `.env` no la cambia. Así se puede probar algo una vez sin editarlo: `APIFAST_TIMINGS=1 tools/dev.sh`.
+- **Las rutas relativas son del repositorio.** `APIFAST_DATA_DIR=target/dev/data` es `<repositorio>/target/dev/data` aunque el script se lance desde otra carpeta.
+- **Se lee, no se ejecuta.** El script no hace `source` del archivo: un `$(…)` o un `;` en un valor quedan como texto.
+- **Otro archivo:** `APIFAST_ENV_FILE=~/otro.env tools/dev.sh`.
+- **Solo lo lee `tools/dev.sh`.** Un apifast instalado no lee ningún `.env`: un `.env` en la carpeta de una colección no cambia cómo funciona.
+
+Las variables:
+
+| Variable | Para qué | En `.env.example` |
+|---|---|---|
+| `APIFAST_DATA_DIR` | Dónde van el historial, las respuestas, las sesiones, el espacio de trabajo y los archivos de la bóveda. | `target/dev/data` |
+| `APIFAST_CONFIG_DIR` | Dónde van `settings.yml` y `keymap.yml`. | `target/dev/config` |
+| `APIFAST_DEV_RELEASE` | `1`: compila optimizado, como `--release`. | `0` |
+| `APIFAST_NO_KEYRING` | `1`: la clave maestra de la bóveda va en un archivo de la carpeta de datos, no en el llavero del sistema. Así las pruebas no llenan el llavero de claves. | `1` |
+| `APIFAST_TIMINGS` | `1`: escribe en la terminal cuánto tardaron el primer frame y el árbol de la colección. | comentada |
+| `LC_MESSAGES` | El idioma de la interfaz cuando su ajuste dice "el del sistema": `en_US.UTF-8`, `es_CO.UTF-8`. No sirve `LANG`: la terminal siempre lo tiene, y gana. | comentada |
+| `APIFAST_COLLECTION_KEY` | CLI: abre los secretos compartidos de una colección sin guardar su clave. | comentada |
+
+## Datos separados de la instalación
+
+Sin `APIFAST_DATA_DIR` ni `APIFAST_CONFIG_DIR`, la versión de desarrollo usa las mismas carpetas que un apifast instalado: `~/.local/share/apifast` y `~/.config/apifast`. Comparte con él el historial, los ajustes, el espacio de trabajo y la bóveda. Además, como el desarrollo suele ir por delante, su versión puede migrar esos datos y el instalado los vería después como de una versión más nueva ([docs/13, "Los datos al actualizar"](13-compilar-y-empaquetar.md#los-datos-al-actualizar)).
+
+Con el `.env` de ejemplo todo queda en `target/dev/`. Para empezar de cero:
+
+```sh
+rm -rf target/dev
+```
+
+Las colecciones no se copian: son carpetas del usuario, y la versión de desarrollo las edita igual que la instalada. Para probar sin miedo, se usa una copia.
+
+## Colecciones para probar
+
+- Una colección de Bruno en YAML se abre directamente. Una de Bruno en `.bru`, de Postman, de Insomnia o una especificación OpenAPI 3 se importa desde el menú de la colección, "Import…".
+- `crates/apifast-storage-fs/tests/corpus/bruno/`: colecciones reales de Bruno que usan las pruebas de compatibilidad.
+- Una colección grande, para el rendimiento:
+
+  ```sh
+  python3 tools/bench/make_collection.py /tmp/c1000 1000
+  tools/dev.sh --release gui /tmp/c1000
+  ```
+
+## Antes de un commit
+
+Lo mismo que comprueba el CI:
+
+```sh
+cargo fmt --all --check
+rustfmt --edition 2024 --check crates/apifast-gui/src/strings/*.rs   # los idiomas, donde cargo fmt no llega
+cargo clippy --workspace --all-targets -- -D warnings
+cargo clippy -p apifast-cli --no-default-features --all-targets -- -D warnings
+cargo clippy -p apifast-gui --no-default-features --all-targets -- -D warnings
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+cargo deny check
+cargo test --workspace --no-fail-fast
+```
+
+Para ver solo el resumen de las pruebas, con los fallos:
+
+```sh
+cargo test --workspace --no-fail-fast 2>&1 \
+  | grep -E "test result|FAILED|panicked|overflow|error: test failed|SIGABRT|^error" \
+  | grep -v "panicked at crates/apifast-git-contract" \
+  | awk '/test result/ {p+=$4; f+=$6} /FAILED|panicked|overflow|error: test failed|SIGABRT|^error/ {print} END {print "passed", p, "failed", f}'
+```
+
+Se buscan también `overflow` y `SIGABRT`: un binario de pruebas que se cae no escribe su `test result`, y sus pruebas no se cuentan. Las líneas `panicked at crates/apifast-git-contract` son esperadas: la batería de git comprueba que un adaptador roto falla.
+
+### Las pruebas de la interfaz
+
+Están en un solo binario, `crates/apifast-gui/tests/gui/`, y usan `egui_kittest`: dibujan la interfaz sin ventana y la recorren por el árbol de accesibilidad, buscando los textos de `strings::EN`. No abren nada en la pantalla.
+
+```sh
+cargo test -p apifast-gui --test gui              # todas
+cargo test -p apifast-gui --test gui flow         # las que tienen "flow" en el nombre
+```
+
+Un texto nuevo de la interfaz va en `crates/apifast-gui/src/strings/en.rs` y en `es.rs` (ver [docs/09, "Idiomas"](09-ui-ux.md#idiomas)); las pruebas lo buscan por su campo (`EN.send`), no por la frase.
+
+## Medir el rendimiento
+
+Las herramientas y cómo se usan están en `tools/bench/README.md`, y los presupuestos y las últimas mediciones en [docs/10](10-rendimiento-y-memoria.md). Siempre en release. Algunas abren la ventana real unos segundos.
+
+## Qué funciona y qué no
+
+En Linux, la aplicación está completa hasta la fase F10 del [roadmap](12-roadmap.md):
+
+- Peticiones HTTP, WebSocket, SSE, gRPC y GraphQL.
+- Entornos y variables, la bóveda de secretos (locales y compartidos con el equipo), cookies y autenticación (Basic, Bearer, API key, Digest, NTLM, AWS SigV4, OAuth 2.0).
+- Aserciones, capturas y scripts en JavaScript compatibles con Bruno.
+- El runner, con informes JUnit y JSON.
+- Importar de Bruno, Postman, Insomnia, OpenAPI 3 y cURL, y exportar a Postman.
+- git: estado, diff por campos, commit y cambio de rama.
+- Interfaz en español y en inglés, versiones y actualizaciones, y paquetes `.rpm`, `.deb` y AppImage.
+
+Lo que falta o tiene límites:
+
+- **Windows y macOS:** compilan y pasan las pruebas en el CI, pero no se han probado en una máquina real ni tienen instalador.
+- **Traducción:** los resultados de las aserciones ("expected eq 201, got 200") y los fallos de los scripts siguen en inglés.
+- **Pendientes anotados en cada fase del roadmap:**
+  - certificados PKCS#12 y claves cifradas;
+  - Swagger 2;
+  - `require` de librerías en los scripts;
+  - scripts de gRPC;
+  - la configuración de proxy del escritorio;
+  - entre otros, anotados en el roadmap.
+- **Falta la guía de usuario y la auditoría de seguridad de la bóveda.**
+- **Uso diario:** las pruebas automáticas no cubren cómo se siente en el día a día. Lo que resulte raro o incómodo se anota y se corrige.
