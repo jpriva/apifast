@@ -104,10 +104,15 @@ Instalar y desinstalar:
 
 ```sh
 sudo dnf install ./target/packages/apifast-*.x86_64.rpm   # Fedora
+sudo dnf reinstall ./target/packages/apifast-*.x86_64.rpm # Fedora, el mismo número de versión recompilado
 sudo dnf remove apifast
 sudo apt install ./target/packages/apifast_*_amd64.deb    # Ubuntu/Debian
 sudo apt remove apifast
 ```
+
+`dnf install` no reemplaza un paquete instalado con el mismo número de versión: para eso está `dnf reinstall`. Una versión nueva (`tools/release.sh`, en [Versiones y actualizaciones](#versiones-y-actualizaciones)) se instala con `dnf upgrade`.
+
+Instalado, la interfaz aparece en el menú de aplicaciones como apifast y se abre también con `apifast-gui`; la CLI es `apifast` (`apifast --version` dice la versión y el commit).
 
 ### Paquetes que sirvan en otros sistemas: compilar en Ubuntu 22.04
 
