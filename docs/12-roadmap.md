@@ -475,6 +475,37 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
   - [x] Medidos con el ejemplo `bench` de `apifast-gui`: 100 MB de respuesta suman 3,5–4,7 MB (presupuesto, 10 MB); una tecla en un body de 200 KB cuesta 1,6 ms de CPU (10 ms); un envío a un servidor local, 0,29 ms (2 ms). Todos los presupuestos se cumplen en Linux.
   - [x] Los 4 MB que quedan tras una respuesta grande no son una fuga: en 8 vueltas la memoria no crece; son código del visor usado por primera vez (páginas que el kernel suelta), lo que el asignador guarda y memoria de los hilos del envío.
   - [ ] Medir en macOS y Windows.
+- [ ] Experiencia de escritorio: lo que traen las demás aplicaciones.
+  - [ ] Registro con niveles (`error`, `warn`, `info`, `debug`, `trace`), con `tracing`:
+    - El nivel sale de `APIFAST_LOG` (también por módulo: `APIFAST_LOG=apifast_http=debug`) o de un ajuste, y por defecto es `warn`.
+    - Escribe en la terminal y en un archivo de la carpeta de datos (`logs/apifast.log`) con tamaño máximo y rotación, para adjuntarlo a un reporte.
+    - Nunca escribe secretos, valores de variables secretas ni la query de una URL, como ya cumplen los errores.
+    - Hay que medir su coste en el binario y en la RAM con el nivel por defecto: no debe notarse.
+  - [ ] Preferencias completas: la ventana de ajustes (`Ctrl+,`) pasa a tener secciones.
+    - General: idioma, abrir el último espacio de trabajo, confirmar al cerrar con cambios sin guardar.
+    - Apariencia: tema, color de acento, escala, densidad.
+    - Editor: fuente y tamaño del código, tabulación, ajuste de línea, números de línea.
+    - Red: proxy, TLS, cookies, tiempo de espera por defecto.
+    - Atajos, con la ventana que ya existe.
+    - Datos: historial, espacio, carpetas en uso, con un botón para abrirlas.
+    - Todo sigue en `settings.yml`, legible y editable a mano.
+  - [ ] Menú de la aplicación: un botón de menú en la barra superior (al estilo de GNOME), o la barra de menú nativa en macOS, con Preferencias, Atajos de teclado, Importar, Acerca de y Salir.
+  - [ ] Ventana "Acerca de":
+    - El icono, el nombre, la versión con su commit, las licencias (MIT o Apache-2.0) y las de las dependencias, generadas al compilar.
+    - El sitio, y las carpetas de datos y de ajustes.
+    - Un botón que copia todo eso (versión, sistema, backend gráfico) para un reporte de error.
+  - [ ] Barra de título propia, con minimizar, maximizar y cerrar siempre, aunque GNOME no los pida:
+    - La ventana va sin decoraciones del sistema y la barra la dibuja la interfaz: arrastrar mueve la ventana, el doble clic maximiza, y los bordes la redimensionan.
+    - Puede llevar el buscador y el entorno, como hacen otros clientes de APIs.
+    - Un ajuste vuelve a la barra del sistema.
+    - En Windows y macOS se mantiene la nativa, salvo que se pruebe allí.
+  - [ ] Mejoras visuales:
+    - Campos de texto que hoy son pequeños, y la × de pestañas y ventanas (anotado desde F2).
+    - Iconos dibujados en lugar de texto en las barras y botones.
+    - Espaciado y tipografía homogéneos.
+    - Estados vacíos con una indicación de qué hacer.
+    - Transiciones suaves al abrir ventanas y paneles.
+    - Revisar en los dos temas, con capturas sin ventana, como permite `egui_kittest` con `wgpu`.
 
 ### Criterio de salida
 
