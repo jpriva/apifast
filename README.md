@@ -44,6 +44,7 @@ The design documents and ADRs are written in Spanish.
 10. [Performance and memory](docs/10-rendimiento-y-memoria.md)
 11. [Quality and clean code](docs/11-calidad-y-clean-code.md)
 12. [Roadmap](docs/12-roadmap.md)
+13. [Building and packaging](docs/13-compilar-y-empaquetar.md): the commands to build apifast and make its .rpm, .deb and AppImage, and the app on Windows and macOS
 
 Architecture decisions live in [docs/adr/](docs/adr/).
 
