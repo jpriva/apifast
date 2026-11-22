@@ -131,11 +131,15 @@ Medido el 2026-11-21 en la misma máquina (Ryzen 7 8700G, Radeon 780M, Mesa con 
 | Abrir 1000 requests (árbol visible, contando el arranque) | < 200 ms | 66–96 ms |
 | Abrir 5000 requests | — | 120–139 ms |
 | CPU en reposo | ~0 % | 0,0 % |
+| RAM extra al recibir y mostrar 100 MB | < 10 MB | 3,5–4,7 MB (llega en unos 50 ms por loopback) |
+| CPU por tecla en un body de 200 KB | < 10 ms | 1,6 ms |
+| Sobrecarga de envío (servidor local) | < 2 ms | 0,29 ms de mediana, 0,34 ms en el percentil 95 |
 | Tamaño del binario | < 60 MB | 36,2 MB (GUI), 20,6 MB (CLI) |
 
 - De la memoria propia, unos 21 MB son el código del binario residente: páginas limpias del archivo, que el kernel puede soltar. El heap es de 4,5 MB y la memoria anónima de 3,8 MB.
 - Se probaron dos recortes que no se aplicaron (se prefirió no cambiar el comportamiento ni la compilación): compilar con `opt-level = "s"` bajaba el código residente de 20,9 a 15,9 MB y el binario de 36,2 a 26,6 MB; y que el cargador de Vulkan no abriera lavapipe ni Dozen (`VK_LOADER_DRIVERS_DISABLE`) quitaba unos 4 MB de la pila gráfica. Quedan como opciones si la memoria propia se acerca al presupuesto.
-- Siguen sin medir en la ventana real la RAM extra al recibir 100 MB, la CPU por tecla en un body de 200 KB y la sobrecarga de envío.
+- La respuesta, el body y el envío se miden con `cargo run --release -p apifast-gui --example bench -- response|typing|send` (ver `tools/bench/README.md`). La respuesta de 100 MB se recibe con la aplicación real (núcleo, almacén de respuestas, visor) en su ventana; la tecla, con el editor de código de los bodies en una ventana real, una tecla por fotograma; el envío, con el núcleo, del comando a la respuesta publicada, historial incluido.
+- Los 4 MB de la respuesta de 100 MB no se devuelven al cerrar su pestaña. Falta ver dónde quedan (en el asignador o en algo que guarda el visor), si se pueden soltar y si crecen con varios envíos seguidos.
 
 ## Perfil de compilación
 

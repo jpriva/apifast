@@ -465,7 +465,9 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
 - [ ] Auditoría de seguridad de la bóveda.
 - [ ] Revisión final de presupuestos de rendimiento.
   - [x] RAM en reposo, arranque, apertura del árbol, CPU en reposo y tamaño, medidos ([docs/10](10-rendimiento-y-memoria.md#mediciones-de-f10)). Los presupuestos de RAM pasan a ser de la memoria propia de apifast, sin la pila gráfica del sistema (con RADV, LLVM aporta de 9 a 24 MB según quién más la use): 30–33 MB.
-  - [ ] Medir en la ventana real la RAM extra al recibir 100 MB, la CPU por tecla en un body de 200 KB y la sobrecarga de envío.
+  - [x] Medidos con el ejemplo `bench` de `apifast-gui`: 100 MB de respuesta suman 3,5–4,7 MB (presupuesto, 10 MB); una tecla en un body de 200 KB cuesta 1,6 ms de CPU (10 ms); un envío a un servidor local, 0,29 ms (2 ms). Todos los presupuestos se cumplen en Linux.
+  - [ ] Que los 4 MB de una respuesta grande se suelten al cerrar su pestaña.
+  - [ ] Medir en macOS y Windows.
 
 ### Criterio de salida
 
