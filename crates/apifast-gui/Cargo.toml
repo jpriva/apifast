@@ -7,8 +7,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-# The commit it is built from, as the command line gets it.
-build = "../apifast-cli/build.rs"
 
 [[bin]]
 name = "apifast-gui"

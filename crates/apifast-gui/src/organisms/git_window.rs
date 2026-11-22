@@ -8,8 +8,8 @@ use apifast_app::{FileChange, FileDiff};
 use apifast_domain::FieldChange;
 use eframe::egui::{self, RichText};
 
-use crate::core::{GitCommand, GitView};
-use crate::strings::Strings;
+use crate::core::{GitCommand, GitNotice, GitProblem, GitView};
+use crate::strings::{Strings, fill};
 use crate::theme;
 
 /// The window's state.
@@ -117,10 +117,10 @@ impl GitWindow {
             }
         });
         if let Some(notice) = &view.notice {
-            ui.label(RichText::new(notice).color(palette.success));
+            ui.label(RichText::new(notice_text(notice, strings)).color(palette.success));
         }
         if let Some(error) = &view.error {
-            ui.label(RichText::new(error).color(palette.danger));
+            ui.label(RichText::new(problem_text(error, strings)).color(palette.danger));
         }
         commands
     }
@@ -256,5 +256,25 @@ fn field_view(ui: &mut egui::Ui, field: &FieldChange, strings: &Strings) {
             let none = format!("{sign} {}", strings.git_none);
             ui.label(RichText::new(none).monospace().color(palette.text_muted));
         }
+    }
+}
+
+/// What a commit or a switch did, in the interface's language.
+fn notice_text(notice: &GitNotice, strings: &Strings) -> String {
+    match notice {
+        GitNotice::Committed { files, id } => {
+            strings.count(&strings.git_committed, *files, &[("id", id)])
+        }
+        GitNotice::Switched(branch) => fill(strings.git_switched, &[("branch", branch)]),
+    }
+}
+
+/// Why something was not done. What git says stays as it says it.
+fn problem_text(problem: &GitProblem, strings: &Strings) -> String {
+    match problem {
+        GitProblem::UnsavedTabs { tabs, branch } => {
+            strings.count(&strings.git_unsaved_tabs, *tabs, &[("branch", branch)])
+        }
+        GitProblem::Failed(why) => why.clone(),
     }
 }

@@ -33,7 +33,7 @@ use workspace::ActiveWorkspace;
 pub use cookies::{CookieCommand, CookieSlot};
 pub use copy::Copied;
 pub use export::Exported;
-pub use git::{GitCommand, GitView};
+pub use git::{GitCommand, GitNotice, GitProblem, GitView};
 pub use import::ImportView;
 pub use methods::MethodsView;
 pub use reimport::ReimportView;

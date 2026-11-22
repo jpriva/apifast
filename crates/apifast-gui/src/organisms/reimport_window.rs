@@ -125,7 +125,7 @@ impl ReimportWindow {
             }
         });
         if let Some(folder) = pick {
-            self.pick(ui.ctx(), folder);
+            self.pick(ui.ctx(), folder, strings.all_files);
         }
         let ready = !self.file.trim().is_empty();
         ui.add_enabled(ready, egui::Button::new(strings.import_review))
@@ -266,7 +266,8 @@ impl ReimportWindow {
 
     /// Opens the system's dialog, for a file or a folder, off the
     /// interface's thread.
-    fn pick(&mut self, ctx: &egui::Context, folder: bool) {
+    fn pick(&mut self, ctx: &egui::Context, folder: bool, all_files: &str) {
+        let all_files = all_files.to_owned();
         let (sender, receiver) = channel();
         let ctx = ctx.clone();
         std::thread::spawn(move || {
@@ -276,7 +277,7 @@ impl ReimportWindow {
             } else {
                 dialog
                     .add_filter("Postman, Insomnia, OpenAPI", &["json", "yaml", "yml"])
-                    .add_filter("All files", &["*"])
+                    .add_filter(&all_files, &["*"])
                     .pick_file()
             };
             let _ = sender.send(picked);

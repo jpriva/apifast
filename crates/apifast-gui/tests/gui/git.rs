@@ -98,15 +98,12 @@ fn the_status_follows_the_files_and_a_commit_and_a_switch_change_it() {
     let snapshot = wait(&core, "the refusal", |s| {
         s.git.as_ref().is_some_and(|g| g.error.is_some())
     });
-    assert!(
-        snapshot
-            .git
-            .as_ref()
-            .unwrap()
-            .error
-            .as_ref()
-            .unwrap()
-            .contains("unsaved")
+    assert_eq!(
+        snapshot.git.as_ref().unwrap().error,
+        Some(apifast_gui::core::GitProblem::UnsavedTabs {
+            tabs: 1,
+            branch: "feature".into()
+        })
     );
     core.send(Command::CloseTab(tab));
 
@@ -120,12 +117,10 @@ fn the_status_follows_the_files_and_a_commit_and_a_switch_change_it() {
             .is_some_and(|g| g.notice.is_some() && g.changes.is_empty())
     });
     let view = snapshot.git.as_ref().unwrap();
-    assert!(
-        view.notice
-            .as_ref()
-            .unwrap()
-            .starts_with("Committed 1 file(s): ")
-    );
+    assert!(matches!(
+        view.notice,
+        Some(apifast_gui::core::GitNotice::Committed { files: 1, .. })
+    ));
     assert_eq!(
         view.diff, None,
         "a diff of a file that no longer changed goes"

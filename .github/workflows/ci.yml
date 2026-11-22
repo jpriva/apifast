@@ -26,6 +26,9 @@ jobs:
       # Installs the version pinned in rust-toolchain.toml.
       - run: rustup toolchain install
       - run: cargo fmt --all --check
+      # The interface's languages are included by its build script, where
+      # cargo fmt does not look.
+      - run: rustfmt --edition 2024 --check crates/apifast-gui/src/strings/*.rs
 
   clippy:
     name: Lints

@@ -1,11 +1,197 @@
 //! Visible texts. Components receive them as parameters and never choose a
 //! language; the screens pass the active [`Strings`].
+//!
+//! Each language is a file of this folder named by its code (`en.rs`,
+//! `es.rs`, `pt_br.rs`), with its `NAME` and its `STRINGS`. That file is the
+//! whole of adding one: the build script finds it and lists it in
+//! [`LANGUAGES`], the compiler refuses it while a text is missing, and the
+//! tests check that its templates have the same `{placeholders}` as
+//! English's. A text with a count is a [`Plural`], picked by the language's
+//! [`PluralRule`].
+
+use std::fmt::Display;
 
 use apifast_domain::Origin;
 
-/// Every text the interface shows.
+// `pub mod en; pub mod es; …` and `LANGUAGES`, one per file of this folder.
+include!(concat!(env!("OUT_DIR"), "/languages.rs"));
+
+/// English: what a language that is not there falls back to.
+pub const EN: Strings = en::STRINGS;
+
+/// A language the interface can show.
+#[derive(Debug, Clone, Copy)]
+pub struct Language {
+    /// Its code: the name of its file, `en` or `pt_br`.
+    pub code: &'static str,
+    /// Its name, in it.
+    pub name: &'static str,
+    /// Its texts.
+    pub strings: &'static Strings,
+}
+
+/// The language `code` names (`es`, `es_CO`, `es-CO.UTF-8`, `pt_BR`): the
+/// one for its region if there is one, otherwise the one for its language.
+/// `None` if neither is there.
+#[must_use]
+pub fn language(code: &str) -> Option<&'static Language> {
+    let code = code.split(['.', '@']).next().unwrap_or_default();
+    let code = code.replace('-', "_").to_lowercase();
+    let base = code.split('_').next().unwrap_or_default();
+    (LANGUAGES.iter().find(|l| l.code == code))
+        .or_else(|| LANGUAGES.iter().find(|l| l.code == base))
+}
+
+/// The system's language, from what `var` gives for `LC_ALL`,
+/// `LC_MESSAGES` and `LANG`, the first that is set; `None` when none is,
+/// or it is `C` or `POSIX`.
+pub fn system_language(var: impl Fn(&str) -> Option<String>) -> Option<&'static Language> {
+    let code = ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .iter()
+        .filter_map(|name| var(name))
+        .find(|value| !value.is_empty())?;
+    language(&code)
+}
+
+/// Which form of a [`Plural`] a count takes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Form {
+    /// One, in English and Spanish.
+    One,
+    /// For languages with a form for a few (Polish, Russian, Arabic).
+    Few,
+    /// For languages with a form for many.
+    Many,
+    /// Every other count.
+    Other,
+}
+
+/// How a language picks the form of a count.
+#[derive(Clone, Copy)]
+pub struct PluralRule(pub fn(u64) -> Form);
+
+impl PluralRule {
+    /// One for 1, other for the rest: English, Spanish and many more.
+    pub const ONE_OTHER: Self = Self(|n| if n == 1 { Form::One } else { Form::Other });
+}
+
+impl std::fmt::Debug for PluralRule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("PluralRule")
+    }
+}
+
+/// A text with a count, `{n}`, in each form its language has.
+#[derive(Debug, Clone, Copy)]
+pub struct Plural {
+    /// For [`Form::One`].
+    pub one: &'static str,
+    /// For [`Form::Few`].
+    pub few: &'static str,
+    /// For [`Form::Many`].
+    pub many: &'static str,
+    /// For [`Form::Other`].
+    pub other: &'static str,
+}
+
+impl Plural {
+    /// A text with two forms, the most languages have: few and many are
+    /// the other.
+    #[must_use]
+    pub const fn two(one: &'static str, other: &'static str) -> Self {
+        Self {
+            one,
+            few: other,
+            many: other,
+            other,
+        }
+    }
+
+    fn form(&self, form: Form) -> &'static str {
+        match form {
+            Form::One => self.one,
+            Form::Few => self.few,
+            Form::Many => self.many,
+            Form::Other => self.other,
+        }
+    }
+}
+
+/// `template` with each `{name}` of `values` replaced by its value. What
+/// is not a placeholder of `values`, `{{host}}` for one, stays as it is.
+#[must_use]
+pub fn fill(template: &str, values: &[(&str, &dyn Display)]) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::with_capacity(template.len());
+    let mut rest = template;
+    while let Some(start) = rest.find('{') {
+        out.push_str(&rest[..start]);
+        rest = &rest[start..];
+        let value = rest.find('}').and_then(|end| {
+            let name = &rest[1..end];
+            let (_, value) = values.iter().find(|(key, _)| *key == name)?;
+            Some((end, value))
+        });
+        if let Some((end, value)) = value {
+            let _ = write!(out, "{value}");
+            rest = &rest[end + 1..];
+        } else {
+            out.push('{');
+            rest = &rest[1..];
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// A text of [`Strings`]: what the checks of the languages read.
+trait Text {
+    fn visit(&self, field: &'static str, visit: &mut dyn FnMut(&'static str, &'static str));
+}
+
+impl Text for &'static str {
+    fn visit(&self, field: &'static str, visit: &mut dyn FnMut(&'static str, &'static str)) {
+        visit(field, self);
+    }
+}
+
+impl Text for Plural {
+    fn visit(&self, field: &'static str, visit: &mut dyn FnMut(&'static str, &'static str)) {
+        for text in [self.one, self.few, self.many, self.other] {
+            visit(field, text);
+        }
+    }
+}
+
+impl Text for PluralRule {
+    fn visit(&self, _: &'static str, _: &mut dyn FnMut(&'static str, &'static str)) {}
+}
+
+/// The struct of every text, and [`Strings::each`] over them.
+macro_rules! texts {
+    (
+        $(#[$meta:meta])*
+        pub struct Strings { $($(#[$field_meta:meta])* pub $field:ident: $ty:ty,)* }
+    ) => {
+        $(#[$meta])*
+        pub struct Strings { $($(#[$field_meta])* pub $field: $ty,)* }
+
+        impl Strings {
+            /// Calls `visit` with each text and its field's name; each form
+            /// of a [`Plural`].
+            pub fn each(&self, mut visit: impl FnMut(&'static str, &'static str)) {
+                $(Text::visit(&self.$field, stringify!($field), &mut visit);)*
+            }
+        }
+    };
+}
+
+texts! {
+/// Every text the interface shows.
+#[derive(Debug, Clone, Copy)]
 pub struct Strings {
+    /// How this language picks the form of a count.
+    pub plural_rule: PluralRule,
     /// Shown in the sidebar while no collection is open.
     pub no_collection: &'static str,
     /// Button and action that create a collection.
@@ -42,7 +228,7 @@ pub struct Strings {
     pub rename_workspace: &'static str,
     /// Title of the picker of a workspace folder.
     pub pick_workspace: &'static str,
-    /// Before the name of the collection whose history is shown.
+    /// The history's heading for a request: `{name}`.
     pub history_of: &'static str,
     /// Button that opens something.
     pub open: &'static str,
@@ -96,6 +282,8 @@ pub struct Strings {
     pub revert: &'static str,
     /// Asks to confirm, before the environment's name.
     pub delete_environment: &'static str,
+    /// Asks before deleting the environment `{name}`.
+    pub delete_environment_confirm: &'static str,
     /// Column of a variable's type.
     pub kind: &'static str,
     /// Type: text.
@@ -230,6 +418,14 @@ pub struct Strings {
     pub days: &'static str,
     /// Button that opens the system's folder picker.
     pub browse: &'static str,
+    /// A file dialog's filter for every file.
+    pub all_files: &'static str,
+    /// Settings: the interface's language.
+    pub language: &'static str,
+    /// The language: the system's.
+    pub language_system: &'static str,
+    /// A file dialog's filter for data files.
+    pub csv_or_json: &'static str,
     /// Title of the folder picker.
     pub pick_collection: &'static str,
     /// Hover of the secret column.
@@ -280,12 +476,12 @@ pub struct Strings {
     pub import_review: &'static str,
     /// Before reviewing.
     pub import_hint: &'static str,
-    /// After a count: folders.
-    pub import_folders: &'static str,
-    /// After a count: requests.
-    pub import_requests: &'static str,
-    /// After a count: environments.
-    pub import_environments_count: &'static str,
+    /// The folders an import creates: `{n}`.
+    pub import_folders: Plural,
+    /// The requests an import creates: `{n}`.
+    pub import_requests: Plural,
+    /// The environments an import creates: `{n}`.
+    pub import_environments_count: Plural,
     /// Heading of the warnings.
     pub import_not_kept: &'static str,
     /// Where a warning about the collection is.
@@ -298,10 +494,10 @@ pub struct Strings {
     pub import: &'static str,
     /// Menu: export the collection to Postman.
     pub export_postman_menu: &'static str,
-    /// Before the file an export wrote.
+    /// Where an export went: `{file}`.
     pub exported_to: &'static str,
-    /// After a count: environments exported with it.
-    pub exported_environments: &'static str,
+    /// After an export: the environments written beside it, `{n}`.
+    pub exported_environments: Plural,
     /// Before what an export did not keep.
     pub export_not_kept: &'static str,
     /// Before why an export failed.
@@ -342,9 +538,9 @@ pub struct Strings {
     pub copy_as_go: &'static str,
     /// Submenu: copy a request as code.
     pub copy_as: &'static str,
-    /// Before the language a request was copied as.
+    /// A request copied as code, in `{language}`.
     pub copied_as: &'static str,
-    /// After it, before what could not be filled in.
+    /// A request copied as code, in `{language}`, without what `{missing}` names.
     pub copied_missing: &'static str,
     /// Before why a request could not be copied.
     pub copy_failed: &'static str,
@@ -442,8 +638,14 @@ pub struct Strings {
     pub git_same: &'static str,
     /// A field that was not there, or is not anymore.
     pub git_none: &'static str,
-    /// Status bar: how many files changed.
-    pub git_changed: &'static str,
+    /// The status bar: how many files changed since the last commit, `{n}`.
+    pub git_changed: Plural,
+    /// After a commit: `{n}` files, the commit `{id}`.
+    pub git_committed: Plural,
+    /// After switching to the branch `{branch}`.
+    pub git_switched: &'static str,
+    /// Refuses to switch to `{branch}` while `{n}` tabs have unsaved changes.
+    pub git_unsaved_tabs: Plural,
     /// Action: open the git window.
     pub action_git: &'static str,
     /// Root menu and palette: open the cookie editor.
@@ -546,13 +748,13 @@ pub struct Strings {
     pub history_empty: &'static str,
     /// A send that failed, in the history.
     pub failed: &'static str,
-    /// After a number of seconds.
+    /// How long ago, in seconds: `{n}`.
     pub seconds_ago: &'static str,
-    /// After a number of minutes.
+    /// How long ago, in minutes: `{n}`.
     pub minutes_ago: &'static str,
-    /// After a number of hours.
+    /// How long ago, in hours: `{n}`.
     pub hours_ago: &'static str,
-    /// After a number of days.
+    /// How long ago, in days: `{n}`.
     pub days_ago: &'static str,
     /// Response tab with the events of the send.
     pub timeline: &'static str,
@@ -620,7 +822,7 @@ pub struct Strings {
     pub run_stop: &'static str,
     /// Runner: forget the results.
     pub run_clear: &'static str,
-    /// Runner: before the iteration number.
+    /// The runner's progress: iteration `{n}` of `{total}`.
     pub run_iteration: &'static str,
     /// Runner totals; the braces are replaced.
     pub run_summary: &'static str,
@@ -638,8 +840,8 @@ pub struct Strings {
     pub filter_jsonpath: &'static str,
     /// Placeholder of the filter on an XML body.
     pub filter_xpath: &'static str,
-    /// Above the filtered values; `{count}` is replaced.
-    pub filter_results: &'static str,
+    /// The nodes a filter of the body selects: `{n}`.
+    pub filter_results: Plural,
     /// Auth type: HTTP Digest.
     pub auth_digest: &'static str,
     /// Auth type: NTLM.
@@ -710,8 +912,8 @@ pub struct Strings {
     pub oauth2_auto_fetch: &'static str,
     /// OAuth 2.0 option.
     pub oauth2_auto_refresh: &'static str,
-    /// OAuth 2.0: extra parameters; `{count}` is replaced.
-    pub oauth2_parameters_kept: &'static str,
+    /// Extra OAuth 2.0 parameters the file has and the editor keeps: `{n}`.
+    pub oauth2_parameters_kept: Plural,
     /// OAuth 2.0: before the token's state.
     pub token_label: &'static str,
     /// OAuth 2.0: no token stored.
@@ -986,8 +1188,8 @@ pub struct Strings {
     pub schema_failed: &'static str,
     /// Heading of the schema explorer.
     pub schema_explorer: &'static str,
-    /// After a count: types of a schema.
-    pub schema_types: &'static str,
+    /// The types of a GraphQL schema: `{n}`.
+    pub schema_types: Plural,
     /// Button: back to the previous type.
     pub schema_back: &'static str,
     /// Field: filter the schema's types.
@@ -1016,6 +1218,8 @@ pub struct Strings {
     pub body_not_editable: &'static str,
     /// Request tab with a WebSocket request's messages.
     pub ws_messages: &'static str,
+    /// How many messages a connection had: `{n}`.
+    pub ws_message_count: Plural,
     /// Placeholder of a WebSocket message's name.
     pub ws_message_name: &'static str,
     /// Button that adds a WebSocket message.
@@ -1116,7 +1320,7 @@ pub struct Strings {
     pub format: &'static str,
     /// Hover of the format button, with its shortcut.
     pub format_hint: &'static str,
-    /// Shown when the body cannot be formatted, before the line number.
+    /// A body that cannot be formatted, at `{line}`.
     pub format_failed: &'static str,
     /// Shown over a body too large to highlight.
     pub highlight_off: &'static str,
@@ -1165,590 +1369,18 @@ pub struct Strings {
     /// A setting that is off.
     pub no: &'static str,
 }
-
-/// English.
-pub const EN: Strings = Strings {
-    no_collection: "Create a collection or open one to start.",
-    new_collection: "New collection…",
-    open_collection: "Open collection…",
-    new_collection_title: "New collection",
-    collection_name: "Name",
-    new_collection_hint: "Shop API",
-    collection_parent: "Folder",
-    collection_goes_in: "It goes in",
-    pick_parent: "Choose where to create the collection",
-    create_here: "Create one here",
-    close_collection: "Close",
-    remove_collection: "Remove from workspace",
-    copy_folder_path: "Copy folder path",
-    workspace: "Workspace",
-    new_workspace: "New workspace…",
-    open_workspace: "Open workspace…",
-    rename_workspace: "Rename workspace…",
-    pick_workspace: "Open a workspace folder",
-    history_of: "History of",
-    open: "Open",
-    no_environment: "No environment",
-    environment: "Environment",
-    send: "Send",
-    cancel: "Cancel",
-    sending: "Sending…",
-    response_idle: "Send the request to see its response.",
-    cancelled: "Cancelled.",
-    no_request: "Select a request in the sidebar.",
-    body: "Body",
-    headers: "Headers",
-    environments: "Environments",
-    edit_environments: "Edit environments (Ctrl+E)",
-    all_variables: "All variables",
-    all_variables_hint: "What the active request sees, after every scope is applied.",
-    no_environments: "No environments yet.",
-    no_variables: "This request sees no variables.",
-    new_environment: "New environment",
-    add: "Add",
-    environment_name: "Environment name",
-    rename_hint: "Press Enter to rename",
-    color: "Color",
-    extends: "Extends",
-    extends_none: "Nothing",
-    revert: "Revert",
-    delete_environment: "Delete environment",
-    kind: "Type",
-    kind_text: "Text",
-    kind_number: "Number",
-    kind_bool: "Boolean",
-    kind_object: "Object",
-    secret: "Secret",
-    new_variable: "New variable",
-    from: "From",
-    overrides: "Overrides",
-    changed_on_disk: "This request changed on disk while you were editing it.",
-    keep_mine: "Keep my changes",
-    load_from_disk: "Load from disk",
-    action_send: "Send request",
-    action_cancel: "Cancel send",
-    action_save: "Save",
-    action_save_all: "Save all",
-    action_palette: "Command palette",
-    action_quick_open: "Go to request",
-    action_new_request: "New request",
-    action_close_tab: "Close tab",
-    action_reopen_tab: "Reopen closed tab",
-    action_next_tab: "Next tab",
-    action_previous_tab: "Previous tab",
-    action_go_to_tab: "Go to tab",
-    action_focus_url: "Focus URL",
-    action_environments: "Edit environments",
-    action_toggle_sidebar: "Toggle sidebar",
-    action_show_history: "Show history",
-    action_format_body: "Format body",
-    action_shortcuts: "Keyboard shortcuts",
-    palette_hint: "Type a command, request or environment",
-    palette_requests_hint: "Type a request name or path",
-    palette_nothing: "Nothing matches.",
-    palette_environment: "Environment:",
-    shortcuts_title: "Keyboard shortcuts",
-    shortcut_change: "Change",
-    shortcut_press: "Press the new shortcut, or Escape",
-    shortcut_reset: "Reset",
-    shortcut_none: "none",
-    shortcut_moved: "Taken from",
-    keymap_problems: "Some entries of keymap.yml were ignored:",
-    new_request_name: "New request",
-    column_name: "Name",
-    column_value: "Value",
-    action_theme_system: "Theme: follow the system",
-    action_theme_light: "Theme: light",
-    action_theme_dark: "Theme: dark",
-    action_settings: "Settings",
-    settings_title: "Settings",
-    settings_appearance: "Appearance",
-    settings_theme: "Theme",
-    theme_system: "Follow the system",
-    theme_light: "Light",
-    theme_dark: "Dark",
-    settings_scale: "Interface scale",
-    settings_scale_hint: "Also Ctrl+= and Ctrl+-; Ctrl+0 resets it",
-    settings_responses: "Responses",
-    settings_pretty_limit: "Format and color bodies up to",
-    settings_storage: "History and storage",
-    settings_history_entries: "Sends kept in the history",
-    settings_keep_days: "Keep history and responses for",
-    settings_responses_mb: "Space for response bodies",
-    settings_storage_hint: "Limits apply the next time a collection opens.",
-    settings_reset: "Restore defaults",
-    settings_problems: "Some entries of settings.yml were ignored:",
-    days: "days",
-    browse: "Browse...",
-    pick_collection: "Open a collection folder",
-    secret_hint: "Secret: the file keeps only its name; the value goes to the vault",
-    secret_value: "Secret value",
-    secret_local: "Stored on this machine",
-    secret_shared: "Shared with the team",
-    secret_locked: "Locked: this machine lacks the collection key",
-    secret_missing: "No value yet: type one",
-    shared: "Shared",
-    shared_hint: "Share with the team: sealed with the collection key in .apifast/secrets, which goes to git",
-    reveal: "Reveal",
-    hide: "Hide",
-    orphans_title: "Values no secret uses",
-    orphans_hint: "Their variable is gone or no longer secret, as after editing with Bruno.",
-    forget: "Forget",
-    collection_key: "Collection key",
-    action_collection_key: "Collection key",
-    import_bruno_folder: "Folder…",
-    import_bruno_folder_hint: "A Bruno collection in .bru files: the folder with bruno.json. (Bruno collections in YAML open directly.)",
-    import_collection_action: "Import…",
-    import_title: "Import a collection",
-    import_collection_file: "Collection or spec",
-    import_environments: "Postman environments",
-    import_add_environments: "Add environments…",
-    import_review: "Review",
-    import_hint: "Choose a Postman export (v2.0 or v2.1), an Insomnia export (v4 or v5), an OpenAPI 3 spec (JSON or YAML) or a Bruno collection folder (.bru), and review what it creates before importing.",
-    import_folders: "folders",
-    import_requests: "requests",
-    import_environments_count: "environments",
-    import_not_kept: "Not kept",
-    import_collection: "Collection",
-    import_folder: "Folder name",
-    import_review_again: "The files changed: review them again before importing.",
-    import: "Import",
-    export_postman_menu: "Export to Postman…",
-    exported_to: "Exported to",
-    exported_environments: "environments next to it",
-    export_not_kept: "Not kept:",
-    export_failed: "Cannot export:",
-    reimport_menu: "Import again…",
-    reimport_title: "Import again",
-    reimport_into: "Collection",
-    reimport_file: "New version",
-    reimport_hint: "Choose the new version of the file or folder this collection was imported from. Requests changed only in the source are updated; those you edited are kept unless you choose them.",
-    reimport_new: "new",
-    reimport_changed: "changed in the source",
-    reimport_conflict: "changed in the source and here",
-    reimport_deleted: "deleted here",
-    reimport_removed: "no longer in the source",
-    reimport_unchanged: "unchanged",
-    reimport_nothing: "Nothing changed in the source.",
-    reimport_apply: "Apply",
-    copy_as_curl: "Copy as cURL",
-    copy_as_javascript: "Copy as JavaScript (fetch)",
-    copy_as_python: "Copy as Python (requests)",
-    copy_as_go: "Copy as Go (net/http)",
-    copy_as: "Copy as",
-    copied_as: "Copied as",
-    copied_missing: "with something missing:",
-    copy_failed: "Cannot copy:",
-    curl_ignored: "Pasted the cURL command. Not kept:",
-    curl_failed: "The pasted cURL command cannot be read",
-    examples: "Examples",
-    examples_empty: "No examples yet. Send the request and press “Save as example” on its response.",
-    example_name: "Example name",
-    example_description: "Description",
-    example_delete: "Delete example",
-    example_body: "Example body",
-    example_no_body: "No body.",
-    save_as_example: "Save as example",
-    save_as_example_hint: "Keep this response in the request's file, with the request as written. Saved with the request (Ctrl+S).",
-    example_saved: "Added the example, saved with the request:",
-    dns_overrides: "DNS overrides",
-    dns_host: "Host",
-    dns_address: "IP address",
-    dns_not_ip: "not an IP address",
-    dns_add: "Add override",
-    dns_hint: "Like /etc/hosts, for this collection only: * matches any run of characters (*.example.com). Saved in .apifast/collection.yml, which goes to git.",
-    add_part: "Add part",
-    part_kind: "Part type",
-    part_text: "Text",
-    part_files: "Files",
-    part_content_type: "Content type",
-    part_content_type_hint: "auto",
-    choose_files: "Choose files…",
-    remove_file: "Remove file",
-    no_files: "No files yet.",
-    body_file_path: "File",
-    body_file_hint: "Read from disk as it is sent. A path inside the collection is kept relative to it; without a content type, application/octet-stream goes.",
-    cookies: "Cookies",
-    cookies_title: "Cookies",
-    git_title: "Git",
-    git_no_repository: "This collection is not in a git repository.",
-    git_detached: "detached HEAD",
-    git_branch: "Branch",
-    git_branch_pick: "Branch…",
-    git_switch: "Switch",
-    git_refresh: "Refresh",
-    git_nothing_changed: "Nothing changed since the last commit.",
-    git_pick_file: "Pick a file to see what changed in it.",
-    git_message: "Commit message",
-    git_commit: "Commit",
-    git_include: "Include in the commit",
-    git_added: "A new file: all of it is new.",
-    git_deleted: "Deleted.",
-    git_same: "Only its formatting changed.",
-    git_none: "(none)",
-    git_changed: "changed",
-    action_git: "Git…",
-    cookies_menu: "Cookies…",
-    action_cookies: "Cookies",
-    cookies_no_collection: "Open a collection to see its cookies.",
-    cookies_empty: "No cookies yet. They appear here when a response sets them.",
-    cookies_add: "Add cookie",
-    cookies_clear: "Delete all",
-    cookies_clear_confirm: "Delete every cookie of this collection? Servers will set them again on the next requests.",
-    cookies_delete_domain: "Delete domain",
-    cookies_edit: "Edit",
-    cookies_delete: "Delete",
-    cookies_add_title: "New cookie",
-    cookies_edit_title: "Edit cookie",
-    cookies_name: "Name",
-    cookies_value: "Value",
-    cookies_domain: "Domain",
-    cookies_path: "Path",
-    cookies_expires: "Expires (UTC)",
-    cookies_expires_hint: "Session · 2030-01-31 12:00:00",
-    cookies_flags: "Flags",
-    cookies_session: "Session",
-    cookies_expired: "Expired",
-    cookies_subdomains: "subdomains",
-    cookies_same_site: "SameSite",
-    cookies_host_only: "Only this host, not its subdomains",
-    cookies_secure: "Secure: only over HTTPS (or to this machine)",
-    cookies_http_only: "HttpOnly: not for scripts",
-    cookies_bad_name: "The name cannot be empty or have =, ; or spaces.",
-    cookies_bad_domain: "The domain cannot be empty.",
-    cookies_bad_path: "The path must start with /.",
-    cookies_bad_expires: "Write the expiry as 2030-01-31 12:00:00, or leave it empty for a session cookie.",
-    response_no_cookies: "This response set no cookies. Responses opened from the history do not keep them.",
-    send_cookies: "Send cookies",
-    store_cookies: "Store cookies",
-    use_key: "Use key",
-    no_collection_key: "This collection shares no secrets yet. Sharing the first one makes its key.",
-    key_needed: "This collection shares secrets, and this machine does not have its key. Paste the key your team gave you:",
-    share_key_hint: "Give this key to your team through a password manager or another private channel. apifast never sends it.",
-    show_key: "Show key",
-    rotate_key: "Rotate key",
-    rotate_hint: "Rotating makes a new key and seals every shared secret again. Your team needs the new key.",
-    rotate_confirm: "Make a new key and seal every shared secret again? Commit the changed files afterwards, and give the new key to your team. Old values stay in git's history: if the old key leaked, change the real credentials too.",
-    vault_banner: "This collection shares secrets that this machine cannot open: paste the collection's key.",
-    master_in_file: "Master key in a file",
-    master_in_file_hint: "No system keyring was found, so the vault's master key is in a file only you can read. Anyone who copies your home folder gets it too.",
-    sidebar_collection: "Collection",
-    sidebar_history: "History",
-    filter: "Filter",
-    filter_history: "Filter the history",
-    history_empty: "Nothing sent yet.",
-    failed: "Failed",
-    seconds_ago: "s ago",
-    minutes_ago: "min ago",
-    hours_ago: "h ago",
-    days_ago: "d ago",
-    timeline: "Timeline",
-    timeline_empty: "This response has no timeline.",
-    events: "Events",
-    events_filter: "Filter by name, id or data",
-    events_waiting: "No events yet.",
-    events_none_match: "No event matches the filter.",
-    events_partial: "Only the start of a large stream is read here; the Body tab has it all.",
-    streaming: "Receiving events…",
-    stop: "Stop",
-    event_name: "Event",
-    event_id: "Id",
-    event_data: "Data",
-    event_retry: "Retry",
-    event_pick: "Select an event to see its data.",
-    tests: "Tests",
-    assertions: "Assertions",
-    captured_for_environment: "Captured for the environment {environment}: {names}. They are used for now; save them to keep them.",
-    save_to_environment: "Save to environment",
-    discard_captures: "Discard",
-    runner: "Runner",
-    run_menu: "Run…",
-    run_recursive: "Subfolders",
-    run_tags: "Only tags",
-    run_exclude_tags: "Skip tags",
-    run_delay: "Delay",
-    run_iterations: "Iterations",
-    run_data: "Data file",
-    run_data_pick: "Choose CSV or JSON…",
-    run_data_clear: "Remove",
-    run_bail: "Stop at the first failure",
-    run_start: "Run",
-    run_stop: "Stop",
-    run_clear: "Clear results",
-    run_iteration: "iteration",
-    run_summary: "{passed} passed · {failed} failed · {errors} errors · {skipped} skipped · {time}",
-    run_export: "Save report:",
-    run_skip: "SKIP",
-    run_error: "ERROR",
-    run_open_step: "Open with this response",
-    filter_body: "Filter the body",
-    filter_jsonpath: "Filter with JSONPath: $.items[*].id",
-    filter_xpath: "Filter with XPath: //item/@id",
-    filter_results: "{count} selected",
-    auth_digest: "Digest",
-    auth_ntlm: "NTLM",
-    ntlm_domain: "Domain (optional)",
-    auth_aws_v4: "AWS Signature v4",
-    aws_access_key_id: "Access key ID",
-    aws_secret_access_key: "Secret access key",
-    aws_session_token: "Session token (optional)",
-    aws_service: "Service",
-    aws_region: "Region",
-    auth_oauth2: "OAuth 2.0",
-    oauth2_flow: "Grant type",
-    oauth2_client_credentials: "Client credentials",
-    oauth2_password: "Password",
-    oauth2_authorization_code: "Authorization code",
-    oauth2_implicit: "Implicit (not supported)",
-    oauth2_authorization_url: "Authorization URL",
-    oauth2_callback_url: "Callback URL",
-    oauth2_access_token_url: "Access token URL",
-    oauth2_refresh_token_url: "Refresh token URL (optional)",
-    oauth2_client_id: "Client ID",
-    oauth2_client_secret: "Client secret",
-    oauth2_scope: "Scope",
-    oauth2_state: "State",
-    oauth2_send_credentials: "Send client credentials",
-    oauth2_in_body: "In the body",
-    oauth2_in_basic: "As Basic auth",
-    oauth2_pkce: "Use PKCE",
-    oauth2_token_in: "Send the token",
-    oauth2_header_prefix: "Prefix",
-    oauth2_query_key: "Parameter",
-    oauth2_token_id: "Token ID",
-    oauth2_token_source: "Token to send",
-    oauth2_automatic: "Automatically",
-    oauth2_auto_fetch: "Get a token when there is none",
-    oauth2_auto_refresh: "Refresh an expired token",
-    oauth2_parameters_kept: "{count} extra parameters, kept from the file",
-    token_label: "Token",
-    token_none: "none yet: one is obtained when sending",
-    token_expired: "expired",
-    token_expires_in: "valid for {time}",
-    token_no_expiry: "valid, no expiry given",
-    token_get: "Get new token",
-    token_forget: "Forget token",
-    proxy: "Proxy",
-    proxy_system: "System",
-    proxy_off: "None",
-    proxy_manual: "Manual",
-    proxy_inherit: "The application's",
-    proxy_custom: "Its own",
-    proxy_protocol: "Protocol",
-    proxy_host: "Host",
-    proxy_port: "Port",
-    proxy_auth: "Credentials",
-    proxy_bypass: "Direct for",
-    proxy_password_saved: "saved, sealed",
-    proxy_save_password: "Save password",
-    proxy_forget_password: "Forget",
-    proxy_hint: "For collections that use the application's proxy. System reads HTTP_PROXY, HTTPS_PROXY, ALL_PROXY and NO_PROXY. The password is kept sealed with the master key, never in settings.yml.",
-    collection_settings: "Collection settings",
-    collection_settings_menu: "Collection settings…",
-    collection_proxy_hint: "Saved in opencollection.yml, password included, as Bruno does: use a proxy without credentials, or the application's, for collections in git.",
-    tls: "TLS",
-    tls_ca_file: "Extra CA file (PEM)",
-    tls_insecure: "Do not check certificates",
-    tls_insecure_warning: "Server certificates are not checked: anyone on the way can read and change the traffic. Turn it off when you are done.",
-    choose: "Choose…",
-    client_certificates: "Client certificates",
-    client_certificate_domain: "Host",
-    client_certificate_file: "Certificate (PEM)",
-    client_certificate_key: "Private key (PEM)",
-    client_certificate_add: "Add certificate",
-    client_certificates_hint: "Paths are relative to the collection. Host takes a port and * wildcards: localhost:8443, *.example.com. PKCS#12 files and encrypted keys are kept but not presented yet.",
-    pass: "PASS",
-    fail: "FAIL",
-    captures: "Captures",
-    expression: "res.body.id",
-    operator: "Operator",
-    expected: "Expected",
-    no_expected: "no value",
-    capture_variable: "Variable",
-    capture_scope: "Scope",
-    tests_hint: "Checked after every send, captures first. Expressions: res.status, res.headers.<name>, res.body.<path> (JSONPath too), res.responseTime, res.size, and req.method, req.url, req.headers.<name>, req.body.<path> for the request as sent.",
-    tests_none: "No assertions, captures or scripts ran. Responses from the history do not keep their results.",
-    captured_as: "=",
-    script_tests: "Script tests",
-    scripts: "Scripts",
-    scripts_menu: "Scripts…",
-    scripts_hint: "JavaScript, with Bruno's API: req, res, bru, test, expect. Before the request: collection, folders, request; after it, the other way round.",
-    scripts_more: "The file has several scripts of this kind: they run one after the other, and only the first is edited here.",
-    script_before_request: "Before request",
-    script_after_response: "After response",
-    script_tests_kind: "Test script",
-    script_console: "Console",
-    event_redirect: "Redirect",
-    event_dns_override: "DNS override",
-    event_decompressed: "Decompressed",
-    event_dns: "DNS",
-    event_connected: "Connected to",
-    event_reused: "Reused connection to",
-    event_tls: "TLS handshake,",
-    event_headers: "Headers received",
-    event_body: "Body received",
-    pretty: "Pretty",
-    raw: "Raw",
-    copy: "Copy",
-    copy_body: "Copy the whole body",
-    pretty_off: "Shown raw: bodies over 2 MB are not formatted.",
-    not_formatted: "Could not be formatted; shown as received.",
-    body_binary: "Binary body, not shown:",
-    indexing: "Reading the body:",
-    body_unreadable: "The body cannot be read:",
-    unsupported_kind: "This kind of request cannot be opened yet",
-    new_request: "New request",
-    new_folder: "New folder",
-    rename: "Rename",
-    delete: "Delete",
-    move_up: "Move up",
-    move_down: "Move down",
-    name_placeholder: "Name",
-    create: "Create",
-    delete_title: "Delete this?",
-    delete_warning: "Its files are deleted from disk, with everything inside.",
-    url_placeholder: "https://example.com or {{host}}/path",
-    url: "URL",
-    bulk_edit: "Bulk edit",
-    bulk_text: "Rows as text",
-    bulk_hint: "One per line, as `name: value`. Start a line with // to keep it but not send it.",
-    method: "Method",
-    close_tab: "Close tab",
-    unsaved_title: "Save changes?",
-    unsaved_warning: "This request has unsaved changes. Closing without saving discards them.",
-    save: "Save",
-    discard: "Don't save",
-    unsaved: "Unsaved changes",
-    variable_missing: "Not defined here. Pick an environment that defines it, or add it.",
-    variable_generated: "Made when the request is sent.",
-    secret_hidden: "secret (hidden)",
-    origin_default: "Default",
-    origin_global: "Global environment",
-    origin_collection: "Collection",
-    origin_environment: "Environment",
-    origin_folder: "Folder",
-    origin_request: "Request",
-    origin_runtime: "Captured from a response",
-    origin_prompt: "Typed in for this send",
-    params: "Params",
-    query_params: "Query",
-    path_params: "Path",
-    path_params_hint: "Add `:name` to the URL's path to get one here.",
-    auth: "Auth",
-    settings: "Settings",
-    inherited: "Inherited",
-    overridden: "Replaced by this request's own header",
-    name: "name",
-    value: "value",
-    remove_row: "Remove",
-    enabled: "Send this row",
-    body_type: "Body type",
-    body_none: "No body",
-    body_json: "JSON",
-    body_text: "Text",
-    body_xml: "XML",
-    body_sparql: "SPARQL",
-    body_graphql: "GraphQL",
-    graphql_query: "Query",
-    graphql_variables: "Variables (JSON)",
-    schema_fetch: "Fetch schema",
-    schema_fetch_again: "Fetch again",
-    schema_fetching: "Fetching the schema…",
-    schema_none: "No schema yet: fetch it to explore its types.",
-    schema_failed: "Cannot fetch the schema:",
-    schema_explorer: "Schema",
-    schema_types: "types",
-    schema_back: "Back",
-    schema_filter: "Filter types",
-    schema_roots: "Root types",
-    schema_all_types: "All types",
-    schema_fields: "Fields",
-    schema_values: "Values",
-    schema_possible: "Possible types",
-    schema_deprecated: "deprecated",
-    schema_implements: "implements",
-    body_form: "Form (URL-encoded)",
-    body_multipart: "Multipart form",
-    body_file: "File",
-    body_not_editable: "This body type cannot be edited here yet; it is sent and saved as it is.",
-    ws_messages: "Messages",
-    ws_message_name: "Name (optional)",
-    ws_add_message: "Add message",
-    ws_remove_message: "Remove",
-    ws_no_messages: "No messages yet: add one to send it once connected.",
-    ws_message_shown: "The message shown",
-    ws_message_kind: "How the message is edited",
-    ws_badge: "WS",
-    ws_connect: "Connect",
-    ws_disconnect: "Disconnect",
-    ws_connected: "Connected",
-    ws_send: "Send",
-    ws_send_hint: "Send this message over the open connection",
-    ws_send_disconnected: "Connect first to send messages",
-    ws_filter: "Filter messages",
-    ws_waiting: "Nothing sent or received yet.",
-    ws_none_match: "No message matches the filter.",
-    ws_partial: "Only the start of a long connection is read here; the Body tab has it all.",
-    ws_pick: "Pick a message to see it whole.",
-    ws_sent: "sent",
-    ws_received: "received",
-    ws_failed: "error",
-    ws_closed_by_client: "closed",
-    ws_closed_by_server: "closed by the server",
-    ws_binary: "binary",
-    grpc_badge: "gRPC call",
-    grpc_metadata: "Metadata",
-    grpc_method: "Method",
-    grpc_method_hint: "/package.Service/Method",
-    grpc_method_type: "Streaming",
-    grpc_type_unknown: "Not known yet",
-    grpc_unary: "Unary",
-    grpc_client_streaming: "Client streaming",
-    grpc_server_streaming: "Server streaming",
-    grpc_bidi_streaming: "Bidirectional streaming",
-    grpc_proto: ".proto file",
-    grpc_proto_hint: "Empty: ask the server (reflection)",
-    grpc_no_messages: "No messages yet: add one to send it in the call.",
-    grpc_call: "Call",
-    grpc_calling: "In call",
-    grpc_load_methods: "Load methods",
-    grpc_load_methods_hint: "Read the .proto file or, without one, ask the server (reflection)",
-    grpc_loading: "Loading…",
-    grpc_pick_method: "Pick a method",
-    grpc_no_methods: "No methods found.",
-    grpc_send_hint: "Send this message in the open call",
-    grpc_send_closed: "Call first: the message shown goes first",
-    grpc_end_stream: "End stream",
-    grpc_end_stream_hint: "Send no more messages; the server then ends the call",
-    format: "Format",
-    format_hint: "Format (Alt+Shift+F)",
-    format_failed: "Could not format: brackets or tags do not match, or something is not closed. Check line",
-    highlight_off: "Highlighting is off: this body is over 200 KB.",
-    auth_type: "Auth type",
-    auth_inherit: "Inherit",
-    auth_none: "No auth",
-    auth_basic: "Basic",
-    auth_bearer: "Bearer token",
-    auth_api_key: "API key",
-    auth_unsupported: "This auth type is not supported yet; it is kept as it is.",
-    inherited_from: "Inherited from",
-    username: "Username",
-    password: "Password",
-    token: "Token",
-    key: "Key",
-    add_to: "Add to",
-    in_header: "Header",
-    in_query: "Query",
-    inherit: "Inherit",
-    timeout: "Timeout",
-    follow_redirects: "Follow redirects",
-    max_redirects: "Maximum redirects",
-    encode_url: "Encode URL",
-    yes: "Yes",
-    no: "No",
-};
+}
 
 impl Strings {
+    /// `plural` in the form `n` takes, with `{n}` and `values` filled.
+    #[must_use]
+    pub fn count(&self, plural: &Plural, n: usize, values: &[(&str, &dyn Display)]) -> String {
+        let n = u64::try_from(n).unwrap_or(u64::MAX);
+        let mut all: Vec<(&str, &dyn Display)> = vec![("n", &n)];
+        all.extend_from_slice(values);
+        fill(plural.form((self.plural_rule.0)(n)), &all)
+    }
+
     /// Where a value comes from, ready to show. `folders` names the
     /// request's folders, outermost first, for [`Origin::Folder`].
     pub fn origin(&self, origin: &Origin, folders: &[String]) -> String {
@@ -1767,5 +1399,113 @@ impl Strings {
             // A scope added after this version: say nothing wrong.
             _ => String::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use super::*;
+
+    /// The `{placeholders}` of `text`.
+    fn placeholders(text: &str) -> BTreeSet<&str> {
+        let mut found = BTreeSet::new();
+        let mut rest = text;
+        while let Some(start) = rest.find('{') {
+            rest = &rest[start + 1..];
+            if let Some(end) = rest.find('}') {
+                let name = &rest[..end];
+                if !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                    found.insert(name);
+                }
+            }
+        }
+        found
+    }
+
+    /// Each field's placeholders, every form of a plural together.
+    fn all_placeholders(strings: &Strings) -> BTreeMap<&'static str, BTreeSet<&'static str>> {
+        let mut fields: BTreeMap<_, BTreeSet<_>> = BTreeMap::new();
+        strings.each(|field, text| {
+            fields.entry(field).or_default().extend(placeholders(text));
+        });
+        fields
+    }
+
+    #[test]
+    fn every_language_has_the_placeholders_of_english_and_no_empty_text() {
+        let english = all_placeholders(&EN);
+        assert!(english["history_of"].contains("name"));
+        for language in LANGUAGES {
+            assert_eq!(
+                all_placeholders(language.strings),
+                english,
+                "{}.rs: its {{placeholders}} differ from English's",
+                language.code
+            );
+            language.strings.each(|field, text| {
+                assert!(
+                    !text.trim().is_empty(),
+                    "{}.rs: `{field}` is empty",
+                    language.code
+                );
+            });
+            assert!(language.name.chars().any(char::is_alphabetic));
+        }
+    }
+
+    #[test]
+    fn english_and_spanish_are_there_by_their_files() {
+        let codes: Vec<&str> = LANGUAGES.iter().map(|l| l.code).collect();
+        assert!(codes.contains(&"en") && codes.contains(&"es"), "{codes:?}");
+        assert_eq!(language("es").map(|l| l.name), Some("Español"));
+    }
+
+    #[test]
+    fn a_language_is_found_by_its_region_or_its_language() {
+        let code = |code| language(code).map(|l| l.code);
+        assert_eq!(code("es_CO.UTF-8"), Some("es"));
+        assert_eq!(code("es-MX"), Some("es"));
+        assert_eq!(code("EN_us"), Some("en"));
+        assert_eq!(code("C"), None);
+        assert_eq!(code("tlh"), None);
+        let system = |vars: &'static [(&'static str, &'static str)]| {
+            system_language(|name| {
+                (vars.iter())
+                    .find(|(key, _)| *key == name)
+                    .map(|(_, value)| (*value).to_owned())
+            })
+            .map(|l| l.code)
+        };
+        assert_eq!(system(&[("LANG", "es_CO.UTF-8")]), Some("es"));
+        assert_eq!(
+            system(&[("LC_ALL", "en_US.UTF-8"), ("LANG", "es_CO.UTF-8")]),
+            Some("en")
+        );
+        assert_eq!(system(&[("LC_ALL", ""), ("LANG", "es_ES")]), Some("es"));
+        assert_eq!(system(&[("LANG", "POSIX")]), None);
+        assert_eq!(system(&[]), None);
+    }
+
+    #[test]
+    fn templates_are_filled_and_counts_take_their_form() {
+        assert_eq!(
+            fill("History of {name}", &[("name", &"Shop")]),
+            "History of Shop"
+        );
+        assert_eq!(
+            fill("{{host}}/{path} {missing}", &[("path", &"users")]),
+            "{{host}}/users {missing}"
+        );
+        assert_eq!(fill("{n} {n}", &[("n", &2)]), "2 2");
+        let es = language("es").map_or(&EN, |l| l.strings);
+        assert_eq!(es.count(&es.import_requests, 1, &[]), "1 petición");
+        assert_eq!(es.count(&es.import_requests, 3, &[]), "3 peticiones");
+        assert_eq!(es.count(&es.import_requests, 0, &[]), "0 peticiones");
+        assert_eq!(
+            EN.count(&EN.git_committed, 2, &[("id", &"1a2b3c4")]),
+            "Committed 2 files: 1a2b3c4"
+        );
     }
 }

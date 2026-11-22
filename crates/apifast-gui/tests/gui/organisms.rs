@@ -433,7 +433,7 @@ fn the_import_window_reviews_then_imports_only_what_was_reviewed() {
     harness.run();
     assert!(
         harness
-            .query_by_label_contains("My Shop: 1 folders")
+            .query_by_label_contains("My Shop: 1 folder, ")
             .is_some()
     );
     assert!(harness.query_by_label_contains("a `test` script").is_some());

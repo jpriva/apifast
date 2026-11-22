@@ -330,6 +330,24 @@ Mientras la paleta está abierta o el editor espera una combinación, los demás
 - Los colores de método y de estado nunca son el único indicador: siempre van con texto.
 - Contraste WCAG AA (4,5:1) en ambos temas, comprobado por un test sobre los tokens de `theme/`: cada color de texto sobre cada fondo, y el texto de los badges sobre su propio tinte.
 
+## Idiomas
+
+La interfaz está en inglés y en español. Por defecto sigue el idioma del sistema (`LC_ALL`, `LC_MESSAGES` o `LANG`, el primero que tenga valor): `es_CO.UTF-8` muestra el español, y un idioma que apifast no tiene muestra el inglés. En los ajustes (`Ctrl+,`) se puede fijar uno, y la interfaz cambia en el momento; se guarda en `settings.yml` como `language: es` (o `system`). En Windows y macOS esas variables no suelen estar, así que allí hay que elegir el idioma en los ajustes.
+
+Cada idioma es un archivo de `crates/apifast-gui/src/strings/` con el nombre de su código (`en.rs`, `es.rs`; uno regional, `pt_br.rs`). Añadir uno es copiar `en.rs` con el nombre nuevo y traducir sus textos:
+
+- `NAME` es el nombre del idioma en él mismo ("Español"), y así aparece en los ajustes.
+- `STRINGS` tiene todos los textos. El compilador rechaza el archivo mientras falte uno.
+- Los textos con datos son plantillas: `"History of {name}"` se traduce `"Historial de {name}"`, en el orden que pida el idioma, sin cambiar los nombres entre llaves. Una prueba comprueba que cada idioma tiene, en cada texto, los mismos `{marcadores}` que el inglés y ningún texto vacío.
+- Los textos con un número son plurales: `Plural::two("{n} file", "{n} files")`, con la forma de uno y la del resto. `plural_rule` dice qué forma toma cada número; `PluralRule::ONE_OTHER` vale para el inglés, el español y muchos más. Un idioma con más formas (polaco, ruso, árabe) escribe su regla, `PluralRule(|n| …)`, y usa las cuatro formas de `Plural`.
+
+No hay que registrarlo en ningún otro sitio: el script de compilación de `apifast-gui` lista los archivos de esa carpeta. `cargo fmt` no llega a ellos, así que se formatean con `rustfmt --edition 2024 crates/apifast-gui/src/strings/*.rs` (el CI lo comprueba).
+
+Lo que no está traducido todavía:
+
+- Los mensajes de error y los avisos que llegan de las capas que no son la interfaz (la aplicación, el dominio, la red, el almacenamiento, la bóveda, los importadores y git), por ejemplo "`x.yml` does not exist". Se muestran tal como los escriben, en inglés.
+- La línea de comandos, que queda en inglés, como `git` o `cargo`.
+
 ## Organización del código de la interfaz
 
 - La interfaz no guarda el modelo. Guarda identificadores, borradores de edición y vistas.

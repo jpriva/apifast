@@ -168,7 +168,7 @@ impl ImportWindow {
                 ui.end_row();
             });
         if let Some(pick) = pick {
-            self.pick(ui.ctx(), pick);
+            self.pick(ui.ctx(), pick, strings.all_files);
         }
         let ready = !self.collection.trim().is_empty();
         ui.add_enabled(ready, egui::Button::new(strings.import_review))
@@ -202,12 +202,15 @@ impl ImportWindow {
         let (folders, requests) = plan.counts();
         ui.label(
             RichText::new(format!(
-                "{}: {folders} {}, {requests} {}, {} {}",
+                "{}: {}, {}, {}",
                 plan.collection,
-                strings.import_folders,
-                strings.import_requests,
-                plan.environments.len(),
-                strings.import_environments_count,
+                strings.count(&strings.import_folders, folders, &[]),
+                strings.count(&strings.import_requests, requests, &[]),
+                strings.count(
+                    &strings.import_environments_count,
+                    plan.environments.len(),
+                    &[]
+                ),
             ))
             .strong(),
         );
@@ -300,7 +303,7 @@ impl ImportWindow {
                 ui.end_row();
             });
         if pick {
-            self.pick(ui.ctx(), Pick::Parent);
+            self.pick(ui.ctx(), Pick::Parent, strings.all_files);
         }
         let (parent, folder) = (self.parent.trim(), self.folder.trim());
         (!parent.is_empty() && !folder.is_empty()).then(|| Path::new(parent).join(folder))
@@ -319,14 +322,15 @@ impl ImportWindow {
     }
 
     /// Opens the system's dialog for `pick`, off the interface's thread.
-    fn pick(&mut self, ctx: &egui::Context, pick: Pick) {
+    fn pick(&mut self, ctx: &egui::Context, pick: Pick, all_files: &str) {
+        let all_files = all_files.to_owned();
         let (sender, receiver) = channel();
         let ctx = ctx.clone();
         std::thread::spawn(move || {
             let json = || {
                 rfd::FileDialog::new()
                     .add_filter("Postman, Insomnia, OpenAPI", &["json", "yaml", "yml"])
-                    .add_filter("All files", &["*"])
+                    .add_filter(&all_files, &["*"])
             };
             let picked = match pick {
                 Pick::Collection => json().pick_file().into_iter().collect(),

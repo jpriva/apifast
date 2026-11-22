@@ -577,11 +577,15 @@ fn the_tree_copies_a_request_as_curl() {
     harness.get_by_label("cURL").click();
     harness.run_steps(2);
     // No environment: `host` is missing, and the notice says so.
+    let missing = apifast_gui::strings::fill(
+        EN.copied_missing.split("{missing}").next().unwrap(),
+        &[("language", &"cURL")],
+    );
     let start = Instant::now();
     loop {
         harness.step();
         if harness
-            .query_all_by_label_contains(EN.copied_missing)
+            .query_all_by_label_contains(&missing)
             .next()
             .is_some()
         {
@@ -626,4 +630,44 @@ fn a_postman_export_is_imported_from_the_sidebar() {
     harness.get_by_label(EN.import).click();
     wait_for(&mut harness, "Pet Store");
     wait_for_row(&mut harness, "List pets");
+}
+
+#[test]
+fn the_system_language_shows_and_the_settings_change_it_at_once() {
+    let data = tempfile::tempdir().unwrap();
+    let es = apifast_gui::strings::language("es").unwrap();
+    let app = App::new(Core::start_with(
+        data.path().to_path_buf(),
+        SystemKeyring::off(),
+        || {},
+    ))
+    .with_system_language(Some(es));
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(1280.0, 800.0))
+        .build_ui_state(|ui, app: &mut App| app.show(ui), app);
+    wait_for(&mut harness, es.strings.new_collection);
+
+    // Ctrl+, opens the settings, in Spanish; English is picked by its name.
+    let modifiers = egui::Modifiers::COMMAND;
+    let events = &mut harness.input_mut().events;
+    events.push(egui::Event::ModifiersChanged(modifiers));
+    events.push(egui::Event::Key {
+        key: egui::Key::Comma,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers,
+    });
+    harness.run();
+    let events = &mut harness.input_mut().events;
+    events.push(egui::Event::ModifiersChanged(egui::Modifiers::NONE));
+    harness.run();
+    harness
+        .get_by_role_and_label(Role::ComboBox, es.strings.language)
+        .click();
+    harness.run();
+    harness.get_by_label("English").click();
+    wait_for(&mut harness, EN.new_collection);
+    harness.get_by_label(EN.settings_appearance);
+    assert!(harness.query_by_label(es.strings.new_collection).is_none());
 }

@@ -48,7 +48,7 @@ impl MessageList {
             let messages = (entries.iter())
                 .filter(|e| matches!(e.event, WsEvent::Sent(_) | WsEvent::Received(_)))
                 .count();
-            let text = format!("{messages} {}", strings.ws_messages.to_lowercase());
+            let text = strings.count(&strings.ws_message_count, messages, &[]);
             ui.label(RichText::new(text).color(muted));
         });
         if entries.is_empty() {

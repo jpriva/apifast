@@ -6,7 +6,8 @@ use eframe::egui::{self, RichText};
 use crate::organisms::proxy_fields;
 use crate::settings::ProxyModeSetting;
 use crate::settings::{
-    DAYS_RANGE, HISTORY_ENTRIES_RANGE, PRETTY_MB_RANGE, RESPONSES_MB_RANGE, SCALE_RANGE, Settings,
+    DAYS_RANGE, HISTORY_ENTRIES_RANGE, PRETTY_MB_RANGE, RESPONSES_MB_RANGE, SCALE_RANGE,
+    SYSTEM_LANGUAGE, Settings,
 };
 use crate::strings::Strings;
 use crate::theme::{self, ThemeChoice};
@@ -220,6 +221,9 @@ fn appearance(ui: &mut egui::Ui, settings: &mut Settings, strings: &Strings) -> 
         .num_columns(2)
         .spacing([theme::space::L, theme::space::S])
         .show(ui, |ui| {
+            ui.label(strings.language);
+            changed |= language_choice(ui, settings, strings);
+            ui.end_row();
             ui.label(strings.settings_theme);
             egui::ComboBox::from_id_salt("settings-theme")
                 .selected_text(theme_label(settings.theme, strings))
@@ -253,6 +257,35 @@ fn appearance(ui: &mut egui::Ui, settings: &mut Settings, strings: &Strings) -> 
 
 /// How much history and how many responses are kept. Returns whether that
 /// changed.
+/// The language: the system's, or one of those apifast has, each by its
+/// name in it.
+fn language_choice(ui: &mut egui::Ui, settings: &mut Settings, strings: &Strings) -> bool {
+    let name = |code: &str| {
+        if code == SYSTEM_LANGUAGE {
+            strings.language_system
+        } else {
+            crate::strings::language(code).map_or(strings.language_system, |l| l.name)
+        }
+    };
+    let mut changed = false;
+    egui::ComboBox::from_id_salt("settings-language")
+        .selected_text(name(&settings.language))
+        .show_ui(ui, |ui| {
+            let codes = std::iter::once(SYSTEM_LANGUAGE)
+                .chain(crate::strings::LANGUAGES.iter().map(|l| l.code));
+            for code in codes {
+                let chosen = settings.language == code;
+                if ui.selectable_label(chosen, name(code)).clicked() && !chosen {
+                    code.clone_into(&mut settings.language);
+                    changed = true;
+                }
+            }
+        })
+        .response
+        .on_hover_text(strings.language);
+    changed
+}
+
 fn storage(ui: &mut egui::Ui, settings: &mut Settings, strings: &Strings) -> bool {
     let mut changed = false;
     let muted = theme::palette(ui).text_muted;

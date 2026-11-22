@@ -95,9 +95,7 @@ pub fn oauth2_fields(
     changed |= token_fields(ui, auth, strings);
     if !auth.parameters.is_empty() {
         ui.label("");
-        let text = strings
-            .oauth2_parameters_kept
-            .replace("{count}", &auth.parameters.len().to_string());
+        let text = strings.count(&strings.oauth2_parameters_kept, auth.parameters.len(), &[]);
         ui.label(RichText::new(text).color(theme::palette(ui).text_muted));
         ui.end_row();
     }

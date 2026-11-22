@@ -365,9 +365,7 @@ impl ResponseView {
                 ui.label(RichText::new(message.as_str()).color(palette.danger));
             }
             Ok((shown, shown_language, count)) => {
-                let text = strings
-                    .filter_results
-                    .replace("{count}", &count.to_string());
+                let text = strings.count(&strings.filter_results, *count, &[]);
                 ui.label(RichText::new(text).color(palette.text_muted));
                 let shown = shown.clone();
                 let shown_language = *shown_language;

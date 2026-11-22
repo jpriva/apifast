@@ -20,13 +20,13 @@ pub struct HistoryView {
 /// `3 h ago`, `2 d ago`.
 pub fn ago(now_ms: i64, at_ms: i64, strings: &Strings) -> String {
     let seconds = now_ms.saturating_sub(at_ms).max(0) / 1000;
-    let (n, unit) = match seconds {
+    let (n, template) = match seconds {
         0..60 => (seconds, strings.seconds_ago),
         60..3600 => (seconds / 60, strings.minutes_ago),
         3600..86_400 => (seconds / 3600, strings.hours_ago),
         _ => (seconds / 86_400, strings.days_ago),
     };
-    format!("{n} {unit}")
+    crate::strings::fill(template, &[("n", &n)])
 }
 
 /// Whether `entry` matches `filter`, ignoring case.

@@ -23,7 +23,7 @@ use crate::organisms::{
     TreeEvent, TreeView, UrlBar, UrlBarEvent, VaultWindow, folder_name, paste_key,
 };
 use crate::settings::Settings;
-use crate::strings::Strings;
+use crate::strings::{Strings, fill};
 use crate::theme::{self, ThemeChoice};
 
 /// Closed tabs remembered, to open again.
@@ -925,14 +925,13 @@ impl MainScreen {
             format!("{} {why}", strings.copy_failed)
         } else {
             ctx.copy_text(copied.text.clone());
+            let language = copied.language.label();
             match &copied.note {
-                Some(missing) => format!(
-                    "{} {}, {} {missing}",
-                    strings.copied_as,
-                    copied.language.label(),
-                    strings.copied_missing
+                Some(missing) => fill(
+                    strings.copied_missing,
+                    &[("language", &language), ("missing", missing)],
                 ),
-                None => format!("{} {}.", strings.copied_as, copied.language.label()),
+                None => fill(strings.copied_as, &[("language", &language)]),
             }
         });
     }
@@ -1203,12 +1202,8 @@ fn status_bar(ui: &mut egui::Ui, git: &crate::core::GitView, strings: &Strings) 
         let text = if git.changes.is_empty() {
             format!("{}: {branch}", strings.git_branch)
         } else {
-            let changed = strings.git_changed;
-            format!(
-                "{}: {branch} · {} {changed}",
-                strings.git_branch,
-                git.changes.len()
-            )
+            let changed = strings.count(&strings.git_changed, git.changes.len(), &[]);
+            format!("{}: {branch} · {changed}", strings.git_branch)
         };
         ui.add(egui::Button::new(RichText::new(text).small()).frame(false))
             .on_hover_text(strings.action_git)
@@ -1319,7 +1314,8 @@ fn sidebar_area(
             if let Some(collection) = &snapshot.collection {
                 let name = &collection.tree.collection.name;
                 let muted = theme::palette(ui).text_muted;
-                ui.label(RichText::new(format!("{} {name}", strings.history_of)).color(muted));
+                let text = fill(strings.history_of, &[("name", name)]);
+                ui.label(RichText::new(text).color(muted));
             }
             (
                 None,
@@ -1448,13 +1444,10 @@ fn exported_text(exported: &crate::core::Exported, strings: &Strings) -> String 
         Ok(warnings) => warnings,
         Err(why) => return format!("{} {why}", strings.export_failed),
     };
-    let mut text = format!("{} {}", strings.exported_to, exported.file.display());
+    let mut text = fill(strings.exported_to, &[("file", &exported.file.display())]);
     if exported.environments > 0 {
-        let _ = write!(
-            text,
-            " (+{} {})",
-            exported.environments, strings.exported_environments
-        );
+        let beside = strings.count(&strings.exported_environments, exported.environments, &[]);
+        let _ = write!(text, " ({beside})");
     }
     text.push('.');
     if !warnings.is_empty() {

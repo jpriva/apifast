@@ -20,10 +20,38 @@ pub struct GitView {
     pub branches: Vec<String>,
     /// The diff the user asked for last, of one of [`Self::changes`].
     pub diff: Option<FileDiff>,
-    /// What the last commit or switch said: `Committed 2 files: 1a2b3c4`.
-    pub notice: Option<String>,
+    /// What the last commit or switch did.
+    pub notice: Option<GitNotice>,
     /// Why the last thing asked failed.
-    pub error: Option<String>,
+    pub error: Option<GitProblem>,
+}
+
+/// What a commit or a switch did, for the interface to say in its language.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GitNotice {
+    /// Committed `files` files as the commit `id`.
+    Committed {
+        /// How many files.
+        files: usize,
+        /// The commit's short id.
+        id: String,
+    },
+    /// Checked out this branch.
+    Switched(String),
+}
+
+/// Why something asked of the repository was not done.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GitProblem {
+    /// A switch to `branch`, refused while `tabs` tabs have unsaved changes.
+    UnsavedTabs {
+        /// How many tabs.
+        tabs: usize,
+        /// The branch asked for.
+        branch: String,
+    },
+    /// git failed: what it said.
+    Failed(String),
 }
 
 /// What the interface asks of the focused collection's repository.
@@ -68,11 +96,11 @@ fn read(git: &dyn GitRepository, view: Option<&GitView>) -> GitView {
             next.branch = status.branch;
             next.changes = status.changes;
         }
-        Err(e) => next.error = Some(e.to_string()),
+        Err(e) => next.error = Some(GitProblem::Failed(e.to_string())),
     }
     match git.branches() {
         Ok(branches) => next.branches = branches,
-        Err(e) => next.error = Some(e.to_string()),
+        Err(e) => next.error = Some(GitProblem::Failed(e.to_string())),
     }
     // A diff of a file that no longer changed is gone.
     if let Some(diff) = &next.diff
@@ -119,26 +147,30 @@ impl State {
                 if let Some(file) = file {
                     match git_diff(&*open.repo, &*git, &file) {
                         Ok(diff) => view.diff = Some(diff),
-                        Err(e) => view.error = Some(e.to_string()),
+                        Err(e) => view.error = Some(GitProblem::Failed(e.to_string())),
                     }
                 }
             }
             GitCommand::Commit { paths, message } => {
                 match commit_changes(&*git, &paths, &message) {
                     Ok(id) => {
-                        view.notice = Some(format!("Committed {} file(s): {id}", paths.len()));
+                        view.notice = Some(GitNotice::Committed {
+                            files: paths.len(),
+                            id,
+                        });
                     }
-                    Err(e) => view.error = Some(e.to_string()),
+                    Err(e) => view.error = Some(GitProblem::Failed(e.to_string())),
                 }
             }
             GitCommand::Switch(branch) if drafts > 0 => {
-                view.error = Some(format!(
-                    "save or discard the unsaved changes of {drafts} tab(s) before switching to {branch}"
-                ));
+                view.error = Some(GitProblem::UnsavedTabs {
+                    tabs: drafts,
+                    branch,
+                });
             }
             GitCommand::Switch(branch) => match git.switch_branch(&branch) {
-                Ok(()) => view.notice = Some(format!("Switched to {branch}")),
-                Err(e) => view.error = Some(e.to_string()),
+                Ok(()) => view.notice = Some(GitNotice::Switched(branch)),
+                Err(e) => view.error = Some(GitProblem::Failed(e.to_string())),
             },
         }
         let error = view.error.take();

@@ -14,7 +14,7 @@ use eframe::egui::{self, RichText};
 
 use crate::atoms::{CloseButton, ColorSwatch, TemplateField, TemplateFieldTexts, VariableHints};
 use crate::core::{SecretStatus, TabContext, VaultView};
-use crate::strings::Strings;
+use crate::strings::{Strings, fill};
 use crate::theme;
 
 /// Width of the list of environments, in points.
@@ -384,7 +384,7 @@ impl EnvironmentEditor {
         let name = self.deleting.clone()?;
         let mut event = None;
         let modal = egui::Modal::new(egui::Id::unique("delete-environment")).show(ctx, |ui| {
-            ui.label(format!("{} `{name}`?", strings.delete_environment));
+            ui.label(fill(strings.delete_environment_confirm, &[("name", &name)]));
             ui.horizontal(|ui| {
                 if ui.button(strings.delete).clicked() {
                     event = Some(EnvironmentEvent::Delete(name.clone()));

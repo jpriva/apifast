@@ -17,7 +17,9 @@ use crate::strings::{self, Strings};
 /// The whole interface.
 pub struct App {
     core: Core,
-    strings: &'static Strings,
+    /// The system's language, if apifast has it: what the `system`
+    /// language setting shows. `None` shows English.
+    system_language: Option<&'static strings::Language>,
     main: MainScreen,
     /// Where the keymap is kept, if anywhere.
     keymap_store: Option<FsKeymapStore>,
@@ -46,13 +48,26 @@ impl App {
     pub fn new(core: Core) -> Self {
         Self {
             core,
-            strings: &strings::EN,
+            system_language: None,
             main: MainScreen::default(),
             keymap_store: None,
             settings_store: None,
             saved: mpsc::channel(),
             timings: None,
         }
+    }
+
+    /// Shows `language` when the language setting says `system`, as the
+    /// system's: what [`strings::system_language`] found.
+    #[must_use]
+    pub fn with_system_language(mut self, language: Option<&'static strings::Language>) -> Self {
+        self.system_language = language;
+        self
+    }
+
+    /// The texts of the language the settings choose.
+    fn strings(&self) -> &'static Strings {
+        self.main.settings.strings(self.system_language)
     }
 
     /// Reads the shortcuts from `store`, and saves them there when the user
@@ -67,7 +82,7 @@ impl App {
                 if !problems.is_empty() {
                     self.main.notice = Some(format!(
                         "{} {}",
-                        self.strings.keymap_problems,
+                        self.strings().keymap_problems,
                         problems.join(", ")
                     ));
                 }
@@ -120,7 +135,7 @@ impl App {
                 if !problems.is_empty() {
                     self.main.notice = Some(format!(
                         "{} {}",
-                        self.strings.settings_problems,
+                        self.strings().settings_problems,
                         problems.join(", ")
                     ));
                 }
@@ -181,7 +196,7 @@ impl App {
         }
         self.main.apply_appearance(ui.ctx());
         let snapshot = self.core.snapshot();
-        for command in self.main.show(ui, &snapshot, self.strings) {
+        for command in self.main.show(ui, &snapshot, self.strings()) {
             self.core.send(command);
         }
         let ctx = ui.ctx().clone();

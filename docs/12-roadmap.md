@@ -464,6 +464,9 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
   - [x] Actualizar lo instalado: `packaging/linux/update.sh` compila el tag más nuevo (o el pedido) en un worktree aparte e instala con su `install-local.sh`; `install-local.sh --rollback` vuelve a la versión anterior, que guarda. Paquetes y AppImage, en [docs/13](13-compilar-y-empaquetar.md#versiones-y-actualizaciones).
   - [x] Migraciones de datos: `last-version` en la carpeta de datos; al arrancar una versión más nueva, las migraciones intermedias corren una vez, tras copiar lo que tocan; una más vieja avisa y no cambia nada. Todavía no hay ninguna.
 - [ ] Traducciones: español e inglés.
+  - [x] La interfaz en español y en inglés: un archivo por idioma en `apifast-gui/src/strings/` que el script de compilación encuentra solo, sin registrarlo en ningún sitio. El idioma del sistema por defecto (`LC_ALL`, `LC_MESSAGES`, `LANG`) y uno fijo en los ajustes, que cambia la interfaz en el momento. Los textos con datos son plantillas (`{name}`) y los que llevan un número, plurales con la regla de su idioma. Las notas del núcleo de la interfaz (commits, cambios de rama) son datos que la interfaz pone en palabras. Una prueba comprueba que cada idioma tiene los marcadores del inglés y ningún texto vacío ([docs/09](09-ui-ux.md#idiomas)).
+  - [ ] Los errores y avisos de las capas que no son la interfaz (aplicación, dominio, red, almacenamiento, bóveda, importadores, git), unos 130, llegan como frases en inglés. Para traducirlos, que devuelvan un código con sus datos y que la interfaz los ponga en palabras.
+  - La CLI queda en inglés, como `git` o `cargo`.
 - [ ] Guía de usuario.
 - [ ] Auditoría de seguridad de la bóveda.
 - [ ] Revisión final de presupuestos de rendimiento.

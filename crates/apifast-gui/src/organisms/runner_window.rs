@@ -9,7 +9,7 @@ use apifast_app::{ReportFormat, ReportMeta, StepResult, assertion_text, duration
 use eframe::egui::{self, RichText};
 
 use crate::core::{RunSettings, RunView};
-use crate::strings::Strings;
+use crate::strings::{Strings, fill};
 use crate::theme;
 
 /// What the user asked of the window.
@@ -164,7 +164,11 @@ impl RunnerWindow {
                             .add_enabled(!picking, egui::Button::new(strings.run_data_pick))
                             .clicked()
                         {
-                            self.picking = Some(pick_data(ui.ctx().clone(), strings.run_data));
+                            self.picking = Some(pick_data(
+                                ui.ctx().clone(),
+                                strings.run_data,
+                                strings.csv_or_json,
+                            ));
                         }
                     }
                 });
@@ -218,10 +222,11 @@ impl RunnerWindow {
         if let Some((iteration, _, path)) = &run.current {
             let mut text = path.to_string();
             if run.iterations > 1 {
-                text = format!(
-                    "{text} · {} {iteration}/{}",
-                    strings.run_iteration, run.iterations
+                let iteration = fill(
+                    strings.run_iteration,
+                    &[("n", iteration), ("total", &run.iterations)],
                 );
+                text = format!("{text} · {iteration}");
             }
             ui.label(RichText::new(text).color(palette.text_muted).monospace());
         }
@@ -366,13 +371,14 @@ fn step_row(ui: &mut egui::Ui, step: &StepResult, iterations: bool, strings: &St
 }
 
 /// Opens the system's file picker for a data file, on a thread of its own.
-fn pick_data(ctx: egui::Context, title: &str) -> mpsc::Receiver<Option<PathBuf>> {
+fn pick_data(ctx: egui::Context, title: &str, filter: &str) -> mpsc::Receiver<Option<PathBuf>> {
     let (sender, receiver) = mpsc::channel();
     let title = title.to_owned();
+    let filter = filter.to_owned();
     std::thread::spawn(move || {
         let file = rfd::FileDialog::new()
             .set_title(title)
-            .add_filter("CSV or JSON", &["csv", "json"])
+            .add_filter(filter, &["csv", "json"])
             .pick_file();
         let _ = sender.send(file);
         ctx.request_repaint();

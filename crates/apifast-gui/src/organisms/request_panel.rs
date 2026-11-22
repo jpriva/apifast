@@ -13,7 +13,7 @@ use crate::atoms::{CodeEditor, Completer, TemplateField, TemplateFieldTexts, Var
 use crate::code::{self, HIGHLIGHT_LIMIT, Language};
 use crate::core::{TabContext, TokenState};
 use crate::organisms::KvTable;
-use crate::strings::Strings;
+use crate::strings::{Strings, fill};
 use crate::theme;
 use crate::vocabulary::HEADER_NAMES;
 
@@ -285,7 +285,7 @@ fn schema_section(
             ui.label(muted(ui, strings.schema_fetching));
         } else if let Some(schema) = &view.schema {
             let count = schema.user_types().count();
-            ui.label(muted(ui, &format!("{count} {}", strings.schema_types)));
+            ui.label(muted(ui, &strings.count(&strings.schema_types, count, &[])));
         }
     });
     if let Some(why) = &view.error {
@@ -898,7 +898,7 @@ pub(super) fn code_body(
         }
     }
     if let Some(line) = ui.data(|d| d.get_temp::<usize>(failed)) {
-        let message = format!("{} {line}.", strings.format_failed);
+        let message = fill(strings.format_failed, &[("line", &line)]);
         ui.label(RichText::new(message).color(theme::palette(ui).danger));
     }
     if text.len() > HIGHLIGHT_LIMIT {

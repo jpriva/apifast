@@ -113,7 +113,11 @@ fn run(
             let settings = FsSettingsStore::new(apifast_history::dirs::settings_file_in(&dirs));
             // Settings first: they tell the core its limits before a
             // collection opens.
-            let mut app = App::new(core).with_settings(settings).with_keymap(keymap);
+            let system = apifast_gui::strings::system_language(|name| std::env::var(name).ok());
+            let mut app = App::new(core)
+                .with_system_language(system)
+                .with_settings(settings)
+                .with_keymap(keymap);
             if timings {
                 app = app.with_timings(started);
             }

@@ -8,6 +8,7 @@ use apifast_app::HistoryLimits;
 use apifast_domain::{ProxyChoice, ProxyConfig, ProxyProtocol};
 use apifast_history::Limits;
 
+use crate::strings::{Language, Strings};
 use crate::theme::ThemeChoice;
 
 /// Smallest and largest interface scale.
@@ -23,9 +24,15 @@ pub const RESPONSES_MB_RANGE: (u32, u32) = (16, 100_000);
 
 const MB: u64 = 1024 * 1024;
 
+/// [`Settings::language`] for the system's language.
+pub const SYSTEM_LANGUAGE: &str = "system";
+
 /// The settings.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
+    /// The interface's language: the code of one of
+    /// [`crate::strings::LANGUAGES`], or `system` for the system's.
+    pub language: String,
     /// The theme.
     pub theme: ThemeChoice,
     /// How large everything is drawn, 1 being normal.
@@ -68,6 +75,7 @@ pub enum ProxyModeSetting {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            language: SYSTEM_LANGUAGE.to_owned(),
             theme: ThemeChoice::System,
             ui_scale: 1.0,
             pretty_limit_mb: 2,
@@ -93,6 +101,10 @@ impl Settings {
         let mut problems = Vec::new();
         for (key, value) in entries {
             let ok = match key.as_str() {
+                "language" => (value == SYSTEM_LANGUAGE)
+                    .then(|| SYSTEM_LANGUAGE.to_owned())
+                    .or_else(|| crate::strings::language(value).map(|l| l.code.to_owned()))
+                    .map(|code| settings.language = code),
                 "theme" => match value.as_str() {
                     "system" => Some(ThemeChoice::System),
                     "light" => Some(ThemeChoice::Light),
@@ -178,6 +190,7 @@ impl Settings {
             ThemeChoice::Dark => "dark",
         };
         vec![
+            ("language".into(), self.language.clone()),
             ("theme".into(), theme.into()),
             ("ui_scale".into(), format!("{}", self.ui_scale)),
             ("pretty_limit_mb".into(), self.pretty_limit_mb.to_string()),
@@ -204,6 +217,17 @@ impl Settings {
             ("send_cookies".into(), self.send_cookies.to_string()),
             ("store_cookies".into(), self.store_cookies.to_string()),
         ]
+    }
+
+    /// The texts of [`Self::language`]; for `system`, those of `system`
+    /// (the system's language, if apifast has it), else English.
+    pub fn strings(&self, system: Option<&'static Language>) -> &'static Strings {
+        let chosen = if self.language == SYSTEM_LANGUAGE {
+            system
+        } else {
+            crate::strings::language(&self.language)
+        };
+        chosen.map_or(&crate::strings::EN, |language| language.strings)
     }
 
     /// The application's proxy, without its password.
@@ -269,6 +293,7 @@ mod tests {
     #[test]
     fn settings_round_trip_through_their_entries() {
         let settings = Settings {
+            language: "es".into(),
             theme: ThemeChoice::Dark,
             ui_scale: 1.25,
             pretty_limit_mb: 8,
@@ -299,6 +324,7 @@ mod tests {
     fn unknown_or_bad_values_keep_the_default_and_are_reported() {
         let entries = [
             ("theme".to_owned(), "purple".to_owned()),
+            ("language".to_owned(), "tlh".to_owned()),
             ("ui_scale".to_owned(), "9".to_owned()),
             ("keep_days".to_owned(), "-3".to_owned()),
             ("nope".to_owned(), "1".to_owned()),
@@ -312,7 +338,12 @@ mod tests {
         assert_eq!(settings.keep_days, 30);
         assert_eq!(
             problems,
-            ["`theme: purple`", "`keep_days: -3`", "`nope: 1`"]
+            [
+                "`theme: purple`",
+                "`language: tlh`",
+                "`keep_days: -3`",
+                "`nope: 1`"
+            ]
         );
     }
 

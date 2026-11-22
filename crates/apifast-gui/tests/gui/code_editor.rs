@@ -90,7 +90,7 @@ fn broken_json_says_the_line_until_it_is_edited() {
     let mut harness = harness(Body::Json("{\n\"a\": [1,\n2}".into()));
     harness.get_by_label(EN.format).click();
     harness.run();
-    let message = format!("{} 3.", EN.format_failed);
+    let message = apifast_gui::strings::fill(EN.format_failed, &[("line", &3)]);
     harness.get_by_label(&message);
     assert_eq!(json(&harness), "{\n\"a\": [1,\n2}");
 
