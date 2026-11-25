@@ -196,6 +196,19 @@ La edición con resaltado se limita a unos 200 KB: con más texto, egui tarda de
 - Los valores guardados que ya no usa ninguna variable secreta se listan bajo la tabla, con un botón para olvidarlos.
 - Vista "todas las variables": cada variable efectiva con su valor y el ámbito del que procede.
 
+## Menú de la aplicación y "Acerca de"
+
+A la derecha de la barra superior hay un botón de menú, al estilo de GNOME. Sus tres líneas se dibujan, no son un carácter de la fuente. Abre Ajustes, Atajos de teclado, Importar…, Acerca de apifast y Salir. Son las mismas acciones de la paleta: el menú se cierra al elegir una, también desde el teclado o un lector de pantalla. En macOS se usa el mismo botón; la barra de menú nativa queda pendiente hasta poder probarla allí.
+
+"Acerca de apifast" muestra:
+
+- El icono, el nombre y qué es apifast, con enlaces al sitio y a la página para reportar errores.
+- La versión con su commit y la licencia (MIT o Apache-2.0).
+- El sistema (`PRETTY_NAME` de `/etc/os-release`, la arquitectura, el escritorio y el tipo de sesión) y los gráficos (backend de wgpu, adaptador y driver).
+- Las carpetas de datos y de ajustes.
+- Las dependencias, plegadas: cuántas hay, las cinco licencias más usadas con su cuenta y una lista con el nombre, la versión y la licencia de cada una. La genera el script de compilación con `cargo metadata --offline --locked --filter-platform <target>`: solo lo que se ejecuta en esa plataforma, sin dependencias de compilación ni de pruebas, y sin los crates de apifast. Si `cargo metadata` falla, compila igual y la ventana dice que la lista no estaba disponible.
+- "Copiar para un reporte de error", que copia la versión, el sistema y los gráficos.
+
 ## Ajustes de la aplicación
 
 `Ctrl+,` (o "Settings" en la paleta) abre los ajustes: una lista de secciones a la izquierda y la elegida a la derecha. Cada cambio se aplica en el momento y se guarda en `settings.yml` de la carpeta de configuración, que se puede editar a mano. Una entrada que no se entiende se ignora y se avisa. "Restore defaults" restablece todo.
@@ -313,7 +326,9 @@ Búsqueda difusa, resultados recientes primero y el atajo de cada acción a la d
 | Formatear body | `Alt+Shift+F` |
 | Zoom | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` |
 | Mostrar historial | (sin atajo) |
-| Editor de atajos | (sin atajo; desde la paleta) |
+| Editor de atajos | (sin atajo; desde la paleta o el menú) |
+| Salir | `Ctrl+Q` (pregunta antes si hay cambios sin guardar y los ajustes lo piden) |
+| Acerca de apifast | (sin atajo; desde la paleta o el menú) |
 
 En macOS, `Ctrl` se sustituye por `Cmd`. Todos los atajos se pueden reasignar desde el editor de atajos; se guardan en `keymap.yml`, solo los que cambian:
 

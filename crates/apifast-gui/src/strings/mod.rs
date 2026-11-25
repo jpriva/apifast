@@ -1511,6 +1511,40 @@ pub struct Strings {
     pub close_save_all: &'static str,
     /// Button: close without saving.
     pub close_anyway: &'static str,
+    /// Name of the application menu's button.
+    pub menu: &'static str,
+    /// Action: open the About window.
+    pub action_about: &'static str,
+    /// Action: quit apifast.
+    pub action_quit: &'static str,
+    /// Title of the About window.
+    pub about_title: &'static str,
+    /// What apifast is, under its name.
+    pub about_summary: &'static str,
+    /// Label: the version.
+    pub about_version: &'static str,
+    /// Label: apifast's license.
+    pub about_license: &'static str,
+    /// Link to apifast's site.
+    pub about_site: &'static str,
+    /// Link to report a bug.
+    pub about_bugs: &'static str,
+    /// Label: the operating system.
+    pub about_system: &'static str,
+    /// Label: the graphics backend and adapter.
+    pub about_graphics: &'static str,
+    /// Button: copy what a bug report needs.
+    pub about_copy: &'static str,
+    /// Said once the information is copied.
+    pub about_copied: &'static str,
+    /// The build had no list of dependencies.
+    pub about_dependencies_none: &'static str,
+    /// Explains the list of dependencies.
+    pub about_dependencies_hint: &'static str,
+    /// Dependencies under the less used licenses, `{n}`.
+    pub about_other_licenses: Plural,
+    /// The count of dependencies, `{n}`.
+    pub about_dependencies: Plural,
     /// How many tabs have unsaved changes, `{n}`.
     pub close_unsaved: Plural,
 }

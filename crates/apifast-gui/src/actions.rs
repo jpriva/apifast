@@ -77,6 +77,10 @@ pub enum Action {
     NewCollection,
     /// Import a collection from another tool.
     ImportCollection,
+    /// Open the About window.
+    About,
+    /// Close apifast, asking first if the settings say so.
+    Quit,
 }
 
 /// Every action, in the order the editor of shortcuts lists them.
@@ -121,6 +125,8 @@ pub const ALL: &[Action] = &[
     Action::OpenCollection,
     Action::NewCollection,
     Action::ImportCollection,
+    Action::About,
+    Action::Quit,
 ];
 
 const CTRL: Modifiers = Modifiers::COMMAND;
@@ -166,6 +172,8 @@ impl Action {
             Self::OpenCollection => "open_collection".into(),
             Self::NewCollection => "new_collection".into(),
             Self::ImportCollection => "import_collection".into(),
+            Self::About => "about".into(),
+            Self::Quit => "quit".into(),
         }
     }
 
@@ -209,6 +217,8 @@ impl Action {
             Self::OpenCollection => strings.open_collection,
             Self::NewCollection => strings.new_collection,
             Self::ImportCollection => strings.import_collection_action,
+            Self::About => strings.action_about,
+            Self::Quit => strings.action_quit,
         };
         text.to_owned()
     }
@@ -247,6 +257,7 @@ impl Action {
             Self::Environments => one(key(CTRL, Key::E)),
             Self::OpenCollection => one(key(CTRL, Key::O)),
             Self::ToggleSidebar => one(key(CTRL, Key::B)),
+            Self::Quit => one(key(CTRL, Key::Q)),
             Self::FormatBody => one(key(Modifiers::ALT.plus(Modifiers::SHIFT), Key::F)),
             Self::ShowHistory
             | Self::Shortcuts
@@ -261,7 +272,8 @@ impl Action {
             | Self::CopyAsPython
             | Self::CopyAsGo
             | Self::NewCollection
-            | Self::ImportCollection => Vec::new(),
+            | Self::ImportCollection
+            | Self::About => Vec::new(),
         }
     }
 }

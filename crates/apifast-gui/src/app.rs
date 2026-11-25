@@ -263,8 +263,29 @@ impl App {
 }
 
 impl eframe::App for App {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        if self.main.about.graphics.is_none()
+            && let Some(render) = frame.wgpu_render_state()
+        {
+            self.main.about.graphics = Some(graphics(&render.adapter.get_info()));
+        }
         self.show(ui);
+    }
+}
+
+/// The graphics backend and adapter, for the About window and bug reports:
+/// `Vulkan · AMD Radeon 780M (radv, Mesa 25.2.4)`.
+pub fn graphics(info: &eframe::wgpu::AdapterInfo) -> String {
+    let driver = [info.driver.as_str(), info.driver_info.as_str()]
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let backend = format!("{:?}", info.backend);
+    if driver.is_empty() {
+        format!("{backend} · {}", info.name)
+    } else {
+        format!("{backend} · {} ({driver})", info.name)
     }
 }
 

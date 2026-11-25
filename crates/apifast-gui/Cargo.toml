@@ -12,6 +12,11 @@ publish.workspace = true
 name = "apifast-gui"
 path = "src/main.rs"
 
+# The build script lists the dependencies and their licenses for the
+# About window, from `cargo metadata`.
+[build-dependencies]
+serde_json.workspace = true
+
 [dependencies]
 apifast-domain.workspace = true
 apifast-template.workspace = true

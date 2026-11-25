@@ -490,11 +490,12 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
     - Atajos: abre el editor que ya existía.
     - Datos: historial, registro y las carpetas de datos, configuración y registro, con un botón que las abre; el espacio que ocupan los datos.
     - Todo sigue en `settings.yml`, legible y editable a mano.
-  - [ ] Menú de la aplicación: un botón de menú en la barra superior (al estilo de GNOME), o la barra de menú nativa en macOS, con Preferencias, Atajos de teclado, Importar, Acerca de y Salir.
-  - [ ] Ventana "Acerca de":
-    - El icono, el nombre, la versión con su commit, las licencias (MIT o Apache-2.0) y las de las dependencias, generadas al compilar.
-    - El sitio, y las carpetas de datos y de ajustes.
-    - Un botón que copia todo eso (versión, sistema, backend gráfico) para un reporte de error.
+  - [x] Menú de la aplicación: un botón de menú dibujado en la barra superior, al estilo de GNOME, con Ajustes, Atajos de teclado, Importar…, Acerca de y Salir (`Ctrl+Q`, que pasa por la confirmación de cambios sin guardar). Acerca de y Salir son también acciones de la paleta ([docs/09](09-ui-ux.md#menú-de-la-aplicación-y-acerca-de)).
+    - [ ] La barra de menú nativa de macOS, cuando se pueda probar allí.
+  - [x] Ventana "Acerca de":
+    - El icono, el nombre, la versión con su commit, la licencia (MIT o Apache-2.0) y las de las 512 dependencias. Las genera el script de compilación con `cargo metadata` para la plataforma de destino.
+    - El sitio, el enlace para reportar errores, y las carpetas de datos y de ajustes.
+    - Un botón que copia la versión, el sistema y los gráficos (backend, adaptador y driver) para un reporte de error.
   - [ ] Barra de título propia, con minimizar, maximizar y cerrar siempre, aunque GNOME no los pida:
     - La ventana va sin decoraciones del sistema y la barra la dibuja la interfaz: arrastrar mueve la ventana, el doble clic maximiza, y los bordes la redimensionan.
     - Puede llevar el buscador y el entorno, como hacen otros clientes de APIs.

@@ -416,6 +416,7 @@ dependencies = [
  "http",
  "prost",
  "rfd",
+ "serde_json",
  "tempfile",
  "tokio",
  "tokio-stream",

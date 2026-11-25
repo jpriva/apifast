@@ -94,6 +94,10 @@ pub struct MainScreen {
     code_font: String,
     /// Closing the window with tabs that have unsaved changes.
     closing: Closing,
+    /// The About window.
+    pub about: crate::organisms::AboutWindow,
+    /// Quit was asked for: the window is asked to close on this frame.
+    quit: bool,
     /// The collection key window.
     pub vault_window: VaultWindow,
     /// The cookie editor.
@@ -240,7 +244,7 @@ impl MainScreen {
         let mut save_captures = None;
         let mut create_here = None;
         let (
-            (environment, edit_environments),
+            (environment, edit_environments, menu),
             open_git,
             (tree_event, picked, asked),
             (tab_event, (url_event, edited)),
@@ -288,12 +292,7 @@ impl MainScreen {
         {
             commands.push(Command::FetchSchema(tab.key()));
         }
-        if open_git {
-            commands.push(Command::Git(self.git_window.open()));
-        }
-        if edit_environments {
-            self.environments.open = !self.environments.open;
-        }
+        commands.extend(self.bar_commands((open_git, edit_environments, menu), snapshot, strings));
         commands.extend(self.collection_commands(ui, (create_here, asked), snapshot, strings));
         commands.extend(self.windows(ui, snapshot, &hints, strings));
         commands.extend(environment);
@@ -321,6 +320,11 @@ impl MainScreen {
         snapshot: &Snapshot,
         strings: &Strings,
     ) -> Option<Command> {
+        if std::mem::take(&mut self.quit) {
+            // Comes back on the next frame as a request to close, which
+            // the code below may ask about.
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
         let unsaved = snapshot.tabs.iter().filter(|tab| tab.is_dirty()).count();
         if ctx.input(|i| i.viewport().close_requested())
             && self.closing != Closing::Allowed
@@ -718,6 +722,7 @@ impl MainScreen {
         if std::mem::take(&mut self.settings_window.open_shortcuts) {
             self.shortcuts.open = true;
         }
+        (self.about).show(&ctx, &self.settings_window.folders, strings);
         if let Some(password) = self.settings_window.password_change.take() {
             commands.push(Command::SetProxyPassword(password));
         }
@@ -737,6 +742,49 @@ impl MainScreen {
         commands
     }
 
+    /// What the bars asked for: the git window, the environment editor, or
+    /// an action of the application's menu.
+    fn bar_commands(
+        &mut self,
+        (open_git, edit_environments, menu): (bool, bool, Option<Action>),
+        snapshot: &Snapshot,
+        strings: &Strings,
+    ) -> Vec<Command> {
+        let mut commands = Vec::new();
+        if open_git {
+            commands.push(Command::Git(self.git_window.open()));
+        }
+        if edit_environments {
+            self.environments.open = !self.environments.open;
+        }
+        if let Some(action) = menu {
+            commands.extend(self.run(action, snapshot, strings));
+        }
+        commands
+    }
+
+    /// Does `action` if it only changes what the screen shows (the
+    /// sidebar, the URL's focus, the environment editor) or quits. Returns
+    /// whether it did.
+    fn toggle(&mut self, action: Action) -> bool {
+        match action {
+            Action::FocusUrl => self.focus_url = true,
+            Action::Environments => self.environments.open = !self.environments.open,
+            Action::ToggleSidebar => self.sidebar_hidden = !self.sidebar_hidden,
+            Action::ShowHistory => {
+                self.sidebar_hidden = false;
+                self.sidebar = Sidebar::History;
+            }
+            Action::FormatBody => {
+                self.request.tab = crate::organisms::RequestTab::Body;
+                self.request.format_now = true;
+            }
+            Action::Quit => self.quit = true,
+            _ => return false,
+        }
+        true
+    }
+
     /// Opens the window `action` is about, if it opens one.
     fn open_window(&mut self, action: Action) -> bool {
         let open = match action {
@@ -744,6 +792,7 @@ impl MainScreen {
             Action::CollectionKey => &mut self.vault_window.open,
             Action::Cookies => &mut self.cookies_window.open,
             Action::Settings => &mut self.settings_window.open,
+            Action::About => &mut self.about.open,
             _ => return false,
         };
         *open = true;
@@ -760,13 +809,12 @@ impl MainScreen {
             |index: usize| (snapshot.tabs.get(index)).map(|tab| Command::ActivateTab(tab.key()));
         let count = snapshot.tabs.len();
         let one = |command: Option<Command>| command.into_iter().collect();
-        if self.open_window(action) {
+        if self.open_window(action) || self.toggle(action) {
             return Vec::new();
         }
         match action {
             Action::Git => vec![Command::Git(self.git_window.open())],
             Action::Send if active.is_some() && !sending => self.send_commands(),
-            Action::Send => Vec::new(),
             Action::Cancel => one(sending.then_some(Command::Cancel)),
             Action::Save => one(active.map(|tab| Command::Save(tab.key()))),
             Action::SaveAll => vec![Command::SaveAll],
@@ -796,36 +844,23 @@ impl MainScreen {
             Action::NextTab => one(position.and_then(|i| tab_at((i + 1) % count))),
             Action::PreviousTab => one(position.and_then(|i| tab_at((i + count - 1) % count))),
             Action::GoToTab(n) => one(tab_at(usize::from(n).saturating_sub(1))),
-            Action::FocusUrl => {
-                self.focus_url = true;
-                Vec::new()
-            }
-            Action::Environments => {
-                self.environments.open = !self.environments.open;
-                Vec::new()
-            }
-            Action::ToggleSidebar => {
-                self.sidebar_hidden = !self.sidebar_hidden;
-                Vec::new()
-            }
-            Action::ShowHistory => {
-                self.sidebar_hidden = false;
-                self.sidebar = Sidebar::History;
-                Vec::new()
-            }
-            Action::FormatBody => {
-                self.request.tab = crate::organisms::RequestTab::Body;
-                self.request.format_now = true;
-                Vec::new()
-            }
             Action::CopyAsCurl
             | Action::CopyAsJavaScript
             | Action::CopyAsPython
             | Action::CopyAsGo => copy_as(action, snapshot),
-            // Opened by `open_window`.
-            Action::Shortcuts | Action::CollectionKey | Action::Cookies | Action::Settings => {
-                Vec::new()
-            }
+            // Done by `open_window` and `toggle`.
+            Action::Send
+            | Action::Shortcuts
+            | Action::CollectionKey
+            | Action::Cookies
+            | Action::Settings
+            | Action::About
+            | Action::FocusUrl
+            | Action::Environments
+            | Action::ToggleSidebar
+            | Action::ShowHistory
+            | Action::FormatBody
+            | Action::Quit => Vec::new(),
             Action::OpenCollection => {
                 self.collections.open_collection();
                 Vec::new()
@@ -1312,7 +1347,7 @@ fn bars<'a>(
     snapshot: &'a Snapshot,
     strings: &'a Strings,
 ) -> (
-    impl FnOnce(&mut egui::Ui) -> (Option<Command>, bool) + 'a,
+    impl FnOnce(&mut egui::Ui) -> (Option<Command>, bool, Option<Action>) + 'a,
     Option<impl FnOnce(&mut egui::Ui) -> bool + 'a>,
 ) {
     let name = (snapshot.collection.as_ref()).map(|c| c.tree.collection.name.as_str());
@@ -1340,16 +1375,53 @@ fn status_bar(ui: &mut egui::Ui, git: &crate::core::GitView, strings: &Strings) 
     .inner
 }
 
+/// The application's menu: a button that opens Settings, Keyboard
+/// shortcuts, Import, About and Quit. Returns the action picked.
+fn app_menu(ui: &mut egui::Ui, strings: &Strings) -> Option<Action> {
+    let button = ui.add(crate::atoms::MenuButton::new(strings.menu));
+    let mut picked = None;
+    egui::Popup::menu(&button)
+        .align(egui::RectAlign::BOTTOM_END)
+        .show(|ui| {
+            for (i, action) in [
+                Action::Settings,
+                Action::Shortcuts,
+                Action::ImportCollection,
+                Action::About,
+                Action::Quit,
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                if i == 3 || i == 4 {
+                    ui.separator();
+                }
+                if ui.button(action.label(strings)).clicked() {
+                    picked = Some(action);
+                    // Also when picked from the keyboard or a screen
+                    // reader, without a click of the pointer.
+                    ui.close();
+                }
+            }
+        });
+    picked
+}
+
 fn top_bar(
     ui: &mut egui::Ui,
     name: Option<&str>,
     snapshot: &Snapshot,
     strings: &Strings,
-) -> (Option<Command>, bool) {
+) -> (Option<Command>, bool, Option<Action>) {
     ui.horizontal(|ui| {
         let Some(name) = name else {
             ui.label(RichText::new("apifast").strong());
-            return (None, false);
+            let menu = ui
+                .with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    app_menu(ui, strings)
+                })
+                .inner;
+            return (None, false, menu);
         };
         ui.label(RichText::new(name).strong());
         if snapshot.vault.master_in_file {
@@ -1357,6 +1429,7 @@ fn top_bar(
                 .on_hover_text(strings.master_in_file_hint);
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let menu = app_menu(ui, strings);
             let edit = ui
                 .button(strings.environments)
                 .on_hover_text(strings.edit_environments)
@@ -1372,7 +1445,7 @@ fn top_bar(
             )
             .show(ui);
             ui.add(ColorSwatch::new(color));
-            (choice.map(Command::SelectEnvironment), edit)
+            (choice.map(Command::SelectEnvironment), edit, menu)
         })
         .inner
     })

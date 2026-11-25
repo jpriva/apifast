@@ -150,6 +150,43 @@ impl Widget for ColorSwatch<'_> {
     }
 }
 
+/// The button of the application's menu: three lines, drawn (the fonts
+/// have no glyph for them), named for screen readers and in its hover.
+#[derive(Debug, Clone, Copy)]
+pub struct MenuButton<'a> {
+    name: &'a str,
+}
+
+impl<'a> MenuButton<'a> {
+    /// A button named `name`.
+    pub fn new(name: &'a str) -> Self {
+        Self { name }
+    }
+}
+
+impl Widget for MenuButton<'_> {
+    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+        let side = ui.spacing().interact_size.y.max(22.0);
+        let (rect, response) = ui.allocate_exact_size(egui::vec2(side, side), Sense::click());
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, self.name));
+        if ui.is_rect_visible(rect) {
+            let visuals = ui.style().interact(&response);
+            ui.painter()
+                .rect_filled(rect, theme::radius::MEDIUM, visuals.weak_bg_fill);
+            let stroke = egui::Stroke::new(1.5, theme::palette(ui).text);
+            let (c, half) = (rect.center(), side * 0.22);
+            for dy in [-0.6, 0.0, 0.6] {
+                let y = c.y + dy * half;
+                ui.painter().line_segment(
+                    [egui::pos2(c.x - half, y), egui::pos2(c.x + half, y)],
+                    stroke,
+                );
+            }
+        }
+        response.on_hover_text(self.name)
+    }
+}
+
 /// A small button with an ×, to close or remove something. Drawn, not
 /// written: the glyph looks different, or is missing, in some fonts. It has
 /// no background until hovered, so rows of them stay quiet.

@@ -16,6 +16,7 @@ mod git;
 mod grpc;
 mod history;
 mod keyboard;
+mod menu;
 mod organisms;
 mod request_panel;
 mod response;
