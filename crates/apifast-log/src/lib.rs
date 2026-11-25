@@ -10,6 +10,10 @@
 //! (`debug`, `apifast_http=trace,wgpu=info`): then it rules, and
 //! [`Logging::set_level`] does not change it.
 //!
+//! Some warnings of libraries that are not problems (a Vulkan driver that
+//! cannot start here, a clipboard protocol the desktop lacks) are replaced by
+//! an `info` event that explains them: [`explained`].
+//!
 //! Nothing here keeps secrets out of the log: what emits an event does,
 //! as errors already do (they never carry secret values nor a URL's query).
 
@@ -18,9 +22,11 @@ use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+pub mod explained;
+
+use tracing_log::AsLog as _;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{Registry, reload};
 
 /// A log file larger than this is moved to `<name>.1` (replacing an older
@@ -170,6 +176,7 @@ impl Logging {
     pub fn set_level(&self, level: LogLevel) {
         if !self.from_env {
             let _ = self.filter.reload(level.targets());
+            follow_log_level();
         }
     }
 
@@ -193,8 +200,17 @@ impl Logging {
 /// If the file cannot be opened, or a log was set up already.
 pub fn init(options: &LogOptions) -> Result<Logging, LogError> {
     let (subscriber, logging) = subscriber(options)?;
-    subscriber.try_init().map_err(|_| LogError::AlreadySet)?;
+    tracing::subscriber::set_global_default(subscriber).map_err(|_| LogError::AlreadySet)?;
+    log::set_boxed_logger(Box::new(explained::Explained::new()))
+        .map_err(|_| LogError::AlreadySet)?;
+    follow_log_level();
     Ok(logging)
+}
+
+/// Lets through the `log` records `tracing` would keep, and no more: a
+/// record below the filter is not even built.
+fn follow_log_level() {
+    log::set_max_level(tracing::level_filters::LevelFilter::current().as_log());
 }
 
 /// The subscriber [`init`] sets, without setting it: for tests.

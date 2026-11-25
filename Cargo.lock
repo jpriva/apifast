@@ -488,9 +488,11 @@ dependencies = [
 name = "apifast-log"
 version = "0.1.0"
 dependencies = [
+ "log",
  "tempfile",
  "thiserror 2.0.21",
  "tracing",
+ "tracing-log",
  "tracing-subscriber",
 ]
 
