@@ -60,11 +60,14 @@ fn badges_take_their_colors_from_the_active_theme() {
     let mut seen = Vec::new();
     for dark in [false, true] {
         let mut harness = Harness::new_ui(|ui| {
-            *ui.visuals_mut() = theme::visuals(if dark {
-                egui::Theme::Dark
-            } else {
-                egui::Theme::Light
-            });
+            *ui.visuals_mut() = theme::visuals(
+                if dark {
+                    egui::Theme::Dark
+                } else {
+                    egui::Theme::Light
+                },
+                theme::Accent::Blue,
+            );
             let expected = if dark { theme::DARK } else { theme::LIGHT };
             seen.push(*theme::palette(ui) == expected);
         });

@@ -1169,6 +1169,8 @@ fn the_history_limits_come_from_the_settings() {
         proxy: apifast_domain::ProxyChoice::System,
         trust: apifast_domain::TlsTrust::default(),
         cookies: (true, true),
+        timeout_ms: 30_000,
+        reopen_last: true,
     });
     open(&core, dir.path());
     let snapshot = wait(&core, "the history", |s| !s.history.is_empty());
@@ -2693,4 +2695,69 @@ fn collection_scripts_are_saved_in_its_file() {
     });
     let file = std::fs::read_to_string(dir.path().join("opencollection.yml")).unwrap();
     assert!(file.contains("console.log(1)"), "{file}");
+}
+
+/// Tells `core` the settings a test needs: the default timeout, and
+/// whether the workspace used last opens at the start.
+fn configure(core: &Core, timeout_ms: u64, reopen_last: bool) {
+    core.send(Command::Configure {
+        history: apifast_gui::core::HISTORY_LIMITS,
+        responses: apifast_gui::core::RESPONSE_LIMITS,
+        proxy: apifast_domain::ProxyChoice::System,
+        trust: apifast_domain::TlsTrust::default(),
+        cookies: (true, true),
+        timeout_ms,
+        reopen_last,
+    });
+}
+
+#[test]
+fn the_default_timeout_of_the_settings_reaches_requests_that_set_none() {
+    let dir = collection(server(Duration::from_secs(5)));
+    let (core, _, _data) = start();
+    configure(&core, 200, true);
+    open(&core, dir.path());
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
+    let snapshot = wait(&core, "the request", |s| s.active_tab().is_some());
+    assert_eq!(
+        snapshot
+            .active_tab()
+            .unwrap()
+            .context
+            .inherited_settings
+            .timeout_ms,
+        apifast_domain::Resolved::new(200, apifast_domain::Origin::Default)
+    );
+
+    let started = Instant::now();
+    core.send(Command::Send);
+    wait(&core, "the timeout", |s| {
+        matches!(response(s), ResponseState::Failed(_))
+    });
+    assert!(started.elapsed() < Duration::from_secs(3));
+}
+
+#[test]
+fn the_settings_choose_whether_the_last_workspace_opens_at_the_start() {
+    let team = tempfile::tempdir().unwrap();
+    let (core, _, data) = start();
+    core.send(Command::CreateWorkspace {
+        folder: team.path().join("team"),
+        name: "Team".into(),
+    });
+    wait(&core, "the team workspace", |s| {
+        s.workspace.as_ref().is_some_and(|w| w.name == "Team")
+    });
+    drop(core);
+
+    let workspace_at_start = |reopen_last: bool| {
+        let core = Core::start_with(data.path().to_path_buf(), SystemKeyring::off(), || {});
+        configure(&core, 30_000, reopen_last);
+        core.send(Command::Restore);
+        let snapshot = wait(&core, "a workspace", |s| s.workspace.is_some());
+        snapshot.workspace.clone().unwrap().name
+    };
+    assert_eq!(workspace_at_start(true), "Team");
+    assert_eq!(workspace_at_start(false), "My workspace");
 }

@@ -1,5 +1,6 @@
-//! Clock and randomness from the operating system. The CLI has its own copy:
-//! drivers cannot depend on each other.
+//! Clock, randomness and the file manager, from the operating system. The
+//! CLI has its own copy of the clock and randomness: drivers cannot depend
+//! on each other.
 
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hasher};
@@ -34,4 +35,26 @@ impl Random for SystemRandom {
         hasher.write_u64(self.counter.fetch_add(1, Ordering::Relaxed));
         hasher.finish()
     }
+}
+
+/// Opens `folder` in the system's file manager, without waiting for it.
+///
+/// # Errors
+///
+/// If the file manager cannot be started.
+pub fn open_folder(folder: &std::path::Path) -> std::io::Result<()> {
+    let program = if cfg!(target_os = "macos") {
+        "open"
+    } else if cfg!(windows) {
+        "explorer"
+    } else {
+        "xdg-open"
+    };
+    std::process::Command::new(program)
+        .arg(folder)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map(drop)
 }

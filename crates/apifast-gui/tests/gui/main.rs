@@ -20,6 +20,7 @@ mod organisms;
 mod request_panel;
 mod response;
 mod runner_window;
+mod settings;
 mod tabs;
 mod template_field;
 mod tree;

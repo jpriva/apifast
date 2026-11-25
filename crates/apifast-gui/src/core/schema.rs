@@ -94,6 +94,7 @@ impl State {
             runtime: open.runtime.clone(),
             script_changes: open.script_changes.clone(),
             draft: Some(request),
+            default_timeout_ms: Some(self.default_timeout_ms),
             ..SendOptions::default()
         };
         let messages = self.messages.clone();

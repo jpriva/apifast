@@ -176,7 +176,8 @@ fn run(
             let mut app = App::new(core)
                 .with_system_language(system)
                 .with_settings(settings)
-                .with_keymap(keymap);
+                .with_keymap(keymap)
+                .with_folders(apifast_history::dirs::data_dir(), dirs);
             if let Some(logging) = logging {
                 app = app.with_logging(logging, log_file, std::env::var("APIFAST_LOG").ok());
             }

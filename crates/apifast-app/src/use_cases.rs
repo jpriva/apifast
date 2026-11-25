@@ -154,6 +154,11 @@ pub struct SendOptions {
     /// Whether a collection run sends it: its scripts see `runner` as
     /// `req.getExecutionMode()`, else `standalone`.
     pub in_run: bool,
+    /// The timeout of a request whose levels set none, in milliseconds
+    /// (0: none); `None` for [`Settings::DEFAULT_TIMEOUT_MS`].
+    ///
+    /// [`Settings::DEFAULT_TIMEOUT_MS`]: apifast_domain::Settings::DEFAULT_TIMEOUT_MS
+    pub default_timeout_ms: Option<u64>,
 }
 
 /// Result of [`send_request`].
@@ -487,6 +492,9 @@ where
         }
     }
     let mut resolved = resolve(Chain::new(&collection, &loaded.folders, &loaded.request));
+    if let Some(timeout_ms) = options.default_timeout_ms {
+        resolved.use_default_timeout_ms(timeout_ms);
+    }
     let scripts = before_scripts(
         ports,
         (&loaded, &collection, kind),
@@ -657,6 +665,7 @@ where
         draft: None,
         script_changes: options.script_changes.clone(),
         in_run: options.in_run,
+        default_timeout_ms: options.default_timeout_ms,
     };
     let outcome = send_in_chain(ports, dependency, &dependency_options, cancel, context)
         .await

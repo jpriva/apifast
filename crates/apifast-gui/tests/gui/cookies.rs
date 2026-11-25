@@ -147,6 +147,8 @@ fn configure(core: &Core, send: bool, store: bool) {
         proxy: apifast_domain::ProxyChoice::System,
         trust: apifast_domain::TlsTrust::default(),
         cookies: (send, store),
+        timeout_ms: 30_000,
+        reopen_last: true,
     });
 }
 

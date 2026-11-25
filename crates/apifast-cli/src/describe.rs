@@ -53,6 +53,7 @@ pub fn run(args: &DescribeArgs) -> Result<ExitCode> {
         draft: None,
         script_changes: Vec::new(),
         in_run: false,
+        default_timeout_ms: None,
     };
     let tokens = apifast_app::memory::MemoryTokens::default();
     let authorizer = terminal_authorizer();

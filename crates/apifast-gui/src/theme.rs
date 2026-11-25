@@ -37,6 +37,10 @@ pub mod text {
     pub const BODY: f32 = 13.0;
     /// Headings.
     pub const HEADING: f32 = 17.0;
+    /// Code, by default.
+    pub const CODE: f32 = 12.0;
+    /// Smallest and largest size of code.
+    pub const CODE_RANGE: (f32, f32) = (9.0, 24.0);
 }
 
 /// Opacity of a badge's background tint, made of its own color.
@@ -151,12 +155,173 @@ pub const DARK: Palette = Palette {
     syntax_keyword: Color32::from_rgb(0xff, 0x8f, 0xc8),
 };
 
-/// The palette for the theme `ui` is drawn with.
+/// The color of focus, selection and primary actions, as the settings
+/// choose it. Each has a light and a dark tone that reach WCAG AA.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum Accent {
+    /// The default.
+    #[default]
+    Blue,
+    /// Green.
+    Green,
+    /// Teal.
+    Teal,
+    /// Purple.
+    Purple,
+    /// Pink.
+    Pink,
+    /// Orange.
+    Orange,
+}
+
+impl Accent {
+    /// Every accent, in the order the settings show them.
+    pub const ALL: [Self; 6] = [
+        Self::Blue,
+        Self::Green,
+        Self::Teal,
+        Self::Purple,
+        Self::Pink,
+        Self::Orange,
+    ];
+
+    /// How `settings.yml` writes it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Blue => "blue",
+            Self::Green => "green",
+            Self::Teal => "teal",
+            Self::Purple => "purple",
+            Self::Pink => "pink",
+            Self::Orange => "orange",
+        }
+    }
+
+    /// The accent `settings.yml` writes as `text`.
+    pub fn parse(text: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|a| a.as_str() == text)
+    }
+
+    /// Its palettes, light and dark.
+    fn palettes(self) -> &'static (Palette, Palette) {
+        &ACCENT_PALETTES[self as usize]
+    }
+
+    /// Its palette for `theme`.
+    pub fn palette(self, theme: Theme) -> &'static Palette {
+        let (light, dark) = self.palettes();
+        match theme {
+            Theme::Light => light,
+            Theme::Dark => dark,
+        }
+    }
+}
+
+/// `base` with `accent` as its accent.
+const fn with_accent(base: Palette, accent: Color32) -> Palette {
+    Palette { accent, ..base }
+}
+
+/// The palettes of each accent, in the order of [`Accent::ALL`]: the
+/// colors are those of the palettes, which already reach WCAG AA.
+static ACCENT_PALETTES: [(Palette, Palette); 6] = [
+    (LIGHT, DARK),
+    (with_accent(LIGHT, LIGHT.get), with_accent(DARK, DARK.get)),
+    (
+        with_accent(LIGHT, LIGHT.variable),
+        with_accent(DARK, DARK.variable),
+    ),
+    (
+        with_accent(LIGHT, LIGHT.patch),
+        with_accent(DARK, DARK.patch),
+    ),
+    (
+        with_accent(LIGHT, LIGHT.syntax_keyword),
+        with_accent(DARK, DARK.syntax_keyword),
+    ),
+    (with_accent(LIGHT, LIGHT.post), with_accent(DARK, DARK.post)),
+];
+
+/// The palette for the theme `ui` is drawn with, and its accent: the one
+/// whose accent is the visuals' link color, which [`visuals`] sets to it.
 pub fn palette(ui: &egui::Ui) -> &'static Palette {
-    if ui.visuals().dark_mode {
-        &DARK
+    let visuals = ui.visuals();
+    let theme = if visuals.dark_mode {
+        Theme::Dark
     } else {
-        &LIGHT
+        Theme::Light
+    };
+    Accent::ALL
+        .into_iter()
+        .map(|accent| accent.palette(theme))
+        .find(|p| p.accent == visuals.hyperlink_color)
+        .unwrap_or_else(|| Accent::Blue.palette(theme))
+}
+
+/// How much room there is between and inside controls.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum Density {
+    /// Less room: more fits on screen.
+    Compact,
+    /// The default.
+    #[default]
+    Normal,
+    /// More room: easier to aim at.
+    Comfortable,
+}
+
+impl Density {
+    /// Every density, in the order the settings show them.
+    pub const ALL: [Self; 3] = [Self::Compact, Self::Normal, Self::Comfortable];
+
+    /// How `settings.yml` writes it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Compact => "compact",
+            Self::Normal => "normal",
+            Self::Comfortable => "comfortable",
+        }
+    }
+
+    /// The density `settings.yml` writes as `text`.
+    pub fn parse(text: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|d| d.as_str() == text)
+    }
+
+    /// Spacing between items and padding inside buttons.
+    pub fn spacing(self) -> (egui::Vec2, egui::Vec2) {
+        match self {
+            Self::Compact => (egui::vec2(space::S, space::XS), egui::vec2(space::S, 1.0)),
+            Self::Normal => (
+                egui::vec2(space::M, space::S),
+                egui::vec2(space::M, space::S),
+            ),
+            Self::Comfortable => (
+                egui::vec2(space::L, space::M),
+                egui::vec2(space::L, space::M),
+            ),
+        }
+    }
+}
+
+/// How the interface looks, beyond the theme: what [`apply_style`] sets.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Look {
+    /// The accent color.
+    pub accent: Accent,
+    /// The room between and inside controls.
+    pub density: Density,
+    /// The size of code, in points.
+    pub code_size: f32,
+}
+
+impl Default for Look {
+    fn default() -> Self {
+        Self {
+            accent: Accent::default(),
+            density: Density::default(),
+            code_size: text::CODE,
+        }
     }
 }
 
@@ -192,11 +357,12 @@ pub fn status_color(palette: &Palette, status: u16) -> Color32 {
     }
 }
 
-/// egui visuals built from a palette.
-pub fn visuals(theme: Theme) -> egui::Visuals {
-    let (mut visuals, p) = match theme {
-        Theme::Dark => (egui::Visuals::dark(), &DARK),
-        Theme::Light => (egui::Visuals::light(), &LIGHT),
+/// egui visuals built from a palette with `accent`.
+pub fn visuals(theme: Theme, accent: Accent) -> egui::Visuals {
+    let p = accent.palette(theme);
+    let mut visuals = match theme {
+        Theme::Dark => egui::Visuals::dark(),
+        Theme::Light => egui::Visuals::light(),
     };
     visuals.panel_fill = p.background;
     // Windows take the background, so the fields in them (on `surface`)
@@ -225,6 +391,53 @@ pub fn visuals(theme: Theme) -> egui::Visuals {
     visuals.window_corner_radius = CornerRadius::same(radius::LARGE);
     visuals.menu_corner_radius = CornerRadius::same(radius::LARGE);
     visuals
+}
+
+/// Why a code font could not be used.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FontProblem {
+    /// The file could not be read, with the system's reason.
+    Unreadable(String),
+    /// The file is not a TTF or OTF font.
+    NotAFont,
+}
+
+/// The name the code font is installed under.
+const CODE_FONT: &str = "apifast-code";
+
+/// Whether `bytes` start as a TrueType or OpenType font (or a collection).
+pub fn is_font(bytes: &[u8]) -> bool {
+    matches!(
+        bytes.get(..4),
+        Some([0, 1, 0, 0] | b"true" | b"OTTO" | b"ttcf")
+    )
+}
+
+/// Draws code with the font in `file`, before the included one (which
+/// stays for the characters it lacks); with an empty `file`, with the
+/// included one only. On a problem nothing changes.
+///
+/// # Errors
+///
+/// If `file` cannot be read, or is not a font.
+pub fn code_font(ctx: &egui::Context, file: &str) -> Result<(), FontProblem> {
+    let mut fonts = egui::FontDefinitions::default();
+    let file = file.trim();
+    if !file.is_empty() {
+        let bytes = std::fs::read(file).map_err(|e| FontProblem::Unreadable(e.to_string()))?;
+        if !is_font(&bytes) {
+            return Err(FontProblem::NotAFont);
+        }
+        fonts.font_data.insert(
+            CODE_FONT.to_owned(),
+            std::sync::Arc::new(egui::FontData::from_owned(bytes)),
+        );
+        if let Some(monospace) = fonts.families.get_mut(&egui::FontFamily::Monospace) {
+            monospace.insert(0, CODE_FONT.to_owned());
+        }
+    }
+    ctx.set_fonts(fonts);
+    Ok(())
 }
 
 /// Which theme the user wants.
@@ -257,12 +470,22 @@ pub fn apply(ctx: &egui::Context, choice: ThemeChoice) {
 
 /// Installs both themes and follows the system's choice.
 pub fn install(ctx: &egui::Context) {
-    ctx.set_visuals_of(Theme::Light, visuals(Theme::Light));
-    ctx.set_visuals_of(Theme::Dark, visuals(Theme::Dark));
+    apply_style(ctx, Look::default());
     apply(ctx, ThemeChoice::System);
+}
+
+/// Uses `look` in both themes: their accent, spacing and code size.
+pub fn apply_style(ctx: &egui::Context, look: Look) {
+    ctx.set_visuals_of(Theme::Light, visuals(Theme::Light, look.accent));
+    ctx.set_visuals_of(Theme::Dark, visuals(Theme::Dark, look.accent));
+    let (items, buttons) = look.density.spacing();
     ctx.all_styles_mut(|style| {
-        style.spacing.item_spacing = egui::vec2(space::M, space::S);
-        style.spacing.button_padding = egui::vec2(space::M, space::S);
+        style.spacing.item_spacing = items;
+        style.spacing.button_padding = buttons;
+        style.text_styles.insert(
+            egui::TextStyle::Monospace,
+            egui::FontId::monospace(look.code_size),
+        );
     });
 }
 
@@ -359,6 +582,52 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn every_accent_reaches_wcag_aa_and_is_found_from_the_visuals() {
+        for accent in Accent::ALL {
+            for theme in [Theme::Light, Theme::Dark] {
+                let p = accent.palette(theme);
+                for background in [p.background, p.surface] {
+                    let ratio = contrast(p.accent, background);
+                    assert!(ratio >= 4.5, "{accent:?} {theme:?} is {ratio:.2}:1");
+                }
+                let mut found = None;
+                egui_kittest::Harness::new_ui(|ui| {
+                    *ui.visuals_mut() = visuals(theme, accent);
+                    found = Some(*palette(ui));
+                })
+                .run();
+                assert_eq!(found.as_ref(), Some(p), "{accent:?} {theme:?}");
+            }
+            assert_eq!(Accent::parse(accent.as_str()), Some(accent));
+        }
+        let accents: std::collections::HashSet<_> = Accent::ALL
+            .iter()
+            .map(|a| a.palette(Theme::Light).accent)
+            .collect();
+        assert_eq!(accents.len(), Accent::ALL.len(), "all different");
+    }
+
+    #[test]
+    fn only_font_files_are_taken_as_code_fonts() {
+        assert!(is_font(&[0, 1, 0, 0, 9]));
+        assert!(is_font(b"OTTO...."));
+        assert!(!is_font(b"<svg"));
+        assert!(!is_font(b"tr"));
+        let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        let text = dir.path().join("notes.txt");
+        std::fs::write(&text, "hello").unwrap_or_else(|e| panic!("{e}"));
+        let ctx = egui::Context::default();
+        let text = text.display().to_string();
+        assert_eq!(code_font(&ctx, &text), Err(FontProblem::NotAFont));
+        let missing = dir.path().join("missing.ttf").display().to_string();
+        assert!(matches!(
+            code_font(&ctx, &missing),
+            Err(FontProblem::Unreadable(_))
+        ));
+        assert_eq!(code_font(&ctx, ""), Ok(()));
     }
 
     #[test]

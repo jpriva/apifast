@@ -93,7 +93,7 @@ fn themed(ui: &mut egui::Ui, theme: Theme, content: impl FnOnce(&mut egui::Ui)) 
         // `visuals_mut` changes only this scope. (`ui.set_visuals` would
         // reach `Context::set_visuals` through `Deref` and change the whole
         // app from the next frame.)
-        *ui.visuals_mut() = theme::visuals(theme);
+        *ui.visuals_mut() = theme::visuals(theme, theme::Accent::default());
         egui::Frame::new()
             .fill(ui.visuals().panel_fill)
             .inner_margin(theme::space::XL)

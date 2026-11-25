@@ -482,13 +482,13 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
     - La interfaz escribe en la terminal y en `logs/apifast.log` de la carpeta de datos, que rota a `apifast.log.1` a los 5 MB. La CLI escribe en la terminal y solo con `APIFAST_LOG`: sin ella, su salida no cambia.
     - Eventos: arranque y backend gráfico, migraciones, colecciones abiertas, envíos (ruta de la request, estado, tiempo y tamaño; el adaptador HTTP en `debug`, solo con el host), errores que muestra la interfaz, commits y cambios de rama. Nunca la URL completa ni valores secretos.
     - Coste: +1,8 MB en el binario de la GUI ([docs/10](10-rendimiento-y-memoria.md)). La RAM no se midió.
-  - [ ] Preferencias completas: la ventana de ajustes (`Ctrl+,`) pasa a tener secciones.
-    - General: idioma, abrir el último espacio de trabajo, confirmar al cerrar con cambios sin guardar.
-    - Apariencia: tema, color de acento, escala, densidad.
-    - Editor: fuente y tamaño del código, tabulación, ajuste de línea, números de línea.
-    - Red: proxy, TLS, cookies, tiempo de espera por defecto.
-    - Atajos, con la ventana que ya existe.
-    - Datos: historial, espacio, carpetas en uso, con un botón para abrirlas.
+  - [x] Preferencias completas: la ventana de ajustes (`Ctrl+,`) tiene secciones, con la lista a la izquierda ([docs/09](09-ui-ux.md#ajustes-de-la-aplicación)).
+    - General: idioma, abrir el último espacio de trabajo (si no, el de por defecto) y preguntar al cerrar con pestañas sin guardar (guardar todo y cerrar, cerrar sin guardar o cancelar).
+    - Apariencia: tema, color de acento (seis, cada uno con su tono claro y oscuro AA, comprobado por un test), escala y densidad.
+    - Editor: fuente del código (un archivo TTF u OTF) y su tamaño, lo que inserta Tab (tabulador o 2, 4, 8 espacios), ajuste de línea (si no, desplazamiento horizontal) y números de línea; y el límite de respuesta formateada.
+    - Red: tiempo de espera por defecto (`SendOptions::default_timeout_ms`, que sustituye solo al valor por defecto de `resolve`), proxy, TLS y cookies.
+    - Atajos: abre el editor que ya existía.
+    - Datos: historial, registro y las carpetas de datos, configuración y registro, con un botón que las abre; el espacio que ocupan los datos.
     - Todo sigue en `settings.yml`, legible y editable a mano.
   - [ ] Menú de la aplicación: un botón de menú en la barra superior (al estilo de GNOME), o la barra de menú nativa en macOS, con Preferencias, Atajos de teclado, Importar, Acerca de y Salir.
   - [ ] Ventana "Acerca de":

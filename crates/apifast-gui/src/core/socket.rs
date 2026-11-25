@@ -52,6 +52,7 @@ impl State {
             draft: self.tab(&key).and_then(|tab| tab.draft.clone()),
             runtime: open.runtime.clone(),
             script_changes: open.script_changes.clone(),
+            default_timeout_ms: Some(self.default_timeout_ms),
             ..SendOptions::default()
         };
         let Some(tab) = self.tab_mut(&key) else {

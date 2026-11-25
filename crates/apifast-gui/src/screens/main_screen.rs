@@ -88,6 +88,12 @@ pub struct MainScreen {
     pub settings_window: SettingsWindow,
     /// The theme and scale last applied, to apply a new choice once.
     applied: Option<(ThemeChoice, f32)>,
+    /// The accent, density and code size last applied.
+    look: Option<theme::Look>,
+    /// The code font last applied; empty for the included one.
+    code_font: String,
+    /// Closing the window with tabs that have unsaved changes.
+    closing: Closing,
     /// The collection key window.
     pub vault_window: VaultWindow,
     /// The cookie editor.
@@ -155,6 +161,21 @@ fn collection_settings_of(snapshot: &Snapshot) -> Vec<CollectionProxyEntry> {
             })
         })
         .collect()
+}
+
+/// Where closing the window is, when the settings ask before closing with
+/// unsaved changes.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+enum Closing {
+    /// Not closing.
+    #[default]
+    No,
+    /// Asking what to do.
+    Asking,
+    /// Saving every tab, to close once they are saved.
+    Saving,
+    /// Closing: the next request to close goes through.
+    Allowed,
 }
 
 /// What changed and is not saved yet.
@@ -287,7 +308,89 @@ impl MainScreen {
             commands.extend(self.tab_commands(event));
         }
         commands.extend(self.keys(ui, snapshot, sending, strings));
+        commands.extend(self.confirm_close(ui.ctx(), snapshot, strings));
         commands
+    }
+
+    /// When the window is asked to close while tabs have unsaved changes
+    /// and the settings say to ask: asks whether to save them all and
+    /// close, close without saving (they are kept as drafts), or stay.
+    fn confirm_close(
+        &mut self,
+        ctx: &egui::Context,
+        snapshot: &Snapshot,
+        strings: &Strings,
+    ) -> Option<Command> {
+        let unsaved = snapshot.tabs.iter().filter(|tab| tab.is_dirty()).count();
+        if ctx.input(|i| i.viewport().close_requested())
+            && self.closing != Closing::Allowed
+            && self.settings.confirm_close
+            && unsaved > 0
+        {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.closing = Closing::Asking;
+        }
+        let close = |closing: &mut Closing| {
+            *closing = Closing::Allowed;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        };
+        match self.closing {
+            Closing::No | Closing::Allowed => None,
+            Closing::Saving if unsaved == 0 => {
+                close(&mut self.closing);
+                None
+            }
+            // A save that failed says why, and the question comes back.
+            Closing::Saving => {
+                if snapshot.error.is_some() {
+                    self.closing = Closing::Asking;
+                }
+                None
+            }
+            Closing::Asking => {
+                let modal = egui::Modal::new(egui::Id::unique("confirm-close")).show(ctx, |ui| {
+                    ui.label(RichText::new(strings.close_title).strong());
+                    ui.label(strings.count(&strings.close_unsaved, unsaved, &[]));
+                    let muted = theme::palette(ui).text_muted;
+                    ui.label(
+                        RichText::new(strings.settings_confirm_close_hint)
+                            .small()
+                            .color(muted),
+                    );
+                    ui.add_space(theme::space::M);
+                    ui.horizontal(|ui| {
+                        if ui.button(strings.close_save_all).clicked() {
+                            Some(Closing::Saving)
+                        } else if ui.button(strings.close_anyway).clicked() {
+                            Some(Closing::Allowed)
+                        } else if ui.button(strings.cancel).clicked() {
+                            Some(Closing::No)
+                        } else {
+                            None
+                        }
+                    })
+                    .inner
+                });
+                let choice = match modal.inner {
+                    None if modal.should_close() => Some(Closing::No),
+                    choice => choice,
+                };
+                match choice? {
+                    Closing::Allowed => {
+                        close(&mut self.closing);
+                        None
+                    }
+                    Closing::Saving => {
+                        self.closing = Closing::Saving;
+                        Some(Command::SaveAll)
+                    }
+                    other => {
+                        self.closing = other;
+                        None
+                    }
+                }
+            }
+        }
     }
 
     /// The commands of the editor: the edits made, a WebSocket message to
@@ -491,11 +594,28 @@ impl MainScreen {
         std::mem::take(&mut self.unsaved.settings)
     }
 
-    /// Applies the theme and scale of the settings, on every screen. The
-    /// scale waits until the mouse is released, so a slider being dragged
-    /// does not move under the pointer; a scale changed with `Ctrl+=` or
-    /// `Ctrl+-` goes back into the settings.
-    pub fn apply_appearance(&mut self, ctx: &egui::Context) {
+    /// Applies the appearance and the editor of the settings, on every
+    /// screen. The scale waits until the mouse is released, so a slider
+    /// being dragged does not move under the pointer; a scale changed with
+    /// `Ctrl+=` or `Ctrl+-` goes back into the settings. A code font that
+    /// cannot be used is told.
+    pub fn apply_appearance(&mut self, ctx: &egui::Context, strings: &Strings) {
+        let look = self.settings.look();
+        if self.look != Some(look) {
+            theme::apply_style(ctx, look);
+            self.look = Some(look);
+        }
+        self.settings.editor().set(ctx);
+        if self.code_font != self.settings.code_font {
+            self.code_font.clone_from(&self.settings.code_font);
+            if let Err(problem) = theme::code_font(ctx, &self.code_font) {
+                let error = match problem {
+                    theme::FontProblem::Unreadable(error) => error,
+                    theme::FontProblem::NotAFont => strings.settings_code_font_invalid.to_owned(),
+                };
+                self.notice = Some(fill(strings.settings_code_font_error, &[("error", &error)]));
+            }
+        }
         let settings = &mut self.settings;
         if let Some((_, scale)) = self.applied
             && (ctx.zoom_factor() - scale).abs() > f32::EPSILON
@@ -594,6 +714,9 @@ impl MainScreen {
         self.settings_window.password_saved = snapshot.proxy_password_saved;
         if self.settings_window.show(&ctx, &mut self.settings, strings) {
             self.unsaved.settings = true;
+        }
+        if std::mem::take(&mut self.settings_window.open_shortcuts) {
+            self.shortcuts.open = true;
         }
         if let Some(password) = self.settings_window.password_change.take() {
             commands.push(Command::SetProxyPassword(password));

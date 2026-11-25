@@ -1417,6 +1417,102 @@ pub struct Strings {
     pub log_debug: &'static str,
     /// The log level: everything.
     pub log_trace: &'static str,
+    /// Settings section: general.
+    pub settings_general: &'static str,
+    /// Settings section: the code editor.
+    pub settings_editor: &'static str,
+    /// Settings section: network.
+    pub settings_network: &'static str,
+    /// Settings section: keyboard shortcuts.
+    pub settings_shortcuts: &'static str,
+    /// Settings section: data and folders.
+    pub settings_data: &'static str,
+    /// Setting: open the last workspace at the start.
+    pub settings_reopen_workspace: &'static str,
+    /// Hover of reopening the last workspace.
+    pub settings_reopen_workspace_hint: &'static str,
+    /// Setting: ask before closing with unsaved changes.
+    pub settings_confirm_close: &'static str,
+    /// Explains that unsaved changes are kept on closing.
+    pub settings_confirm_close_hint: &'static str,
+    /// Setting: accent color.
+    pub settings_accent: &'static str,
+    /// Accent: blue.
+    pub accent_blue: &'static str,
+    /// Accent: green.
+    pub accent_green: &'static str,
+    /// Accent: teal.
+    pub accent_teal: &'static str,
+    /// Accent: purple.
+    pub accent_purple: &'static str,
+    /// Accent: pink.
+    pub accent_pink: &'static str,
+    /// Accent: orange.
+    pub accent_orange: &'static str,
+    /// Setting: how much room controls have.
+    pub settings_density: &'static str,
+    /// Density: compact.
+    pub density_compact: &'static str,
+    /// Density: normal.
+    pub density_normal: &'static str,
+    /// Density: comfortable.
+    pub density_comfortable: &'static str,
+    /// Setting: the font of code.
+    pub settings_code_font: &'static str,
+    /// Hint of the code font.
+    pub settings_code_font_hint: &'static str,
+    /// The code font could not be used, with `{error}`.
+    pub settings_code_font_error: &'static str,
+    /// The code font file is not a font.
+    pub settings_code_font_invalid: &'static str,
+    /// The code font when none is chosen: the one included.
+    pub settings_code_font_default: &'static str,
+    /// Button that goes back to the included code font.
+    pub settings_code_font_reset: &'static str,
+    /// Setting: the size of code.
+    pub settings_code_size: &'static str,
+    /// Setting: what the Tab key inserts in code.
+    pub settings_tab: &'static str,
+    /// Tab option: a tab character.
+    pub tab_character: &'static str,
+    /// Tab option: `{n}` spaces.
+    pub tab_spaces: &'static str,
+    /// Setting: wrap long lines of code.
+    pub settings_wrap_lines: &'static str,
+    /// Setting: show line numbers in code.
+    pub settings_line_numbers: &'static str,
+    /// Setting: the default timeout.
+    pub settings_timeout: &'static str,
+    /// Explains the default timeout.
+    pub settings_timeout_hint: &'static str,
+    /// Explains the shortcuts section.
+    pub settings_shortcuts_hint: &'static str,
+    /// Button that opens the shortcuts editor.
+    pub settings_edit_shortcuts: &'static str,
+    /// Settings: the folders apifast uses.
+    pub settings_folders: &'static str,
+    /// Folder: data (history, responses, workspaces).
+    pub folder_data: &'static str,
+    /// Folder: settings and shortcuts.
+    pub folder_config: &'static str,
+    /// Folder: the log.
+    pub folder_logs: &'static str,
+    /// Button that opens a folder in the system's file manager.
+    pub settings_open_folder: &'static str,
+    /// The space the data takes, `{size}`.
+    pub settings_space_used: &'static str,
+    /// While the space the data takes is measured.
+    pub settings_space_measuring: &'static str,
+    /// A folder could not be opened, with `{error}`.
+    pub settings_folder_error: &'static str,
+    /// Title of the question before closing with unsaved changes.
+    pub close_title: &'static str,
+    /// Button: save every tab, then close.
+    pub close_save_all: &'static str,
+    /// Button: close without saving.
+    pub close_anyway: &'static str,
+    /// How many tabs have unsaved changes, `{n}`.
+    pub close_unsaved: Plural,
 }
 }
 

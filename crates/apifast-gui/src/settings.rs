@@ -1,6 +1,6 @@
-//! The application's settings, as `settings.yml` keeps them: appearance,
-//! how large a response is shown pretty, and how much history and how many
-//! response bodies are kept.
+//! The application's settings, as `settings.yml` keeps them, in the
+//! sections of the settings window: general, appearance, editor, network
+//! and data.
 
 use std::time::Duration;
 
@@ -11,7 +11,7 @@ use apifast_history::Limits;
 use apifast_log::LogLevel;
 
 use crate::strings::{Language, Strings};
-use crate::theme::ThemeChoice;
+use crate::theme::{Accent, Density, Look, ThemeChoice};
 
 /// Smallest and largest interface scale.
 pub const SCALE_RANGE: (f32, f32) = (0.75, 2.0);
@@ -23,22 +23,53 @@ pub const HISTORY_ENTRIES_RANGE: (u32, u32) = (10, 100_000);
 pub const DAYS_RANGE: (u32, u32) = (1, 3650);
 /// Bounds of the megabytes of response bodies kept.
 pub const RESPONSES_MB_RANGE: (u32, u32) = (16, 100_000);
+/// Bounds of the default timeout, in seconds; 0 is none.
+pub const TIMEOUT_S_RANGE: (u32, u32) = (0, 3600);
+/// What the Tab key can insert: a tab (0) or that many spaces.
+pub const TAB_SIZES: [u8; 4] = [0, 2, 4, 8];
 
 const MB: u64 = 1024 * 1024;
+
+use crate::theme::text::CODE_RANGE;
 
 /// [`Settings::language`] for the system's language.
 pub const SYSTEM_LANGUAGE: &str = "system";
 
 /// The settings.
 #[derive(Debug, Clone, PartialEq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent switches, as settings.yml writes them"
+)]
 pub struct Settings {
     /// The interface's language: the code of one of
     /// [`crate::strings::LANGUAGES`], or `system` for the system's.
     pub language: String,
+    /// Open the workspace used last at the start; else the default one.
+    pub reopen_workspace: bool,
+    /// Ask before closing the window while tabs have unsaved changes.
+    pub confirm_close: bool,
     /// The theme.
     pub theme: ThemeChoice,
+    /// The color of focus, selection and primary actions.
+    pub accent: Accent,
     /// How large everything is drawn, 1 being normal.
     pub ui_scale: f32,
+    /// How much room there is between and inside controls.
+    pub density: Density,
+    /// A font file (TTF or OTF) for code; empty for the one included.
+    pub code_font: String,
+    /// The size of code, in points.
+    pub code_size: f32,
+    /// What the Tab key inserts in code: a tab (0) or that many spaces;
+    /// one of [`TAB_SIZES`].
+    pub tab_size: u8,
+    /// Long lines of code wrap; else they scroll sideways.
+    pub wrap_lines: bool,
+    /// Code shows its line numbers.
+    pub line_numbers: bool,
+    /// The timeout of requests that set none, in seconds; 0 is none.
+    pub timeout_s: u32,
     /// Bodies up to this many megabytes are shown pretty.
     pub pretty_limit_mb: u32,
     /// History entries kept.
@@ -80,8 +111,18 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             language: SYSTEM_LANGUAGE.to_owned(),
+            reopen_workspace: true,
+            confirm_close: false,
             theme: ThemeChoice::System,
+            accent: Accent::default(),
             ui_scale: 1.0,
+            density: Density::default(),
+            code_font: String::new(),
+            code_size: crate::theme::text::CODE,
+            tab_size: 2,
+            wrap_lines: true,
+            line_numbers: false,
+            timeout_s: 30,
             pretty_limit_mb: 2,
             history_entries: 1000,
             keep_days: 30,
@@ -105,6 +146,12 @@ impl Settings {
         let mut settings = Self::default();
         let mut problems = Vec::new();
         for (key, value) in entries {
+            if let Some(understood) = settings.read_added(key, value) {
+                if !understood {
+                    problems.push(format!("`{key}: {value}`"));
+                }
+                continue;
+            }
             let ok = match key.as_str() {
                 "language" => (value == SYSTEM_LANGUAGE)
                     .then(|| SYSTEM_LANGUAGE.to_owned())
@@ -187,6 +234,47 @@ impl Settings {
         (settings, problems)
     }
 
+    /// Reads the entry `key` of the general, appearance and editor
+    /// sections, and the timeout: `None` if `key` is not one of them, else
+    /// whether `value` was understood.
+    fn read_added(&mut self, key: &str, value: &str) -> Option<bool> {
+        let settings = self;
+        let read = match key {
+            "reopen_workspace" => value
+                .parse::<bool>()
+                .ok()
+                .map(|b| settings.reopen_workspace = b),
+            "confirm_close" => value
+                .parse::<bool>()
+                .ok()
+                .map(|b| settings.confirm_close = b),
+            "accent" => Accent::parse(value).map(|accent| settings.accent = accent),
+            "density" => Density::parse(value).map(|density| settings.density = density),
+            "code_font" => {
+                value.clone_into(&mut settings.code_font);
+                Some(())
+            }
+            "code_size" => value
+                .parse::<f32>()
+                .ok()
+                .filter(|n| n.is_finite())
+                .map(|n| settings.code_size = n.clamp(CODE_RANGE.0, CODE_RANGE.1)),
+            "tab_size" => value
+                .parse::<u8>()
+                .ok()
+                .filter(|n| TAB_SIZES.contains(n))
+                .map(|n| settings.tab_size = n),
+            "wrap_lines" => value.parse::<bool>().ok().map(|b| settings.wrap_lines = b),
+            "line_numbers" => value
+                .parse::<bool>()
+                .ok()
+                .map(|b| settings.line_numbers = b),
+            "timeout_s" => number(value, TIMEOUT_S_RANGE).map(|n| settings.timeout_s = n),
+            _ => return None,
+        };
+        Some(read.is_some())
+    }
+
     /// The entries for `settings.yml`: every setting, so the file shows
     /// what can be set.
     pub fn entries(&self) -> Vec<(String, String)> {
@@ -197,8 +285,18 @@ impl Settings {
         };
         vec![
             ("language".into(), self.language.clone()),
+            ("reopen_workspace".into(), self.reopen_workspace.to_string()),
+            ("confirm_close".into(), self.confirm_close.to_string()),
             ("theme".into(), theme.into()),
+            ("accent".into(), self.accent.as_str().into()),
             ("ui_scale".into(), format!("{}", self.ui_scale)),
+            ("density".into(), self.density.as_str().into()),
+            ("code_font".into(), self.code_font.clone()),
+            ("code_size".into(), format!("{}", self.code_size)),
+            ("tab_size".into(), self.tab_size.to_string()),
+            ("wrap_lines".into(), self.wrap_lines.to_string()),
+            ("line_numbers".into(), self.line_numbers.to_string()),
+            ("timeout_s".into(), self.timeout_s.to_string()),
             ("pretty_limit_mb".into(), self.pretty_limit_mb.to_string()),
             ("history_entries".into(), self.history_entries.to_string()),
             ("keep_days".into(), self.keep_days.to_string()),
@@ -265,6 +363,29 @@ impl Settings {
         }
     }
 
+    /// The accent, spacing and code size.
+    pub fn look(&self) -> Look {
+        Look {
+            accent: self.accent,
+            density: self.density,
+            code_size: self.code_size,
+        }
+    }
+
+    /// How code editors behave.
+    pub fn editor(&self) -> crate::atoms::EditorOptions {
+        crate::atoms::EditorOptions {
+            tab_size: self.tab_size,
+            wrap: self.wrap_lines,
+            line_numbers: self.line_numbers,
+        }
+    }
+
+    /// The timeout of requests that set none, in milliseconds; 0 is none.
+    pub fn timeout_ms(&self) -> u64 {
+        u64::from(self.timeout_s) * 1000
+    }
+
     /// The largest body shown pretty, in bytes.
     pub fn pretty_limit(&self) -> u64 {
         u64::from(self.pretty_limit_mb) * MB
@@ -306,8 +427,18 @@ mod tests {
     fn settings_round_trip_through_their_entries() {
         let settings = Settings {
             language: "es".into(),
+            reopen_workspace: false,
+            confirm_close: true,
             theme: ThemeChoice::Dark,
+            accent: Accent::Teal,
             ui_scale: 1.25,
+            density: Density::Compact,
+            code_font: "/usr/share/fonts/mono.ttf".into(),
+            code_size: 14.5,
+            tab_size: 4,
+            wrap_lines: false,
+            line_numbers: true,
+            timeout_s: 0,
             pretty_limit_mb: 8,
             history_entries: 500,
             keep_days: 7,
@@ -340,6 +471,9 @@ mod tests {
             ("language".to_owned(), "tlh".to_owned()),
             ("ui_scale".to_owned(), "9".to_owned()),
             ("keep_days".to_owned(), "-3".to_owned()),
+            ("tab_size".to_owned(), "3".to_owned()),
+            ("accent".to_owned(), "gold".to_owned()),
+            ("code_size".to_owned(), "99".to_owned()),
             ("nope".to_owned(), "1".to_owned()),
         ];
         let (settings, problems) = Settings::from_entries(&entries);
@@ -349,12 +483,20 @@ mod tests {
             "clamped"
         );
         assert_eq!(settings.keep_days, 30);
+        assert_eq!(settings.tab_size, 2);
+        assert_eq!(settings.accent, Accent::Blue);
+        assert!(
+            (settings.code_size - CODE_RANGE.1).abs() < f32::EPSILON,
+            "clamped"
+        );
         assert_eq!(
             problems,
             [
                 "`theme: purple`",
                 "`language: tlh`",
                 "`keep_days: -3`",
+                "`tab_size: 3`",
+                "`accent: gold`",
                 "`nope: 1`"
             ]
         );
@@ -374,5 +516,6 @@ mod tests {
         let responses = settings.response_limits();
         assert_eq!(responses.max_total_bytes, Some(16 * MB));
         assert_eq!(Settings::default().pretty_limit(), 2 * MB);
+        assert_eq!(Settings::default().timeout_ms(), 30_000);
     }
 }

@@ -224,6 +224,7 @@ fn run_options(args: &RunArgs, folder: Option<String>, data: Vec<Vec<Variable>>)
             draft: None,
             script_changes: Vec::new(),
             in_run: false,
+            default_timeout_ms: None,
         },
     }
 }

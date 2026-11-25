@@ -2,6 +2,7 @@
 //! screen that fits it and sends the user's commands back.
 
 use std::io::Write as _;
+use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::Instant;
 
@@ -92,6 +93,17 @@ impl App {
             env_filter: logging.from_env().then_some(env_filter).flatten(),
         };
         self.logging = Some(logging);
+        self
+    }
+
+    /// Shows in the settings the folders apifast uses: `data` (history,
+    /// responses, workspaces, the log) and `config` (settings, shortcuts).
+    #[must_use]
+    pub fn with_folders(mut self, data: PathBuf, config: PathBuf) -> Self {
+        self.main.settings_window.folders = crate::organisms::Folders {
+            data: Some(data),
+            config: Some(config),
+        };
         self
     }
 
@@ -197,6 +209,8 @@ impl App {
             proxy: settings.proxy_choice(),
             trust: settings.trust(),
             cookies: (settings.send_cookies, settings.store_cookies),
+            timeout_ms: settings.timeout_ms(),
+            reopen_last: settings.reopen_workspace,
         });
     }
 
@@ -236,7 +250,7 @@ impl App {
         while let Ok(result) = self.saved.1.try_recv() {
             self.main.notice = result.err();
         }
-        self.main.apply_appearance(ui.ctx());
+        self.main.apply_appearance(ui.ctx(), self.strings());
         self.tell_language();
         let snapshot = self.core.snapshot();
         for command in self.main.show(ui, &snapshot, self.strings()) {

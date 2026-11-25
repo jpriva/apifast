@@ -163,6 +163,7 @@ impl State {
                 environment: open.environment.clone(),
                 runtime: open.runtime.clone(),
                 script_changes: open.script_changes.clone(),
+                default_timeout_ms: Some(self.default_timeout_ms),
                 ..SendOptions::default()
             },
         };

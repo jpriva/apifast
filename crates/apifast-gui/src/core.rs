@@ -424,6 +424,12 @@ pub enum Command {
         /// Whether cookies from the jars are sent, and whether those that
         /// responses set are stored.
         cookies: (bool, bool),
+        /// The timeout of requests whose levels set none, in milliseconds
+        /// (0: none).
+        timeout_ms: u64,
+        /// Whether the workspace used last opens at the start, instead of
+        /// the default one.
+        reopen_last: bool,
     },
     /// The interface's language, by its code: what the core says (errors,
     /// notices) is said in it. English until told.
@@ -981,6 +987,8 @@ impl Core {
                     proxy: apifast_domain::ProxyChoice::System,
                     trust: apifast_domain::TlsTrust::default(),
                     cookie_policy: (true, true),
+                    default_timeout_ms: apifast_domain::Settings::DEFAULT_TIMEOUT_MS,
+                    reopen_last: true,
                     importing: None,
                     reimporting: None,
                     sealed,
@@ -1062,6 +1070,10 @@ struct State {
     trust: apifast_domain::TlsTrust,
     /// Whether cookies are sent and stored, as the settings say.
     cookie_policy: (bool, bool),
+    /// The timeout of requests whose levels set none, as the settings say.
+    default_timeout_ms: u64,
+    /// Whether the workspace used last opens at the start.
+    reopen_last: bool,
     /// The collection read for the import being reviewed.
     importing: Option<apifast_app::ImportedCollection>,
     /// The source read for the reimport being reviewed.
@@ -1292,8 +1304,12 @@ impl State {
                 proxy,
                 trust,
                 cookies: (send, store),
+                timeout_ms,
+                reopen_last,
             } => {
                 self.limits = (history, responses);
+                self.default_timeout_ms = timeout_ms;
+                self.reopen_last = reopen_last;
                 self.set_cookie_policy(send, store);
                 if proxy != self.proxy || trust != self.trust {
                     self.proxy = proxy;
@@ -1527,7 +1543,8 @@ impl State {
         bare.headers.clear();
         bare.auth = Setting::Inherit;
         bare.settings = Settings::default();
-        let inherited = resolve(Chain::new(&collection, &loaded.folders, &bare));
+        let mut inherited = resolve(Chain::new(&collection, &loaded.folders, &bare));
+        inherited.use_default_timeout_ms(self.default_timeout_ms);
         let uses_oauth2 = matches!(
             (&request.auth, &inherited.auth().value),
             (Setting::Set(AuthScheme::OAuth2(_)), _) | (Setting::Inherit, AuthScheme::OAuth2(_))
@@ -1589,6 +1606,7 @@ impl State {
             draft: self.tab(&key).and_then(|tab| tab.draft.clone()),
             runtime: open.runtime.clone(),
             script_changes: open.script_changes.clone(),
+            default_timeout_ms: Some(self.default_timeout_ms),
             ..SendOptions::default()
         };
         let Some(tab) = self.tab_mut(&key) else {

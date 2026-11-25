@@ -196,6 +196,21 @@ La edición con resaltado se limita a unos 200 KB: con más texto, egui tarda de
 - Los valores guardados que ya no usa ninguna variable secreta se listan bajo la tabla, con un botón para olvidarlos.
 - Vista "todas las variables": cada variable efectiva con su valor y el ámbito del que procede.
 
+## Ajustes de la aplicación
+
+`Ctrl+,` (o "Settings" en la paleta) abre los ajustes: una lista de secciones a la izquierda y la elegida a la derecha. Cada cambio se aplica en el momento y se guarda en `settings.yml` de la carpeta de configuración, que se puede editar a mano. Una entrada que no se entiende se ignora y se avisa. "Restore defaults" restablece todo.
+
+| Sección | Ajustes |
+|---|---|
+| General | Idioma (`language`). Abrir el último espacio de trabajo al iniciar (`reopen_workspace`; si no, el de por defecto). Preguntar antes de cerrar con cambios sin guardar (`confirm_close`, apagado por defecto: los borradores se guardan igual y vuelven al abrir). |
+| Apariencia | Tema (`theme`). Color de acento (`accent`: `blue`, `green`, `teal`, `purple`, `pink`, `orange`; cada uno con un tono claro y otro oscuro que cumplen AA). Escala (`ui_scale`). Densidad (`density`: `compact`, `normal`, `comfortable`), que cambia el espacio entre controles y dentro de los botones. |
+| Editor | Fuente del código (`code_font`: un archivo TTF u OTF, que va antes que la incluida; vacío, la incluida). Tamaño del código (`code_size`, de 9 a 24 pt). Lo que inserta Tab (`tab_size`: 0 para un tabulador, o 2, 4 u 8 espacios; Shift+Tab sigue quitando sangría). Ajustar las líneas largas (`wrap_lines`; si no, desplazamiento horizontal). Números de línea (`line_numbers`). Y el tamaño máximo de una respuesta que se muestra formateada (`pretty_limit_mb`). |
+| Red | Tiempo de espera por defecto (`timeout_s`; 0 es sin límite), para las requests cuya colección, carpetas y request no ponen uno: el panel de ajustes de la request lo muestra como el valor por defecto. Proxy, TLS y cookies, descritos abajo. |
+| Atajos | Un botón que abre el editor de atajos. |
+| Datos | Historial y respuestas guardadas, el registro, y las carpetas en uso (datos, configuración y registro), cada una con un botón que la abre en el gestor de archivos. Debajo, el espacio que ocupa la carpeta de datos, medido en segundo plano. |
+
+Con "Preguntar antes de cerrar", cerrar la ventana con pestañas sin guardar abre una pregunta: "Save all and close" guarda todas y cierra cuando terminan (si un guardado falla, se pregunta de nuevo), "Close without saving" cierra (los cambios quedan como borradores) y "Cancel" se queda.
+
 ## Ajustes de la colección
 
 "Collection settings…" en el menú de la raíz de una colección cargada abre sus ajustes: el proxy (el de la aplicación, ninguno o el suyo: protocolo, host, puerto, credenciales y hosts directos) y los certificados de cliente (una fila por certificado: activo, host, certificado y clave PEM; "Add certificate" añade uno). Se guarda en `opencollection.yml` al pulsar "Save", y los envíos siguientes ya van por él. Un aviso recuerda que la contraseña queda en el archivo, como en Bruno. Debajo, las sobrescrituras de DNS: una fila por entrada (activa, host e IP, con "not an IP address" en rojo si no lo es) y "Add override"; se guardan en `.apifast/collection.yml`.
@@ -323,7 +338,7 @@ Mientras la paleta está abierta o el editor espera una combinación, los demás
 
 ## Temas y accesibilidad
 
-- Tema claro y oscuro, siguiendo el del sistema por defecto; se puede fijar uno desde la paleta.
+- Tema claro y oscuro, siguiendo el del sistema por defecto; se puede fijar uno desde la paleta. El color de acento y la densidad se eligen en los ajustes; `theme::palette` reconoce el acento por el color de enlace de los visuals.
 - Las ventanas usan el color de fondo y los campos el de superficie, con borde, para que un campo se distinga siempre de lo que lo rodea.
 - Las tablas con campos editables se componen fila a fila con anchos repartidos, no con `egui::Grid`: en una celda de grid un campo solo recibe el ancho que su columna midió el frame anterior y no crece.
 - Escala de interfaz configurable en los ajustes (`Ctrl+,`), que también siguen `Ctrl+=`, `Ctrl+-` y `Ctrl+0`; la escala aumenta el texto con todo lo demás.

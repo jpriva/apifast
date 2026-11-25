@@ -58,7 +58,7 @@ pub use response_cookies::set_by as cookies_set_by;
 pub use runner_window::{RunnerEvent, RunnerWindow};
 pub use schema_explorer::SchemaExplorer;
 pub use scripts_panel::{ALL_KINDS, ScriptsTarget, ScriptsWindow, script_count, scripts_editor};
-pub use settings_window::{LogInfo, SettingsWindow};
+pub use settings_window::{Folders, LogInfo, SettingsSection, SettingsWindow, folder_size};
 pub use shortcuts::{ShortcutEditor, shortcut_of};
 pub use tabs::{TabBar, TabEvent};
 pub use tests_panel::tests_panel;

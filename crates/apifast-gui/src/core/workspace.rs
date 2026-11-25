@@ -35,12 +35,14 @@ impl State {
         ))
     }
 
-    /// Opens the workspace last used, or the default one (made the first
-    /// time), with its collections and tabs as they were left.
+    /// Opens the workspace last used (unless the settings say not to), or
+    /// the default one (made the first time), with its collections and
+    /// tabs as they were left.
     pub(super) fn restore(&mut self) {
         let known = self.known().load().unwrap_or_default();
         let last = known
             .active
+            .filter(|_| self.reopen_last)
             .filter(|folder| folder.join(WORKSPACE_FILE).is_file());
         let folder = match last {
             Some(folder) => folder,

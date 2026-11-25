@@ -79,7 +79,7 @@ fn harness() -> Harness<'static, State> {
         .build_ui_state(
             |ui, state: &mut State| {
                 // As the app does, every frame.
-                state.screen.apply_appearance(ui.ctx());
+                state.screen.apply_appearance(ui.ctx(), &EN);
                 let commands = state.screen.show(ui, &state.snapshot, &EN);
                 state.commands.extend(commands);
             },

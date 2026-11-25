@@ -197,6 +197,14 @@ impl ResolvedRequest {
     pub fn set_timeout_ms(&mut self, timeout_ms: u64) {
         self.settings.timeout_ms = Resolved::new(timeout_ms, Origin::Request);
     }
+
+    /// Uses `timeout_ms` as the default timeout: when no level sets one,
+    /// it replaces [`Settings::DEFAULT_TIMEOUT_MS`], still as the default.
+    pub fn use_default_timeout_ms(&mut self, timeout_ms: u64) {
+        if self.settings.timeout_ms.origin == Origin::Default {
+            self.settings.timeout_ms.value = timeout_ms;
+        }
+    }
 }
 
 /// Applies header, auth and settings inheritance to a request.
@@ -373,6 +381,26 @@ mod tests {
         assert_eq!(s.max_redirects, Resolved::new(10, Origin::Collection));
         assert_eq!(s.follow_redirects, Resolved::new(false, Origin::Request));
         assert_eq!(s.encode_url, Resolved::new(true, Origin::Default));
+    }
+
+    #[test]
+    fn a_default_timeout_replaces_only_the_default() {
+        let mut collection = Collection::new("c");
+        let request = get("/");
+        let mut resolved = resolve(Chain::new(&collection, &[], &request));
+        resolved.use_default_timeout_ms(5_000);
+        assert_eq!(
+            resolved.settings().timeout_ms,
+            Resolved::new(5_000, Origin::Default)
+        );
+
+        collection.defaults.settings.timeout_ms = Setting::Set(1_000);
+        let mut resolved = resolve(Chain::new(&collection, &[], &request));
+        resolved.use_default_timeout_ms(5_000);
+        assert_eq!(
+            resolved.settings().timeout_ms,
+            Resolved::new(1_000, Origin::Collection)
+        );
     }
 
     #[test]
