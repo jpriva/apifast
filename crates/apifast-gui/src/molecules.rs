@@ -92,3 +92,44 @@ pub fn empty_state(ui: &mut egui::Ui, state: &EmptyState) -> Option<usize> {
     });
     pressed
 }
+
+/// Shows `window` with apifast's own title bar instead of egui's: `title`
+/// on the left and a drawn × on the right, named `close` for screen
+/// readers, over a line. The window is dragged by any free space, as
+/// egui's are. `open` turns false when it is closed, by the × or by egui.
+/// Returns what `add` returned, while the window is shown.
+pub fn window<R>(
+    ctx: &egui::Context,
+    window: egui::Window<'_>,
+    (title, close): (&str, &str),
+    open: &mut bool,
+    add: impl FnOnce(&mut egui::Ui) -> R,
+) -> Option<R> {
+    let mut shown = *open;
+    let mut closed = false;
+    let inner = window
+        .title_bar(false)
+        .open(&mut shown)
+        .show(ctx, |ui| {
+            closed = title_bar(ui, title, close);
+            add(ui)
+        })
+        .and_then(|response| response.inner);
+    *open = shown && !closed;
+    inner
+}
+
+/// The title bar of a [`window`]. Returns whether its × was clicked.
+fn title_bar(ui: &mut egui::Ui, title: &str, close: &str) -> bool {
+    let clicked = ui
+        .horizontal(|ui| {
+            ui.label(egui::RichText::new(title).strong());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.add(crate::atoms::CloseButton::new(close)).clicked()
+            })
+            .inner
+        })
+        .inner;
+    ui.separator();
+    clicked
+}

@@ -371,6 +371,7 @@ Mientras la paleta está abierta o el editor espera una combinación, los demás
 - Estados vacíos (`molecules::empty_state`): sin colección o sin petición abierta, el área principal dice qué falta y ofrece botones para resolverlo, cada uno con su atajo.
 - La barra lateral se desliza al mostrarla u ocultarla (`Ctrl+B`) y se puede cerrar o abrir arrastrando su borde. Las ventanas aparecen y desaparecen con un fundido, el de egui.
 - Esquinas redondeadas (`theme::radius`): 4 en badges, 6 en botones, campos y paneles, y 10 en ventanas, menús y popups.
+- Las ventanas dentro de apifast (ajustes, entornos, cookies…) no usan la barra de título de egui sino la propia (`molecules::window`): el título a la izquierda y una × dibujada a la derecha, la misma que cierra las pestañas, sobre una línea. Se arrastran desde cualquier espacio libre.
 - En Linux, apifast dibuja su propia barra de título por defecto. La ventana va sin decoraciones del sistema, y la barra superior hace de barra de título:
   - Arrastrar su espacio libre mueve la ventana y el doble clic la maximiza o la restaura.
   - Siempre tiene minimizar, maximizar (restaurar si ya está maximizada) y cerrar, dibujados. Cerrar pasa por la pregunta de cambios sin guardar.

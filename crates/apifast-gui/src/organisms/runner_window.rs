@@ -93,11 +93,14 @@ impl RunnerWindow {
             Some((_, _, label)) => format!("{} · {label}", strings.runner),
             None => strings.runner.to_owned(),
         };
-        egui::Window::new(title)
-            .id(egui::Id::unique("runner-window"))
-            .open(&mut open)
-            .default_size([560.0, 480.0])
-            .show(ctx, |ui| {
+        crate::molecules::window(
+            ctx,
+            egui::Window::new(&title)
+                .id(egui::Id::unique("runner-window"))
+                .default_size([560.0, 480.0]),
+            (&title, strings.close_window),
+            &mut open,
+            |ui| {
                 let running = run.is_some_and(|r| r.running);
                 if !running {
                     event = self.form(ui, strings);
@@ -109,7 +112,8 @@ impl RunnerWindow {
                         event = progress;
                     }
                 }
-            });
+            },
+        );
         if !open {
             self.open = false;
         }

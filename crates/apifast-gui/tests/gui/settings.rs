@@ -112,6 +112,18 @@ fn each_section_shows_its_settings_and_changes_them() {
 }
 
 #[test]
+fn the_window_title_bar_has_its_own_close_button() {
+    let mut harness = harness(Vec::new());
+    open_settings(&mut harness);
+    assert!(harness.state().screen.settings_window.open);
+    // One ×, apifast's drawn button: egui's, named the same, is gone.
+    assert_eq!(harness.get_all_by_label(EN.close_window).count(), 1);
+    harness.get_by_label(EN.close_window).click();
+    harness.run();
+    assert!(!harness.state().screen.settings_window.open);
+}
+
+#[test]
 fn the_editor_options_apply_once_set() {
     let mut harness = harness(Vec::new());
     harness.state_mut().screen.settings.tab_size = 4;

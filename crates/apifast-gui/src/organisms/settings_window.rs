@@ -181,12 +181,14 @@ impl SettingsWindow {
         }
         let mut changed = self.take_picked(settings);
         let mut open = self.open;
-        egui::Window::new(strings.settings_title)
-            .id(egui::Id::unique("settings-window"))
-            .open(&mut open)
-            .collapsible(false)
-            .resizable(false)
-            .show(ctx, |ui| {
+        crate::molecules::window(
+            ctx,
+            egui::Window::new(strings.settings_title)
+                .id(egui::Id::unique("settings-window"))
+                .resizable(false),
+            (strings.settings_title, strings.close_window),
+            &mut open,
+            |ui| {
                 ui.horizontal_top(|ui| {
                     // The separator between the list and the contents
                     // takes the height it is given: without a limit, all.
@@ -231,7 +233,8 @@ impl SettingsWindow {
                         );
                     });
                 });
-            });
+            },
+        );
         self.open = open;
         changed
     }

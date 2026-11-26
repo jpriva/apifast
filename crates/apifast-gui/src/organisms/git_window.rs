@@ -54,12 +54,14 @@ impl GitWindow {
         }
         let mut commands = Vec::new();
         let mut open = self.open;
-        egui::Window::new(strings.git_title)
-            .id(egui::Id::unique("git-window"))
-            .open(&mut open)
-            .default_width(760.0)
-            .collapsible(false)
-            .show(ctx, |ui| {
+        crate::molecules::window(
+            ctx,
+            egui::Window::new(strings.git_title)
+                .id(egui::Id::unique("git-window"))
+                .default_width(760.0),
+            (strings.git_title, strings.close_window),
+            &mut open,
+            |ui| {
                 let Some(view) = view else {
                     let muted = theme::palette(ui).text_muted;
                     ui.label(RichText::new(strings.git_no_repository).color(muted));
@@ -70,7 +72,8 @@ impl GitWindow {
                 commands.extend(self.changes(ui, view, strings));
                 ui.separator();
                 commands.extend(self.commit_form(ui, view, strings));
-            });
+            },
+        );
         self.open = open;
         commands
     }

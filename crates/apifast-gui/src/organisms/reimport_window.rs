@@ -71,12 +71,14 @@ impl ReimportWindow {
         }
         let mut event = None;
         let mut open = true;
-        egui::Window::new(strings.reimport_title)
-            .id(egui::Id::unique("reimport-window"))
-            .open(&mut open)
-            .default_width(620.0)
-            .collapsible(false)
-            .show(ctx, |ui| {
+        crate::molecules::window(
+            ctx,
+            egui::Window::new(strings.reimport_title)
+                .id(egui::Id::unique("reimport-window"))
+                .default_width(620.0),
+            (strings.reimport_title, strings.close_window),
+            &mut open,
+            |ui| {
                 if let Some(view) = view {
                     ui.label(
                         RichText::new(format!(
@@ -92,7 +94,8 @@ impl ReimportWindow {
                 if let Some(chosen) = self.plan(ui, view, strings) {
                     event = Some(chosen);
                 }
-            });
+            },
+        );
         if !open {
             self.open = false;
             event = Some(ReimportEvent::Close);

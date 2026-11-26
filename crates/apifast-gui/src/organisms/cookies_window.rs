@@ -164,12 +164,14 @@ impl CookiesWindow {
             Some(name) => format!("{} · {name}", strings.cookies_title),
             None => strings.cookies_title.to_owned(),
         };
-        egui::Window::new(title)
-            .id(egui::Id::unique("cookies-window"))
-            .open(&mut open)
-            .default_width(720.0)
-            .collapsible(false)
-            .show(ctx, |ui| {
+        crate::molecules::window(
+            ctx,
+            egui::Window::new(&title)
+                .id(egui::Id::unique("cookies-window"))
+                .default_width(720.0),
+            (&title, strings.close_window),
+            &mut open,
+            |ui| {
                 if collection.is_none() {
                     let muted = theme::palette(ui).text_muted;
                     ui.label(RichText::new(strings.cookies_no_collection).color(muted));
@@ -183,7 +185,8 @@ impl CookiesWindow {
                     self.toolbar(ui, cookies, strings);
                     commands.extend(self.list(ui, cookies, now_ms, strings));
                 }
-            });
+            },
+        );
         self.open = open;
         commands.extend(self.confirm_clear(ctx, strings));
         commands

@@ -509,7 +509,7 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
     - Estados vacíos con una indicación y botones con su atajo.
     - Transiciones: la barra lateral se desliza; las ventanas usan el fundido de egui.
     - Revisado en los dos temas con capturas sin ventana (`egui_kittest` con `wgpu`), que encontraron el método mal alineado en el árbol y botones cortados en la barra lateral.
-    - [ ] La × de las ventanas es la de egui: cambiarla pide una barra de título propia para cada ventana.
+    - [x] Las ventanas internas (ajustes, entornos, cookies, git, runner, importar, bóveda, atajos, scripts, ajustes de colección, acerca de) llevan una barra de título propia (`molecules::window`): el título a la izquierda y la × dibujada, como la de las pestañas, sobre una línea. Se arrastran por cualquier espacio libre, como antes. Prueba de que la × cierra y de que no queda la de egui, y captura en los dos temas.
     - [x] Tablas clave/valor (params, headers, campos de formulario, path params) al estilo de Bruno ([docs/09](09-ui-ux.md#tablas-clavevalor)):
       - Un solo marco con líneas finas entre filas y columnas, campos sin borde propio, la fila resaltada al pasar el ratón y la celda con el foco marcada con el acento.
       - Fila de encabezado con «Name» y «Value» en texto tenue.

@@ -53,12 +53,15 @@ impl CollectionSettingsWindow {
         let (root, name, settings) = self.editing.as_mut()?;
         let mut open = true;
         let mut saved = None;
-        egui::Window::new(format!("{} · {name}", strings.collection_settings))
-            .id(egui::Id::unique("collection-settings"))
-            .open(&mut open)
-            .default_width(460.0)
-            .collapsible(false)
-            .show(ctx, |ui| {
+        let title = format!("{} · {name}", strings.collection_settings);
+        crate::molecules::window(
+            ctx,
+            egui::Window::new(&title)
+                .id(egui::Id::unique("collection-settings"))
+                .default_width(460.0),
+            (&title, strings.close_window),
+            &mut open,
+            |ui| {
                 let proxy = &mut settings.proxy;
                 ui.label(RichText::new(strings.proxy).strong());
                 ui.horizontal(|ui| {
@@ -101,7 +104,8 @@ impl CollectionSettingsWindow {
                 if ui.button(RichText::new(strings.save).strong()).clicked() {
                     saved = Some((root.clone(), settings.clone()));
                 }
-            });
+            },
+        );
         if !open || saved.is_some() {
             self.editing = None;
         }

@@ -870,6 +870,7 @@ pub const STRINGS: Strings = Strings {
     window_maximize: "Maximizar",
     window_restore: "Restaurar",
     window_close: "Cerrar",
+    close_window: "Cerrar ventana",
     title_search: "Buscar…",
     settings_own_title_bar: "Barra de título de apifast",
     settings_own_title_bar_hint: "Con minimizar, maximizar y cerrar siempre. Apagada: la barra del sistema.",

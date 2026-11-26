@@ -92,18 +92,21 @@ impl ImportWindow {
         self.propose_folder(view);
         let mut event = None;
         let mut open = true;
-        egui::Window::new(strings.import_title)
-            .id(egui::Id::unique("import-window"))
-            .open(&mut open)
-            .default_width(620.0)
-            .collapsible(false)
-            .show(ctx, |ui| {
+        crate::molecules::window(
+            ctx,
+            egui::Window::new(strings.import_title)
+                .id(egui::Id::unique("import-window"))
+                .default_width(620.0),
+            (strings.import_title, strings.close_window),
+            &mut open,
+            |ui| {
                 event = self.files_form(ui, strings);
                 ui.separator();
                 if let Some(chosen) = self.plan(ui, view, strings) {
                     event = Some(chosen);
                 }
-            });
+            },
+        );
         if !open {
             self.open = false;
             event = Some(ImportEvent::Close);

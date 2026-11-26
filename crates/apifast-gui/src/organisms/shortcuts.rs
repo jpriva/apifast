@@ -54,12 +54,14 @@ impl ShortcutEditor {
         }
         let mut changed = self.take_key(ctx, keymap, strings);
         let mut open = self.open;
-        egui::Window::new(strings.shortcuts_title)
-            .id(egui::Id::unique("shortcut-editor"))
-            .open(&mut open)
-            .default_size([520.0, 480.0])
-            .collapsible(false)
-            .show(ctx, |ui| {
+        crate::molecules::window(
+            ctx,
+            egui::Window::new(strings.shortcuts_title)
+                .id(egui::Id::unique("shortcut-editor"))
+                .default_size([520.0, 480.0]),
+            (strings.shortcuts_title, strings.close_window),
+            &mut open,
+            |ui| {
                 let muted = theme::palette(ui).text_muted;
                 if let Some(note) = &self.note {
                     ui.label(RichText::new(note.as_str()).color(theme::palette(ui).warning));
@@ -113,7 +115,8 @@ impl ShortcutEditor {
                                 }
                             });
                     });
-            });
+            },
+        );
         self.open = open;
         changed
     }

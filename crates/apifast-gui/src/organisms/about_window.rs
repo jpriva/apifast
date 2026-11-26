@@ -66,13 +66,15 @@ impl AboutWindow {
             return;
         }
         let mut open = self.open;
-        egui::Window::new(strings.about_title)
-            .id(egui::Id::unique("about-window"))
-            .open(&mut open)
-            .collapsible(false)
-            .resizable(false)
-            .default_width(440.0)
-            .show(ctx, |ui| {
+        crate::molecules::window(
+            ctx,
+            egui::Window::new(strings.about_title)
+                .id(egui::Id::unique("about-window"))
+                .resizable(false)
+                .default_width(440.0),
+            (strings.about_title, strings.close_window),
+            &mut open,
+            |ui| {
                 self.header(ui, strings);
                 ui.separator();
                 self.details(ui, folders, strings);
@@ -90,7 +92,8 @@ impl AboutWindow {
                         ui.label(RichText::new(strings.about_copied).color(muted));
                     }
                 });
-            });
+            },
+        );
         self.open = open;
     }
 

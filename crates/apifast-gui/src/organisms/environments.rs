@@ -148,13 +148,15 @@ impl EnvironmentEditor {
         self.follow(environments);
         let mut open = self.open;
         let mut events = Vec::new();
-        egui::Window::new(strings.environments)
-            .id(egui::Id::unique("environment-editor"))
-            .open(&mut open)
-            .default_size([920.0, 460.0])
-            .resizable(true)
-            .collapsible(false)
-            .show(ctx, |ui| {
+        crate::molecules::window(
+            ctx,
+            egui::Window::new(strings.environments)
+                .id(egui::Id::unique("environment-editor"))
+                .default_size([920.0, 460.0])
+                .resizable(true),
+            (strings.environments, strings.close_window),
+            &mut open,
+            |ui| {
                 ui.horizontal(|ui| {
                     ui.selectable_value(
                         &mut self.view,
@@ -174,7 +176,8 @@ impl EnvironmentEditor {
                     }
                     EnvironmentsView::Variables => all_variables(ui, context, strings),
                 }
-            });
+            },
+        );
         self.open = open;
         events.extend(self.confirm_delete(ctx, strings));
         events

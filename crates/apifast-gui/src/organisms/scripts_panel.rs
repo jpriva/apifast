@@ -141,19 +141,23 @@ impl ScriptsWindow {
         let (target, name, scripts) = self.editing.as_mut()?;
         let mut open = true;
         let mut saved = None;
-        egui::Window::new(format!("{} · {name}", strings.scripts))
-            .id(egui::Id::unique("scripts-window"))
-            .open(&mut open)
-            .default_width(560.0)
-            .collapsible(false)
-            .show(ctx, |ui| {
+        let title = format!("{} · {name}", strings.scripts);
+        crate::molecules::window(
+            ctx,
+            egui::Window::new(&title)
+                .id(egui::Id::unique("scripts-window"))
+                .default_width(560.0),
+            (&title, strings.close_window),
+            &mut open,
+            |ui| {
                 let id = ui.make_persistent_id("scripts-window-editor");
                 scripts_editor(ui, scripts, &ALL_KINDS, id, strings);
                 ui.add_space(theme::space::S);
                 if ui.button(strings.save).clicked() {
                     saved = Some((target.clone(), scripts.clone()));
                 }
-            });
+            },
+        );
         if saved.is_some() || !open {
             self.editing = None;
         }

@@ -52,12 +52,14 @@ impl VaultWindow {
         }
         let mut commands = Vec::new();
         let mut open = self.open;
-        egui::Window::new(strings.collection_key)
-            .id(egui::Id::unique("vault-window"))
-            .open(&mut open)
-            .default_width(520.0)
-            .collapsible(false)
-            .show(ctx, |ui| {
+        crate::molecules::window(
+            ctx,
+            egui::Window::new(strings.collection_key)
+                .id(egui::Id::unique("vault-window"))
+                .default_width(520.0),
+            (strings.collection_key, strings.close_window),
+            &mut open,
+            |ui| {
                 let muted = theme::palette(ui).text_muted;
                 if !vault.shares {
                     ui.label(RichText::new(strings.no_collection_key).color(muted));
@@ -69,7 +71,8 @@ impl VaultWindow {
                         commands.push(VaultCommand::ImportKey(key));
                     }
                 }
-            });
+            },
+        );
         self.open = open;
         commands.extend(self.confirm_rotation(ctx, strings));
         commands

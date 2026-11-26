@@ -1553,6 +1553,8 @@ pub struct Strings {
     pub window_restore: &'static str,
     /// Window button: close.
     pub window_close: &'static str,
+    /// Name of the × of a window inside apifast's (settings, environments…).
+    pub close_window: &'static str,
     /// Button in the title bar that opens the command palette.
     pub title_search: &'static str,
     /// Setting: apifast draws the title bar.

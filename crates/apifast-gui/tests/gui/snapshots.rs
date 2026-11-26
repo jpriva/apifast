@@ -152,3 +152,30 @@ fn the_collection_tree() {
     }
     results.unwrap();
 }
+
+/// A window inside apifast's: its own title bar, with the title and a
+/// drawn ×, over a line.
+#[test]
+#[cfg_attr(not(target_os = "linux"), ignore = "drawn only on Linux")]
+fn a_window_with_its_own_title_bar() {
+    let mut results = SnapshotResults::new();
+    for (theme, suffix) in themes() {
+        let mut open = true;
+        let mut harness = harness(egui::vec2(420.0, 200.0), theme, move |ui| {
+            let window = egui::Window::new("Collection settings · API")
+                .id(egui::Id::unique("snapshot-window"))
+                .fixed_pos(egui::pos2(20.0, 20.0))
+                .default_width(360.0);
+            let title = ("Collection settings · API", EN.close_window);
+            apifast_gui::molecules::window(ui.ctx(), window, title, &mut open, |ui| {
+                ui.label("Proxy");
+                ui.checkbox(&mut true, "Verify certificates");
+            });
+            // The page behind the window, painted to the edges.
+            ui.allocate_space(ui.available_size());
+        });
+        harness.snapshot(format!("window_{suffix}"));
+        results.extend_harness(&mut harness);
+    }
+    results.unwrap();
+}
