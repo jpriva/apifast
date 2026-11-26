@@ -104,8 +104,9 @@ fn open_select_send_and_see_the_status() {
         .with_size(egui::vec2(1280.0, 800.0))
         .build_ui_state(|ui, app: &mut App| app.show(ui), app);
 
-    // The app starts in its main view; then a collection is opened.
-    harness.get_by_label(EN.new_collection);
+    // The app starts in its main view, which says how to get a collection;
+    // then one is opened.
+    harness.get_by_label(EN.empty_collection_title);
     open_folder(&mut harness, dir.path());
     wait_for(&mut harness, "Shop API");
 
@@ -174,7 +175,13 @@ fn a_new_collection_is_created_from_the_empty_view() {
         .with_size(egui::vec2(1280.0, 800.0))
         .build_ui_state(|ui, app: &mut App| app.show(ui), app);
 
-    harness.get_by_label(EN.new_collection).click();
+    // The empty view's button; the sidebar has one too.
+    harness.get_by_label(EN.empty_collection_title);
+    harness
+        .get_all_by_label(EN.new_collection)
+        .next()
+        .unwrap()
+        .click();
     wait_for(&mut harness, EN.new_collection_title);
     // The name takes the focus.
     type_into_focus(&mut harness, "Billing API");
@@ -617,7 +624,12 @@ fn a_postman_export_is_imported_from_the_sidebar() {
         .with_size(egui::vec2(1280.0, 900.0))
         .build_ui_state(|ui, app: &mut App| app.show(ui), app);
     harness.run_steps(2);
-    harness.get_by_label(EN.import_collection_action).click();
+    // The sidebar's; the empty view has one too.
+    harness
+        .get_all_by_label(EN.import_collection_action)
+        .next()
+        .unwrap()
+        .click();
     wait_for(&mut harness, EN.import_hint);
     harness
         .get_by_role_and_label(Role::TextInput, EN.import_collection_file)

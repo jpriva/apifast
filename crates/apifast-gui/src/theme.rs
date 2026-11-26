@@ -302,6 +302,16 @@ impl Density {
             ),
         }
     }
+
+    /// The height of buttons, text fields and lists' rows: what is easy to
+    /// aim at and to read in a field.
+    pub fn control_height(self) -> f32 {
+        match self {
+            Self::Compact => 22.0,
+            Self::Normal => 26.0,
+            Self::Comfortable => 30.0,
+        }
+    }
 }
 
 /// How the interface looks, beyond the theme: what [`apply_style`] sets.
@@ -333,6 +343,23 @@ pub fn parse_color(color: &str) -> Option<Color32> {
     }
     let channel = |at: usize| u8::from_str_radix(&hex[at..at + 2], 16).ok();
     Some(Color32::from_rgb(channel(0)?, channel(2)?, channel(4)?))
+}
+
+/// The color of text on the accent, as on a primary button: white on the
+/// dark accents of the light theme, the background on the light accents of
+/// the dark one.
+pub fn on_accent(palette: &Palette) -> Color32 {
+    if lightness(palette.accent) > lightness(palette.background) {
+        palette.background
+    } else {
+        Color32::WHITE
+    }
+}
+
+/// How light a color is, roughly: enough to tell a light one from a dark
+/// one.
+fn lightness(c: Color32) -> u32 {
+    299 * u32::from(c.r()) + 587 * u32::from(c.g()) + 114 * u32::from(c.b())
 }
 
 /// Color of a method badge.
@@ -479,9 +506,22 @@ pub fn apply_style(ctx: &egui::Context, look: Look) {
     ctx.set_visuals_of(Theme::Light, visuals(Theme::Light, look.accent));
     ctx.set_visuals_of(Theme::Dark, visuals(Theme::Dark, look.accent));
     let (items, buttons) = look.density.spacing();
+    let height = look.density.control_height();
     ctx.all_styles_mut(|style| {
         style.spacing.item_spacing = items;
         style.spacing.button_padding = buttons;
+        style.spacing.interact_size.y = height;
+        // Every size of text comes from the tokens of `text`.
+        for (text_style, size) in [
+            (egui::TextStyle::Small, text::SMALL),
+            (egui::TextStyle::Body, text::BODY),
+            (egui::TextStyle::Button, text::BODY),
+            (egui::TextStyle::Heading, text::HEADING),
+        ] {
+            style
+                .text_styles
+                .insert(text_style, egui::FontId::proportional(size));
+        }
         style.text_styles.insert(
             egui::TextStyle::Monospace,
             egui::FontId::monospace(look.code_size),
@@ -602,6 +642,11 @@ mod tests {
                 assert_eq!(found.as_ref(), Some(p), "{accent:?} {theme:?}");
             }
             assert_eq!(Accent::parse(accent.as_str()), Some(accent));
+            for theme in [Theme::Light, Theme::Dark] {
+                let p = accent.palette(theme);
+                let ratio = contrast(on_accent(p), p.accent);
+                assert!(ratio >= 4.5, "text on {accent:?} {theme:?} is {ratio:.2}:1");
+            }
         }
         let accents: std::collections::HashSet<_> = Accent::ALL
             .iter()

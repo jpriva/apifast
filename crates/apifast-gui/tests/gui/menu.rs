@@ -253,7 +253,10 @@ fn the_search_in_the_title_bar_opens_the_palette() {
 fn a_transparent_window_gets_its_frame_and_its_margin_resizes_it() {
     let mut harness = harness();
     harness.run();
-    assert!(!harness.state().screen.framed(&harness.ctx), "opaque window");
+    assert!(
+        !harness.state().screen.framed(&harness.ctx),
+        "opaque window"
+    );
 
     harness.state_mut().screen.transparent = true;
     harness.run();
@@ -264,9 +267,15 @@ fn a_transparent_window_gets_its_frame_and_its_margin_resizes_it() {
     assert!(menu.max.x < 1100.0 - margin, "{menu:?}");
     assert!(menu.min.y > margin, "{menu:?}");
     // In the margin, the pointer resizes.
-    let seen = drag(&mut harness, egui::pos2(4.0, 400.0), egui::pos2(-20.0, 400.0));
+    let seen = drag(
+        &mut harness,
+        egui::pos2(4.0, 400.0),
+        egui::pos2(-20.0, 400.0),
+    );
     assert!(
-        seen.contains(&egui::ViewportCommand::BeginResize(egui::ResizeDirection::West)),
+        seen.contains(&egui::ViewportCommand::BeginResize(
+            egui::ResizeDirection::West
+        )),
         "{seen:?}"
     );
 
@@ -274,4 +283,37 @@ fn a_transparent_window_gets_its_frame_and_its_margin_resizes_it() {
     harness.state_mut().screen.settings.own_title_bar = false;
     harness.run();
     assert!(!harness.state().screen.framed(&harness.ctx));
+}
+
+#[test]
+fn with_no_request_open_the_main_area_says_how_to_open_or_make_one() {
+    use apifast_app::CollectionTree;
+    use apifast_gui::core::CollectionView;
+    let mut harness = harness();
+    harness.get_by_label(EN.empty_collection_title);
+    let tree = CollectionTree {
+        collection: apifast_domain::Collection::new("C"),
+        items: Vec::new(),
+    };
+    harness.state_mut().snapshot.collection = Some(CollectionView {
+        root: "/c".into(),
+        tree: std::sync::Arc::new(tree),
+    });
+    harness.run();
+    harness.get_by_label(EN.empty_request_title);
+    // Each button says its shortcut, in its name too.
+    let button = format!("{} Ctrl+N", EN.action_new_request);
+    harness
+        .get_all_by_label_contains(&button)
+        .next()
+        .unwrap()
+        .click();
+    harness.run();
+    let commands = std::mem::take(&mut harness.state_mut().commands);
+    assert!(
+        commands
+            .iter()
+            .any(|c| matches!(c, Command::CreateRequest { root, .. } if root.as_os_str() == "/c")),
+        "{commands:?}"
+    );
 }

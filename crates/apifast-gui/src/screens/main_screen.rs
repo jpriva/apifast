@@ -262,6 +262,9 @@ impl MainScreen {
         self.response.pretty_limit = Some(self.settings.pretty_limit());
         let focus_url = std::mem::take(&mut self.focus_url);
         let notice = self.notice.as_deref();
+        let (empty, empty_actions) = self.empty_state(ui.ctx(), collection.is_some(), strings);
+        let mut empty_pick = None;
+        let mut sidebar_shown = !self.sidebar_hidden;
         let (sidebar, history) = (&mut self.sidebar, &mut self.history);
         let (tree, tabs, panels, editor) = (
             &mut self.tree,
@@ -284,7 +287,7 @@ impl MainScreen {
             ui,
             corner,
             bars(snapshot, self.settings.draws_title_bar(), strings),
-            (!self.sidebar_hidden).then_some(|ui: &mut egui::Ui| {
+            (&mut sidebar_shown, |ui: &mut egui::Ui| {
                 sidebar_area(ui, (sidebar, tree, history), snapshot, strings)
             }),
             |ui| {
@@ -293,16 +296,11 @@ impl MainScreen {
                     .collect();
                 let tab_event = tabs.show(ui, &snapshot.tabs, selected, strings);
                 ui.separator();
-                let palette = theme::palette(ui);
                 create_here = messages(ui, snapshot, notice, strings);
                 (pasted_key, save_captures) = banners(ui, snapshot, key_paste, strings);
                 let (Some(tab), Some(editor)) = (active, editor.as_mut()) else {
-                    let hint = if collection.is_some() {
-                        strings.no_request
-                    } else {
-                        strings.no_collection
-                    };
-                    ui.label(RichText::new(hint).color(palette.text_muted));
+                    empty_pick =
+                        crate::molecules::empty_state(ui, &empty).map(|i| empty_actions[i]);
                     return (tab_event, (None, false));
                 };
                 if tab.conflict {
@@ -325,6 +323,8 @@ impl MainScreen {
         {
             commands.push(Command::FetchSchema(tab.key()));
         }
+        self.sidebar_hidden = !sidebar_shown;
+        let menu = menu.or(empty_pick);
         commands.extend(self.bar_commands((open_git, edit_environments, menu), snapshot, strings));
         commands.extend(self.collection_commands(ui, (create_here, asked), snapshot, strings));
         commands.extend(self.windows(ui, snapshot, &hints, strings));
@@ -784,6 +784,45 @@ impl MainScreen {
             }
         }
         commands
+    }
+
+    /// What the main area says while nothing is open in it, and the action
+    /// of each of its buttons: with no collection, how to get one; with no
+    /// request, how to open or make one.
+    fn empty_state(
+        &self,
+        ctx: &egui::Context,
+        has_collection: bool,
+        strings: &Strings,
+    ) -> (crate::molecules::EmptyState, Vec<Action>) {
+        let (title, hint, actions) = if has_collection {
+            let actions = vec![Action::NewRequest, Action::QuickOpen, Action::Palette];
+            (strings.empty_request_title, strings.no_request, actions)
+        } else {
+            let actions = vec![
+                Action::NewCollection,
+                Action::OpenCollection,
+                Action::ImportCollection,
+            ];
+            (
+                strings.empty_collection_title,
+                strings.no_collection,
+                actions,
+            )
+        };
+        let buttons = (actions.iter())
+            .map(|&action| {
+                let shortcut = (self.keymap.shortcuts(action).first())
+                    .map(|shortcut| ctx.format_shortcut(shortcut));
+                (action.label(strings), shortcut)
+            })
+            .collect();
+        let state = crate::molecules::EmptyState {
+            title: title.to_owned(),
+            hint: hint.to_owned(),
+            actions: buttons,
+        };
+        (state, actions)
     }
 
     /// What the bars asked for: the git window, the environment editor, or
@@ -1638,14 +1677,23 @@ fn workspace_header(
         });
     response.response.accessible_name(strings.workspace);
     ui.horizontal(|ui| {
-        if ui.small_button(strings.new_collection).clicked() {
-            ask = Some(SidebarAsk::Action(Action::NewCollection));
-        }
-        if ui.small_button(strings.open_collection).clicked() {
-            ask = Some(SidebarAsk::Action(Action::OpenCollection));
-        }
-        if ui.small_button(strings.import_collection_action).clicked() {
-            ask = Some(SidebarAsk::Action(Action::ImportCollection));
+        use crate::atoms::{Icon, IconButton};
+        for (icon, name, action) in [
+            (Icon::Plus, strings.new_collection, Action::NewCollection),
+            (
+                Icon::Folder,
+                strings.open_collection,
+                Action::OpenCollection,
+            ),
+            (
+                Icon::Import,
+                strings.import_collection_action,
+                Action::ImportCollection,
+            ),
+        ] {
+            if ui.add(IconButton::new(icon, name)).clicked() {
+                ask = Some(SidebarAsk::Action(action));
+            }
         }
     });
     ask

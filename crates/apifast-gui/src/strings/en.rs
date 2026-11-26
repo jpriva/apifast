@@ -873,6 +873,8 @@ pub const STRINGS: Strings = Strings {
     title_search: "Search…",
     settings_own_title_bar: "Draw the title bar in apifast",
     settings_own_title_bar_hint: "With minimize, maximize and close always. Off: the system's bar.",
+    empty_collection_title: "No collection open",
+    empty_request_title: "No request open",
     close_unsaved: Plural::two(
         "{n} tab has unsaved changes.",
         "{n} tabs have unsaved changes.",

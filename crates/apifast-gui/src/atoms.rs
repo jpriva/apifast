@@ -150,6 +150,136 @@ impl Widget for ColorSwatch<'_> {
     }
 }
 
+/// A symbol drawn with lines, not written: the fonts have few of them, and
+/// a missing glyph stops the interface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Icon {
+    /// A plus: create.
+    Plus,
+    /// A folder: open one.
+    Folder,
+    /// An arrow into a tray: import.
+    Import,
+    /// A page with a plus: a new request.
+    NewRequest,
+    /// A folder with a plus: a new folder.
+    NewFolder,
+}
+
+impl Icon {
+    /// Draws the icon in `rect` with `stroke`.
+    pub fn paint(self, painter: &egui::Painter, rect: egui::Rect, stroke: egui::Stroke) {
+        let r = rect.shrink(rect.width() * 0.2);
+        let (c, w, h) = (r.center(), r.width(), r.height());
+        let at = |x: f32, y: f32| egui::pos2(r.left() + w * x, r.top() + h * y);
+        let plus = |center: egui::Pos2, arm: f32| {
+            painter.line_segment(
+                [center - egui::vec2(arm, 0.0), center + egui::vec2(arm, 0.0)],
+                stroke,
+            );
+            painter.line_segment(
+                [center - egui::vec2(0.0, arm), center + egui::vec2(0.0, arm)],
+                stroke,
+            );
+        };
+        let folder = || {
+            let points = vec![
+                at(0.0, 0.15),
+                at(0.38, 0.15),
+                at(0.5, 0.3),
+                at(1.0, 0.3),
+                at(1.0, 0.9),
+                at(0.0, 0.9),
+                at(0.0, 0.15),
+            ];
+            painter.add(egui::Shape::line(points, stroke));
+        };
+        match self {
+            Self::Plus => plus(c, w * 0.45),
+            Self::Folder => folder(),
+            Self::Import => {
+                // A tray, and an arrow coming down into it.
+                let tray = vec![at(0.0, 0.6), at(0.0, 0.95), at(1.0, 0.95), at(1.0, 0.6)];
+                painter.add(egui::Shape::line(tray, stroke));
+                painter.line_segment([at(0.5, 0.0), at(0.5, 0.72)], stroke);
+                let head = vec![at(0.25, 0.48), at(0.5, 0.72), at(0.75, 0.48)];
+                painter.add(egui::Shape::line(head, stroke));
+            }
+            Self::NewRequest => {
+                let page = vec![
+                    at(0.1, 0.0),
+                    at(0.6, 0.0),
+                    at(0.85, 0.25),
+                    at(0.85, 1.0),
+                    at(0.1, 1.0),
+                    at(0.1, 0.0),
+                ];
+                painter.add(egui::Shape::line(page, stroke));
+                plus(at(0.47, 0.6), w * 0.17);
+            }
+            Self::NewFolder => {
+                folder();
+                plus(at(0.5, 0.6), w * 0.15);
+            }
+        }
+    }
+}
+
+/// A square button with an [`Icon`], named for screen readers and in its
+/// hover, framed only while hovered or focused.
+#[derive(Debug, Clone, Copy)]
+pub struct IconButton<'a> {
+    icon: Icon,
+    name: &'a str,
+}
+
+impl<'a> IconButton<'a> {
+    /// A button showing `icon`, named `name`.
+    pub fn new(icon: Icon, name: &'a str) -> Self {
+        Self { icon, name }
+    }
+}
+
+impl Widget for IconButton<'_> {
+    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+        let side = ui.spacing().interact_size.y;
+        let (rect, response) = ui.allocate_exact_size(egui::vec2(side, side), Sense::click());
+        response.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), self.name)
+        });
+        if ui.is_rect_visible(rect) {
+            let palette = theme::palette(ui);
+            let hot = response.hovered() || response.has_focus();
+            if hot {
+                let fill = ui.visuals().widgets.hovered.weak_bg_fill;
+                ui.painter().rect_filled(rect, theme::radius::MEDIUM, fill);
+            }
+            let color = if !ui.is_enabled() {
+                palette.text_muted.gamma_multiply(0.6)
+            } else if hot {
+                palette.text
+            } else {
+                palette.text_muted
+            };
+            self.icon
+                .paint(ui.painter(), rect, egui::Stroke::new(1.4, color));
+        }
+        response.on_hover_text(self.name)
+    }
+}
+
+/// The button of a screen's main action (Send): filled with the accent.
+pub fn primary_button(ui: &egui::Ui, text: &str) -> egui::Button<'static> {
+    let palette = theme::palette(ui);
+    egui::Button::new(
+        egui::RichText::new(text)
+            .color(theme::on_accent(palette))
+            .strong(),
+    )
+    .fill(palette.accent)
+    .min_size(egui::vec2(72.0, 0.0))
+}
+
 /// The button of the application's menu: three lines, drawn (the fonts
 /// have no glyph for them), named for screen readers and in its hover.
 #[derive(Debug, Clone, Copy)]

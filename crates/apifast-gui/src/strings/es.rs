@@ -873,6 +873,8 @@ pub const STRINGS: Strings = Strings {
     title_search: "Buscar…",
     settings_own_title_bar: "Barra de título de apifast",
     settings_own_title_bar_hint: "Con minimizar, maximizar y cerrar siempre. Apagada: la barra del sistema.",
+    empty_collection_title: "Ninguna colección abierta",
+    empty_request_title: "Ninguna petición abierta",
     close_unsaved: Plural::two(
         "{n} pestaña tiene cambios sin guardar.",
         "{n} pestañas tienen cambios sin guardar.",

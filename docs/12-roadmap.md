@@ -502,13 +502,14 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
     - Un ajuste (`own_title_bar`) vuelve a la barra del sistema en el momento; se lee antes de abrir la ventana.
     - En Windows y macOS se mantiene la nativa (`chrome::SUPPORTED`), hasta probar allí.
     - [x] Esquinas redondeadas y sombra con la barra propia: la ventana es transparente y apifast dibuja su marco, con un margen para la sombra que también redimensiona. Si el driver no admite transparencia, el registro dice cómo volver a la barra del sistema.
-  - [ ] Mejoras visuales:
-    - Campos de texto que hoy son pequeños, y la × de pestañas y ventanas (anotado desde F2).
-    - Iconos dibujados en lugar de texto en las barras y botones.
-    - Espaciado y tipografía homogéneos.
-    - Estados vacíos con una indicación de qué hacer.
-    - Transiciones suaves al abrir ventanas y paneles.
-    - Revisar en los dos temas, con capturas sin ventana, como permite `egui_kittest` con `wgpu`.
+  - [x] Mejoras visuales ([docs/09](09-ui-ux.md#temas-y-accesibilidad)):
+    - Campos de texto a la altura de los botones (26 puntos con la densidad normal), y la × de pestañas dibujada.
+    - Iconos dibujados en lugar de texto en la barra lateral y la del árbol.
+    - Espaciado y tipografía desde los tokens del tema; Send como botón principal, con el acento.
+    - Estados vacíos con una indicación y botones con su atajo.
+    - Transiciones: la barra lateral se desliza; las ventanas usan el fundido de egui.
+    - Revisado en los dos temas con capturas sin ventana (`egui_kittest` con `wgpu`), que encontraron el método mal alineado en el árbol y botones cortados en la barra lateral.
+    - [ ] La × de las ventanas es la de egui: cambiarla pide una barra de título propia para cada ventana.
 
 ### Criterio de salida
 

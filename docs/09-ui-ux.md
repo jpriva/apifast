@@ -357,6 +357,12 @@ Mientras la paleta está abierta o el editor espera una combinación, los demás
 - Las ventanas usan el color de fondo y los campos el de superficie, con borde, para que un campo se distinga siempre de lo que lo rodea.
 - Las tablas con campos editables se componen fila a fila con anchos repartidos, no con `egui::Grid`: en una celda de grid un campo solo recibe el ancho que su columna midió el frame anterior y no crece.
 - Escala de interfaz configurable en los ajustes (`Ctrl+,`), que también siguen `Ctrl+=`, `Ctrl+-` y `Ctrl+0`; la escala aumenta el texto con todo lo demás.
+- Altura de controles según la densidad (`Density::control_height`: 22, 26 o 30 puntos). Botones, campos de texto, desplegables y filas del árbol comparten esa altura, así que los campos ya no quedan más bajos que los botones de al lado.
+- Tamaños de texto solo desde los tokens de `theme::text`: 11 el pequeño, 13 el cuerpo y los botones, 17 los títulos, y el del código según los ajustes.
+- Iconos dibujados con líneas (`atoms::Icon`, `IconButton`), nunca caracteres de la fuente: un glifo que falta detiene la interfaz. Nueva colección, abrir, importar, nueva petición y nueva carpeta son iconos con su nombre al pasar el ratón y para lectores de pantalla.
+- La acción principal de la pantalla (Send) va rellena con el acento (`atoms::primary_button`). El texto encima es blanco o el fondo, según `theme::on_accent`, con contraste AA comprobado para los seis acentos.
+- Estados vacíos (`molecules::empty_state`): sin colección o sin petición abierta, el área principal dice qué falta y ofrece botones para resolverlo, cada uno con su atajo.
+- La barra lateral se desliza al mostrarla u ocultarla (`Ctrl+B`) y se puede cerrar o abrir arrastrando su borde. Las ventanas aparecen y desaparecen con un fundido, el de egui.
 - Esquinas redondeadas (`theme::radius`): 4 en badges, 6 en botones, campos y paneles, y 10 en ventanas, menús y popups.
 - En Linux, apifast dibuja su propia barra de título por defecto. La ventana va sin decoraciones del sistema, y la barra superior hace de barra de título:
   - Arrastrar su espacio libre mueve la ventana y el doble clic la maximiza o la restaura.

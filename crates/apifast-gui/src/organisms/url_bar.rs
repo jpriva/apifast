@@ -131,7 +131,12 @@ impl<'a> UrlBar<'a> {
                     (true, false) => (strings.cancel, UrlBarEvent::Cancel),
                     (false, _) => (go, UrlBarEvent::Send),
                 };
-                if ui.button(text).clicked() {
+                let button = if sending {
+                    egui::Button::new(text)
+                } else {
+                    crate::atoms::primary_button(ui, text)
+                };
+                if ui.add(button).clicked() {
                     event = Some(action);
                 }
                 let texts = TemplateFieldTexts {

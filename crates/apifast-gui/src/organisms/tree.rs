@@ -198,13 +198,14 @@ impl TreeView {
         }
         let mut action = None;
         ui.horizontal(|ui| {
+            use crate::atoms::{Icon, IconButton};
             let new_request = ui.add_enabled(
                 focused.is_some(),
-                egui::Button::new(strings.new_request).small(),
+                IconButton::new(Icon::NewRequest, strings.new_request),
             );
             let new_folder = ui.add_enabled(
                 focused.is_some(),
-                egui::Button::new(strings.new_folder).small(),
+                IconButton::new(Icon::NewFolder, strings.new_folder),
             );
             let dialog = if new_request.clicked() {
                 Some(NameAction::NewRequest(String::new()))
@@ -482,9 +483,11 @@ fn paint_row(ui: &mut egui::Ui, row: &Row, rect: Rect, selected: bool, hovered: 
         RowKind::Request { method, kind } => {
             // A child that does not take space in the list: the badge sits
             // inside the row's rectangle.
-            let badge = Rect::from_min_max(
-                pos2(x, rect.top()),
-                pos2(x + theme::METHOD_BADGE_WIDTH, rect.bottom()),
+            // Centered on the row, as its name is.
+            let height = ui.text_style_height(&egui::TextStyle::Monospace);
+            let badge = Rect::from_center_size(
+                pos2(x + theme::METHOD_BADGE_WIDTH / 2.0, rect.center().y),
+                vec2(theme::METHOD_BADGE_WIDTH, height),
             );
             ui.new_child(UiBuilder::new().max_rect(badge))
                 .add(MethodBadge::new(method).kind(*kind));

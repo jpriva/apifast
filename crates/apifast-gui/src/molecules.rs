@@ -55,3 +55,40 @@ impl<'a> EnvironmentSelector<'a> {
         choice.filter(|new| new.as_deref() != self.active)
     }
 }
+
+/// What an empty area says: what is missing, what to do, and buttons that
+/// do it, each with its shortcut.
+#[derive(Debug, Clone, Default)]
+pub struct EmptyState {
+    /// What is missing: "No request open".
+    pub title: String,
+    /// What to do about it.
+    pub hint: String,
+    /// The buttons, each with its shortcut if it has one.
+    pub actions: Vec<(String, Option<String>)>,
+}
+
+/// Draws `state` centered in the space left. Returns the index of the
+/// action pressed.
+pub fn empty_state(ui: &mut egui::Ui, state: &EmptyState) -> Option<usize> {
+    let palette = crate::theme::palette(ui);
+    let mut pressed = None;
+    ui.vertical_centered(|ui| {
+        ui.add_space(ui.available_height() / 4.0);
+        ui.label(egui::RichText::new(&state.title).heading());
+        ui.add_space(crate::theme::space::S);
+        ui.label(egui::RichText::new(&state.hint).color(palette.text_muted));
+        ui.add_space(crate::theme::space::L);
+        for (index, (label, shortcut)) in state.actions.iter().enumerate() {
+            // Every label to the left, with or without a shortcut after it.
+            let shortcut = shortcut.as_deref().unwrap_or_default();
+            let button = egui::Button::new(label)
+                .min_size(egui::vec2(220.0, 0.0))
+                .right_text(egui::RichText::new(shortcut).color(palette.text_muted));
+            if ui.add(button).clicked() {
+                pressed = Some(index);
+            }
+        }
+    });
+    pressed
+}

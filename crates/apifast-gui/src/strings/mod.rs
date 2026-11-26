@@ -1559,6 +1559,10 @@ pub struct Strings {
     pub settings_own_title_bar: &'static str,
     /// Explains the title bar setting.
     pub settings_own_title_bar_hint: &'static str,
+    /// Title of the main area with no collection open.
+    pub empty_collection_title: &'static str,
+    /// Title of the main area with no request open.
+    pub empty_request_title: &'static str,
     /// How many tabs have unsaved changes, `{n}`.
     pub close_unsaved: Plural,
 }
