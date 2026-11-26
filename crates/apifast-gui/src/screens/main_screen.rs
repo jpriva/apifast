@@ -98,8 +98,10 @@ pub struct MainScreen {
     pub about: crate::organisms::AboutWindow,
     /// Whether the system draws the window's decorations, as last asked.
     decorations: Option<bool>,
-    /// Quit was asked for: the window is asked to close on this frame.
-    quit: bool,
+    /// Whether the window is transparent where nothing is drawn, so that
+    /// apifast can draw its frame: rounded corners and a shadow. Set when
+    /// the window opens; it cannot change later.
+    pub transparent: bool,
     /// The collection key window.
     pub vault_window: VaultWindow,
     /// The cookie editor.
@@ -182,6 +184,9 @@ enum Closing {
     Saving,
     /// Closing: the next request to close goes through.
     Allowed,
+    /// Quit was asked for: the window is asked to close on this frame, and
+    /// that request may be asked about.
+    Quit,
 }
 
 /// What changed and is not saved yet.
@@ -209,10 +214,35 @@ impl Editor {
 }
 
 impl MainScreen {
-    /// Draws `snapshot` and returns the commands the user asked for.
+    /// Draws `snapshot` and returns the commands the user asked for: in
+    /// the window's frame when apifast draws it ([`Self::framed`]).
     pub fn show(
         &mut self,
         ui: &mut egui::Ui,
+        snapshot: &Snapshot,
+        strings: &Strings,
+    ) -> Vec<Command> {
+        if self.framed(ui.ctx()) {
+            crate::chrome::window_frame(ui, |ui, corner| self.screen(ui, corner, snapshot, strings))
+        } else {
+            self.screen(ui, 0, snapshot, strings)
+        }
+    }
+
+    /// Whether apifast draws the window's frame (rounded corners, shadow):
+    /// with its own title bar, in a transparent window, not maximized.
+    pub fn framed(&self, ctx: &egui::Context) -> bool {
+        self.transparent
+            && self.settings.draws_title_bar()
+            && !crate::chrome::maximized(ctx)
+            && !ctx.input(|i| i.viewport().fullscreen.unwrap_or(false))
+    }
+
+    /// The screen, its outer corners rounded by `corner` points.
+    fn screen(
+        &mut self,
+        ui: &mut egui::Ui,
+        corner: u8,
         snapshot: &Snapshot,
         strings: &Strings,
     ) -> Vec<Command> {
@@ -252,6 +282,7 @@ impl MainScreen {
             (tab_event, (url_event, edited)),
         ) = layout::workbench(
             ui,
+            corner,
             bars(snapshot, self.settings.draws_title_bar(), strings),
             (!self.sidebar_hidden).then_some(|ui: &mut egui::Ui| {
                 sidebar_area(ui, (sidebar, tree, history), snapshot, strings)
@@ -322,9 +353,10 @@ impl MainScreen {
         snapshot: &Snapshot,
         strings: &Strings,
     ) -> Option<Command> {
-        if std::mem::take(&mut self.quit) {
+        if self.closing == Closing::Quit {
             // Comes back on the next frame as a request to close, which
             // the code below may ask about.
+            self.closing = Closing::No;
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
         let unsaved = snapshot.tabs.iter().filter(|tab| tab.is_dirty()).count();
@@ -341,7 +373,7 @@ impl MainScreen {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         };
         match self.closing {
-            Closing::No | Closing::Allowed => None,
+            Closing::No | Closing::Allowed | Closing::Quit => None,
             Closing::Saving if unsaved == 0 => {
                 close(&mut self.closing);
                 None
@@ -614,7 +646,7 @@ impl MainScreen {
             self.decorations = Some(!drawn);
         }
         if drawn {
-            crate::chrome::resize_edges(ctx);
+            crate::chrome::resize_edges(ctx, self.framed(ctx));
         }
         let look = self.settings.look();
         if self.look != Some(look) {
@@ -791,7 +823,11 @@ impl MainScreen {
                 self.request.tab = crate::organisms::RequestTab::Body;
                 self.request.format_now = true;
             }
-            Action::Quit => self.quit = true,
+            Action::Quit => {
+                if self.closing == Closing::No {
+                    self.closing = Closing::Quit;
+                }
+            }
             _ => return false,
         }
         true

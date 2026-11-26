@@ -22,6 +22,9 @@ pub const TARGET: &str = "apifast_log::explained";
 pub enum Action {
     /// Log this instead, at `info`.
     Explain(String),
+    /// Log this instead, still at `warn`: it is a problem, and this says
+    /// what to do.
+    Warn(String),
     /// Drop it: it is the tail of one already explained.
     Drop,
 }
@@ -40,6 +43,15 @@ pub fn explain(target: &str, text: &str, after_loader: &AtomicBool) -> Option<Ac
             return Some(Action::Drop);
         }
         return None;
+    }
+    if target.starts_with("egui_wgpu") && text.contains("Transparent window was requested") {
+        return Some(Action::Warn(
+            "window: the graphics driver cannot draw a transparent window, which apifast's \
+             own title bar needs for its rounded corners and shadow: they show as a dark \
+             margin. Turn off Settings → Appearance → \"Draw the title bar in apifast\" to \
+             use the system's bar."
+                .to_owned(),
+        ));
     }
     if target.starts_with("arboard") && text.contains("Falling back to the X11 clipboard") {
         return Some(Action::Explain(
@@ -109,22 +121,27 @@ impl log::Log for Explained {
 
     fn log(&self, record: &log::Record<'_>) {
         let target = record.target();
-        if target.starts_with("wgpu_hal::vulkan") || target.starts_with("arboard") {
+        if ["wgpu_hal::vulkan", "arboard", "egui_wgpu"]
+            .iter()
+            .any(|known| target.starts_with(known))
+        {
             let text = record.args().to_string();
-            match explain(target, &text, &self.after_loader) {
-                Some(Action::Explain(message)) => {
-                    self.tracer.log(
-                        &log::Record::builder()
-                            .args(format_args!("{message}"))
-                            .level(log::Level::Info)
-                            .target(TARGET)
-                            .module_path_static(Some(TARGET))
-                            .build(),
-                    );
-                    return;
-                }
+            let explained = match explain(target, &text, &self.after_loader) {
+                Some(Action::Explain(message)) => Some((log::Level::Info, message)),
+                Some(Action::Warn(message)) => Some((log::Level::Warn, message)),
                 Some(Action::Drop) => return,
-                None => {}
+                None => None,
+            };
+            if let Some((level, message)) = explained {
+                self.tracer.log(
+                    &log::Record::builder()
+                        .args(format_args!("{message}"))
+                        .level(level)
+                        .target(TARGET)
+                        .module_path_static(Some(TARGET))
+                        .build(),
+                );
+                return;
             }
         }
         self.tracer.log(record);
@@ -187,5 +204,15 @@ mod tests {
             None
         );
         assert_eq!(explain("wgpu_core", DZN, &after), None);
+    }
+
+    #[test]
+    fn a_window_that_cannot_be_transparent_says_how_to_go_back() {
+        let after = AtomicBool::new(false);
+        let warning = "Transparent window was requested, but the active wgpu surface does not support a `CompositeAlphaMode` with transparency.";
+        assert!(matches!(
+            explain("egui_wgpu::winit", warning, &after),
+            Some(Action::Warn(text)) if text.contains("Draw the title bar in apifast")
+        ));
     }
 }

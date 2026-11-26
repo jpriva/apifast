@@ -140,8 +140,8 @@ fn drag(
     press_at(harness, from, true);
     harness.step();
     let mut seen = viewport_commands(harness);
-    for step in 1..=4 {
-        let at = from + (to - from) * (step as f32 / 4.0);
+    for step in 1..=4_u8 {
+        let at = from + (to - from) * (f32::from(step) / 4.0);
         harness
             .input_mut()
             .events
@@ -246,4 +246,32 @@ fn the_search_in_the_title_bar_opens_the_palette() {
     harness.get_by_label(EN.title_search).click();
     harness.run();
     assert!(harness.state().screen.palette.open.is_some());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn a_transparent_window_gets_its_frame_and_its_margin_resizes_it() {
+    let mut harness = harness();
+    harness.run();
+    assert!(!harness.state().screen.framed(&harness.ctx), "opaque window");
+
+    harness.state_mut().screen.transparent = true;
+    harness.run();
+    assert!(harness.state().screen.framed(&harness.ctx));
+    // The bar sits inside the margin, where the shadow falls.
+    let menu = harness.get_by_label(EN.menu).rect();
+    let margin = apifast_gui::chrome::FRAME_MARGIN;
+    assert!(menu.max.x < 1100.0 - margin, "{menu:?}");
+    assert!(menu.min.y > margin, "{menu:?}");
+    // In the margin, the pointer resizes.
+    let seen = drag(&mut harness, egui::pos2(4.0, 400.0), egui::pos2(-20.0, 400.0));
+    assert!(
+        seen.contains(&egui::ViewportCommand::BeginResize(egui::ResizeDirection::West)),
+        "{seen:?}"
+    );
+
+    // With the system's bar, no frame.
+    harness.state_mut().screen.settings.own_title_bar = false;
+    harness.run();
+    assert!(!harness.state().screen.framed(&harness.ctx));
 }

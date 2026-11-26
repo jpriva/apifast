@@ -152,6 +152,9 @@ fn run(
     let mut viewport = egui::ViewportBuilder::default()
         .with_inner_size([1280.0, 800.0])
         .with_decorations(!own_title_bar)
+        // With its own title bar, apifast draws the window's frame: rounded
+        // corners and a shadow, on a transparent window.
+        .with_transparent(own_title_bar)
         .with_title("apifast")
         // As the desktop file is named (packaging/linux), so the desktop
         // shows the window with its entry and icon.
@@ -187,7 +190,8 @@ fn run(
                 .with_system_language(system)
                 .with_settings(settings)
                 .with_keymap(keymap)
-                .with_folders(apifast_history::dirs::data_dir(), dirs);
+                .with_folders(apifast_history::dirs::data_dir(), dirs)
+                .with_transparent_window(own_title_bar);
             if let Some(logging) = logging {
                 app = app.with_logging(logging, log_file, std::env::var("APIFAST_LOG").ok());
             }

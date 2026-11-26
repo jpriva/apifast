@@ -14,10 +14,55 @@ use crate::theme;
 /// macOS keep theirs until it is tried there.
 pub const SUPPORTED: bool = cfg!(target_os = "linux");
 
-/// How far from the window's edge the pointer resizes it, in points.
+/// How far from the window's edge the pointer resizes it, in points, when
+/// the window fills itself to the edge.
 const EDGE: f32 = 6.0;
+/// The transparent room around a window whose frame apifast draws: where
+/// its shadow falls, and where the pointer resizes it, in points.
+pub const FRAME_MARGIN: f32 = 12.0;
+/// How round the corners of that window are, in points.
+pub const FRAME_CORNER: u8 = 12;
 /// How far from a corner the pointer resizes both ways, in points.
 const CORNER: f32 = 14.0;
+
+/// Draws the window's frame, for a transparent window without system
+/// decorations: a shadow in the margin around it, the window rounded at
+/// `corner` points, and a thin border over its content, which `add` puts
+/// inside. The shadow is lighter while the window does not have the focus.
+pub fn window_frame<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui, u8) -> R) -> R {
+    let rect = ui.max_rect().shrink(FRAME_MARGIN);
+    let corner = egui::CornerRadius::same(FRAME_CORNER);
+    let focused = ui.ctx().input(|i| i.viewport().focused.unwrap_or(true));
+    let dark = ui.visuals().dark_mode;
+    let alpha = match (dark, focused) {
+        (true, true) => 140,
+        (true, false) => 80,
+        (false, true) => 70,
+        (false, false) => 35,
+    };
+    let shadow = egui::epaint::Shadow {
+        offset: [0, 2],
+        blur: 12,
+        spread: 0,
+        color: egui::Color32::from_black_alpha(alpha),
+    };
+    let painter = ui.painter().clone();
+    painter.add(shadow.as_shape(rect, corner));
+    painter.rect_filled(rect, corner, ui.visuals().panel_fill);
+    let inner = ui
+        .scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
+            add(ui, FRAME_CORNER)
+        })
+        .inner;
+    let border = theme::palette(ui).border;
+    painter.rect_stroke(
+        rect,
+        corner,
+        egui::Stroke::new(1.0, border),
+        egui::StrokeKind::Inside,
+    );
+    inner
+}
 
 /// Whether the window is maximized, as the system last said.
 pub fn maximized(ctx: &egui::Context) -> bool {
@@ -137,9 +182,11 @@ fn control_button(
 }
 
 /// The bands along the window's edges and corners, each with the way it
-/// resizes, for a window as big as `window`.
-pub fn edges(window: egui::Rect) -> [(ResizeDirection, egui::Rect); 8] {
+/// resizes, for a window as big as `window`: `edge` deep, and the corners
+/// `edge` more on each side.
+pub fn edges(window: egui::Rect, edge: f32) -> [(ResizeDirection, egui::Rect); 8] {
     use ResizeDirection::{East, North, NorthEast, NorthWest, South, SouthEast, SouthWest, West};
+    let corner = edge + CORNER - EDGE;
     let (min, max) = (window.min, window.max);
     let rect = |x0: f32, y0: f32, x1: f32, y1: f32| {
         egui::Rect::from_min_max(egui::pos2(x0, y0), egui::pos2(x1, y1))
@@ -147,35 +194,35 @@ pub fn edges(window: egui::Rect) -> [(ResizeDirection, egui::Rect); 8] {
     [
         (
             NorthWest,
-            rect(min.x, min.y, min.x + CORNER, min.y + CORNER),
+            rect(min.x, min.y, min.x + corner, min.y + corner),
         ),
         (
             NorthEast,
-            rect(max.x - CORNER, min.y, max.x, min.y + CORNER),
+            rect(max.x - corner, min.y, max.x, min.y + corner),
         ),
         (
             SouthWest,
-            rect(min.x, max.y - CORNER, min.x + CORNER, max.y),
+            rect(min.x, max.y - corner, min.x + corner, max.y),
         ),
         (
             SouthEast,
-            rect(max.x - CORNER, max.y - CORNER, max.x, max.y),
+            rect(max.x - corner, max.y - corner, max.x, max.y),
         ),
         (
             North,
-            rect(min.x + CORNER, min.y, max.x - CORNER, min.y + EDGE),
+            rect(min.x + corner, min.y, max.x - corner, min.y + edge),
         ),
         (
             South,
-            rect(min.x + CORNER, max.y - EDGE, max.x - CORNER, max.y),
+            rect(min.x + corner, max.y - edge, max.x - corner, max.y),
         ),
         (
             West,
-            rect(min.x, min.y + CORNER, min.x + EDGE, max.y - CORNER),
+            rect(min.x, min.y + corner, min.x + edge, max.y - corner),
         ),
         (
             East,
-            rect(max.x - EDGE, min.y + CORNER, max.x, max.y - CORNER),
+            rect(max.x - edge, min.y + corner, max.x, max.y - corner),
         ),
     ]
 }
@@ -194,17 +241,19 @@ fn cursor(direction: ResizeDirection) -> CursorIcon {
 }
 
 /// Lets the window's edges and corners resize it, over everything else,
-/// unless it is maximized.
-pub fn resize_edges(ctx: &egui::Context) {
+/// unless it is maximized. With its frame drawn (`framed`), the margin
+/// around it resizes it, and a little inside.
+pub fn resize_edges(ctx: &egui::Context, framed: bool) {
     if maximized(ctx) {
         return;
     }
+    let edge = if framed { FRAME_MARGIN + 3.0 } else { EDGE };
     let window = ctx.content_rect();
     egui::Area::new(egui::Id::unique("window-resize-edges"))
         .order(egui::Order::Foreground)
         .fixed_pos(window.min)
         .show(ctx, |ui| {
-            for (direction, rect) in edges(window) {
+            for (direction, rect) in edges(window, edge) {
                 let id = ui.scope_id().with(("edge", format!("{direction:?}")));
                 let response = ui.interact(rect, id, Sense::drag());
                 if response.hovered() || response.dragged() {
@@ -225,7 +274,7 @@ mod tests {
     #[test]
     fn the_edges_go_around_the_window_without_overlapping() {
         let window = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0));
-        let edges = edges(window);
+        let edges = edges(window, EDGE);
         for (i, (a, ra)) in edges.iter().enumerate() {
             assert!(window.contains_rect(*ra), "{a:?} is inside");
             for (b, rb) in &edges[i + 1..] {

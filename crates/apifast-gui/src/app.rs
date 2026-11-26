@@ -262,7 +262,25 @@ impl App {
     }
 }
 
+impl App {
+    /// The window is transparent where nothing is drawn, so apifast draws
+    /// its frame (see [`crate::chrome::window_frame`]).
+    #[must_use]
+    pub fn with_transparent_window(mut self, transparent: bool) -> Self {
+        self.main.transparent = transparent;
+        self
+    }
+}
+
 impl eframe::App for App {
+    fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {
+        if self.main.transparent {
+            [0.0; 4]
+        } else {
+            visuals.panel_fill.to_normalized_gamma_f32()
+        }
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         if self.main.about.graphics.is_none()
             && let Some(render) = frame.wgpu_render_state()

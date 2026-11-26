@@ -501,7 +501,7 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
     - Lleva el buscador ("Search…", que abre la paleta), el entorno y el menú.
     - Un ajuste (`own_title_bar`) vuelve a la barra del sistema en el momento; se lee antes de abrir la ventana.
     - En Windows y macOS se mantiene la nativa (`chrome::SUPPORTED`), hasta probar allí.
-    - [ ] Esquinas redondeadas y sombra con la barra propia: piden una ventana transparente que dibuje su marco.
+    - [x] Esquinas redondeadas y sombra con la barra propia: la ventana es transparente y apifast dibuja su marco, con un margen para la sombra que también redimensiona. Si el driver no admite transparencia, el registro dice cómo volver a la barra del sistema.
   - [ ] Mejoras visuales:
     - Campos de texto que hoy son pequeños, y la × de pestañas y ventanas (anotado desde F2).
     - Iconos dibujados en lugar de texto en las barras y botones.

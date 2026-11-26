@@ -362,7 +362,9 @@ Mientras la paleta está abierta o el editor espera una combinación, los demás
   - Arrastrar su espacio libre mueve la ventana y el doble clic la maximiza o la restaura.
   - Siempre tiene minimizar, maximizar (restaurar si ya está maximizada) y cerrar, dibujados. Cerrar pasa por la pregunta de cambios sin guardar.
   - Lleva el nombre de la colección, "Search…" (abre la paleta), el entorno y el menú.
-  - Los bordes y las esquinas de la ventana (6 y 14 puntos) la redimensionan, salvo maximizada.
+  - Esquinas redondeadas (12 puntos) y sombra, dibujadas por apifast (`chrome::window_frame`). La ventana es transparente y deja alrededor un margen de 12 puntos donde cae la sombra, más tenue sin el foco. Los paneles que llegan a una esquina la redondean igual (`layout::workbench`). Maximizada o a pantalla completa, sin margen ni esquinas.
+  - El margen y unos puntos hacia dentro redimensionan la ventana, salvo maximizada. Sin marco, una franja de 6 puntos en los bordes y de 14 en las esquinas.
+  - Si el driver no admite ventanas transparentes, egui-wgpu lo avisa y el margen se ve oscuro. `apifast-log` cambia ese aviso por uno que dice cómo volver a la barra del sistema.
   - Todo se pide con comandos de viewport (`StartDrag`, `BeginResize`, `Maximized`…), que winit cumple en Wayland y X11.
   - El ajuste "Draw the title bar in apifast" (Apariencia, `own_title_bar`) vuelve a la barra del sistema en el momento. `main.rs` lo lee antes de abrir la ventana, para que no aparezca primero la otra barra.
   - Con la del sistema, en Wayland es la de Adwaita de winit, con esquinas redondeadas y los botones que pide `org.gnome.desktop.wm.preferences button-layout`. GNOME trae por defecto solo el de cerrar; `gsettings set org.gnome.desktop.wm.preferences button-layout 'appmenu:minimize,maximize,close'` añade los otros dos.

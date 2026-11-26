@@ -102,12 +102,13 @@ tail -f target/dev/data/logs/apifast.log                # lo que escribe la inte
 - `warn`: los errores que muestra la interfaz (en su idioma), los envíos fallidos y las colecciones que no se pueden abrir.
 - `debug`: cada envío en el adaptador HTTP, con el método y el host.
 
-**Avisos de bibliotecas que no son problemas.** Algunos avisos de wgpu y de arboard son normales en muchos sistemas. `apifast-log` los cambia por un evento `info` que explica qué pasó y qué se hizo, con el objetivo `apifast_log::explained`. Con el nivel por defecto (`warn`) no se ven; con `info` o más, sí:
+**Avisos de bibliotecas que no son problemas.** Algunos avisos de wgpu y de arboard son normales en muchos sistemas. `apifast-log` los cambia por un evento `info` que explica qué pasó y qué se hizo (el de la ventana transparente, que sí es un problema, se queda en `warn` y dice qué hacer), con el objetivo `apifast_log::explained`. Con el nivel por defecto (`warn`) no se ven; con `info` o más, sí:
 
 | Aviso original | Por qué pasa | Lo que se escribe en su lugar |
 |---|---|---|
 | `wgpu_hal::vulkan`: `… vkCreateInstance in ICD /usr/lib64/libvulkan_dzn.so. Skipping this driver.`, y la línea `objects: …` que lo sigue | El cargador de Vulkan prueba todos los drivers instalados. Dozen (`dzn`, Vulkan sobre DirectX 12) solo funciona en Windows y WSL, así que lo descarta y se usa otro. | `vulkan: the driver libvulkan_dzn.so (Dozen, …) only works on Windows and WSL, so the Vulkan loader skipped it …`. Para que el cargador ni lo intente: desinstalarlo o `VK_LOADER_DRIVERS_DISABLE=*dzn*`. Otro driver que no arranca se explica igual, con su ruta. |
 | `arboard`: `… Falling back to the X11 clipboard protocol …` | GNOME no ofrece el protocolo de portapapeles de Wayland para aplicaciones (`ext-data-control` o `wlr-data-control`), así que se usa el de XWayland. Copiar y pegar funcionan igual. | `clipboard: the desktop does not offer Wayland's clipboard protocol …` |
+| `egui_wgpu`: `Transparent window was requested, but the active wgpu surface does not support a CompositeAlphaMode with transparency.` | El driver no puede dibujar una ventana transparente, que la barra de título propia necesita para sus esquinas y su sombra: se ven como un margen oscuro. Este sí es un problema, así que sigue en `warn`. | `window: the graphics driver cannot draw a transparent window, …` y cómo apagar "Draw the title bar in apifast". |
 
 Se reconocen en `crates/apifast-log/src/explained.rs`: añadir otro es una regla más en `explain`, con su prueba. Los demás mensajes de las bibliotecas pasan tal cual.
 
