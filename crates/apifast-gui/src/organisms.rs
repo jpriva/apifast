@@ -44,7 +44,7 @@ pub use environments::{EnvironmentEditor, EnvironmentEvent, EnvironmentsView};
 pub use event_list::EventList;
 pub use examples_panel::examples_panel;
 pub use git_window::GitWindow;
-pub use history::{HistoryView, ago, matches};
+pub use history::{HistoryEvent, HistoryView, ago, matches};
 pub use import_window::{ImportEvent, ImportWindow};
 pub use kv_table::{BulkRow, KvRow, KvTable, from_bulk, to_bulk};
 pub use message_list::MessageList;
@@ -54,7 +54,8 @@ pub use proxy_editor::proxy_fields;
 pub use reimport_window::{ReimportEvent, ReimportWindow};
 pub use request_panel::{Connection, RequestChange, RequestPanel, RequestTab, TokenAction};
 pub use response::{
-    BodyMode, COPY_LIMIT, PRETTY_LIMIT, ResponseTab, ResponseView, describe, millis, size_text,
+    BodyMode, COPY_LIMIT, HistoryOf, PRETTY_LIMIT, ResponseTab, ResponseView, describe, millis,
+    size_text,
 };
 pub use response_cookies::set_by as cookies_set_by;
 pub use runner_window::{RunnerEvent, RunnerWindow};

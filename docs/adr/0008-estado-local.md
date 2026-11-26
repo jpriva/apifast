@@ -25,6 +25,14 @@ Todo se indexa por el identificador estable de la colección, no por su ruta.
 
 Los cuerpos de respuesta y el historial **no se cifran**: se limitan por tamaño y antigüedad, y cada request puede marcarse como "no guardar respuesta". Es el mismo nivel de protección que ofrecen Bruno y Yaak.
 
+Desde el formato 2 de sus líneas (F10), cada entrada guarda también un id, un nombre opcional y lo que se envió:
+- Lo enviado se guarda ya resuelto: método, URL, headers y hasta 64 KB del body de texto.
+- Como no se cifra, los secretos se enmascaran. Si la request llevaba alguno, también se ocultan los valores de la query, igual que en la timeline.
+- Los valores de `Authorization`, `Proxy-Authorization` y `Cookie` no se guardan nunca, aunque no vengan de un secreto: pueden llevar tokens o cookies que en apifast se guardan cifrados.
+- Una entrada con nombre, y su respuesta, sobreviven a la limpieza por límites.
+- Las líneas del formato 1 se siguen leyendo, y la siguiente reescritura las guarda en el formato 2.
+- Renombrar o borrar una entrada reescribe el archivo, aparte y luego renombrado, como ya hacía la limpieza. Un candado compartido por el proceso evita que una entrada añadida mientras tanto se pierda.
+
 ## Consecuencias
 
 **A favor**

@@ -16,7 +16,7 @@ use crate::use_cases::{ChainContext, Prepared, host_for, prepare};
 use crate::{
     AppError, AppHost, BodyWriter, CancelToken, Clock, CollectionRepository, EnvironmentRepository,
     HttpTransport, RenderedRequest, RequestPath, ResponseHead, ResponseId, ResponseStore,
-    SendOptions, SendOutcome, SendPorts, StoreError, TransportError,
+    SendOptions, SendOutcome, SendPorts, SentRequest, StoreError, TransportError,
 };
 
 /// The messages the user sends over an open connection.
@@ -190,6 +190,7 @@ where
     }
     let secrets = handler.secrets;
     let body = handler.log.finish()?;
+    let sent = SentRequest::of(&rendered.request);
     Ok(SendOutcome {
         head,
         body,
@@ -200,6 +201,7 @@ where
         assertions: Vec::new(),
         dependencies: context.recorded,
         scripts: scripts.map(|s| s.report).unwrap_or_default(),
+        sent,
     })
 }
 

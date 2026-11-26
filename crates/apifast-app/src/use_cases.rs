@@ -22,7 +22,7 @@ use crate::{
     RequestPath, ResponseHead, ResponseStore, SecretStore, StoredBody, render_request, sort_tree,
 };
 use crate::{AssertionOutcome, CaptureOutcome, RenderedRequest, ResponseFacts};
-use crate::{HistoryEntry, HistoryStore, ResponseId, TransportError};
+use crate::{HistoryEntry, HistoryStore, ResponseId, SentRequest, TransportError};
 
 /// Loads the collection tree, sorted by `seq` and name.
 ///
@@ -185,6 +185,8 @@ pub struct SendOutcome {
     pub dependencies: Vec<HistoryEntry>,
     /// What the scripts of the request, its folders and the collection did.
     pub scripts: ScriptReport,
+    /// The request as it went out, as the history keeps it.
+    pub sent: SentRequest,
 }
 
 /// How many rounds of `response(...)` dependencies one render may need.
@@ -358,7 +360,8 @@ where
             head.clone(),
             (body.size, body.id.clone()),
             rendered.request.secrets(),
-        );
+        )
+        .with_sent(Some(SentRequest::of(&rendered.request)));
         // A history that cannot be written does not stop the send.
         if history.append(&entry).is_ok() {
             context.recorded.push(entry);
@@ -375,6 +378,7 @@ where
         assertions,
         dependencies: Vec::new(),
         scripts: scripts.map(|s| s.report).unwrap_or_default(),
+        sent: SentRequest::of(&rendered.request),
     })
 }
 

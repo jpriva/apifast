@@ -1,5 +1,6 @@
-//! The response panel: status, time and size, then the body, the headers or
-//! the timeline of the send, the events of an event stream, live while it
+//! The response panel: status, time and size, with the earlier responses
+//! of the request a click away, then the body, the headers, the timeline of
+//! the send or the request as it went out, the events of an event stream, live while it
 //! arrives, and the messages of a WebSocket connection, live while it is
 //! open.
 //!
@@ -7,8 +8,10 @@
 //! small enough to load whole, and otherwise "raw", by windows, whatever its
 //! size.
 
+use std::sync::Arc;
+
 use crate::messages::Say as _;
-use apifast_app::{TimelineEvent, TimelineKind};
+use apifast_app::{HistoryEntry, RequestPath, SentBody, SentRequest, TimelineEvent, TimelineKind};
 use apifast_domain::{
     SseEvent, WsLogEntry, human_size, is_event_stream, is_grpc_response, is_websocket_handshake,
     parse_events, parse_ws_log,
@@ -19,7 +22,9 @@ use crate::atoms::StatusBadge;
 use crate::body::BodyHandle;
 use crate::code::{self, Language};
 use crate::core::{LiveStream, Received, ResponseState};
-use crate::organisms::{BodyViewer, EventList, MessageList, response_cookies};
+use crate::organisms::{
+    BodyViewer, EventList, HistoryEvent, HistoryView, MessageList, response_cookies,
+};
 use crate::strings::Strings;
 use crate::theme;
 
@@ -29,6 +34,9 @@ pub const PRETTY_LIMIT: u64 = 2 * 1024 * 1024;
 pub const COPY_LIMIT: u64 = 16 * 1024 * 1024;
 /// Largest part of an event stream read into its events, in bytes.
 pub const EVENTS_LIMIT: u64 = 16 * 1024 * 1024;
+/// Width and greatest height of the list of a request's earlier responses.
+const HISTORY_WIDTH: f32 = 360.0;
+const HISTORY_HEIGHT: f32 = 320.0;
 /// Bytes looked at to tell the language and whether the body is binary.
 const SNIFF_BYTES: usize = 8 * 1024;
 
@@ -50,6 +58,8 @@ pub enum ResponseTab {
     Events,
     /// The messages of a WebSocket connection.
     Messages,
+    /// The request as it went out.
+    Request,
 }
 
 /// How the body is shown.
@@ -79,6 +89,18 @@ struct Pretty {
     formatted: bool,
 }
 
+/// The history the response panel lists: the entries of `path` among
+/// `entries`, `now_ms` being the current time.
+#[derive(Debug, Clone)]
+pub struct HistoryOf {
+    /// The focused collection's history, oldest first.
+    pub entries: Arc<Vec<HistoryEntry>>,
+    /// The request shown.
+    pub path: RequestPath,
+    /// The current time, in milliseconds since the Unix epoch.
+    pub now_ms: i64,
+}
+
 /// The response panel and what it remembers.
 #[derive(Debug, Default)]
 pub struct ResponseView {
@@ -95,6 +117,14 @@ pub struct ResponseView {
     pub example_requested: bool,
     /// What saving an example said: done, or why not.
     pub example_note: Option<String>,
+    /// The focused collection's history and the request shown, set by the
+    /// screen: the "History" button lists that request's entries.
+    pub history: Option<HistoryOf>,
+    /// What the user did in that list; taken by the screen.
+    pub history_event: Option<HistoryEvent>,
+    history_list: HistoryView,
+    /// Whether the list of the request's earlier responses is open.
+    history_open: bool,
     viewer: BodyViewer,
     prepared: Option<Prepared>,
     /// What the filter selected, for the body and expression it ran on.
@@ -125,7 +155,10 @@ impl ResponseView {
         let palette = theme::palette(ui);
         match state {
             ResponseState::Idle => {
-                ui.label(RichText::new(strings.response_idle).color(palette.text_muted));
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(strings.response_idle).color(palette.text_muted));
+                    self.history_button(ui, strings);
+                });
             }
             ResponseState::Sending => {
                 ui.horizontal(|ui| {
@@ -135,13 +168,84 @@ impl ResponseView {
             }
             ResponseState::Streaming(stream) => self.streaming(ui, stream, strings),
             ResponseState::Cancelled => {
-                ui.label(RichText::new(strings.cancelled).color(palette.text_muted));
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(strings.cancelled).color(palette.text_muted));
+                    self.history_button(ui, strings);
+                });
             }
             ResponseState::Failed(message) => {
-                ui.label(RichText::new(message.as_str()).color(palette.danger));
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(message.as_str()).color(palette.danger));
+                    self.history_button(ui, strings);
+                });
             }
             ResponseState::Received(received) => self.received(ui, received, strings),
         }
+    }
+
+    /// "History (n)", on the right of the row, when the request shown has
+    /// entries: it opens their list, newest first, where they are opened,
+    /// renamed or deleted.
+    fn history_button(&mut self, ui: &mut egui::Ui, strings: &Strings) {
+        let Some(HistoryOf {
+            entries,
+            path,
+            now_ms,
+        }) = self.history.clone()
+        else {
+            return;
+        };
+        let count = entries.iter().filter(|entry| entry.request == path).count();
+        if count == 0 {
+            return;
+        }
+        // A menu open on a row (to rename or delete it) is egui's one open
+        // popup: the list keeps its own state, so the menu does not close it.
+        let menu_open = egui::Popup::is_any_open(ui.ctx());
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let label = format!("{} ({count})", strings.response_history);
+            let button = ui
+                .button(label)
+                .on_hover_text(strings.response_history_hint);
+            if button.clicked() {
+                self.history_open = !self.history_open;
+            }
+            let shown = egui::Popup::from_response(&button)
+                .open(self.history_open)
+                .close_behavior(egui::PopupCloseBehavior::IgnoreClicks)
+                .show(|ui| {
+                    ui.set_min_width(HISTORY_WIDTH);
+                    egui::ScrollArea::vertical()
+                        .max_height(HISTORY_HEIGHT)
+                        .show(ui, |ui| {
+                            let shown = (entries.iter().enumerate().rev())
+                                .filter(|(_, entry)| entry.request == path);
+                            self.history_list.list(ui, shown, now_ms, strings)
+                        })
+                        .inner
+                });
+            let Some(shown) = shown else {
+                return;
+            };
+            let event = shown.inner;
+            // Closed by picking an entry, by Escape, or by a click outside
+            // it that is not on the button or in a row's menu.
+            let rect = shown.response.rect;
+            let clicked_outside = ui.input(|i| {
+                i.pointer.any_click()
+                    && (i.pointer.interact_pos()).is_some_and(|at| !rect.contains(at))
+            });
+            let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));
+            if matches!(event, Some(HistoryEvent::Open(_)))
+                || escape
+                || (clicked_outside && !menu_open && !button.clicked())
+            {
+                self.history_open = false;
+            }
+            if event.is_some() {
+                self.history_event = event;
+            }
+        });
     }
 
     /// An event stream as it arrives: its status and its events so far.
@@ -204,6 +308,7 @@ impl ResponseView {
             ui.add(StatusBadge::new(received.head.status));
             ui.label(RichText::new(format!("{} ms", received.head.elapsed_ms)).color(muted));
             ui.label(RichText::new(size_text(received)).color(muted));
+            self.history_button(ui, strings);
         });
         ui.horizontal(|ui| {
             if stream {
@@ -225,6 +330,7 @@ impl ResponseView {
             };
             ui.selectable_value(&mut self.tab, ResponseTab::Cookies, cookies);
             ui.selectable_value(&mut self.tab, ResponseTab::Timeline, strings.timeline);
+            ui.selectable_value(&mut self.tab, ResponseTab::Request, strings.sent_request);
             if !socket {
                 ui.selectable_value(
                     &mut self.tab,
@@ -244,6 +350,7 @@ impl ResponseView {
                 response_cookies::show(ui, &cookies, strings);
             }
             ResponseTab::Timeline => timeline(ui, received, strings),
+            ResponseTab::Request => sent(ui, received.sent.as_deref(), strings),
             ResponseTab::Tests => tests(ui, received, strings),
             ResponseTab::Events => {
                 let (partial, events) = parsed_events(&mut self.parsed, received);
@@ -589,6 +696,80 @@ pub fn describe(event: &TimelineEvent, strings: &Strings) -> String {
             human_size(*wire_bytes)
         ),
     }
+}
+
+/// The request as it went out: its line, headers and body, with a button
+/// that copies it as HTTP text; or why it is not kept.
+fn sent(ui: &mut egui::Ui, sent: Option<&SentRequest>, strings: &Strings) {
+    let muted = theme::palette(ui).text_muted;
+    let Some(sent) = sent else {
+        ui.label(RichText::new(strings.sent_not_kept).color(muted));
+        return;
+    };
+    ui.horizontal(|ui| {
+        if ui
+            .button(strings.copy)
+            .on_hover_text(strings.sent_copy)
+            .clicked()
+        {
+            ui.ctx().copy_text(sent.to_http());
+        }
+        ui.label(RichText::new(strings.sent_note).color(muted).small());
+    });
+    egui::ScrollArea::vertical()
+        .id_salt("response-sent")
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            let line = format!("{} {}", sent.method, sent.url);
+            ui.add(egui::Label::new(RichText::new(line).monospace().strong()).selectable(true));
+            ui.add_space(theme::space::S);
+            pairs(ui, "response-sent-headers", &sent.headers);
+            ui.add_space(theme::space::S);
+            match &sent.body {
+                SentBody::None => {}
+                SentBody::Text { text, size } => {
+                    ui.add(
+                        egui::Label::new(RichText::new(text.as_str()).monospace()).selectable(true),
+                    );
+                    let kept = u64::try_from(text.len()).unwrap_or(u64::MAX);
+                    if kept < *size {
+                        let left = (size - kept).to_string();
+                        let note = crate::strings::fill(strings.sent_body_cut, &[("n", &left)]);
+                        ui.label(RichText::new(note).color(muted).small());
+                    }
+                }
+                SentBody::Form(fields) => pairs(ui, "response-sent-form", fields),
+                SentBody::Multipart(parts) => {
+                    let parts: Vec<(String, String)> = (parts.iter())
+                        .map(|part| {
+                            let at = if part.files { "@" } else { "" };
+                            (part.name.clone(), format!("{at}{}", part.value))
+                        })
+                        .collect();
+                    pairs(ui, "response-sent-parts", &parts);
+                }
+                SentBody::File(path) => {
+                    let path = format!("@{path}");
+                    ui.add(egui::Label::new(RichText::new(path).monospace()).selectable(true));
+                }
+            }
+        });
+}
+
+/// Names and values in two columns, the names strong.
+fn pairs(ui: &mut egui::Ui, id: &str, pairs: &[(String, String)]) {
+    egui::Grid::new(id)
+        .num_columns(2)
+        .striped(true)
+        .show(ui, |ui| {
+            for (name, value) in pairs {
+                ui.label(RichText::new(name.as_str()).strong());
+                ui.add(
+                    egui::Label::new(RichText::new(value.as_str()).monospace()).selectable(true),
+                );
+                ui.end_row();
+            }
+        });
 }
 
 fn timeline(ui: &mut egui::Ui, received: &Received, strings: &Strings) {

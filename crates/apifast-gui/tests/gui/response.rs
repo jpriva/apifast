@@ -7,7 +7,7 @@ use apifast_app::{ResponseHead, TimelineEvent, TimelineKind};
 use apifast_gui::body::BodyHandle;
 use apifast_gui::core::{Live, LiveStream, Received, ResponseState};
 use apifast_gui::organisms::{
-    BodyMode, PRETTY_LIMIT, ResponseTab, ResponseView, describe, millis, size_text,
+    BodyMode, HistoryOf, PRETTY_LIMIT, ResponseTab, ResponseView, describe, millis, size_text,
 };
 use apifast_gui::strings::EN;
 use eframe::egui;
@@ -57,6 +57,7 @@ fn received(content_type: &str, body: impl Into<Vec<u8>>) -> ResponseState {
         size: body.len() as u64,
         body: BodyHandle::memory(format!("r{}", body.len()), body),
         checks: apifast_gui::core::Checks::default(),
+        sent: None,
     })
 }
 
@@ -560,4 +561,163 @@ fn a_grpc_call_lists_its_messages_and_how_it_ended() {
     harness.state_mut().response = ResponseState::Streaming(LiveStream::from(live));
     harness.run_steps(2);
     assert!(has(&harness, EN.grpc_calling));
+}
+
+fn with_sent(response: ResponseState) -> ResponseState {
+    use apifast_app::{SentBody, SentRequest};
+    let ResponseState::Received(mut received) = response else {
+        unreachable!()
+    };
+    received.sent = Some(std::sync::Arc::new(SentRequest {
+        method: "POST".into(),
+        url: "http://localhost/users".into(),
+        headers: vec![
+            ("content-type".into(), "application/json".into()),
+            ("authorization".into(), "[hidden]".into()),
+        ],
+        body: SentBody::Text {
+            text: r#"{"name":"ana"}"#.into(),
+            size: 20,
+        },
+    }));
+    ResponseState::Received(received)
+}
+
+#[test]
+fn the_request_tab_shows_what_was_sent_and_copies_it() {
+    let mut harness = harness(with_sent(received("text/plain", "ok")));
+    harness.run();
+    harness.get_by_label(EN.sent_request).click();
+    harness.run();
+    assert_eq!(harness.state().view.tab, ResponseTab::Request);
+    assert!(has(&harness, "POST http://localhost/users"));
+    assert!(has(&harness, "authorization"));
+    assert!(has(&harness, "[hidden]"));
+    assert!(has(&harness, r#"{"name":"ana"}"#));
+    assert!(has(&harness, "6 more bytes were sent but not kept."));
+    harness.get_by_label(EN.copy).click();
+    harness.step();
+    let copied = harness.output().platform_output.commands.iter().any(|c| {
+        matches!(c, egui::OutputCommand::CopyText(text) if text.starts_with("POST http://localhost/users\n"))
+    });
+    assert!(copied);
+}
+
+#[test]
+fn a_response_without_what_was_sent_says_so() {
+    let mut harness = harness(received("text/plain", "ok"));
+    harness.run();
+    harness.get_by_label(EN.sent_request).click();
+    harness.run();
+    assert!(has(&harness, EN.sent_not_kept));
+}
+
+/// Entries of two requests: `users/get.yml` has two, the newest named.
+fn history() -> std::sync::Arc<Vec<apifast_app::HistoryEntry>> {
+    use apifast_app::{HistoryEntry, RequestPath, ResponseId};
+    let entry = |at_ms: i64, path: &str, id: &str| {
+        let head = ResponseHead {
+            status: 200,
+            version: "HTTP/1.1".into(),
+            url: "http://h/".into(),
+            redirects: 0,
+            headers: Vec::new(),
+            elapsed_ms: 5,
+            timeline: Vec::new(),
+        };
+        HistoryEntry::received(
+            at_ms,
+            RequestPath::new(path),
+            ("GET".into(), "/".into()),
+            head,
+            (1, ResponseId(id.into())),
+            &[],
+        )
+    };
+    let mut named = entry(3, "users/get.yml", "c");
+    named.name = Some("Before the fix".into());
+    std::sync::Arc::new(vec![
+        entry(1, "users/get.yml", "a"),
+        entry(2, "health.yml", "b"),
+        named,
+    ])
+}
+
+#[test]
+fn the_history_button_lists_the_requests_earlier_responses() {
+    use apifast_gui::organisms::HistoryEvent;
+    let mut harness = harness(received("text/plain", "ok"));
+    let path = apifast_app::RequestPath::new("users/get.yml");
+    harness.state_mut().view.history = Some(HistoryOf {
+        entries: history(),
+        path,
+        now_ms: 10_000,
+    });
+    harness.run();
+    let label = format!("{} (2)", EN.response_history);
+    harness.get_by_label(&label).click();
+    harness.run();
+    // Only this request's, the named one by its name.
+    harness.get_by_label("Before the fix");
+    assert!(harness.query_by_label("health.yml").is_none());
+    harness.get_by_label("users/get.yml").click();
+    harness.run();
+    assert_eq!(
+        harness.state().view.history_event,
+        Some(HistoryEvent::Open(0))
+    );
+    assert!(
+        harness.query_by_label("Before the fix").is_none(),
+        "picking closes it"
+    );
+}
+
+#[test]
+fn without_earlier_responses_there_is_no_history_button() {
+    let mut harness = harness(ResponseState::Idle);
+    let path = apifast_app::RequestPath::new("other.yml");
+    harness.state_mut().view.history = Some(HistoryOf {
+        entries: history(),
+        path,
+        now_ms: 10_000,
+    });
+    harness.run();
+    assert!(
+        harness
+            .query_by_label_contains(EN.response_history)
+            .is_none()
+    );
+}
+
+#[test]
+fn an_earlier_response_is_renamed_from_the_list() {
+    use apifast_gui::organisms::HistoryEvent;
+    let mut harness = harness(received("text/plain", "ok"));
+    let path = apifast_app::RequestPath::new("users/get.yml");
+    harness.state_mut().view.history = Some(HistoryOf {
+        entries: history(),
+        path,
+        now_ms: 10_000,
+    });
+    harness.run();
+    let label = format!("{} (2)", EN.response_history);
+    harness.get_by_label(&label).click();
+    harness.run();
+    harness.get_by_label("users/get.yml").click_secondary();
+    harness.run();
+    harness.get_by_label(EN.history_rename).click();
+    harness.run();
+    harness
+        .get_by_label(EN.history_name_hint)
+        .type_text("First");
+    harness.run();
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    assert_eq!(
+        harness.state().view.history_event,
+        Some(HistoryEvent::Rename {
+            id: "a".into(),
+            name: "First".into(),
+        })
+    );
 }

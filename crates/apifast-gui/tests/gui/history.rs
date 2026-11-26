@@ -1,8 +1,8 @@
 //! The history panel lists sends newest first, filters them and reports the
-//! one picked.
+//! one picked; its menu renames and deletes them, and it can be cleared.
 
 use apifast_app::{HistoryEntry, RequestPath, ResponseHead, ResponseId};
-use apifast_gui::organisms::{HistoryView, ago, matches};
+use apifast_gui::organisms::{HistoryEvent, HistoryView, ago, matches};
 use apifast_gui::strings::EN;
 use eframe::egui;
 use egui_kittest::Harness;
@@ -41,7 +41,7 @@ fn entries() -> Vec<HistoryEntry> {
 struct State {
     view: HistoryView,
     entries: Vec<HistoryEntry>,
-    picked: Vec<usize>,
+    picked: Vec<HistoryEvent>,
 }
 
 fn harness() -> Harness<'static, State> {
@@ -49,8 +49,8 @@ fn harness() -> Harness<'static, State> {
         .with_size(egui::vec2(400.0, 300.0))
         .build_ui_state(
             |ui, state: &mut State| {
-                if let Some(index) = state.view.show(ui, &state.entries, NOW, &EN) {
-                    state.picked.push(index);
+                if let Some(event) = state.view.show(ui, &state.entries, NOW, &EN) {
+                    state.picked.push(event);
                 }
             },
             State {
@@ -78,7 +78,7 @@ fn picking_an_entry_reports_its_index() {
     let mut harness = harness();
     harness.get_by_label("health.yml").click();
     harness.run();
-    assert_eq!(harness.state().picked, [0]);
+    assert_eq!(harness.state().picked, [HistoryEvent::Open(0)]);
 }
 
 #[test]
@@ -112,4 +112,82 @@ fn an_empty_history_says_so() {
     harness.state_mut().entries.clear();
     harness.run();
     harness.get_by_label(EN.history_empty);
+}
+
+#[test]
+fn an_entry_is_renamed_from_its_menu() {
+    let mut harness = harness();
+    harness.get_by_label("users/create.yml").click_secondary();
+    harness.run();
+    harness.get_by_label(EN.history_rename).click();
+    harness.run();
+    let field = harness.get_by_label(EN.history_name_hint);
+    assert!(field.is_focused(), "the name field takes the focus");
+    field.type_text("Before the fix");
+    harness.run();
+    harness.key_press(egui::Key::Enter);
+    harness.run();
+    assert_eq!(
+        harness.state().picked,
+        [HistoryEvent::Rename {
+            id: "r".into(),
+            name: "Before the fix".into(),
+        }]
+    );
+}
+
+#[test]
+fn escape_leaves_the_name_as_it_was() {
+    let mut harness = harness();
+    harness.get_by_label("users/create.yml").click_secondary();
+    harness.run();
+    harness.get_by_label(EN.history_rename).click();
+    harness.run();
+    harness.get_by_label(EN.history_name_hint).type_text("x");
+    harness.run();
+    harness.key_press(egui::Key::Escape);
+    harness.run();
+    assert_eq!(harness.state().picked, []);
+    harness.get_by_label("users/create.yml");
+}
+
+#[test]
+fn a_named_entry_shows_its_name_and_is_found_by_it() {
+    let mut harness = harness();
+    harness.state_mut().entries[1].name = Some("Before the fix".into());
+    harness.run();
+    harness.get_by_label("Before the fix");
+    assert!(harness.query_by_label("users/create.yml").is_none());
+    harness.state_mut().view.filter = "before".into();
+    harness.run();
+    harness.get_by_label("Before the fix");
+    assert!(harness.query_by_label("health.yml").is_none());
+}
+
+#[test]
+fn an_entry_is_deleted_from_its_menu() {
+    let mut harness = harness();
+    harness.get_by_label("users/create.yml").click_secondary();
+    harness.run();
+    harness.get_by_label(EN.delete).click();
+    harness.run();
+    assert_eq!(harness.state().picked, [HistoryEvent::Remove("r".into())]);
+}
+
+#[test]
+fn clearing_the_history_asks_first() {
+    let mut harness = harness();
+    harness.get_by_label(EN.history_clear).click();
+    harness.run();
+    harness.get_by_label(EN.history_clear_title);
+    harness.get_by_label(EN.cancel).click();
+    harness.run();
+    assert_eq!(harness.state().picked, []);
+    assert!(harness.query_by_label(EN.history_clear_title).is_none());
+
+    harness.get_by_label(EN.history_clear).click();
+    harness.run();
+    harness.get_by_label(EN.history_clear_confirm).click();
+    harness.run();
+    assert_eq!(harness.state().picked, [HistoryEvent::Clear]);
 }

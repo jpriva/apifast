@@ -52,10 +52,10 @@ use apifast_app::{
     AppError, AssertionOutcome, CancelToken, CaptureOutcome, Clock, CollectionRepository,
     CollectionTree, HistoryEntry, HistoryLimits, HistoryOutcome, HistoryStore, ItemPath,
     NoPrompter, NoSecrets, Placement, RequestPath, ResponseHead, ResponseId, ResponseStore,
-    SecretStore, SendOptions, SendPorts, Session, SessionStore, SessionTab, SharedSecretFiles,
-    TokenStore, TransportError, apply_captures, apply_script_variables, create_folder,
-    create_request, delete_item, keep_script_changes, load_request, move_item, rename_item,
-    resolve_request_variables, save_request, send_request,
+    SecretStore, SendOptions, SendPorts, SentRequest, Session, SessionStore, SessionTab,
+    SharedSecretFiles, TokenStore, TransportError, apply_captures, apply_script_variables,
+    create_folder, create_request, delete_item, keep_script_changes, load_request, move_item,
+    rename_in, rename_item, resolve_request_variables, save_request, send_request,
 };
 use apifast_domain::{
     AuthScheme, Chain, Collection, Environment, Header, HttpRequest, Origin, Resolved,
@@ -152,8 +152,8 @@ struct Stores {
 fn received(
     store: &Arc<FsResponseStore>,
     head: ResponseHead,
-    size: u64,
-    id: ResponseId,
+    (size, id): (u64, ResponseId),
+    sent: Option<SentRequest>,
 ) -> Received {
     let stored = StoredBody {
         store: store.clone(),
@@ -165,6 +165,7 @@ fn received(
         size,
         body: BodyHandle::new(id.0, Arc::new(stored)),
         checks: Checks::default(),
+        sent: sent.map(Arc::new),
     }
 }
 
@@ -183,8 +184,8 @@ fn response_of(
             Some(ResponseState::Received(received(
                 store,
                 head.clone(),
-                *size,
-                body.clone(),
+                (*size, body.clone()),
+                entry.sent.clone(),
             )))
         }
         HistoryOutcome::Failed(message) => Some(ResponseState::Failed(message.clone())),
@@ -200,14 +201,17 @@ fn history_entry(
     written: (String, String),
 ) -> Option<HistoryEntry> {
     match result {
-        Ok(outcome) => Some(HistoryEntry::received(
-            at_ms,
-            path,
-            written,
-            outcome.head.clone(),
-            (outcome.body.size, outcome.body.id.clone()),
-            &outcome.secrets,
-        )),
+        Ok(outcome) => Some(
+            HistoryEntry::received(
+                at_ms,
+                path,
+                written,
+                outcome.head.clone(),
+                (outcome.body.size, outcome.body.id.clone()),
+                &outcome.secrets,
+            )
+            .with_sent(Some(outcome.sent.clone())),
+        ),
         Err(AppError::Transport(TransportError::Cancelled)) => None,
         Err(e) => Some(HistoryEntry::failed(at_ms, path, written, e.to_string())),
     }
@@ -236,7 +240,12 @@ fn finished(
             assertions: outcome.assertions,
             scripts: Box::new(outcome.scripts),
         },
-        ..received(responses, outcome.head, outcome.body.size, outcome.body.id)
+        ..received(
+            responses,
+            outcome.head,
+            (outcome.body.size, outcome.body.id),
+            Some(outcome.sent),
+        )
     });
     Finished {
         id,
@@ -286,6 +295,23 @@ impl TabKey {
             path,
         }
     }
+}
+
+/// A change to the focused collection's history.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HistoryCommand {
+    /// Names entry `id`; an empty name takes its name away. A named entry
+    /// is kept whatever the limits.
+    Rename {
+        /// The entry's [`HistoryEntry::id`].
+        id: String,
+        /// Its new name.
+        name: String,
+    },
+    /// Removes entry `id`, with its body.
+    Remove(String),
+    /// Removes every entry, with their bodies.
+    Clear,
 }
 
 /// What the interface asks the core to do.
@@ -410,6 +436,8 @@ pub enum Command {
     },
     /// Shows entry `index` of [`Snapshot::history`] in its request's tab.
     OpenHistory(usize),
+    /// A change to the focused collection's history.
+    History(HistoryCommand),
     /// How much history and how many response bodies to keep, from the
     /// settings. Applied when a collection opens.
     Configure {
@@ -840,6 +868,9 @@ pub struct Received {
     /// What ran after it: captures and assertions. Empty for a response
     /// from the history, which does not keep them.
     pub checks: Checks,
+    /// The request as it went out, as the history keeps it; none for an
+    /// entry from before apifast kept it.
+    pub sent: Option<Arc<SentRequest>>,
 }
 
 /// The captures and assertions that ran after a response, masked, and
@@ -1244,7 +1275,7 @@ impl State {
             | Command::Delete { .. }
             | Command::Move { .. }
             | Command::SaveScripts { .. } => self.handle_tree(command),
-            Command::OpenHistory(index) => self.open_history(index),
+            Command::OpenHistory(_) | Command::History(_) => self.handle_history(command),
             Command::Configure { .. }
             | Command::SetProxyPassword(_)
             | Command::SaveCollectionSettings { .. } => self.handle_settings(command),
@@ -1754,8 +1785,17 @@ impl State {
                 let now_ms = SystemClock.unix_millis();
                 // Limits that cannot be applied now are applied next time.
                 let _ = history.prune(history_limits, now_ms);
-                let _ = responses.prune(response_limits, now);
-                history.entries().unwrap_or_default()
+                let entries = history.entries().unwrap_or_default();
+                // The bodies of named entries stay, as the entries do.
+                let keep: Vec<ResponseId> = (entries.iter())
+                    .filter(|entry| entry.name().is_some())
+                    .filter_map(|entry| match &entry.outcome {
+                        HistoryOutcome::Received { body, .. } => Some(body.clone()),
+                        HistoryOutcome::Failed(_) => None,
+                    })
+                    .collect();
+                let _ = responses.prune_keeping(response_limits, now, &keep);
+                entries
             })
             .await
             .unwrap_or_default();
@@ -1792,6 +1832,57 @@ impl State {
         let mut all = entries;
         all.extend(meanwhile);
         open.entries = Arc::new(all);
+    }
+
+    /// Opens an entry of the focused collection's history, or changes it.
+    fn handle_history(&mut self, command: Command) {
+        match command {
+            Command::OpenHistory(index) => self.open_history(index),
+            Command::History(command) => self.history_command(command),
+            _ => {}
+        }
+    }
+
+    /// Renames, removes or clears entries of the focused collection's
+    /// history, in its file and in what the interface shows. The bodies of
+    /// the entries removed go too.
+    fn history_command(&mut self, command: HistoryCommand) {
+        let Some(open) = (self.focus.as_ref()).and_then(|root| self.open.get_mut(root)) else {
+            return;
+        };
+        let removed = match command {
+            HistoryCommand::Rename { id, name } => {
+                let name = Some(name.as_str());
+                if let Err(error) = open.history.rename(&id, name) {
+                    tracing::warn!(%error, "cannot rename a history entry");
+                }
+                rename_in(Arc::make_mut(&mut open.entries).as_mut_slice(), &id, name);
+                Vec::new()
+            }
+            HistoryCommand::Remove(id) => {
+                if let Err(error) = open.history.remove(&id) {
+                    tracing::warn!(%error, "cannot remove a history entry");
+                }
+                let entries = Arc::make_mut(&mut open.entries);
+                let index = entries.iter().position(|entry| entry.id == id);
+                index
+                    .map(|index| entries.remove(index))
+                    .into_iter()
+                    .collect()
+            }
+            HistoryCommand::Clear => {
+                if let Err(error) = open.history.clear() {
+                    tracing::warn!(%error, "cannot clear the history");
+                }
+                std::mem::take(Arc::make_mut(&mut open.entries))
+            }
+        };
+        for entry in removed {
+            if let HistoryOutcome::Received { body, .. } = &entry.outcome {
+                // A body that stays is removed by the next pruning.
+                let _ = open.responses.remove(body);
+            }
+        }
     }
 
     /// Shows entry `index` of the focused collection's history in its

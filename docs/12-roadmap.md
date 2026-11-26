@@ -517,12 +517,14 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
       - Papelera dibujada en lugar de la ×, visible al pasar por la fila; filas desactivadas atenuadas.
       - Las capturas (`tests/gui/snapshots.rs`) cubren params, headers y una fila con el ratón encima y una celda con el foco.
     - [x] El editor del Body ocupa todo el alto disponible, con números de línea activados por defecto. Quien ya guardó `line_numbers: false` en sus ajustes lo conserva.
-  - [ ] Historial de respuestas al estilo del HTTP Client de IntelliJ:
-    - Cada entrada guarda también lo enviado: método, URL final, headers y body ya resueltos (el body hasta un límite, en el almacén de respuestas), con los secretos enmascarados como en la timeline. Migración del formato sin perder las entradas existentes.
-    - En el panel de respuesta, un botón «History (n)» con las respuestas anteriores de esa request (fecha, estado, tiempo y nombre), para abrirlas, renombrarlas o borrarlas. Sustituye al «Selector de respuestas anteriores» que quedó fuera de F2.
-    - Una entrada abierta muestra las pestañas de siempre y una pestaña Request con lo enviado, para copiarlo o reenviarlo tal cual.
-    - Renombrar una entrada la fija: la limpieza automática no la borra.
-    - En el historial lateral, renombrar y borrar desde el menú contextual, y borrar todo tras confirmar.
+  - [x] Historial de respuestas al estilo del HTTP Client de IntelliJ ([docs/09](09-ui-ux.md#barra-lateral), [ADR 0008](adr/0008-estado-local.md)):
+    - Cada entrada guarda un id, un nombre opcional y lo enviado (`SentRequest`): método, URL final, headers y body ya resueltos, con los secretos enmascarados como en la timeline. Los valores de `Authorization`, `Proxy-Authorization` y `Cookie` no se guardan nunca. Del body de texto se guardan 64 KB, en la misma línea del historial y no en el almacén de respuestas: así una entrada se escribe de una vez. El formato pasa a 2; las líneas del 1 se siguen leyendo, con un id sacado del cuerpo o de la línea.
+    - En el panel de respuesta, un botón «History (n)» con las respuestas anteriores de esa request (estado, nombre, hace cuánto y tiempo), para abrirlas, renombrarlas o borrarlas. Sustituye al «Selector de respuestas anteriores» que quedó fuera de F2. La lista lleva su propio estado de abierta, porque egui solo guarda un popup abierto y el menú contextual de una fila la cerraría.
+    - La respuesta abierta tiene una pestaña Request con lo enviado y un botón para copiarlo como texto HTTP.
+    - Renombrar una entrada la fija: la limpieza automática no la borra, ni a su respuesta (`FsResponseStore::prune_keeping`).
+    - En el historial lateral, renombrar (en la misma fila) y borrar desde el menú contextual, y vaciar todo tras confirmar. Borrar se lleva también la respuesta guardada.
+    - Probado en el modelo, en el archivo (ida y vuelta, formato 1, renombrar, borrar, vaciar, límites con nombres), en el núcleo (enviar, renombrar, borrar con su respuesta, reiniciar y vaciar) y en la interfaz, con capturas.
+    - [ ] Reenviar una entrada tal cual, sin volver a renderizar: hoy se copia como texto.
   - [ ] Disposiciones editables (layouts). Se llaman así para no confundirlas con los workspaces de `workspace.yml`, que agrupan colecciones. Sustituyen a la disposición lado a lado con `Ctrl+J` que quedó fuera de F2.
     - [ ] Paso 0, decisión (ADR):
       - Elegir entre `egui_tiles`, `egui_dock` o paneles propios, según cuál tenga versión para egui 0.37, su licencia (cargo-deny) y si deja sacar un panel a otra ventana.

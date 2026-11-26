@@ -113,6 +113,22 @@ impl FsResponseStore {
     ///
     /// If the folder cannot be listed. Files that cannot be removed are skipped.
     pub fn prune(&self, limits: Limits, now: SystemTime) -> Result<Pruned, StoreError> {
+        self.prune_keeping(limits, now, &[])
+    }
+
+    /// As [`Self::prune`], but the responses in `keep` (those of named
+    /// history entries) stay whatever the limits, and do not count toward
+    /// them.
+    ///
+    /// # Errors
+    ///
+    /// If the folder cannot be listed. Files that cannot be removed are skipped.
+    pub fn prune_keeping(
+        &self,
+        limits: Limits,
+        now: SystemTime,
+        keep: &[ResponseId],
+    ) -> Result<Pruned, StoreError> {
         let entries = match fs::read_dir(&self.dir) {
             Ok(entries) => entries,
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Pruned::default()),
@@ -134,7 +150,13 @@ impl FsResponseStore {
             };
             let modified = metadata.modified().unwrap_or(UNIX_EPOCH);
             match path.extension().and_then(|e| e.to_str()) {
-                Some(BODY_EXTENSION) => bodies.push((modified, metadata.len(), path)),
+                Some(BODY_EXTENSION) => {
+                    let kept = (path.file_stem().and_then(|stem| stem.to_str()))
+                        .is_some_and(|stem| keep.iter().any(|id| id.0 == stem));
+                    if !kept {
+                        bodies.push((modified, metadata.len(), path));
+                    }
+                }
                 Some(PARTIAL_EXTENSION) => {
                     let stale = now
                         .duration_since(modified)

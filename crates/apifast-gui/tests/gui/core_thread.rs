@@ -888,6 +888,69 @@ fn a_history_entry_opens_its_request_with_that_response() {
 }
 
 #[test]
+fn history_entries_keep_what_was_sent_and_are_renamed_removed_and_cleared() {
+    use apifast_app::HistoryOutcome;
+    use apifast_gui::core::HistoryCommand;
+
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, data) = start();
+    open(&core, dir.path());
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    core.send(Command::OpenRequest(at(&core, "users/get.yml")));
+    core.send(Command::Send);
+    wait(&core, "one entry", |s| s.history.len() == 1);
+    core.send(Command::Send);
+    let snapshot = wait(&core, "two entries", |s| s.history.len() == 2);
+
+    // What was sent: resolved, in the entry and in the response shown.
+    let sent = snapshot.history[0].sent.clone().unwrap();
+    assert_eq!(sent.method, "GET");
+    assert!(sent.url.ends_with("/users/1"), "{}", sent.url);
+    assert!(!sent.url.contains("{{"), "resolved: {}", sent.url);
+    let snapshot = wait(&core, "the response", |s| {
+        matches!(response(s), ResponseState::Received(_))
+    });
+    assert_eq!(received(&snapshot).sent.as_deref(), Some(&sent));
+
+    let (first, second) = (
+        snapshot.history[0].id.clone(),
+        snapshot.history[1].id.clone(),
+    );
+    core.send(Command::History(HistoryCommand::Rename {
+        id: first.clone(),
+        name: "Before the fix".into(),
+    }));
+    let snapshot = wait(&core, "the name", |s| s.history[0].name.is_some());
+    assert_eq!(snapshot.history[0].name.as_deref(), Some("Before the fix"));
+
+    let HistoryOutcome::Received { body, .. } = &snapshot.history[1].outcome else {
+        unreachable!()
+    };
+    let body_file = std::fs::read_dir(data.path().join("responses"))
+        .unwrap()
+        .flatten()
+        .flat_map(|dir| std::fs::read_dir(dir.path()).unwrap().flatten())
+        .find(|file| file.file_name().to_string_lossy().starts_with(&body.0))
+        .unwrap()
+        .path();
+    core.send(Command::History(HistoryCommand::Remove(second)));
+    let snapshot = wait(&core, "one entry", |s| s.history.len() == 1);
+    assert_eq!(snapshot.history[0].id, first);
+    assert!(!body_file.exists(), "its body goes with it");
+
+    // The file has it too: a restart reads the name back.
+    drop(core);
+    let core = Core::start_with(data.path().to_path_buf(), SystemKeyring::off(), || {});
+    open(&core, dir.path());
+    let snapshot = wait(&core, "the history", |s| !s.history.is_empty());
+    assert_eq!(snapshot.history[0].name.as_deref(), Some("Before the fix"));
+    assert!(snapshot.history[0].sent.is_some());
+
+    core.send(Command::History(HistoryCommand::Clear));
+    wait(&core, "no entries", |s| s.history.is_empty());
+}
+
+#[test]
 fn old_history_is_pruned_when_the_collection_opens() {
     use apifast_app::{HistoryEntry, HistoryStore};
 

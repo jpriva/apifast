@@ -209,6 +209,28 @@ fn pruning_keeps_the_newest_within_the_limits() {
 }
 
 #[test]
+fn pruning_keeps_the_responses_asked_for_whatever_the_limits() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsResponseStore::new(dir.path());
+    let ids: Vec<ResponseId> = (0..3).map(|_| store_body(&store, &[b"abc"])).collect();
+    for (i, id) in ids.iter().enumerate() {
+        age(&store, id, Duration::from_secs(3600 * (3 - i as u64)));
+    }
+    let limits = Limits {
+        max_count: Some(1),
+        ..Limits::default()
+    };
+    // The oldest is kept, and does not count: the newest stays too.
+    let pruned = store
+        .prune_keeping(limits, SystemTime::now(), &ids[..1])
+        .unwrap();
+    assert_eq!(pruned.responses, 1);
+    assert!(store.size(&ids[0]).is_ok());
+    assert!(store.size(&ids[1]).is_err());
+    assert!(store.size(&ids[2]).is_ok());
+}
+
+#[test]
 fn pruning_removes_stale_partials_but_not_running_ones() {
     let dir = tempfile::tempdir().unwrap();
     let store = FsResponseStore::new(dir.path());

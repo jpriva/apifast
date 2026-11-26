@@ -102,7 +102,7 @@ pub(super) enum RunMessage {
         total: usize,
         path: RequestPath,
     },
-    Step(Box<StepResult>, Option<HistoryEntry>),
+    Step(Box<StepResult>, Option<Box<HistoryEntry>>),
     Done(Result<RunReport, String>),
 }
 
@@ -245,7 +245,7 @@ impl State {
             RunMessage::Step(step, entry) => {
                 Arc::make_mut(&mut view.steps).push(*step);
                 if let (Some(entry), Some(open)) = (entry, self.open.get_mut(&view.root)) {
-                    Arc::make_mut(&mut open.entries).push(entry);
+                    Arc::make_mut(&mut open.entries).push(*entry);
                 }
             }
             RunMessage::Done(result) => {
@@ -291,7 +291,12 @@ impl State {
                     assertions: outcome.assertions,
                     scripts: Box::new(outcome.scripts),
                 },
-                ..received(&responses, outcome.head, outcome.body.size, outcome.body.id)
+                ..received(
+                    &responses,
+                    outcome.head,
+                    (outcome.body.size, outcome.body.id),
+                    Some(outcome.sent),
+                )
             }),
             Err(message) => ResponseState::Failed(message),
         };
@@ -373,7 +378,10 @@ fn spawn_run(
                 let entry = history_entry(step, written, clock.unix_millis());
                 // A history that cannot be written does not stop the run.
                 let entry = history.append(&entry).is_ok().then_some(entry);
-                tell(RunMessage::Step(Box::new(step.clone()), entry));
+                tell(RunMessage::Step(
+                    Box::new(step.clone()),
+                    entry.map(Box::new),
+                ));
             }
         };
         let result = run_collection(send, &TokioPause, &options, &cancel, &on_event)
@@ -394,7 +402,8 @@ fn history_entry(step: &StepResult, written: (String, String), at_ms: i64) -> Hi
             outcome.head.clone(),
             (outcome.body.size, outcome.body.id.clone()),
             &outcome.secrets,
-        ),
+        )
+        .with_sent(Some(outcome.sent.clone())),
         Err(message) => HistoryEntry::failed(at_ms, step.path.clone(), written, message.clone()),
     }
 }

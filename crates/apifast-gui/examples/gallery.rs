@@ -384,6 +384,7 @@ fn sample_responses() -> Vec<ResponseState> {
             size: preview.len() as u64,
             body: BodyHandle::memory(format!("sample-{status}"), preview),
             checks: apifast_gui::core::Checks::default(),
+            sent: None,
         })
     };
     vec![

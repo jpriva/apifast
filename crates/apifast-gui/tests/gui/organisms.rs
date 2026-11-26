@@ -197,6 +197,7 @@ fn the_response_view_shows_each_state() {
         size: 8,
         body: BodyHandle::memory("r1", "not\nhere"),
         checks: apifast_gui::core::Checks::default(),
+        sent: None,
     });
     let cases = [
         (ResponseState::Idle, EN.response_idle),

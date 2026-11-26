@@ -775,6 +775,34 @@ pub struct Strings {
     pub filter_history: &'static str,
     /// Shown when there is no history.
     pub history_empty: &'static str,
+    /// Rename this entry: a named entry is kept whatever the history's limits.
+    pub history_rename: &'static str,
+    /// Placeholder of an entry's name while renaming it.
+    pub history_name_hint: &'static str,
+    /// Hover of a named entry.
+    pub history_named: &'static str,
+    /// Button that empties the history.
+    pub history_clear: &'static str,
+    /// Title of the question before emptying the history.
+    pub history_clear_title: &'static str,
+    /// What emptying the history does.
+    pub history_clear_warning: &'static str,
+    /// Button that empties the history, once asked.
+    pub history_clear_confirm: &'static str,
+    /// Button with the earlier responses of the request shown.
+    pub response_history: &'static str,
+    /// Hover of that button.
+    pub response_history_hint: &'static str,
+    /// Tab with the request as it was sent.
+    pub sent_request: &'static str,
+    /// Shown when the history has no record of what was sent.
+    pub sent_not_kept: &'static str,
+    /// What the Request tab shows, and what it does not.
+    pub sent_note: &'static str,
+    /// Hover of the button that copies the request sent.
+    pub sent_copy: &'static str,
+    /// Below a body kept in part; {n} is how many bytes were left out.
+    pub sent_body_cut: &'static str,
     /// A send that failed, in the history.
     pub failed: &'static str,
     /// How long ago, in seconds: `{n}`.

@@ -67,6 +67,12 @@ fn step(path: &str, status: u16) -> StepResult {
             captures: Vec::new(),
             assertions: Vec::new(),
             dependencies: Vec::new(),
+            sent: apifast_app::SentRequest {
+                method: "GET".into(),
+                url: String::new(),
+                headers: Vec::new(),
+                body: apifast_app::SentBody::None,
+            },
         }),
         duration_ms: 3,
     }

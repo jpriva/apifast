@@ -13,15 +13,17 @@ use crate::actions::{ALL, Action, Keymap};
 
 use crate::atoms::{ColorSwatch, HintsCache, VariableHint, VariableHints};
 use crate::core::{
-    Command, Received, ResponseState, Snapshot, Tab, TabContext, TabKey, VaultCommand,
+    Command, HistoryCommand, Received, ResponseState, Snapshot, Tab, TabContext, TabKey,
+    VaultCommand,
 };
 use crate::layout;
 use crate::molecules::EnvironmentSelector;
 use crate::organisms::{
     CollectionDialogs, CollectionRequest, CommandPalette, CookiesWindow, EnvironmentEditor,
-    EnvironmentEvent, HistoryView, PaletteItem, PaletteMode, RequestChange, RequestPanel,
-    ResponseView, RunnerEvent, RunnerWindow, SettingsWindow, ShortcutEditor, TabBar, TabEvent,
-    TreeEvent, TreeView, UrlBar, UrlBarEvent, VaultWindow, folder_name, paste_key,
+    EnvironmentEvent, HistoryEvent, HistoryOf, HistoryView, PaletteItem, PaletteMode,
+    RequestChange, RequestPanel, ResponseView, RunnerEvent, RunnerWindow, SettingsWindow,
+    ShortcutEditor, TabBar, TabEvent, TreeEvent, TreeView, UrlBar, UrlBarEvent, VaultWindow,
+    folder_name, paste_key,
 };
 use crate::settings::Settings;
 use crate::strings::{Strings, fill};
@@ -306,6 +308,13 @@ impl MainScreen {
                 if tab.conflict {
                     resolve = conflict_banner(ui, strings);
                 }
+                // The list of earlier responses is of the focused collection.
+                let focused = (snapshot.collection.as_ref()).is_some_and(|c| c.root == tab.root);
+                panels.1.history = focused.then(|| HistoryOf {
+                    entries: snapshot.history.clone(),
+                    path: tab.path.clone(),
+                    now_ms: now_ms(),
+                });
                 let area = (panels, &*hints, sending, focus_url);
                 let edits = editor_area(ui, tab, &mut editor.request, area, strings);
                 (tab_event, edits)
@@ -332,9 +341,8 @@ impl MainScreen {
         if let Some((root, event)) = tree_event {
             commands.extend(self.tree_commands(root, event));
         }
-        if let Some(index) = picked {
-            commands.push(Command::OpenHistory(index));
-        }
+        let in_response = self.response.history_event.take();
+        commands.extend(picked.or(in_response).map(history_command));
         commands.extend(self.editor_commands(edited, url_event.as_ref()));
         if let Some(event) = tab_event {
             commands.extend(self.tab_commands(event));
@@ -1030,6 +1038,16 @@ impl MainScreen {
     }
 }
 
+/// What the core is asked for what was done in a history list.
+fn history_command(event: HistoryEvent) -> Command {
+    match event {
+        HistoryEvent::Open(index) => Command::OpenHistory(index),
+        HistoryEvent::Rename { id, name } => Command::History(HistoryCommand::Rename { id, name }),
+        HistoryEvent::Remove(id) => Command::History(HistoryCommand::Remove(id)),
+        HistoryEvent::Clear => Command::History(HistoryCommand::Clear),
+    }
+}
+
 /// The URL bar, the request panel and the response, one under the other.
 /// Returns the URL bar's event and whether the request was edited, with the
 /// URL and the parameter list kept in step.
@@ -1590,7 +1608,7 @@ enum SidebarAsk {
 
 /// The sidebar: the workspace, then a switch between its collections and
 /// the focused collection's history. Returns what the tree reported, with
-/// its collection, the history entry picked and what else was asked for.
+/// its collection, what was done in the history and what else was asked for.
 fn sidebar_area(
     ui: &mut egui::Ui,
     (sidebar, tree, history): (&mut Sidebar, &mut TreeView, &mut HistoryView),
@@ -1598,7 +1616,7 @@ fn sidebar_area(
     strings: &Strings,
 ) -> (
     Option<(PathBuf, TreeEvent)>,
-    Option<usize>,
+    Option<HistoryEvent>,
     Option<SidebarAsk>,
 ) {
     let ask = workspace_header(ui, snapshot, strings);

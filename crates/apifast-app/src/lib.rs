@@ -59,7 +59,8 @@ pub use git::{
 pub use graphql::{SchemaCache, cached_schema, fetch_schema, schema_key};
 pub use grpc::{GrpcTransport, NO_GRPC, NoGrpc, call_grpc, describe_grpc};
 pub use history::{
-    HIDDEN, HistoryEntry, HistoryLimits, HistoryOutcome, HistoryStore, hide_query, within_limits,
+    HIDDEN, HistoryEntry, HistoryLimits, HistoryOutcome, HistoryStore, SENT_BODY_LIMIT, SentBody,
+    SentPart, SentRequest, hide_query, rename_in, within_limits,
 };
 pub use host::AppHost;
 pub use import::{

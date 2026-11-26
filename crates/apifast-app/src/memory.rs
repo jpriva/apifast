@@ -13,7 +13,7 @@ use crate::{
     HistoryEntry, HistoryLimits, HistoryStore, HttpTransport, LoadedRequest, Prompter, Random,
     RenderedRequest, RepositoryError, RequestPath, ResponseHead, ResponseId, ResponseStore,
     SecretStore, Session, SessionStore, SharedSecretFiles, StoreError, StoredBody, TransportError,
-    TreeItem, Workspace, WorkspaceRepository, within_limits,
+    TreeItem, Workspace, WorkspaceRepository, rename_in, within_limits,
 };
 
 /// Locks a mutex, recovering the data if a panicking test poisoned it.
@@ -705,6 +705,20 @@ impl HistoryStore for MemoryHistory {
         let before = entries.len();
         *entries = within_limits(std::mem::take(&mut *entries), limits, now_ms);
         Ok(before - entries.len())
+    }
+
+    fn rename(&self, id: &str, name: Option<&str>) -> Result<bool, StoreError> {
+        Ok(rename_in(&mut lock(&self.entries), id, name))
+    }
+
+    fn remove(&self, id: &str) -> Result<Option<HistoryEntry>, StoreError> {
+        let mut entries = lock(&self.entries);
+        let index = entries.iter().position(|entry| entry.id == id);
+        Ok(index.map(|index| entries.remove(index)))
+    }
+
+    fn clear(&self) -> Result<Vec<HistoryEntry>, StoreError> {
+        Ok(std::mem::take(&mut *lock(&self.entries)))
     }
 }
 

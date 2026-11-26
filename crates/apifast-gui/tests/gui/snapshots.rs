@@ -179,3 +179,82 @@ fn a_window_with_its_own_title_bar() {
     }
     results.unwrap();
 }
+
+/// A response with its earlier responses listed, and the request as it was
+/// sent.
+#[test]
+#[cfg_attr(not(target_os = "linux"), ignore = "drawn only on Linux")]
+fn the_request_sent_and_the_earlier_responses() {
+    use apifast_app::{HistoryEntry, RequestPath, ResponseHead, ResponseId, SentBody, SentRequest};
+    use apifast_gui::body::BodyHandle;
+    use apifast_gui::core::{Checks, Received, ResponseState};
+    use apifast_gui::organisms::{HistoryOf, ResponseTab, ResponseView};
+    use std::sync::Arc;
+
+    let head = |status: u16, elapsed_ms: u64| ResponseHead {
+        status,
+        version: "HTTP/1.1".into(),
+        url: "http://localhost:8080/users".into(),
+        redirects: 0,
+        headers: vec![("content-type".into(), "application/json".into())],
+        elapsed_ms,
+        timeline: Vec::new(),
+    };
+    let sent = SentRequest {
+        method: "POST".into(),
+        url: "http://localhost:8080/users".into(),
+        headers: vec![
+            ("content-type".into(), "application/json".into()),
+            ("authorization".into(), "[hidden]".into()),
+        ],
+        body: SentBody::Text {
+            text: "{\n  \"name\": \"Ana\"\n}".into(),
+            size: 19,
+        },
+    };
+    let path = RequestPath::new("users/create.yml");
+    // Fixed times, far in the past: "how long ago" grows by days only.
+    let entry = |at_ms: i64, status: u16, id: &str, name: Option<&str>| {
+        let mut entry = HistoryEntry::received(
+            at_ms,
+            path.clone(),
+            ("POST".into(), "{{host}}/users".into()),
+            head(status, 40),
+            (19, ResponseId(id.into())),
+            &[],
+        );
+        entry.name = name.map(str::to_owned);
+        entry
+    };
+    let history = Arc::new(vec![
+        entry(0, 500, "a", None),
+        entry(1_000, 201, "b", Some("Before the fix")),
+        entry(2_000, 201, "c", None),
+    ]);
+    let mut results = SnapshotResults::new();
+    for (theme, suffix) in themes() {
+        let response = ResponseState::Received(Received {
+            head: head(201, 42),
+            size: 19,
+            body: BodyHandle::memory("r", b"{\"id\":7}".to_vec()),
+            checks: Checks::default(),
+            sent: Some(Arc::new(sent.clone())),
+        });
+        let mut view = ResponseView::default();
+        view.tab = ResponseTab::Request;
+        view.history = Some(HistoryOf {
+            entries: history.clone(),
+            path: path.clone(),
+            now_ms: 3 * 3_600_000,
+        });
+        let mut harness = harness(egui::vec2(720.0, 360.0), theme, move |ui| {
+            view.show(ui, &response, &EN);
+        });
+        let label = format!("{} (3)", EN.response_history);
+        harness.get_by_label(&label).click();
+        harness.run();
+        harness.snapshot(format!("response_history_{suffix}"));
+        results.extend_harness(&mut harness);
+    }
+    results.unwrap();
+}
