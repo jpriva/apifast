@@ -107,7 +107,7 @@ jobs:
       - if: env.CODE == 'true' && runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
       - if: env.CODE == 'true'
-        run: cargo test --workspace --locked
+        run: cargo test --workspace --locked --no-fail-fast
       # The drivers without gRPC and git: Lints already checks that they
       # build, so their tests run once, on Linux.
       - if: env.CODE == 'true' && runner.os == 'Linux'

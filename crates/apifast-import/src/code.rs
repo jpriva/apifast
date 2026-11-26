@@ -73,10 +73,22 @@ struct Files<'a>(Option<&'a Path>);
 
 impl Files<'_> {
     fn path(&self, path: &str) -> String {
-        match self.0 {
-            Some(root) if !Path::new(path).is_absolute() => root.join(path).display().to_string(),
-            _ => path.to_owned(),
+        file_on_disk(self.0, path)
+    }
+}
+
+/// Where the file at `path`, relative to the collection in `root` and
+/// written with `/` as the collection keeps it, is on this system: joined
+/// with the system's separator (`\` on Windows), so the command does not
+/// mix both. An absolute path, or one without a root, stays as it is.
+pub(crate) fn file_on_disk(root: Option<&Path>, path: &str) -> String {
+    match root {
+        Some(root) if !Path::new(path).is_absolute() => {
+            let mut full = root.to_path_buf();
+            full.extend(path.split('/').filter(|part| !part.is_empty()));
+            full.display().to_string()
         }
+        _ => path.to_owned(),
     }
 }
 
