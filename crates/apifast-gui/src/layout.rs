@@ -1,5 +1,10 @@
 //! Layouts: where the panels go, without knowing what they hold.
 
+mod editor;
+
+pub use editor::{EditorLayout, Pane};
+pub use egui_tiles::LinearDir;
+
 use eframe::egui;
 
 use crate::theme;

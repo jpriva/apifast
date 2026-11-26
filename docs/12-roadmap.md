@@ -520,7 +520,7 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
   - [x] Historial de respuestas al estilo del HTTP Client de IntelliJ ([docs/09](09-ui-ux.md#barra-lateral), [ADR 0008](adr/0008-estado-local.md)):
     - Cada entrada guarda un id, un nombre opcional y lo enviado (`SentRequest`): método, URL final, headers y body ya resueltos, con los secretos enmascarados como en la timeline. Los valores de `Authorization`, `Proxy-Authorization` y `Cookie` no se guardan nunca. Del body de texto se guardan 64 KB, en la misma línea del historial y no en el almacén de respuestas: así una entrada se escribe de una vez. El formato pasa a 2; las líneas del 1 se siguen leyendo, con un id sacado del cuerpo o de la línea.
     - En el panel de respuesta, un botón «History (n)» con las respuestas anteriores de esa request (estado, nombre, hace cuánto y tiempo), para abrirlas, renombrarlas o borrarlas. Sustituye al «Selector de respuestas anteriores» que quedó fuera de F2. La lista lleva su propio estado de abierta, porque egui solo guarda un popup abierto y el menú contextual de una fila la cerraría.
-    - La respuesta abierta tiene una pestaña Request con lo enviado y un botón para copiarlo como texto HTTP.
+    - La respuesta abierta tiene una pestaña con lo enviado (se llamó "Request" y pasó a "Sent" al llegar los paneles, que ya se llaman así) y un botón para copiarlo como texto HTTP.
     - Renombrar una entrada la fija: la limpieza automática no la borra, ni a su respuesta (`FsResponseStore::prune_keeping`).
     - En el historial lateral, renombrar (en la misma fila) y borrar desde el menú contextual, y vaciar todo tras confirmar. Borrar se lleva también la respuesta guardada.
     - Probado en el modelo, en el archivo (ida y vuelta, formato 1, renombrar, borrar, vaciar, límites con nombres), en el núcleo (enviar, renombrar, borrar con su respuesta, reiniciar y vaciar) y en la interfaz, con capturas.
@@ -530,11 +530,16 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
       - `egui_tiles` 0.18 para los paneles: es de Rerun, divide en cualquier dirección, serializa el árbol y tiene la licencia de apifast. `egui_dock` 0.22 se descartó porque solo saca pestañas a ventanas de egui y arrastra `paste`, sin mantenimiento.
       - Ninguna saca un panel a una ventana del sistema: lo hará apifast con viewports inmediatos de egui, ocultando el panel del árbol mientras está fuera.
       - Medido con `bench -- viewports`: cada ventana extra cuesta unos 2,4 MB de memoria propia y unos 0,27 ms de CPU por frame dibujado, nada en reposo.
-    - [ ] Paso 1, paneles acoplables:
-      - Request, respuesta, historial y árbol pasan a ser paneles con pestaña: se arrastran para ponerlos al lado, debajo o como pestaña de otro, y se redimensionan con los divisores.
+    - [x] Paso 1, paneles acoplables ([docs/09](09-ui-ux.md#layout-principal)):
+      - La request y la respuesta son paneles de `egui_tiles` con su pestaña (`layout::EditorLayout`), bajo la barra de URL. Se arrastran para ponerlos al lado, debajo o como pestaña del otro, y se redimensionan con la línea entre ellos.
       - La disposición predeterminada es la de Bruno: request a la izquierda y respuesta a la derecha, del mismo tamaño.
-      - `Ctrl+J` alterna entre lado a lado y uno encima del otro.
-      - El layout de `layout::workbench` y las esquinas redondeadas de la barra propia siguen funcionando.
+      - `Ctrl+J` (acción `toggle_layout`) alterna entre lado a lado y uno encima del otro, conservando los tamaños.
+      - Las filas de pestañas de la request y de la respuesta pasan a otra línea en un panel estrecho; las capturas mostraron que si no, ensanchaban la tabla de debajo y la cortaban.
+      - La pestaña "Request" de la respuesta pasa a llamarse "Sent", para no repetir el nombre del panel.
+      - `layout::workbench` y las esquinas redondeadas de la barra propia no cambian.
+      - `egui_tiles` añade 121 KB al binario de la GUI (de 39,04 a 39,16 MB).
+      - Pruebas: la disposición inicial y el cambio con `Ctrl+J`, y capturas de las dos disposiciones en los dos temas.
+    - [ ] Paso 1b: el árbol y el historial como paneles. Hoy siguen en la barra lateral, con su animación, `Ctrl+B` y las esquinas de la ventana; pasarlos a mosaicos cambia `layout::workbench` y se hace aparte.
     - [ ] Paso 2, guardar y recargar:
       - La disposición (qué panel va dónde, sus tamaños y las ventanas sacadas) se guarda serializada en la configuración personal (`layouts.yml`), no en la colección.
       - Varias disposiciones con nombre: guardar como, cambiar, renombrar y borrar desde la paleta y el menú de la aplicación. Al arrancar se restaura la última.

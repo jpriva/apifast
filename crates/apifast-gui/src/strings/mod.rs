@@ -367,6 +367,12 @@ pub struct Strings {
     pub action_environments: &'static str,
     /// Action: show or hide the sidebar.
     pub action_toggle_sidebar: &'static str,
+    /// Title of the editor's request pane.
+    pub pane_request: &'static str,
+    /// Title of the editor's response pane.
+    pub pane_response: &'static str,
+    /// Action that puts the request and response side by side or one under the other.
+    pub action_toggle_layout: &'static str,
     /// Action: show the history.
     pub action_show_history: &'static str,
     /// Action: format the body.
@@ -793,7 +799,7 @@ pub struct Strings {
     pub response_history: &'static str,
     /// Hover of that button.
     pub response_history_hint: &'static str,
-    /// Tab with the request as it was sent.
+    /// Tab of the response with the request as it was sent.
     pub sent_request: &'static str,
     /// Shown when the history has no record of what was sent.
     pub sent_not_kept: &'static str,

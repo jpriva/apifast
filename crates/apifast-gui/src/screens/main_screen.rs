@@ -32,11 +32,6 @@ use crate::theme::{self, ThemeChoice};
 /// Closed tabs remembered, to open again.
 const CLOSED_TABS: usize = 20;
 
-/// Default height of the request panel, above the response, in points.
-const REQUEST_PANEL_HEIGHT: f32 = 280.0;
-/// Lowest the request panel can be resized to, in points.
-const REQUEST_PANEL_MIN_HEIGHT: f32 = 120.0;
-
 /// What the sidebar shows.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Sidebar {
@@ -59,6 +54,8 @@ pub struct MainScreen {
     tabs: TabBar,
     request: RequestPanel,
     response: ResponseView,
+    /// Where the request and the response are.
+    pub layout: layout::EditorLayout,
     editor: Option<Editor>,
     hints: HintsCache,
     /// The shortcuts of every action.
@@ -271,7 +268,7 @@ impl MainScreen {
         let (tree, tabs, panels, editor) = (
             &mut self.tree,
             &mut self.tabs,
-            (&mut self.request, &mut self.response),
+            (&mut self.request, &mut self.response, &mut self.layout),
             &mut self.editor,
         );
         let key_paste = &mut self.key_paste;
@@ -862,6 +859,7 @@ impl MainScreen {
             Action::FocusUrl => self.focus_url = true,
             Action::Environments => self.environments.open = !self.environments.open,
             Action::ToggleSidebar => self.sidebar_hidden = !self.sidebar_hidden,
+            Action::ToggleLayout => self.layout.toggle(),
             Action::ShowHistory => {
                 self.sidebar_hidden = false;
                 self.sidebar = Sidebar::History;
@@ -953,6 +951,7 @@ impl MainScreen {
             | Action::FocusUrl
             | Action::Environments
             | Action::ToggleSidebar
+            | Action::ToggleLayout
             | Action::ShowHistory
             | Action::FormatBody
             | Action::Quit => Vec::new(),
@@ -1048,15 +1047,19 @@ fn history_command(event: HistoryEvent) -> Command {
     }
 }
 
-/// The URL bar, the request panel and the response, one under the other.
-/// Returns the URL bar's event and whether the request was edited, with the
+/// The URL bar, then the request and its response in their panes, side
+/// by side or as the user arranged them. Returns the URL bar's event and whether the request was edited, with the
 /// URL and the parameter list kept in step.
 fn editor_area(
     ui: &mut egui::Ui,
     tab: &Tab,
     request: &mut HttpRequest,
-    ((panel, response), hints, sending, focus_url): (
-        (&mut RequestPanel, &mut ResponseView),
+    ((panel, response, arrangement), hints, sending, focus_url): (
+        (
+            &mut RequestPanel,
+            &mut ResponseView,
+            &mut layout::EditorLayout,
+        ),
         &VariableHints,
         bool,
         bool,
@@ -1085,14 +1088,14 @@ fn editor_area(
         edited = true;
     }
     ui.separator();
-    let change = egui::Panel::top("request-panel")
-        .resizable(true)
-        .default_size(REQUEST_PANEL_HEIGHT)
-        .min_size(REQUEST_PANEL_MIN_HEIGHT)
-        .show(ui, |ui| {
-            panel.show(ui, request, &tab.context, hints, strings)
-        })
-        .inner;
+    let mut change = None;
+    let titles = (strings.pane_request, strings.pane_response);
+    arrangement.show(ui, titles, |ui, pane| match pane {
+        layout::Pane::Request => {
+            change = panel.show(ui, request, &tab.context, hints, strings);
+        }
+        layout::Pane::Response => response.show(ui, &tab.response, strings),
+    });
     match change {
         Some(RequestChange::Params) => {
             sync_url_from_params(request);
@@ -1101,7 +1104,6 @@ fn editor_area(
         Some(RequestChange::Other) => edited = true,
         None => {}
     }
-    response.show(ui, &tab.response, strings);
     if std::mem::take(&mut response.example_requested)
         && let ResponseState::Received(received) = &tab.response
     {

@@ -126,7 +126,9 @@ impl RequestPanel {
                 RequestTab::Params
             };
         }
-        ui.horizontal(|ui| {
+        // Wrapped: in a narrow pane the tabs go on to a second row instead
+        // of widening what is below them.
+        ui.horizontal_wrapped(|ui| {
             let params = request.params.iter().filter(|p| p.enabled).count();
             let headers = request.headers.iter().filter(|h| h.enabled).count();
             let tests = request.assertions.iter().filter(|a| a.enabled).count()

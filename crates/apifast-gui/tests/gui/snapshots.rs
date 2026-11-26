@@ -258,3 +258,57 @@ fn the_request_sent_and_the_earlier_responses() {
     }
     results.unwrap();
 }
+
+/// The main screen with a request open: its panes side by side, as in
+/// Bruno, and one under the other after Ctrl+J.
+#[test]
+#[cfg_attr(not(target_os = "linux"), ignore = "drawn only on Linux")]
+fn the_editor_panes_side_by_side_and_stacked() {
+    use apifast_gui::core::{ResponseState, Snapshot, Tab};
+    use apifast_gui::screens::MainScreen;
+    use std::sync::Arc;
+
+    let mut results = SnapshotResults::new();
+    for (theme, suffix) in themes() {
+        let saved = request();
+        let tab = Tab {
+            root: "/c".into(),
+            path: apifast_app::RequestPath::new("users/create.yml"),
+            draft: None,
+            saved,
+            response: ResponseState::Idle,
+            revision: 1,
+            context: Arc::default(),
+            conflict: false,
+        };
+        let snapshot = Snapshot {
+            active: Some(tab.key()),
+            tabs: vec![tab],
+            ..Snapshot::default()
+        };
+        let mut screen = MainScreen::default();
+        screen.settings.own_title_bar = false;
+        let mut first = true;
+        let mut harness = Harness::builder()
+            .with_size(egui::vec2(1000.0, 520.0))
+            .wgpu()
+            .build_ui_state(
+                move |ui, screen: &mut MainScreen| {
+                    if first {
+                        theme::install(ui.ctx());
+                        ui.ctx().set_theme(theme);
+                        first = false;
+                    }
+                    let _ = screen.show(ui, &snapshot, &EN);
+                },
+                screen,
+            );
+        harness.run();
+        harness.snapshot(format!("main_side_by_side_{suffix}"));
+        harness.state_mut().layout.toggle();
+        harness.run();
+        harness.snapshot(format!("main_stacked_{suffix}"));
+        results.extend_harness(&mut harness);
+    }
+    results.unwrap();
+}

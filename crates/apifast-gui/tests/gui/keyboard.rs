@@ -321,6 +321,24 @@ fn the_sidebar_hides_and_the_history_shows() {
 }
 
 #[test]
+fn ctrl_j_puts_the_response_under_the_request_and_back_beside_it() {
+    use apifast_gui::layout::LinearDir;
+    let mut harness = harness();
+    let direction = |h: &Harness<'_, State>| h.state().screen.layout.direction();
+    assert_eq!(
+        direction(&harness),
+        Some(LinearDir::Horizontal),
+        "side by side"
+    );
+    harness.get_by_label(EN.pane_request);
+    harness.get_by_label(EN.pane_response);
+    press(&mut harness, Modifiers::COMMAND, Key::J);
+    assert_eq!(direction(&harness), Some(LinearDir::Vertical));
+    press(&mut harness, Modifiers::COMMAND, Key::J);
+    assert_eq!(direction(&harness), Some(LinearDir::Horizontal));
+}
+
+#[test]
 fn the_theme_is_chosen_from_the_palette() {
     let mut harness = harness();
     press(&mut harness, Modifiers::COMMAND, Key::K);

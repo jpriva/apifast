@@ -19,21 +19,17 @@ La interfaz se construye con egui (eframe). El objetivo es que resulte familiar 
 │ Mi equipo ▾       │  login ×   crear usuario ●   Pagos · listar ×      +     │
 │ [+ Colección] [⌂] ├──────────────────────────────────────────────────────────┤
 │ ▾ Mi API          │ [POST ▾] {{host}}/v1/users/:orgId              [ Enviar ] │
-│   ▾ auth          ├──────────────────────────────────────────────────────────┤
-│      POST login   │ Params  Headers(2)  Body  Auth  Vars  Tests  Docs  Ajustes│
-│      POST refresh │ ┌──────────────────────────────────────────────────────┐ │
-│   ▾ usuarios      │ │ {                                                    │ │
-│      GET  listar  │ │   "name": "{{$randomFullName}}",                     │ │
-│      POST crear   │ │   "email": "{{user_email}}"                          │ │
-│ ▸ Pagos           │ │ }                                                    │ │
-│ ▸ Legacy  ⚠       │ └──────────────────────────────────────────────────────┘ │
-│                   ├──────────────────────────────────────────────────────────┤
-│                   │ 201 Created    182 ms    1.2 kB        Tests 2/2 ✓       │
-│                   │ Body  Headers(8)  Cookies  Timeline  Tests               │
-│ Colecciones │ Hist│ ┌──────────────────────────────────────────────────────┐ │
-│                   │ │ { "id": 981, "name": "Ana Ruiz" }                    │ │
-│                   │ └──────────────────────────────────────────────────────┘ │
-├───────────────────┴──────────────────────────────────────────────────────────┤
+│   ▾ auth          ├────────────────────────────┬─────────────────────────────┤
+│      POST login   │ Request                    │ Response                    │
+│      POST refresh │ Params Headers(2) Body     │ 201 Created  182 ms  1.2 kB │
+│   ▾ usuarios      │ Auth Tests Scripts …       │ Body Headers(8) Timeline …  │
+│      GET  listar  │ ┌────────────────────────┐ │ ┌─────────────────────────┐ │
+│      POST crear   │ │ {                      │ │ │ { "id": 981,            │ │
+│ ▸ Pagos           │ │   "name": "{{name}}",  │ │ │   "name": "Ana Ruiz" }  │ │
+│ ▸ Legacy  ⚠       │ │   "email": "{{mail}}"  │ │ │                         │ │
+│                   │ │ }                      │ │ │                         │ │
+│ Colecciones │ Hist│ └────────────────────────┘ │ └─────────────────────────┘ │
+├───────────────────┴────────────────────────────┴─────────────────────────────┤
 │ main ↑1  ·  2 sin guardar  ·  bóveda desbloqueada                            │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -44,11 +40,16 @@ La interfaz se construye con egui (eframe). El objetivo es que resulte familiar 
 | Barra lateral | Selector de workspace, árbol con una raíz por colección, historial de la colección activa. Se puede ocultar y redimensionar |
 | Pestañas | Una por request abierta, de cualquier colección; un punto indica cambios sin guardar. El nombre de la colección aparece en el tooltip, y delante del nombre ("Billing / Health") cuando dos pestañas de colecciones distintas se llaman igual |
 | Barra de URL | Método, URL con resaltado de variables, botón de enviar o cancelar. Pegar un comando cURL convierte la request (ver abajo) |
-| Panel de request | Pestañas de edición |
+| Panel de request | Pestañas de edición. Con la respuesta, en paneles que se mueven y redimensionan (ver abajo) |
 | Panel de respuesta | Estado, tiempo, tamaño y pestañas de visualización |
 | Barra de estado | La rama de git de la colección enfocada y cuántos de sus archivos cambiaron desde el último commit (`Branch: main · 3 changed`); un clic abre la ventana "Git". Solo aparece si la colección está en un repositorio |
 
-Los paneles de request y respuesta se pueden disponer uno encima del otro o lado a lado (`Ctrl+J`).
+**Paneles de la request y la respuesta** ([ADR 0015](adr/0015-disposiciones-con-egui-tiles.md)):
+- Bajo la barra de URL, la request y su respuesta son dos paneles con pestaña ("Request", "Response"). Por defecto están lado a lado y con el mismo ancho, como en Bruno.
+- Arrastrar la pestaña de un panel lo pone al lado del otro, debajo, encima o como otra pestaña del mismo sitio, y la línea entre ellos los redimensiona.
+- `Ctrl+J` alterna entre lado a lado y uno encima del otro, conservando los tamaños. Si los dos paneles estaban como pestañas de un mismo sitio, vuelven a ponerse lado a lado.
+- Las filas de pestañas de la request (Params, Headers…) y de la respuesta pasan a una segunda línea cuando el panel es estrecho, en lugar de ensanchar lo que hay debajo.
+- Por ahora la disposición dura lo que dura la sesión; guardarla con nombre es el paso siguiente.
 
 **Pegar un cURL en la barra de URL.** Si lo que se pega en el campo de la URL empieza por `curl `, no se pega como texto: la request pasa a ser la del comando (método, URL, params, headers, body y auth), y conserva su nombre, su posición, sus tests, sus ajustes, su documentación y sus ejemplos. Queda como un cambio sin guardar, que se puede deshacer descartándolo. Se intercepta el pegado antes de que lo vea el campo, que es de una línea y perdería los saltos de línea del comando. Una nota sobre las pestañas dice las opciones que no se conservaron (`-k`, `--proxy …`) o por qué el comando no se puede leer; desaparece al editar la URL. Escribir `curl` a mano no convierte nada.
 
@@ -179,7 +180,7 @@ La edición con resaltado se limita a unos 200 KB: con más texto, egui tarda de
 | Headers | Tabla de headers recibidos |
 | Cookies | Cookies que fija la respuesta (`Cookies (2)`), leídas como las lee el tarro: nombre, valor, dominio, ruta, caducidad y atributos. Las respuestas abiertas desde el historial no tienen: los `Set-Cookie` se guardan ocultos |
 | Timeline | Eventos del envío con sus tiempos |
-| Request | La request tal como salió: método y URL final, headers y body ya resueltos, con "Copy" (como texto HTTP). Los secretos se enmascaran; los valores de `Authorization`, `Proxy-Authorization` y `Cookie` nunca se guardan. Lo que añade el transporte (cookies del tarro, firmas, `Content-Length`) no aparece. Del body de texto se guardan 64 KB. Una respuesta anterior a esta versión lo dice en vez de mostrarlo |
+| Sent | La request tal como salió: método y URL final, headers y body ya resueltos, con "Copy" (como texto HTTP). Los secretos se enmascaran; los valores de `Authorization`, `Proxy-Authorization` y `Cookie` nunca se guardan. Lo que añade el transporte (cookies del tarro, firmas, `Content-Length`) no aparece. Del body de texto se guardan 64 KB. Una respuesta anterior a esta versión lo dice en vez de mostrarlo |
 | Tests | Tests de los scripts, sus errores y su consola; aserciones (primero las que fallan, con su motivo) y capturas con su valor; la pestaña dice `Tests 2/3` (aserciones y tests de scripts) en verde o en rojo |
 | Events | Solo para un `text/event-stream`: sus eventos (`Events (12)`), en vivo mientras llegan |
 | Messages | Solo para una conexión WebSocket o una llamada gRPC: lo enviado y lo recibido, los errores y el cierre (`Messages (4)`), en vivo mientras está abierta. Una conexión no tiene la pestaña Tests |

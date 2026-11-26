@@ -310,7 +310,7 @@ impl ResponseView {
             ui.label(RichText::new(size_text(received)).color(muted));
             self.history_button(ui, strings);
         });
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             if stream {
                 let count = parsed_events(&mut self.parsed, received).1.len();
                 let label = format!("{} ({count})", strings.events);

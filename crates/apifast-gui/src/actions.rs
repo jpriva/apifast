@@ -43,6 +43,9 @@ pub enum Action {
     Environments,
     /// Show or hide the sidebar.
     ToggleSidebar,
+    /// Put the request and the response side by side, or one under the
+    /// other.
+    ToggleLayout,
     /// Show the history in the sidebar.
     ShowHistory,
     /// Format the body being edited.
@@ -108,6 +111,7 @@ pub const ALL: &[Action] = &[
     Action::FocusUrl,
     Action::Environments,
     Action::ToggleSidebar,
+    Action::ToggleLayout,
     Action::ShowHistory,
     Action::FormatBody,
     Action::Shortcuts,
@@ -155,6 +159,7 @@ impl Action {
             Self::FocusUrl => "focus_url".into(),
             Self::Environments => "environments".into(),
             Self::ToggleSidebar => "toggle_sidebar".into(),
+            Self::ToggleLayout => "toggle_layout".into(),
             Self::ShowHistory => "show_history".into(),
             Self::FormatBody => "format_body".into(),
             Self::Shortcuts => "shortcuts".into(),
@@ -200,6 +205,7 @@ impl Action {
             Self::FocusUrl => strings.action_focus_url,
             Self::Environments => strings.action_environments,
             Self::ToggleSidebar => strings.action_toggle_sidebar,
+            Self::ToggleLayout => strings.action_toggle_layout,
             Self::ShowHistory => strings.action_show_history,
             Self::FormatBody => strings.action_format_body,
             Self::Shortcuts => strings.action_shortcuts,
@@ -257,6 +263,7 @@ impl Action {
             Self::Environments => one(key(CTRL, Key::E)),
             Self::OpenCollection => one(key(CTRL, Key::O)),
             Self::ToggleSidebar => one(key(CTRL, Key::B)),
+            Self::ToggleLayout => one(key(CTRL, Key::J)),
             Self::Quit => one(key(CTRL, Key::Q)),
             Self::FormatBody => one(key(Modifiers::ALT.plus(Modifiers::SHIFT), Key::F)),
             Self::ShowHistory
