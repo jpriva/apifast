@@ -231,6 +231,23 @@ fn wait_for_row_to_be(harness: &mut Harness<'_, App>, label: &str, shown: bool) 
     }
 }
 
+/// Steps the interface until no node is labelled `label`, failing after
+/// 10 seconds.
+fn wait_for_gone(harness: &mut Harness<'_, App>, label: &str) {
+    let start = Instant::now();
+    loop {
+        harness.step();
+        if harness.query_all_by_label(label).next().is_none() {
+            return;
+        }
+        assert!(
+            start.elapsed() < Duration::from_secs(10),
+            "timed out waiting for `{label}` to go"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
 /// Steps the interface until `done` holds, failing after 10 seconds.
 fn wait_until(harness: &mut Harness<'_, App>, what: &str, done: impl Fn() -> bool) {
     let start = Instant::now();
@@ -349,12 +366,9 @@ fn edits_are_saved_with_ctrl_s_and_drafts_survive_a_restart() {
             .unwrap()
             .contains("{{host}}/health/v2")
     });
-    harness.run_steps(2);
-    assert!(
-        harness
-            .query_by_label(apifast_gui::strings::EN.unsaved)
-            .is_none()
-    );
+    // The core writes the file, then says so: wait for that too, not a
+    // fixed number of frames, which a slow machine may not fill.
+    wait_for_gone(&mut harness, apifast_gui::strings::EN.unsaved);
 
     // An unsaved change, then the app closes.
     harness
