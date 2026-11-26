@@ -16,13 +16,41 @@ env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
   RUSTDOCFLAGS: -D warnings
+  # No debug info at all in CI: it builds and links faster, and the cache is
+  # smaller. A panic still says its file and line.
+  CARGO_PROFILE_DEV_DEBUG: "false"
 
 jobs:
+  # Whether the change touches more than the docs (`docs/`, `*.md`). If not,
+  # the jobs below skip their work and report success, so a pull request
+  # that only changes docs is not left waiting for the required checks.
+  changes:
+    name: What changed
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          # Without a base to compare with (a new branch), everything runs.
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$BASE" HEAD | grep -qvE '^docs/|\.md$'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
   fmt:
     name: Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       # Installs the version pinned in rust-toolchain.toml.
       - run: rustup toolchain install
       - run: cargo fmt --all --check
@@ -33,49 +61,81 @@ jobs:
   clippy:
     name: Lints
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       # Installs the version pinned in rust-toolchain.toml.
       - run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves its cache: pull requests read it, and their own
+          # caches would push it out of the repository's 10 GB.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # The drivers also build without gRPC.
       - run: cargo clippy -p apifast-cli -p apifast-gui --all-targets --no-default-features --locked -- -D warnings
 
   test:
     name: Tests (${{ matrix.os }})
+    needs: changes
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    # Skipped step by step, not as a job: a matrix job skipped as a whole
+    # reports one check without the system's name, and the required
+    # `Tests (ubuntu-latest)` and its siblings would wait for ever.
+    env:
+      CODE: ${{ needs.changes.outputs.code }}
     steps:
-      - uses: actions/checkout@v5
+      - if: env.CODE == 'true'
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       # Installs the version pinned in rust-toolchain.toml.
-      - run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
+      - if: env.CODE == 'true'
+        run: rustup toolchain install
+      - if: env.CODE == 'true'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # mold links the big test binaries in a fraction of the time.
+      - if: env.CODE == 'true' && runner.os == 'Linux'
+        uses: rui314/setup-mold@339e96b4ff1f3bd865856ba4cbbe8818a7acb038 # v1
       # Lavapipe (Vulkan on the CPU) draws the interface's screenshot tests,
       # which run only on Linux.
-      - if: runner.os == 'Linux'
+      - if: env.CODE == 'true' && runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
-      - run: cargo test --workspace --locked
-      - run: cargo test -p apifast-cli -p apifast-gui --no-default-features --locked
+      - if: env.CODE == 'true'
+        run: cargo test --workspace --locked --no-fail-fast
+      # The drivers without gRPC and git: Lints already checks that they
+      # build, so their tests run once, on Linux.
+      - if: env.CODE == 'true' && runner.os == 'Linux'
+        run: cargo test -p apifast-cli -p apifast-gui --no-default-features --locked
 
   doc:
     name: Docs
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       # Installs the version pinned in rust-toolchain.toml.
       - run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves its cache: pull requests read it, and their own
+          # caches would push it out of the repository's 10 GB.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo doc --workspace --no-deps --locked
 
   deny:
     name: Dependencies (cargo deny)
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     steps:
-      - uses: actions/checkout@v5
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: EmbarkStudios/cargo-deny-action@81891abc19297b21343b15ef67dc61e4aea74fda # v2.1.4
         with:
           command: check

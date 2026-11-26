@@ -608,7 +608,9 @@ async fn bru_sets_collection_variables_and_reads_every_environment_variable() {
 async fn timers_fire_and_a_pending_timeout_is_waited_for() {
     let outcome = run(r"
         await new Promise((resolve) => setTimeout(() => { console.log('awaited'); resolve(); }, 10));
-        setTimeout((what) => bru.setVar('late', what), 20, 'fired');
+        // Long enough for the interval's three ticks of 1 ms, which take
+        // about 47 ms where the clock ticks every 15.6 ms (Windows).
+        setTimeout((what) => bru.setVar('late', what), 200, 'fired');
         const cleared = setTimeout(() => console.log('never'), 5);
         clearTimeout(cleared);
         let ticks = 0;

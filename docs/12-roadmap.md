@@ -459,6 +459,11 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
   - [x] Construir los paquetes de release en el sistema más antiguo soportado (Ubuntu 22.04, glibc 2.35), en CI: `.github/workflows/packages.yml` valida la entrada de menú y el metainfo, construye, comprueba la glibc que piden los binarios (`check-glibc.sh`) y guarda los paquetes como artefacto; un tag `v<versión>` debe coincidir con la del workspace. No se publica nada.
   - [x] El icono definitivo: `packaging/linux/icons/hicolor/scalable/apps/com.tryxtek.apifast.svg`.
   - [ ] macOS y Windows.
+    - [x] El CI corre todas las pruebas en los dos desde noviembre de 2026. Antes no compilaban allí, y eso escondía fallos:
+      - el commit por gix podía ocultar cambios ("racy git") y dejar una caché de árboles obsoleta;
+      - el diálogo "New collection" crecía con una ruta larga hasta dejar "Create" fuera de alcance;
+      - varias pruebas suponían rutas sin enlaces (`/var` → `/private/var` en macOS) o sin `\r\n` (Windows).
+    - [ ] En Windows, `canonicalize` da rutas `\\?\C:\…` y el núcleo las guarda así, y así podrían verse en la interfaz. Hay que resolver las rutas sin ese prefijo (como hace el crate `dunce`) en el núcleo y en `apifast-storage-fs`, y probarlo en Windows.
 - [x] Actualizaciones.
   - [x] Versiones: `tools/release.sh <versión>` la pone en el workspace y en el metainfo, hace el commit y el tag `v<versión>`, sin publicar nada. `apifast --version` y la ventana de ajustes dicen la versión y el commit compilado.
   - [x] Actualizar lo instalado: `packaging/linux/update.sh` compila el tag más nuevo (o el pedido) en un worktree aparte e instala con su `install-local.sh`; `install-local.sh --rollback` vuelve a la versión anterior, que guarda. Paquetes y AppImage, en [docs/13](13-compilar-y-empaquetar.md#versiones-y-actualizaciones).

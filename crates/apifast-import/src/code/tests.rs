@@ -80,9 +80,13 @@ fn javascript_uses_fetch() {
         "{}",
         code.text
     );
+    // As this system joins it: `/c\\files\\a.pdf` (escaped) on Windows.
+    let pdf = Path::new("/c").join("files").join("a.pdf");
+    let pdf = serde_json::to_string(&pdf.display().to_string()).unwrap();
     assert!(
-        code.text
-            .contains("form.append(\"doc\", await fs.openAsBlob(\"/c/files/a.pdf\"), \"a.pdf\");"),
+        code.text.contains(&format!(
+            "form.append(\"doc\", await fs.openAsBlob({pdf}), \"a.pdf\");"
+        )),
         "{}",
         code.text
     );

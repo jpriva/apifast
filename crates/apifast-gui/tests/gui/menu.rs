@@ -110,6 +110,8 @@ fn ctrl_q_asks_the_window_to_close() {
     );
 }
 
+// Only the title bar's tests use it, and apifast draws its own only on Linux.
+#[cfg(target_os = "linux")]
 /// The viewport commands of the last frame.
 fn viewport_commands(harness: &Harness<'_, State>) -> Vec<egui::ViewportCommand> {
     harness.output().viewport_output[&egui::ViewportId::ROOT]
@@ -117,6 +119,8 @@ fn viewport_commands(harness: &Harness<'_, State>) -> Vec<egui::ViewportCommand>
         .clone()
 }
 
+// Only the title bar's tests use it, and apifast draws its own only on Linux.
+#[cfg(target_os = "linux")]
 fn press_at(harness: &mut Harness<'_, State>, pos: egui::Pos2, pressed: bool) {
     harness.input_mut().events.push(egui::Event::PointerButton {
         pos,
@@ -126,6 +130,8 @@ fn press_at(harness: &mut Harness<'_, State>, pos: egui::Pos2, pressed: bool) {
     });
 }
 
+// Only the title bar's tests use it, and apifast draws its own only on Linux.
+#[cfg(target_os = "linux")]
 /// Presses at `from`, then moves to `to`, a frame each: a drag starting.
 fn drag(
     harness: &mut Harness<'_, State>,

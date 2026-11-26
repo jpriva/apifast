@@ -194,6 +194,34 @@ UPDATE_SNAPSHOTS=1 cargo test -p apifast-gui --test gui snapshots
 
 Si una falla, junto a la imagen quedan `<nombre>.new.png`, con lo que se dibujó, y `<nombre>.diff.png`, con las diferencias. Git las ignora.
 
+## El repositorio en GitHub
+
+`main` solo cambia por pull request, y con el CI en verde. Lo imponen tres rulesets (Settings → Rules):
+
+| Ruleset | Qué impide | Excepciones |
+|---|---|---|
+| `main: never delete or rewrite` | Borrar `main` o forzarla (`push --force`) | Ninguna, tampoco para los admins |
+| `main: pull requests with green CI` | Cambiar `main` sin PR; fusionar con un check en rojo (`Format`, `Lints`, `Tests` en los tres sistemas, `Docs`, `Dependencies (cargo deny)`); merge commits; commits sin firmar | Un admin puede saltárselo solo al fusionar un PR |
+| `tags: never delete or move` | Borrar, mover o reescribir un tag | Ninguna |
+
+Cómo se trabaja con ellas:
+- Se trabaja en una rama: `git switch -c tipo/tema`, se sube y se abre un PR (`gh pr create`).
+- Se fusiona con **squash**, el único método permitido. GitHub firma ese commit, así que no hace falta firmar los de la rama. La rama se borra sola al fusionar.
+- Para empujar directo a `main` habría que firmar los commits y aun así lo impide el ruleset de PR. No es la forma de trabajar.
+- Un tag de versión (`v*`) no se puede mover ni borrar: antes de crearlo, el commit tiene que ser el bueno. Para corregir un error, se publica una versión nueva.
+- Si de verdad hace falta deshacer algo (por ejemplo, borrar un tag), se desactiva el ruleset un momento desde Settings → Rules y se vuelve a activar.
+
+Además:
+- **Secret scanning y push protection** están activos: GitHub rechaza un push que lleve un token o una clave reconocible.
+- **Dependabot:** avisa de vulnerabilidades en las dependencias y propone sus parches de seguridad.
+- **Actions fijadas:** las actions de los workflows van fijadas a un commit (`uses: owner/action@<sha> # vX.Y.Z`), así que un tag movido no cambia lo que corre en el CI. Dependabot propone cada mes sus actualizaciones (`.github/dependabot.yml`).
+- **El CI, más corto:**
+  - Un cambio que solo toca `docs/` o archivos `.md` no compila nada: los jobs dan su check por bueno en segundos.
+  - Los tests se compilan sin información de depuración y se enlazan con `mold` en Linux.
+  - Los de las variantes sin funciones opcionales corren solo en Linux.
+  - Solo `main` guarda la caché de compilación; los PRs la leen.
+- **Workflows con permisos mínimos:** tienen permiso de solo lectura por defecto, y el código de un contribuidor externo no corre en el CI hasta que se aprueba.
+
 ## Medir el rendimiento
 
 Las herramientas y cómo se usan están en `tools/bench/README.md`, y los presupuestos y las últimas mediciones en [docs/10](10-rendimiento-y-memoria.md). Siempre en release. Algunas abren la ventana real unos segundos.

@@ -164,9 +164,10 @@ fn ctrl_k_opens_the_palette_and_enter_runs_the_selection() {
 fn the_palette_switches_environments_and_shows_shortcuts() {
     let mut harness = harness();
     press(&mut harness, Modifiers::COMMAND, Key::K);
-    // Each action shows its shortcut, as egui writes them on this system.
-    let ctx = egui::Context::default();
-    let shortcut = ctx.format_shortcut(&parse_shortcut("Ctrl+Shift+S").unwrap());
+    // Each action shows its shortcut, as egui writes them on this system:
+    // with the harness's context, which has its fonts (on macOS, egui looks
+    // in them for the ⌘ glyphs).
+    let shortcut = (harness.ctx).format_shortcut(&parse_shortcut("Ctrl+Shift+S").unwrap());
     harness.get_by_label(&shortcut);
     type_text(&mut harness, "prod");
     harness.get_by_label("prod").click();

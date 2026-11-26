@@ -473,6 +473,21 @@ impl GixRepository {
             );
         }
         index.sort_entries();
+        // Git finds some changes only by reading the file: those made in the
+        // same second as the index was written, with the same size ("racy
+        // git"). Their entries are dated at or after the index read; the
+        // new one is dated now, past them, so git would trust their stat
+        // and miss the change. As git does when it writes an index, they
+        // are marked to be read (size 0, a "smudged" entry).
+        let since = index.timestamp().unix_seconds();
+        for entry in index.entries_mut() {
+            if i64::from(entry.stat.mtime.secs) >= since {
+                entry.stat.size = 0;
+            }
+        }
+        // The tree cache would still say the old trees are current, and a
+        // later `git commit` could take them as they were (gitoxide #2421).
+        index.remove_tree();
         index
             .write(gix::index::write::Options::default())
             .map_err(failed)

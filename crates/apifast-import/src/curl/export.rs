@@ -52,10 +52,7 @@ pub fn to_curl(request: &RenderedRequest, files_root: Option<&Path>) -> String {
         }
         _ => {}
     }
-    let file = |path: &str| match files_root {
-        Some(root) if !Path::new(path).is_absolute() => root.join(path).display().to_string(),
-        _ => path.to_owned(),
-    };
+    let file = |path: &str| crate::code::file_on_disk(files_root, path);
     match request.body() {
         RenderedBody::Text(text) => lines.push(format!("--data-raw {}", quote(text))),
         RenderedBody::Form(fields) => {
@@ -188,22 +185,22 @@ mod tests {
             },
         ]);
         let command = to_curl(&rendered(&multipart), Some(Path::new("/work/shop")));
+        // As this system joins it: `/work/shop\docs\a.pdf` on Windows.
+        let pdf = Path::new("/work/shop").join("docs").join("a.pdf");
+        let pdf = pdf.display();
         assert!(
             command.contains("--form-string 'note=@literally'"),
             "{command}"
         );
         assert!(
-            command.contains("--form 'doc=@/work/shop/docs/a.pdf;type=application/pdf'"),
+            command.contains(&format!("--form 'doc=@{pdf};type=application/pdf'")),
             "{command}"
         );
         let Body::Multipart(parts) = parse_curl(&command).unwrap().request.body else {
             panic!("{command}");
         };
         assert_eq!(parts[0].value, MultipartValue::Text("@literally".into()));
-        assert_eq!(
-            parts[1].value,
-            MultipartValue::Files(vec!["/work/shop/docs/a.pdf".into()])
-        );
+        assert_eq!(parts[1].value, MultipartValue::Files(vec![pdf.to_string()]));
 
         let mut file = HttpRequest::new("r", Method::Put, "http://h/put");
         file.body = Body::File {

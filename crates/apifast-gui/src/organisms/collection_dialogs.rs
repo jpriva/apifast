@@ -207,15 +207,14 @@ impl CollectionDialogs {
                 !dialog.name.trim().is_empty() && (renaming || !dialog.parent.trim().is_empty());
             let folder = PathBuf::from(dialog.parent.trim()).join(folder_name(&dialog.name));
             if ready && !renaming {
-                ui.label(
-                    egui::RichText::new(format!(
-                        "{} {}",
-                        strings.collection_goes_in,
-                        folder.display()
-                    ))
-                    .color(theme::palette(ui).text_muted)
-                    .small(),
-                );
+                let text = format!("{} {}", strings.collection_goes_in, folder.display());
+                let muted = theme::palette(ui).text_muted;
+                // A path has no spaces to wrap at: cut, whole on hover, so a
+                // long one does not widen the dialog past the window.
+                ui.add(
+                    egui::Label::new(egui::RichText::new(&text).color(muted).small()).truncate(),
+                )
+                .on_hover_text(text);
             }
             ui.add_space(theme::space::M);
             ui.horizontal(|ui| {

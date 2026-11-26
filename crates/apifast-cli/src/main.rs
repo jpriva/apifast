@@ -151,7 +151,25 @@ fn parse_var(raw: &str) -> Result<(String, String), String> {
 /// Exit code of a usage error: unknown options, missing arguments.
 const EXIT_USAGE: u8 = 3;
 
+/// The stack of the thread the command runs on, in bytes. Scripts run on
+/// it, and `QuickJS` may use 1 MB of it (apifast-script-js); Windows gives
+/// the main thread only 1 MB.
+const STACK_BYTES: usize = 8 << 20;
+
 fn main() -> ExitCode {
+    let command = std::thread::Builder::new()
+        .name("apifast".into())
+        .stack_size(STACK_BYTES)
+        .spawn(command);
+    // A thread that cannot start, or that panicked, is a failure.
+    command
+        .ok()
+        .and_then(|thread| thread.join().ok())
+        .unwrap_or(ExitCode::FAILURE)
+}
+
+/// Does what the command line asks for.
+fn command() -> ExitCode {
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
         Err(error) => {
