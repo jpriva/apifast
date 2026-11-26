@@ -30,9 +30,12 @@ use crate::console::Console;
 /// The file name scripts are evaluated as, which their errors' stacks name.
 const FILE: &str = "script";
 
-/// How deep a script's calls may go, in bytes of the native stack. Far
-/// below the stack of a tokio thread, so deep recursion is a script error.
-const STACK_BYTES: usize = 256 << 10;
+/// How deep a script's calls may go, in bytes of the native stack: far
+/// below the stack of the threads that run scripts, so deep recursion is a
+/// script error and not a crash. The core's thread and the CLI's have
+/// 8 MB, and test threads 2 MB. 256 KB was too little for ajv's schemas
+/// in a debug build on Windows, whose C frames are larger.
+const STACK_BYTES: usize = 1 << 20;
 
 /// How often a waiting script checks whether it was cancelled.
 const CANCEL_POLL: Duration = Duration::from_millis(20);

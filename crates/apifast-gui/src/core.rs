@@ -72,6 +72,10 @@ use crate::system::{SystemClock, SystemRandom};
 pub use runner::{RunSettings, RunView};
 use tokens::token_state;
 
+/// The stack of the core's thread, in bytes: scripts run on it, and
+/// `QuickJS` may use 1 MB of it (apifast-script-js).
+const CORE_STACK_BYTES: usize = 8 << 20;
+
 /// How much history is kept by default: entries beyond these are removed
 /// when a collection opens (see [`Command::Configure`]).
 pub const HISTORY_LIMITS: HistoryLimits = HistoryLimits {
@@ -986,6 +990,8 @@ impl Core {
         let own_sender = sender.downgrade();
         let thread = std::thread::Builder::new()
             .name("apifast-core".into())
+            // Scripts run on it, and QuickJS may use 1 MB of its stack.
+            .stack_size(CORE_STACK_BYTES)
             .spawn(move || {
                 #[expect(clippy::expect_used, reason = "without a runtime nothing can work")]
                 let runtime = tokio::runtime::Builder::new_current_thread()
