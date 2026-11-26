@@ -14,12 +14,13 @@ for n in 100 1000 5000; do python3 tools/bench/make_collection.py /tmp/c$n $n; d
 for n in 100 1000 5000; do python3 tools/bench/measure.py target/release/apifast-gui /tmp/c$n; done
 ```
 
-Three more need the real window or the core, and run as an example of `apifast-gui`:
+Four more need the real window or the core, and run as an example of `apifast-gui`:
 
 ```sh
 cargo run --release -p apifast-gui --example bench -- response   # memory to receive and show 100 MB, 3 rounds (APIFAST_BENCH_ROUNDS)
 cargo run --release -p apifast-gui --example bench -- typing     # CPU per keystroke in a 200 KB body
 cargo run --release -p apifast-gui --example bench -- send       # time of a send to a local server
+cargo run --release -p apifast-gui --example bench -- viewports  # memory and CPU per frame of 1 and 2 extra windows
 ```
 
 The startup times come from `APIFAST_TIMINGS=1`, which makes `apifast-gui` write when it showed its first frame and the collection's tree.

@@ -6,6 +6,7 @@
 //! cargo run --release -p apifast-gui --example bench -- response
 //! cargo run --release -p apifast-gui --example bench -- typing
 //! cargo run --release -p apifast-gui --example bench -- send
+//! cargo run --release -p apifast-gui --example bench -- viewports
 //! ```
 //!
 //! `response` opens the real application on a collection with one request
@@ -17,6 +18,9 @@
 //! window, sends a request to a local server that answers one line, again
 //! and again through the application's core, and reports the time from the
 //! command to the response shown: the overhead of a send, without network.
+//! `viewports` opens one and then two more windows of the system next to the
+//! main one, each drawing a panel, and reports apifast's own memory with
+//! each: the cost of taking a panel out to its own window.
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
@@ -88,8 +92,16 @@ fn main() -> eframe::Result {
             send_bench();
             Ok(())
         }
+        "viewports" => eframe::run_native(
+            "apifast bench",
+            options(eframe::wgpu::PresentMode::AutoVsync),
+            Box::new(|cc| {
+                apifast_gui::theme::install(&cc.egui_ctx);
+                Ok(Box::new(ViewportBench::new()))
+            }),
+        ),
         _ => {
-            say("usage: bench response|typing|send");
+            say("usage: bench response|typing|send|viewports");
             Ok(())
         }
     }
@@ -511,5 +523,79 @@ impl eframe::App for TypingBench {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
         }
         ui.ctx().request_repaint();
+    }
+}
+
+/// How long each step of `viewports` waits before measuring: the windows
+/// open, draw and settle.
+const VIEWPORT_SETTLE: Duration = Duration::from_secs(6);
+
+/// Opens extra windows one by one and measures the memory with each.
+struct ViewportBench {
+    /// Extra windows open now.
+    open: usize,
+    /// When the current step started.
+    since: Instant,
+    /// apifast's own memory with the main window only, in KiB.
+    before: Option<u64>,
+    /// What each window shows: some text, as a panel would.
+    text: String,
+    /// Frames drawn and CPU used (ms) since the step started.
+    frames: u32,
+    cpu: u64,
+}
+
+impl ViewportBench {
+    fn new() -> Self {
+        Self {
+            open: 0,
+            since: Instant::now(),
+            before: None,
+            frames: 0,
+            cpu: cpu_ms(),
+            text: "{\n  \"name\": \"Ana\",\n  \"roles\": [\"admin\"]\n}\n".repeat(20),
+        }
+    }
+}
+
+impl eframe::App for ViewportBench {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
+        ui.label(format!("main window; {} more open", self.open));
+        ui.add(egui::TextEdit::multiline(&mut self.text).code_editor());
+        for n in 0..self.open {
+            let id = egui::ViewportId::from_hash_of(("bench-viewport", n));
+            let builder = egui::ViewportBuilder::default()
+                .with_title(format!("panel {n}"))
+                .with_inner_size([640.0, 480.0]);
+            let text = &mut self.text;
+            ctx.show_viewport_immediate(id, builder, |ui, _class| {
+                egui::CentralPanel::default().show(ui, |ui| {
+                    ui.label(format!("panel {n}"));
+                    ui.add(egui::TextEdit::multiline(text).code_editor());
+                });
+            });
+        }
+        ctx.request_repaint();
+        self.frames += 1;
+        if self.since.elapsed() < VIEWPORT_SETTLE {
+            return;
+        }
+        let own = pss().1;
+        let before = *self.before.get_or_insert(own);
+        let per_frame = (cpu_ms() - self.cpu) * 1000 / u64::from(self.frames.max(1));
+        say(&format!(
+            "{}, CPU {per_frame} µs per frame ({} frames)",
+            memory_line(&format!("{} extra window(s)", self.open), before),
+            self.frames
+        ));
+        self.since = Instant::now();
+        self.frames = 0;
+        self.cpu = cpu_ms();
+        if self.open == 2 {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        } else {
+            self.open += 1;
+        }
     }
 }

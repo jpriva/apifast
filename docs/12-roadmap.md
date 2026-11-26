@@ -526,9 +526,10 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
     - Probado en el modelo, en el archivo (ida y vuelta, formato 1, renombrar, borrar, vaciar, límites con nombres), en el núcleo (enviar, renombrar, borrar con su respuesta, reiniciar y vaciar) y en la interfaz, con capturas.
     - [ ] Reenviar una entrada tal cual, sin volver a renderizar: hoy se copia como texto.
   - [ ] Disposiciones editables (layouts). Se llaman así para no confundirlas con los workspaces de `workspace.yml`, que agrupan colecciones. Sustituyen a la disposición lado a lado con `Ctrl+J` que quedó fuera de F2.
-    - [ ] Paso 0, decisión (ADR):
-      - Elegir entre `egui_tiles`, `egui_dock` o paneles propios, según cuál tenga versión para egui 0.37, su licencia (cargo-deny) y si deja sacar un panel a otra ventana.
-      - Medir en un prototipo el coste en memoria y por frame de cada ventana extra, contra los presupuestos de [rendimiento](10-rendimiento-y-memoria.md).
+    - [x] Paso 0, decisión ([ADR 0015](adr/0015-disposiciones-con-egui-tiles.md)):
+      - `egui_tiles` 0.18 para los paneles: es de Rerun, divide en cualquier dirección, serializa el árbol y tiene la licencia de apifast. `egui_dock` 0.22 se descartó porque solo saca pestañas a ventanas de egui y arrastra `paste`, sin mantenimiento.
+      - Ninguna saca un panel a una ventana del sistema: lo hará apifast con viewports inmediatos de egui, ocultando el panel del árbol mientras está fuera.
+      - Medido con `bench -- viewports`: cada ventana extra cuesta unos 2,4 MB de memoria propia y unos 0,27 ms de CPU por frame dibujado, nada en reposo.
     - [ ] Paso 1, paneles acoplables:
       - Request, respuesta, historial y árbol pasan a ser paneles con pestaña: se arrastran para ponerlos al lado, debajo o como pestaña de otro, y se redimensionan con los divisores.
       - La disposición predeterminada es la de Bruno: request a la izquierda y respuesta a la derecha, del mismo tamaño.
