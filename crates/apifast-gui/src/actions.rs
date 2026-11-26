@@ -46,6 +46,8 @@ pub enum Action {
     /// Put the request and the response side by side, or one under the
     /// other.
     ToggleLayout,
+    /// Open the Layouts window: saved layouts, saving the one on screen.
+    Layouts,
     /// Show the history in the sidebar.
     ShowHistory,
     /// Format the body being edited.
@@ -112,6 +114,7 @@ pub const ALL: &[Action] = &[
     Action::Environments,
     Action::ToggleSidebar,
     Action::ToggleLayout,
+    Action::Layouts,
     Action::ShowHistory,
     Action::FormatBody,
     Action::Shortcuts,
@@ -160,6 +163,7 @@ impl Action {
             Self::Environments => "environments".into(),
             Self::ToggleSidebar => "toggle_sidebar".into(),
             Self::ToggleLayout => "toggle_layout".into(),
+            Self::Layouts => "layouts".into(),
             Self::ShowHistory => "show_history".into(),
             Self::FormatBody => "format_body".into(),
             Self::Shortcuts => "shortcuts".into(),
@@ -206,6 +210,7 @@ impl Action {
             Self::Environments => strings.action_environments,
             Self::ToggleSidebar => strings.action_toggle_sidebar,
             Self::ToggleLayout => strings.action_toggle_layout,
+            Self::Layouts => strings.action_layouts,
             Self::ShowHistory => strings.action_show_history,
             Self::FormatBody => strings.action_format_body,
             Self::Shortcuts => strings.action_shortcuts,
@@ -280,7 +285,8 @@ impl Action {
             | Self::CopyAsGo
             | Self::NewCollection
             | Self::ImportCollection
-            | Self::About => Vec::new(),
+            | Self::About
+            | Self::Layouts => Vec::new(),
         }
     }
 }

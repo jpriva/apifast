@@ -11,7 +11,7 @@ use egui_tiles::{
 use crate::theme;
 
 /// A pane of the editor.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Pane {
     /// The request: its tabs (params, headers, body…).
     Request,
@@ -83,6 +83,23 @@ impl EditorLayout {
             }
             None => *self = Self::side_by_side(),
         }
+    }
+
+    /// The layout as data, to keep it in a file.
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::to_value(&self.tree).unwrap_or_default()
+    }
+
+    /// A layout kept with [`Self::to_json`], if it is one: it reads as a
+    /// tree, and has the request and the response once each.
+    pub fn from_json(value: serde_json::Value) -> Option<Self> {
+        let tree: Tree<Pane> = serde_json::from_value(value).ok()?;
+        let layout = Self { tree };
+        let mut panes: Vec<Pane> = layout.panes().into_iter().map(|(_, pane)| pane).collect();
+        panes.sort_by_key(|pane| *pane == Pane::Response);
+        let root = layout.tree.root()?;
+        (panes == [Pane::Request, Pane::Response] && layout.tree.tiles.get(root).is_some())
+            .then_some(layout)
     }
 
     /// The pane each tile shows, to find them.
@@ -186,5 +203,22 @@ mod tests {
         assert_eq!(together.direction(), None);
         together.toggle();
         assert_eq!(together.direction(), Some(LinearDir::Horizontal));
+    }
+
+    #[test]
+    fn a_layout_survives_as_data_and_bad_data_is_refused() {
+        let mut stacked = EditorLayout::stacked();
+        stacked.toggle();
+        stacked.toggle();
+        let back = EditorLayout::from_json(stacked.to_json()).unwrap();
+        assert_eq!(back.direction(), Some(LinearDir::Vertical));
+        assert_eq!(back.to_json(), stacked.to_json());
+
+        assert!(EditorLayout::from_json(serde_json::json!({"root": 1})).is_none());
+        // A tree that lost the response is not a layout of the editor.
+        let alone = EditorLayout {
+            tree: Tree::new_tabs(egui::Id::unique("t"), vec![Pane::Request]),
+        };
+        assert!(EditorLayout::from_json(alone.to_json()).is_none());
     }
 }

@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::Instant;
 
-use apifast_storage_fs::{FsKeymapStore, FsSettingsStore};
+use apifast_storage_fs::{FsKeymapStore, FsLayoutStore, FsSettingsStore, LayoutFile};
 use eframe::egui;
 
 use crate::actions::Keymap;
@@ -30,6 +30,8 @@ pub struct App {
     keymap_store: Option<FsKeymapStore>,
     /// Where the settings are kept, if anywhere.
     settings_store: Option<FsSettingsStore>,
+    /// Where the editor's layouts are kept.
+    layouts_store: Option<FsLayoutStore>,
     /// Results of saves, which run away from the interface.
     saved: (mpsc::Sender<SaveResult>, mpsc::Receiver<SaveResult>),
     /// When the process started, to report how long it took to show the
@@ -59,6 +61,7 @@ impl App {
             main: MainScreen::default(),
             keymap_store: None,
             settings_store: None,
+            layouts_store: None,
             saved: mpsc::channel(),
             timings: None,
         }
@@ -140,6 +143,25 @@ impl App {
             Err(e) => self.main.notice = Some(e.to_string()),
         }
         self.keymap_store = Some(store);
+        self
+    }
+
+    /// Reads the editor's layouts from `store`, puts the one left on
+    /// screen, and saves them there when they change. What cannot be read
+    /// is told on screen; the default layout stands in for it.
+    #[must_use]
+    pub fn with_layouts(mut self, store: FsLayoutStore) -> Self {
+        match store.load() {
+            Ok(file) => {
+                if self.main.set_layouts((file.current, file.saved)) {
+                    self.main.notice = Some(self.strings().layout_not_understood.to_owned());
+                }
+            }
+            Err(e) => self.main.notice = Some(e.to_string()),
+        }
+        // What is on screen now is what the file has: nothing to write.
+        let _ = self.main.take_layouts_change();
+        self.layouts_store = Some(store);
         self
     }
 
@@ -225,6 +247,20 @@ impl App {
             let entries = self.main.keymap.entries();
             std::thread::spawn(move || {
                 let _ = done.send(store.save(&entries).map_err(|e| e.to_string()));
+            });
+        }
+        let done = self.saved.0.clone();
+        // A pane being dragged or resized is written once it is let go.
+        if !ctx.input(|i| i.pointer.any_down())
+            && let Some(store) = self.layouts_store.clone()
+            && let Some((current, saved)) = self.main.take_layouts_change()
+        {
+            let file = LayoutFile {
+                current: Some(current),
+                saved,
+            };
+            std::thread::spawn(move || {
+                let _ = done.send(store.save(&file).map_err(|e| e.to_string()));
             });
         }
         let done = self.saved.0.clone();

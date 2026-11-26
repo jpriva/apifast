@@ -615,7 +615,8 @@ El historial, las respuestas, las cookies y la bóveda local viven en el directo
 └── ui-state.yml                      # tamaños de paneles
 ~/.config/apifast/
 ├── settings.yml
-└── keymap.yml                        # atajos cambiados por el usuario, por acción
+├── keymap.yml                        # atajos cambiados por el usuario, por acción
+└── layouts.yml                       # dónde quedaron los paneles y las disposiciones guardadas (ADR 0015)
 ```
 
 En macOS y Windows se usan los directorios equivalentes de cada plataforma.

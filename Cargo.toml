@@ -48,6 +48,7 @@ roxmltree = "0.21.2"
 # `preserve_order`: imported specs keep the order of their paths and
 # properties, and files written as JSON the order they were built in.
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
+serde = { version = "1.0.229", features = ["derive"] }
 thiserror = "2.0.21"
 # The log: events everywhere through `tracing`; only apifast-log sets where
 # they go (docs/14).

@@ -34,6 +34,11 @@ pub fn keymap_file_in(config_dir: &Path) -> PathBuf {
     config_dir.join("keymap.yml")
 }
 
+/// The file of the editor's layouts under `config_dir` (ADR 0015).
+pub fn layouts_file_in(config_dir: &Path) -> PathBuf {
+    config_dir.join("layouts.yml")
+}
+
 /// The list of known workspaces under `config_dir` (ADR 0009).
 pub fn known_workspaces_file_in(config_dir: &Path) -> PathBuf {
     config_dir.join("workspaces.yml")

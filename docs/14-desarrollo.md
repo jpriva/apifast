@@ -67,7 +67,7 @@ Las variables:
 | Variable | Para qué | En `.env.example` |
 |---|---|---|
 | `APIFAST_DATA_DIR` | Dónde van el historial, las respuestas, las sesiones, el espacio de trabajo y los archivos de la bóveda. | `target/dev/data` |
-| `APIFAST_CONFIG_DIR` | Dónde van `settings.yml` y `keymap.yml`. | `target/dev/config` |
+| `APIFAST_CONFIG_DIR` | Dónde van `settings.yml`, `keymap.yml` y `layouts.yml`. | `target/dev/config` |
 | `APIFAST_DEV_RELEASE` | `1`: compila optimizado, como `--release`. | `0` |
 | `APIFAST_NO_KEYRING` | `1`: la clave maestra de la bóveda va en un archivo de la carpeta de datos, no en el llavero del sistema. Así las pruebas no llenan el llavero de claves. | `1` |
 | `APIFAST_LOG` | El filtro del registro: un nivel, o `objetivo=nivel` separados por comas. Manda sobre el ajuste "Registro". Ver [El registro](#el-registro). | comentada |

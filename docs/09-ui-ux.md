@@ -49,7 +49,11 @@ La interfaz se construye con egui (eframe). El objetivo es que resulte familiar 
 - Arrastrar la pestaña de un panel lo pone al lado del otro, debajo, encima o como otra pestaña del mismo sitio, y la línea entre ellos los redimensiona.
 - `Ctrl+J` alterna entre lado a lado y uno encima del otro, conservando los tamaños. Si los dos paneles estaban como pestañas de un mismo sitio, vuelven a ponerse lado a lado.
 - Las filas de pestañas de la request (Params, Headers…) y de la respuesta pasan a una segunda línea cuando el panel es estrecho, en lugar de ensanchar lo que hay debajo.
-- Por ahora la disposición dura lo que dura la sesión; guardarla con nombre es el paso siguiente.
+- La disposición se recuerda: al soltar un panel arrastrado o redimensionado se escribe en `layouts.yml`, en la carpeta de configuración, y al arrancar vuelve como quedó.
+- La ventana **Layouts…** (menú de la aplicación o paleta) guarda la disposición de la pantalla con un nombre y lista las guardadas. Cada una se puede aplicar, renombrar (en la misma fila: Enter guarda, Esc cancela) o borrar.
+  - Guardar con un nombre que ya existe reemplaza esa disposición.
+  - "Restore default layout" vuelve a la de Bruno.
+- Una disposición del archivo que no se entiende (de otra versión, o editada a mano) no se aplica: se avisa y se usa la predeterminada.
 
 **Pegar un cURL en la barra de URL.** Si lo que se pega en el campo de la URL empieza por `curl `, no se pega como texto: la request pasa a ser la del comando (método, URL, params, headers, body y auth), y conserva su nombre, su posición, sus tests, sus ajustes, su documentación y sus ejemplos. Queda como un cambio sin guardar, que se puede deshacer descartándolo. Se intercepta el pegado antes de que lo vea el campo, que es de una línea y perdería los saltos de línea del comando. Una nota sobre las pestañas dice las opciones que no se conservaron (`-k`, `--proxy …`) o por qué el comando no se puede leer; desaparece al editar la URL. Escribir `curl` a mano no convierte nada.
 

@@ -312,3 +312,23 @@ fn the_editor_panes_side_by_side_and_stacked() {
     }
     results.unwrap();
 }
+
+/// The Layouts window, with two layouts saved.
+#[test]
+#[cfg_attr(not(target_os = "linux"), ignore = "drawn only on Linux")]
+fn the_layouts_window() {
+    use apifast_gui::organisms::LayoutsWindow;
+    let mut results = SnapshotResults::new();
+    for (theme, suffix) in themes() {
+        let mut window = LayoutsWindow::default();
+        window.open = true;
+        let names = vec!["Bruno".to_owned(), "Two monitors".to_owned()];
+        let mut harness = harness(egui::vec2(520.0, 300.0), theme, move |ui| {
+            let _ = window.show(ui.ctx(), &names, &EN);
+            ui.allocate_space(ui.available_size());
+        });
+        harness.snapshot(format!("layouts_{suffix}"));
+        results.extend_harness(&mut harness);
+    }
+    results.unwrap();
+}

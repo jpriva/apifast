@@ -15,6 +15,7 @@ mod diff;
 mod examples;
 mod fs;
 mod keymap;
+mod layouts;
 mod read;
 mod session;
 mod settings;
@@ -36,6 +37,7 @@ use oneyaml::Value;
 
 pub use convert::yaml_to_json;
 pub use keymap::FsKeymapStore;
+pub use layouts::{FsLayoutStore, LayoutFile};
 pub use session::FsSessionStore;
 pub use settings::FsSettingsStore;
 pub use source::{import_source, import_source_path};

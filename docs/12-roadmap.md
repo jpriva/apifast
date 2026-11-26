@@ -540,11 +540,12 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
       - `egui_tiles` añade 121 KB al binario de la GUI (de 39,04 a 39,16 MB).
       - Pruebas: la disposición inicial y el cambio con `Ctrl+J`, y capturas de las dos disposiciones en los dos temas.
     - [ ] Paso 1b: el árbol y el historial como paneles. Hoy siguen en la barra lateral, con su animación, `Ctrl+B` y las esquinas de la ventana; pasarlos a mosaicos cambia `layout::workbench` y se hace aparte.
-    - [ ] Paso 2, guardar y recargar:
-      - La disposición (qué panel va dónde, sus tamaños y las ventanas sacadas) se guarda serializada en la configuración personal (`layouts.yml`), no en la colección.
-      - Varias disposiciones con nombre: guardar como, cambiar, renombrar y borrar desde la paleta y el menú de la aplicación. Al arrancar se restaura la última.
-      - Un archivo de otra versión que no se entiende se ignora con un aviso y se usa la predeterminada.
-      - Hay siempre una acción para volver a la predeterminada.
+    - [x] Paso 2, guardar y recargar ([docs/09](09-ui-ux.md#layout-principal)):
+      - `layouts.yml` en la carpeta de configuración (`FsLayoutStore` en `apifast-storage-fs`) guarda la disposición de la pantalla y las guardadas con nombre. Los árboles van en YAML tal como los serializa `egui_tiles`; el almacén no sabe qué son.
+      - La disposición de la pantalla se escribe al soltar un panel, en otro hilo, como los ajustes; al arrancar vuelve como quedó.
+      - La ventana "Layouts…" (menú de la aplicación y paleta, acción `layouts`): guardar la actual con un nombre (reemplaza la del mismo nombre), aplicar, renombrar en la fila, borrar y restablecer la predeterminada.
+      - Una disposición que no se entiende no se aplica: debe leerse como árbol y tener la request y la respuesta una vez cada una. Se avisa y se usa la predeterminada.
+      - Pruebas: el archivo (ida y vuelta, entradas sin nombre, YAML roto), la disposición como datos, la ventana entera (guardar, aplicar, restablecer, renombrar, borrar y qué se entrega para escribir) y la vuelta desde el archivo; captura de la ventana.
     - [ ] Paso 3, sacar un panel a otra ventana:
       - Un botón «Sacar a ventana» en la pestaña lo abre en una ventana del sistema propia (viewport de egui). Al cerrarla vuelve a su sitio.
       - Se recuerda su tamaño. En Wayland no se puede recordar la posición, porque la elige el compositor.

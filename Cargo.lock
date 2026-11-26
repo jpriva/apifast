@@ -420,6 +420,7 @@ dependencies = [
  "http",
  "prost",
  "rfd",
+ "serde",
  "serde_json",
  "tempfile",
  "tokio",

@@ -10,7 +10,7 @@ use std::time::Instant;
 
 use apifast_gui::app::App;
 use apifast_gui::core::{Command, Core};
-use apifast_storage_fs::{FsKeymapStore, FsSettingsStore, WORKSPACE_FILE};
+use apifast_storage_fs::{FsKeymapStore, FsLayoutStore, FsSettingsStore, WORKSPACE_FILE};
 use eframe::egui;
 use eframe::egui_wgpu::{WgpuConfiguration, WgpuSetup, WgpuSetupCreateNew};
 use eframe::wgpu::Backends;
@@ -190,6 +190,9 @@ fn run(
                 .with_system_language(system)
                 .with_settings(settings)
                 .with_keymap(keymap)
+                .with_layouts(FsLayoutStore::new(apifast_history::dirs::layouts_file_in(
+                    &dirs,
+                )))
                 .with_folders(apifast_history::dirs::data_dir(), dirs)
                 .with_transparent_window(own_title_bar);
             if let Some(logging) = logging {

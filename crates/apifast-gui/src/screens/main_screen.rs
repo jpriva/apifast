@@ -56,6 +56,12 @@ pub struct MainScreen {
     response: ResponseView,
     /// Where the request and the response are.
     pub layout: layout::EditorLayout,
+    /// The layouts saved with a name, as kept in their file.
+    saved_layouts: Vec<(String, serde_json::Value)>,
+    /// The layout on screen as last kept, to tell when it changes.
+    kept_layout: Option<serde_json::Value>,
+    /// The Layouts window.
+    pub layouts_window: crate::organisms::LayoutsWindow,
     editor: Option<Editor>,
     hints: HintsCache,
     /// The shortcuts of every action.
@@ -193,6 +199,7 @@ enum Closing {
 struct Unsaved {
     keymap: bool,
     settings: bool,
+    layouts: bool,
 }
 
 /// The interface's own copy of the active tab's contents. Edits change it
@@ -637,6 +644,84 @@ impl MainScreen {
         std::mem::take(&mut self.unsaved.settings)
     }
 
+    /// Takes the layouts kept in a file: the one on screen as data, and
+    /// those saved with a name. Tells whether the one on screen could not
+    /// be read; the default stands in for it.
+    pub fn set_layouts(
+        &mut self,
+        (current, saved): (Option<serde_json::Value>, Vec<(String, serde_json::Value)>),
+    ) -> bool {
+        self.saved_layouts = saved;
+        let Some(current) = current else {
+            return false;
+        };
+        match layout::EditorLayout::from_json(current) {
+            Some(layout) => {
+                self.layout = layout;
+                self.kept_layout = Some(self.layout.to_json());
+                false
+            }
+            None => true,
+        }
+    }
+
+    /// What to write to the layouts' file, if it changed since it was last
+    /// taken: the layout on screen, as data, and those saved with a name.
+    pub fn take_layouts_change(
+        &mut self,
+    ) -> Option<(serde_json::Value, Vec<(String, serde_json::Value)>)> {
+        let current = self.layout.to_json();
+        let saved = std::mem::take(&mut self.unsaved.layouts);
+        if !saved && self.kept_layout.as_ref() == Some(&current) {
+            return None;
+        }
+        self.kept_layout = Some(current.clone());
+        Some((current, self.saved_layouts.clone()))
+    }
+
+    /// Does what was asked in the Layouts window.
+    fn layout_event(&mut self, event: crate::organisms::LayoutEvent, strings: &Strings) {
+        use crate::organisms::LayoutEvent;
+        let saved = &mut self.saved_layouts;
+        match event {
+            LayoutEvent::Apply(index) => {
+                let found = saved.get(index).cloned();
+                match found.and_then(|(_, value)| layout::EditorLayout::from_json(value)) {
+                    Some(layout) => self.layout = layout,
+                    None => self.notice = Some(strings.layout_not_understood.to_owned()),
+                }
+                return;
+            }
+            LayoutEvent::SaveAs(name) => {
+                let value = self.layout.to_json();
+                match saved.iter_mut().find(|(other, _)| *other == name) {
+                    Some(same) => same.1 = value,
+                    None => saved.push((name, value)),
+                }
+            }
+            LayoutEvent::Rename(index, name) => {
+                // A layout that had the new name is replaced by this one.
+                let other = saved.iter().position(|(other, _)| *other == name);
+                if let Some(entry) = saved.get_mut(index) {
+                    entry.0 = name;
+                }
+                if let Some(other) = other.filter(|other| *other != index) {
+                    saved.remove(other);
+                }
+            }
+            LayoutEvent::Delete(index) => {
+                if index < saved.len() {
+                    saved.remove(index);
+                }
+            }
+            LayoutEvent::Reset => {
+                self.layout = layout::EditorLayout::default();
+                return;
+            }
+        }
+        self.unsaved.layouts = true;
+    }
+
     /// Applies the appearance and the editor of the settings, on every
     /// screen. The scale waits until the mouse is released, so a slider
     /// being dragged does not move under the pointer; a scale changed with
@@ -772,6 +857,12 @@ impl MainScreen {
             self.shortcuts.open = true;
         }
         (self.about).show(&ctx, &self.settings_window.folders, strings);
+        let names: Vec<String> = (self.saved_layouts.iter())
+            .map(|(name, _)| name.clone())
+            .collect();
+        if let Some(event) = self.layouts_window.show(&ctx, &names, strings) {
+            self.layout_event(event, strings);
+        }
         if let Some(password) = self.settings_window.password_change.take() {
             commands.push(Command::SetProxyPassword(password));
         }
@@ -886,6 +977,7 @@ impl MainScreen {
             Action::Cookies => &mut self.cookies_window.open,
             Action::Settings => &mut self.settings_window.open,
             Action::About => &mut self.about.open,
+            Action::Layouts => &mut self.layouts_window.open,
             _ => return false,
         };
         *open = true;
@@ -948,6 +1040,7 @@ impl MainScreen {
             | Action::Cookies
             | Action::Settings
             | Action::About
+            | Action::Layouts
             | Action::FocusUrl
             | Action::Environments
             | Action::ToggleSidebar
@@ -1494,6 +1587,7 @@ fn app_menu(ui: &mut egui::Ui, strings: &Strings) -> Option<Action> {
             for (i, action) in [
                 Action::Settings,
                 Action::Shortcuts,
+                Action::Layouts,
                 Action::ImportCollection,
                 Action::About,
                 Action::Quit,
@@ -1501,7 +1595,7 @@ fn app_menu(ui: &mut egui::Ui, strings: &Strings) -> Option<Action> {
             .into_iter()
             .enumerate()
             {
-                if i == 3 || i == 4 {
+                if i == 4 || i == 5 {
                     ui.separator();
                 }
                 if ui.button(action.label(strings)).clicked() {

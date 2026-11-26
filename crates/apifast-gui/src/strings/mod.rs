@@ -373,6 +373,24 @@ pub struct Strings {
     pub pane_response: &'static str,
     /// Action that puts the request and response side by side or one under the other.
     pub action_toggle_layout: &'static str,
+    /// Title of the Layouts window.
+    pub layouts_title: &'static str,
+    /// What the Layouts window says first.
+    pub layouts_hint: &'static str,
+    /// Shown when no layout was saved.
+    pub layouts_none: &'static str,
+    /// Button that puts a saved layout on screen.
+    pub layout_apply: &'static str,
+    /// Placeholder of a layout's name.
+    pub layout_name_hint: &'static str,
+    /// Button that saves the layout on screen with the name typed.
+    pub layout_save: &'static str,
+    /// Button that puts the default layout on screen.
+    pub layout_reset: &'static str,
+    /// Told when a layout in layouts.yml cannot be read.
+    pub layout_not_understood: &'static str,
+    /// Action that opens the Layouts window.
+    pub action_layouts: &'static str,
     /// Action: show the history.
     pub action_show_history: &'static str,
     /// Action: format the body.
