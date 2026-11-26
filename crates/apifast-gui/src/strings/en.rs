@@ -271,6 +271,8 @@ pub const STRINGS: Strings = Strings {
     action_toggle_sidebar: "Toggle sidebar",
     pane_request: "Request",
     pane_response: "Response",
+    pane_take_out: "Open in its own window",
+    pane_bring_back: "Put back in the main window",
     action_toggle_layout: "Request and response side by side or stacked",
     layouts_title: "Layouts",
     layouts_hint: "Drag a pane's tab to move it, and the line between panes to resize them. Ctrl+J puts them side by side or one under the other.",

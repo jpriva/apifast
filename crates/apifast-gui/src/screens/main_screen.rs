@@ -278,6 +278,9 @@ impl MainScreen {
             (&mut self.request, &mut self.response, &mut self.layout),
             &mut self.editor,
         );
+        // Shortcuts pressed in a pane's own window, run with the others.
+        let mut window_keys = Vec::new();
+        let keys = (&self.keymap, &mut window_keys);
         let key_paste = &mut self.key_paste;
 
         let mut resolve = None;
@@ -312,14 +315,8 @@ impl MainScreen {
                 if tab.conflict {
                     resolve = conflict_banner(ui, strings);
                 }
-                // The list of earlier responses is of the focused collection.
-                let focused = (snapshot.collection.as_ref()).is_some_and(|c| c.root == tab.root);
-                panels.1.history = focused.then(|| HistoryOf {
-                    entries: snapshot.history.clone(),
-                    path: tab.path.clone(),
-                    now_ms: now_ms(),
-                });
-                let area = (panels, &*hints, sending, focus_url);
+                panels.1.history = earlier_responses(snapshot, tab);
+                let area = (panels, &*hints, sending, focus_url, keys);
                 let edits = editor_area(ui, tab, &mut editor.request, area, strings);
                 (tab_event, edits)
             },
@@ -352,6 +349,9 @@ impl MainScreen {
             commands.extend(self.tab_commands(event));
         }
         commands.extend(self.keys(ui, snapshot, sending, strings));
+        for action in window_keys {
+            commands.extend(self.run(action, snapshot, strings));
+        }
         commands.extend(self.confirm_close(ui.ctx(), snapshot, strings));
         commands
     }
@@ -621,16 +621,7 @@ impl MainScreen {
         if self.palette.open.is_some() || self.shortcuts.capturing() {
             return Vec::new();
         }
-        let available: Vec<Action> = (ALL.iter().copied())
-            .filter(|action| match action {
-                // Escape is free for everything else when not sending.
-                Action::Cancel => sending,
-                Action::Send => !sending,
-                // The body editor takes its own shortcut.
-                Action::FormatBody => false,
-                _ => true,
-            })
-            .collect();
+        let available = available_actions(sending);
         let pressed = ui.input_mut(|i| self.keymap.pressed(i, &available));
         pressed
             .into_iter()
@@ -1140,6 +1131,99 @@ fn history_command(event: HistoryEvent) -> Command {
     }
 }
 
+/// The earlier responses of `tab`'s request, for the response panel: the
+/// history it lists is the focused collection's.
+fn earlier_responses(snapshot: &Snapshot, tab: &Tab) -> Option<HistoryOf> {
+    let focused = (snapshot.collection.as_ref()).is_some_and(|c| c.root == tab.root);
+    focused.then(|| HistoryOf {
+        entries: snapshot.history.clone(),
+        path: tab.path.clone(),
+        now_ms: now_ms(),
+    })
+}
+
+/// The request panel, the response view and where they are.
+type Panels<'a> = (
+    &'a mut RequestPanel,
+    &'a mut ResponseView,
+    &'a mut layout::EditorLayout,
+);
+
+/// The keymap, and where to put the shortcuts pressed in a pane's own
+/// window.
+type WindowKeys<'a> = (&'a Keymap, &'a mut Vec<Action>);
+
+/// The actions whose shortcuts are listened to, `sending` or not.
+fn available_actions(sending: bool) -> Vec<Action> {
+    (ALL.iter().copied())
+        .filter(|action| match action {
+            // Escape is free for everything else when not sending.
+            Action::Cancel => sending,
+            Action::Send => !sending,
+            // The body editor takes its own shortcut.
+            Action::FormatBody => false,
+            _ => true,
+        })
+        .collect()
+}
+
+/// What happened in a pane's own window this frame.
+#[derive(Debug, Default)]
+struct PaneWindow {
+    /// It was closed, or asked to go back: the pane goes back in its place.
+    back: bool,
+    /// Its size now, when the system says.
+    size: Option<egui::Vec2>,
+    /// The shortcuts pressed in it.
+    pressed: Vec<Action>,
+}
+
+/// Shows `pane`, titled `title`, in a window of its own of `size` (ADR
+/// 0015): a window of the system, drawn in the same frame as the main one,
+/// or a window inside it where the system cannot open more. `draw` fills
+/// it; a button above puts it back, and so does closing it.
+fn pane_window(
+    ctx: &egui::Context,
+    (pane, title, size): (layout::Pane, &str, egui::Vec2),
+    (keymap, available): &(&Keymap, Vec<Action>),
+    strings: &Strings,
+    draw: &mut dyn FnMut(&mut egui::Ui, layout::Pane),
+) -> PaneWindow {
+    let id = egui::ViewportId::from_hash_of(("apifast-pane", pane));
+    let mut builder = egui::ViewportBuilder::default()
+        .with_title(format!("{title} · apifast"))
+        .with_inner_size(size)
+        .with_min_inner_size([320.0, 240.0])
+        .with_app_id("com.tryxtek.apifast");
+    if let Some(icon) = crate::app::window_icon() {
+        builder = builder.with_icon(icon);
+    }
+    ctx.show_viewport_immediate(id, builder, |ui, class| {
+        let mut window = PaneWindow::default();
+        let own = class != egui::ViewportClass::EmbeddedWindow;
+        let mut contents = |ui: &mut egui::Ui| {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(title).strong());
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    window.back = ui.button(strings.pane_bring_back).clicked();
+                });
+            });
+            ui.separator();
+            draw(ui, pane);
+        };
+        if own {
+            // Its own input: closing it and its shortcuts.
+            window.size = ui.input(|i| i.viewport().inner_rect.map(|rect| rect.size()));
+            window.pressed = ui.input_mut(|i| keymap.pressed(i, available));
+            egui::CentralPanel::default().show(ui, |ui| contents(ui));
+            window.back |= ui.input(|i| i.viewport().close_requested());
+        } else {
+            contents(ui);
+        }
+        window
+    })
+}
+
 /// The URL bar, then the request and its response in their panes, side
 /// by side or as the user arranged them. Returns the URL bar's event and whether the request was edited, with the
 /// URL and the parameter list kept in step.
@@ -1147,15 +1231,12 @@ fn editor_area(
     ui: &mut egui::Ui,
     tab: &Tab,
     request: &mut HttpRequest,
-    ((panel, response, arrangement), hints, sending, focus_url): (
-        (
-            &mut RequestPanel,
-            &mut ResponseView,
-            &mut layout::EditorLayout,
-        ),
+    ((panel, response, arrangement), hints, sending, focus_url, (keymap, pressed)): (
+        Panels<'_>,
         &VariableHints,
         bool,
         bool,
+        WindowKeys<'_>,
     ),
     strings: &Strings,
 ) -> (Option<UrlBarEvent>, bool) {
@@ -1183,12 +1264,29 @@ fn editor_area(
     ui.separator();
     let mut change = None;
     let titles = (strings.pane_request, strings.pane_response);
-    arrangement.show(ui, titles, |ui, pane| match pane {
+    let mut draw = |ui: &mut egui::Ui, pane| match pane {
         layout::Pane::Request => {
-            change = panel.show(ui, request, &tab.context, hints, strings);
+            change = panel
+                .show(ui, request, &tab.context, hints, strings)
+                .or(change);
         }
         layout::Pane::Response => response.show(ui, &tab.response, strings),
-    });
+    };
+    arrangement.show(ui, (titles, strings.pane_take_out), &mut draw);
+    let keys = (keymap, available_actions(sending));
+    for (pane, size) in arrangement.out().to_vec() {
+        let title = match pane {
+            layout::Pane::Request => titles.0,
+            layout::Pane::Response => titles.1,
+        };
+        let window = pane_window(ui.ctx(), (pane, title, size), &keys, strings, &mut draw);
+        if window.back {
+            arrangement.bring_back(pane);
+        } else if let Some(size) = window.size {
+            arrangement.resized(pane, size);
+        }
+        pressed.extend(window.pressed);
+    }
     match change {
         Some(RequestChange::Params) => {
             sync_url_from_params(request);

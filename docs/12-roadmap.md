@@ -546,16 +546,16 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
       - La ventana "Layouts…" (menú de la aplicación y paleta, acción `layouts`): guardar la actual con un nombre (reemplaza la del mismo nombre), aplicar, renombrar en la fila, borrar y restablecer la predeterminada.
       - Una disposición que no se entiende no se aplica: debe leerse como árbol y tener la request y la respuesta una vez cada una. Se avisa y se usa la predeterminada.
       - Pruebas: el archivo (ida y vuelta, entradas sin nombre, YAML roto), la disposición como datos, la ventana entera (guardar, aplicar, restablecer, renombrar, borrar y qué se entrega para escribir) y la vuelta desde el archivo; captura de la ventana.
-    - [ ] Paso 3, sacar un panel a otra ventana:
-      - Un botón «Sacar a ventana» en la pestaña lo abre en una ventana del sistema propia (viewport de egui). Al cerrarla vuelve a su sitio.
-      - Se recuerda su tamaño. En Wayland no se puede recordar la posición, porque la elige el compositor.
-      - Esas ventanas llevan la barra del sistema; dibujar la propia en ellas queda para después.
-      - Los atajos funcionan también con el foco en la ventana sacada.
-    - [ ] Pruebas:
-      - Mover, partir y cerrar paneles, y guardar y restaurar el estado, con `egui_kittest`.
-      - Capturas en los dos temas.
-      - Medición de memoria con una y con dos ventanas sacadas.
-    - [ ] Documentar en [docs/09](09-ui-ux.md): sección de disposiciones y atajos.
+    - [x] Paso 3, sacar un panel a otra ventana ([docs/09](09-ui-ux.md#layout-principal)):
+      - Un botón en la barra de pestañas de cada panel (icono dibujado `Icon::TakeOut`) lo abre en un viewport inmediato de egui. El panel se oculta en el árbol (con su contenedor de pestañas, si era el único), así que conserva su sitio y el otro ocupa todo el espacio.
+      - Vuelve al cerrar la ventana o con "Put back in the main window".
+      - Los atajos funcionan también con el foco en la ventana sacada: se leen en su propia entrada y se ejecutan con los de la principal.
+      - `layouts.yml` guarda qué paneles están fuera y el tamaño de su ventana. El formato pasa a `{tree, out}`, y un árbol suelto, como lo guardaba el paso 2, se sigue leyendo. Wayland no deja recordar la posición.
+      - Esas ventanas llevan la barra del sistema; la propia queda para después.
+      - Sin ventanas del sistema (las pruebas), egui dibuja el panel en una ventana suya dentro de la principal.
+      - Pruebas: sacar, guardar con el tamaño, leer y devolver al mismo sitio (modelo); sacar y devolver desde la pantalla. Además se abrió de verdad en Wayland con un programa temporal: dos viewports, el panel fuera y su tamaño.
+    - [x] Pruebas: disposición inicial, `Ctrl+J`, guardar y restaurar, sacar y devolver, con `egui_kittest`; capturas en los dos temas; memoria con una y dos ventanas sacadas (`bench -- viewports`). Arrastrar pestañas lo prueba `egui_tiles`.
+    - [x] Documentado en [docs/09](09-ui-ux.md#layout-principal): paneles, `Ctrl+J`, la ventana Layouts y sacar paneles.
 
 ### Criterio de salida
 

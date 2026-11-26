@@ -166,6 +166,9 @@ pub enum Icon {
     NewFolder,
     /// A bin: remove.
     Trash,
+    /// A box with an arrow leaving it by its corner: open in a window of
+    /// its own.
+    TakeOut,
 }
 
 impl Icon {
@@ -237,6 +240,21 @@ impl Icon {
                 painter.add(egui::Shape::line(bin, stroke));
                 painter.line_segment([at(0.4, 0.38), at(0.42, 0.8)], stroke);
                 painter.line_segment([at(0.6, 0.38), at(0.58, 0.8)], stroke);
+            }
+            Self::TakeOut => {
+                // The box, open at its top right corner.
+                let open_box = vec![
+                    at(0.45, 0.15),
+                    at(0.0, 0.15),
+                    at(0.0, 1.0),
+                    at(0.85, 1.0),
+                    at(0.85, 0.55),
+                ];
+                painter.add(egui::Shape::line(open_box, stroke));
+                // The arrow, from the middle to that corner.
+                painter.line_segment([at(0.4, 0.6), at(1.0, 0.0)], stroke);
+                let head = vec![at(0.6, 0.0), at(1.0, 0.0), at(1.0, 0.4)];
+                painter.add(egui::Shape::line(head, stroke));
             }
         }
     }

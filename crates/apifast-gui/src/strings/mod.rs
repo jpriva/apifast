@@ -371,6 +371,10 @@ pub struct Strings {
     pub pane_request: &'static str,
     /// Title of the editor's response pane.
     pub pane_response: &'static str,
+    /// Button on a pane's tabs that opens it in a window of its own.
+    pub pane_take_out: &'static str,
+    /// Button in a pane's own window that puts it back.
+    pub pane_bring_back: &'static str,
     /// Action that puts the request and response side by side or one under the other.
     pub action_toggle_layout: &'static str,
     /// Title of the Layouts window.

@@ -49,7 +49,14 @@ La interfaz se construye con egui (eframe). El objetivo es que resulte familiar 
 - Arrastrar la pestaña de un panel lo pone al lado del otro, debajo, encima o como otra pestaña del mismo sitio, y la línea entre ellos los redimensiona.
 - `Ctrl+J` alterna entre lado a lado y uno encima del otro, conservando los tamaños. Si los dos paneles estaban como pestañas de un mismo sitio, vuelven a ponerse lado a lado.
 - Las filas de pestañas de la request (Params, Headers…) y de la respuesta pasan a una segunda línea cuando el panel es estrecho, en lugar de ensanchar lo que hay debajo.
-- La disposición se recuerda: al soltar un panel arrastrado o redimensionado se escribe en `layouts.yml`, en la carpeta de configuración, y al arrancar vuelve como quedó.
+- **Sacar un panel a su propia ventana:** el botón con un recuadro y una flecha, a la derecha de la barra de pestañas de cada panel, lo abre en una ventana del sistema (un viewport de egui que se dibuja en el mismo frame que la principal).
+  - El otro panel ocupa todo el sitio. El hueco del que salió se guarda, y el panel vuelve ahí al cerrar su ventana o con "Put back in the main window".
+  - Los atajos funcionan también con el foco en esa ventana.
+  - La ventana lleva la barra de título del sistema.
+  - Se recuerda su tamaño, pero no su posición, porque en Wayland la elige el compositor.
+  - Donde el sistema no deja abrir más ventanas, el panel sale en una ventana de egui dentro de la principal; así lo prueban las pruebas.
+  - Solo hay ventanas sacadas mientras hay una request abierta. Cada una cuesta unos 2,4 MB ([docs/10](10-rendimiento-y-memoria.md#mediciones-de-f10)).
+- La disposición se recuerda, con los paneles que están en su propia ventana: al soltar un panel arrastrado o redimensionado se escribe en `layouts.yml`, en la carpeta de configuración, y al arrancar vuelve como quedó.
 - La ventana **Layouts…** (menú de la aplicación o paleta) guarda la disposición de la pantalla con un nombre y lista las guardadas. Cada una se puede aplicar, renombrar (en la misma fila: Enter guarda, Esc cancela) o borrar.
   - Guardar con un nombre que ya existe reemplaza esa disposición.
   - "Restore default layout" vuelve a la de Bruno.

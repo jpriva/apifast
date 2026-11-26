@@ -271,6 +271,8 @@ pub const STRINGS: Strings = Strings {
     action_toggle_sidebar: "Mostrar u ocultar la barra lateral",
     pane_request: "Petición",
     pane_response: "Respuesta",
+    pane_take_out: "Abrir en su propia ventana",
+    pane_bring_back: "Devolver a la ventana principal",
     action_toggle_layout: "Petición y respuesta lado a lado o una encima de otra",
     layouts_title: "Disposiciones",
     layouts_hint: "Arrastra la pestaña de un panel para moverlo, y la línea entre paneles para redimensionarlos. Ctrl+J los pone lado a lado o uno encima del otro.",
