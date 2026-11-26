@@ -41,6 +41,8 @@ macro_rules! git_repository_contract {
                 a_commit_keeps_what_else_was_staged,
                 the_first_commit_starts_the_branch,
                 a_collection_in_a_folder_commits_by_its_own_paths,
+                a_commit_keeps_other_changes_visible_whatever_the_clock,
+                a_later_git_commit_keeps_what_was_committed,
                 the_local_branches_are_listed,
                 switching_branches_changes_the_files_the_index_and_head,
                 a_switch_is_refused_while_a_tracked_file_has_changes,
@@ -96,6 +98,9 @@ pub fn repo() -> tempfile::TempDir {
     git(dir.path(), &["config", "user.name", "Tester"]);
     git(dir.path(), &["config", "user.email", "tester@example.com"]);
     git(dir.path(), &["config", "commit.gpgsign", "false"]);
+    // Files as written, whatever the system's git says: Windows runners
+    // turn `\n` into `\r\n` on checkout by default.
+    git(dir.path(), &["config", "core.autocrlf", "false"]);
     dir
 }
 
@@ -325,6 +330,67 @@ pub fn a_collection_in_a_folder_commits_by_its_own_paths(open: Open<'_>) {
         .unwrap();
     assert_eq!(git_output(root, &["status", "--porcelain"]), "M top.txt");
     assert_eq!(git_output(root, &["show", "HEAD:api/a.yml"]), "a: 2");
+}
+
+/// A commit keeps the other files' changes visible to git, even one made
+/// in the same second as the index was last written, with the same size.
+/// Git only finds those by reading the file ("racy git"): rewriting the
+/// index must keep them marked to be read, as git does.
+pub fn a_commit_keeps_other_changes_visible_whatever_the_clock(open: Open<'_>) {
+    let dir = repo();
+    let root = dir.path();
+    // Dated at a set time, so the test does not depend on the clock.
+    let past = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000_000);
+    let set_mtime = |path: &str| {
+        let times = std::fs::FileTimes::new().set_modified(past);
+        let file = std::fs::File::options().write(true).open(root.join(path));
+        file.and_then(|file| file.set_times(times)).unwrap();
+    };
+    // ctime is left out, so that only the mtime set below counts.
+    git(root, &["config", "core.trustctime", "false"]);
+    write(root, "a.yml", "a: 1\n");
+    write(root, "top.txt", "t");
+    set_mtime("top.txt");
+    git(root, &["add", "."]);
+    git(root, &["commit", "-q", "-m", "first"]);
+    // Changed in the same second as the index, with the same size and
+    // time: only the index's timestamp tells git to read it.
+    write(root, "top.txt", "u");
+    set_mtime("top.txt");
+    set_mtime(".git/index");
+    // Without writing the index, which would mark the file itself.
+    let status = ["--no-optional-locks", "status", "--porcelain"];
+    assert_eq!(git_output(root, &status), "M top.txt");
+
+    write(root, "a.yml", "a: 2\n");
+    opened(open, root)
+        .commit(&paths(&["a.yml"]), "Change a")
+        .unwrap();
+    assert_eq!(git_output(root, &status), "M top.txt");
+}
+
+/// A commit leaves no stale tree cache in the index: a later `git commit`
+/// of another file keeps what was committed, and does not take a folder
+/// as it was before.
+pub fn a_later_git_commit_keeps_what_was_committed(open: Open<'_>) {
+    let dir = repo();
+    let root = dir.path();
+    write(root, "api/a.yml", "a: 1\n");
+    write(root, "top.txt", "t");
+    git(root, &["add", "."]);
+    git(root, &["commit", "-q", "-m", "first"]);
+    // git keeps the trees it built in the index.
+    git(root, &["write-tree"]);
+
+    write(root, "api/a.yml", "a: 2\n");
+    opened(open, root)
+        .commit(&paths(&["api/a.yml"]), "Change a")
+        .unwrap();
+    write(root, "top.txt", "u");
+    git(root, &["add", "top.txt"]);
+    git(root, &["commit", "-q", "-m", "Change top"]);
+    assert_eq!(git_output(root, &["show", "HEAD:api/a.yml"]), "a: 2");
+    assert_eq!(git_output(root, &["status", "--porcelain"]), "");
 }
 
 /// A repository with `main` (a, b, run.sh) and `feature` (a changed, b
