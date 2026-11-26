@@ -57,6 +57,9 @@ pub struct Settings {
     pub ui_scale: f32,
     /// How much room there is between and inside controls.
     pub density: Density,
+    /// apifast draws the title bar, with minimize, maximize and close
+    /// always; else the system does. Only where [`crate::chrome::SUPPORTED`].
+    pub own_title_bar: bool,
     /// A font file (TTF or OTF) for code; empty for the one included.
     pub code_font: String,
     /// The size of code, in points.
@@ -117,6 +120,7 @@ impl Default for Settings {
             accent: Accent::default(),
             ui_scale: 1.0,
             density: Density::default(),
+            own_title_bar: true,
             code_font: String::new(),
             code_size: crate::theme::text::CODE,
             tab_size: 2,
@@ -250,6 +254,10 @@ impl Settings {
                 .map(|b| settings.confirm_close = b),
             "accent" => Accent::parse(value).map(|accent| settings.accent = accent),
             "density" => Density::parse(value).map(|density| settings.density = density),
+            "own_title_bar" => value
+                .parse::<bool>()
+                .ok()
+                .map(|b| settings.own_title_bar = b),
             "code_font" => {
                 value.clone_into(&mut settings.code_font);
                 Some(())
@@ -291,6 +299,7 @@ impl Settings {
             ("accent".into(), self.accent.as_str().into()),
             ("ui_scale".into(), format!("{}", self.ui_scale)),
             ("density".into(), self.density.as_str().into()),
+            ("own_title_bar".into(), self.own_title_bar.to_string()),
             ("code_font".into(), self.code_font.clone()),
             ("code_size".into(), format!("{}", self.code_size)),
             ("tab_size".into(), self.tab_size.to_string()),
@@ -363,6 +372,12 @@ impl Settings {
         }
     }
 
+    /// Whether apifast draws the title bar: where it can, and the settings
+    /// say so.
+    pub fn draws_title_bar(&self) -> bool {
+        crate::chrome::SUPPORTED && self.own_title_bar
+    }
+
     /// The accent, spacing and code size.
     pub fn look(&self) -> Look {
         Look {
@@ -433,6 +448,7 @@ mod tests {
             accent: Accent::Teal,
             ui_scale: 1.25,
             density: Density::Compact,
+            own_title_bar: false,
             code_font: "/usr/share/fonts/mono.ttf".into(),
             code_size: 14.5,
             tab_size: 4,

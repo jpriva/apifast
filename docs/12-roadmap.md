@@ -496,11 +496,12 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
     - El icono, el nombre, la versión con su commit, la licencia (MIT o Apache-2.0) y las de las 512 dependencias. Las genera el script de compilación con `cargo metadata` para la plataforma de destino.
     - El sitio, el enlace para reportar errores, y las carpetas de datos y de ajustes.
     - Un botón que copia la versión, el sistema y los gráficos (backend, adaptador y driver) para un reporte de error.
-  - [ ] Barra de título propia, con minimizar, maximizar y cerrar siempre, aunque GNOME no los pida:
-    - La ventana va sin decoraciones del sistema y la barra la dibuja la interfaz: arrastrar mueve la ventana, el doble clic maximiza, y los bordes la redimensionan.
-    - Puede llevar el buscador y el entorno, como hacen otros clientes de APIs.
-    - Un ajuste vuelve a la barra del sistema.
-    - En Windows y macOS se mantiene la nativa, salvo que se pruebe allí.
+  - [x] Barra de título propia, con minimizar, maximizar y cerrar siempre, aunque GNOME no los pida ([docs/09](09-ui-ux.md#temas-y-accesibilidad)):
+    - La ventana va sin decoraciones del sistema y la barra la dibuja la interfaz (`chrome`): arrastrar mueve la ventana, el doble clic maximiza, y los bordes y las esquinas la redimensionan.
+    - Lleva el buscador ("Search…", que abre la paleta), el entorno y el menú.
+    - Un ajuste (`own_title_bar`) vuelve a la barra del sistema en el momento; se lee antes de abrir la ventana.
+    - En Windows y macOS se mantiene la nativa (`chrome::SUPPORTED`), hasta probar allí.
+    - [ ] Esquinas redondeadas y sombra con la barra propia: piden una ventana transparente que dibuje su marco.
   - [ ] Mejoras visuales:
     - Campos de texto que hoy son pequeños, y la × de pestañas y ventanas (anotado desde F2).
     - Iconos dibujados en lugar de texto en las barras y botones.

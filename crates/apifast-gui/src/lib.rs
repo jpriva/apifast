@@ -12,6 +12,7 @@ pub mod actions;
 pub mod app;
 pub mod atoms;
 pub mod body;
+pub mod chrome;
 pub mod code;
 pub mod core;
 pub mod layout;

@@ -1545,6 +1545,20 @@ pub struct Strings {
     pub about_other_licenses: Plural,
     /// The count of dependencies, `{n}`.
     pub about_dependencies: Plural,
+    /// Window button: minimize.
+    pub window_minimize: &'static str,
+    /// Window button: maximize.
+    pub window_maximize: &'static str,
+    /// Window button: restore from maximized.
+    pub window_restore: &'static str,
+    /// Window button: close.
+    pub window_close: &'static str,
+    /// Button in the title bar that opens the command palette.
+    pub title_search: &'static str,
+    /// Setting: apifast draws the title bar.
+    pub settings_own_title_bar: &'static str,
+    /// Explains the title bar setting.
+    pub settings_own_title_bar_hint: &'static str,
     /// How many tabs have unsaved changes, `{n}`.
     pub close_unsaved: Plural,
 }

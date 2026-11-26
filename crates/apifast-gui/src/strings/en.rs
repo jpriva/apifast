@@ -866,6 +866,13 @@ pub const STRINGS: Strings = Strings {
     about_dependencies_hint: "The crates apifast is built with, each under its own license.",
     about_other_licenses: Plural::two("{n} under other licenses", "{n} under other licenses"),
     about_dependencies: Plural::two("{n} dependency", "{n} dependencies"),
+    window_minimize: "Minimize",
+    window_maximize: "Maximize",
+    window_restore: "Restore",
+    window_close: "Close",
+    title_search: "Search…",
+    settings_own_title_bar: "Draw the title bar in apifast",
+    settings_own_title_bar_hint: "With minimize, maximize and close always. Off: the system's bar.",
     close_unsaved: Plural::two(
         "{n} tab has unsaved changes.",
         "{n} tabs have unsaved changes.",

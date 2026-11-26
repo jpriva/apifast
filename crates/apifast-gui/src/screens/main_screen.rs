@@ -96,6 +96,8 @@ pub struct MainScreen {
     closing: Closing,
     /// The About window.
     pub about: crate::organisms::AboutWindow,
+    /// Whether the system draws the window's decorations, as last asked.
+    decorations: Option<bool>,
     /// Quit was asked for: the window is asked to close on this frame.
     quit: bool,
     /// The collection key window.
@@ -250,7 +252,7 @@ impl MainScreen {
             (tab_event, (url_event, edited)),
         ) = layout::workbench(
             ui,
-            bars(snapshot, strings),
+            bars(snapshot, self.settings.draws_title_bar(), strings),
             (!self.sidebar_hidden).then_some(|ui: &mut egui::Ui| {
                 sidebar_area(ui, (sidebar, tree, history), snapshot, strings)
             }),
@@ -604,6 +606,16 @@ impl MainScreen {
     /// `Ctrl+=` or `Ctrl+-` goes back into the settings. A code font that
     /// cannot be used is told.
     pub fn apply_appearance(&mut self, ctx: &egui::Context, strings: &Strings) {
+        let drawn = self.settings.draws_title_bar();
+        if self.decorations != Some(!drawn) {
+            if crate::chrome::SUPPORTED {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(!drawn));
+            }
+            self.decorations = Some(!drawn);
+        }
+        if drawn {
+            crate::chrome::resize_edges(ctx);
+        }
         let look = self.settings.look();
         if self.look != Some(look) {
             theme::apply_style(ctx, look);
@@ -1345,6 +1357,7 @@ fn conflict_banner(ui: &mut egui::Ui, strings: &Strings) -> Option<bool> {
 )]
 fn bars<'a>(
     snapshot: &'a Snapshot,
+    own_title_bar: bool,
     strings: &'a Strings,
 ) -> (
     impl FnOnce(&mut egui::Ui) -> (Option<Command>, bool, Option<Action>) + 'a,
@@ -1352,7 +1365,7 @@ fn bars<'a>(
 ) {
     let name = (snapshot.collection.as_ref()).map(|c| c.tree.collection.name.as_str());
     (
-        move |ui: &mut egui::Ui| top_bar(ui, name, snapshot, strings),
+        move |ui: &mut egui::Ui| top_bar(ui, (name, own_title_bar), snapshot, strings),
         (snapshot.git.as_ref()).map(|git| move |ui: &mut egui::Ui| status_bar(ui, git, strings)),
     )
 }
@@ -1407,29 +1420,38 @@ fn app_menu(ui: &mut egui::Ui, strings: &Strings) -> Option<Action> {
     picked
 }
 
+/// The top bar: the collection's name, a search that opens the palette,
+/// the environment, the application's menu and, when apifast draws the
+/// title bar (`own`), the window's buttons, with the rest of the bar
+/// moving the window.
 fn top_bar(
     ui: &mut egui::Ui,
-    name: Option<&str>,
+    (name, own): (Option<&str>, bool),
     snapshot: &Snapshot,
     strings: &Strings,
 ) -> (Option<Command>, bool, Option<Action>) {
+    if own {
+        crate::chrome::drag_area(ui);
+    }
     ui.horizontal(|ui| {
-        let Some(name) = name else {
-            ui.label(RichText::new("apifast").strong());
-            let menu = ui
-                .with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    app_menu(ui, strings)
-                })
-                .inner;
-            return (None, false, menu);
-        };
-        ui.label(RichText::new(name).strong());
-        if snapshot.vault.master_in_file {
+        ui.label(RichText::new(name.unwrap_or("apifast")).strong());
+        if name.is_some() && snapshot.vault.master_in_file {
             ui.label(RichText::new(strings.master_in_file).color(theme::palette(ui).warning))
                 .on_hover_text(strings.master_in_file_hint);
         }
+        let search = ui
+            .button(strings.title_search)
+            .on_hover_text(strings.action_palette)
+            .clicked();
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let menu = app_menu(ui, strings);
+            if own {
+                crate::chrome::window_controls(ui, strings);
+                ui.separator();
+            }
+            let menu = app_menu(ui, strings).or(search.then_some(Action::Palette));
+            if name.is_none() {
+                return (None, false, menu);
+            }
             let edit = ui
                 .button(strings.environments)
                 .on_hover_text(strings.edit_environments)

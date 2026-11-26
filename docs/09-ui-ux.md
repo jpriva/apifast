@@ -216,7 +216,7 @@ A la derecha de la barra superior hay un botón de menú, al estilo de GNOME. Su
 | Sección | Ajustes |
 |---|---|
 | General | Idioma (`language`). Abrir el último espacio de trabajo al iniciar (`reopen_workspace`; si no, el de por defecto). Preguntar antes de cerrar con cambios sin guardar (`confirm_close`, apagado por defecto: los borradores se guardan igual y vuelven al abrir). |
-| Apariencia | Tema (`theme`). Color de acento (`accent`: `blue`, `green`, `teal`, `purple`, `pink`, `orange`; cada uno con un tono claro y otro oscuro que cumplen AA). Escala (`ui_scale`). Densidad (`density`: `compact`, `normal`, `comfortable`), que cambia el espacio entre controles y dentro de los botones. |
+| Apariencia | Tema (`theme`). En Linux, barra de título de apifast o del sistema (`own_title_bar`). Color de acento (`accent`: `blue`, `green`, `teal`, `purple`, `pink`, `orange`; cada uno con un tono claro y otro oscuro que cumplen AA). Escala (`ui_scale`). Densidad (`density`: `compact`, `normal`, `comfortable`), que cambia el espacio entre controles y dentro de los botones. |
 | Editor | Fuente del código (`code_font`: un archivo TTF u OTF, que va antes que la incluida; vacío, la incluida). Tamaño del código (`code_size`, de 9 a 24 pt). Lo que inserta Tab (`tab_size`: 0 para un tabulador, o 2, 4 u 8 espacios; Shift+Tab sigue quitando sangría). Ajustar las líneas largas (`wrap_lines`; si no, desplazamiento horizontal). Números de línea (`line_numbers`). Y el tamaño máximo de una respuesta que se muestra formateada (`pretty_limit_mb`). |
 | Red | Tiempo de espera por defecto (`timeout_s`; 0 es sin límite), para las requests cuya colección, carpetas y request no ponen uno: el panel de ajustes de la request lo muestra como el valor por defecto. Proxy, TLS y cookies, descritos abajo. |
 | Atajos | Un botón que abre el editor de atajos. |
@@ -358,7 +358,15 @@ Mientras la paleta está abierta o el editor espera una combinación, los demás
 - Las tablas con campos editables se componen fila a fila con anchos repartidos, no con `egui::Grid`: en una celda de grid un campo solo recibe el ancho que su columna midió el frame anterior y no crece.
 - Escala de interfaz configurable en los ajustes (`Ctrl+,`), que también siguen `Ctrl+=`, `Ctrl+-` y `Ctrl+0`; la escala aumenta el texto con todo lo demás.
 - Esquinas redondeadas (`theme::radius`): 4 en badges, 6 en botones, campos y paneles, y 10 en ventanas, menús y popups.
-- En Wayland la ventana dibuja su barra de título (GNOME no la dibuja por ella): la de Adwaita de winit, con esquinas redondeadas y los botones que pide `org.gnome.desktop.wm.preferences button-layout`. GNOME trae por defecto solo el de cerrar; `gsettings set org.gnome.desktop.wm.preferences button-layout 'appmenu:minimize,maximize,close'` añade los otros dos, en todas las aplicaciones.
+- En Linux, apifast dibuja su propia barra de título por defecto. La ventana va sin decoraciones del sistema, y la barra superior hace de barra de título:
+  - Arrastrar su espacio libre mueve la ventana y el doble clic la maximiza o la restaura.
+  - Siempre tiene minimizar, maximizar (restaurar si ya está maximizada) y cerrar, dibujados. Cerrar pasa por la pregunta de cambios sin guardar.
+  - Lleva el nombre de la colección, "Search…" (abre la paleta), el entorno y el menú.
+  - Los bordes y las esquinas de la ventana (6 y 14 puntos) la redimensionan, salvo maximizada.
+  - Todo se pide con comandos de viewport (`StartDrag`, `BeginResize`, `Maximized`…), que winit cumple en Wayland y X11.
+  - El ajuste "Draw the title bar in apifast" (Apariencia, `own_title_bar`) vuelve a la barra del sistema en el momento. `main.rs` lo lee antes de abrir la ventana, para que no aparezca primero la otra barra.
+  - Con la del sistema, en Wayland es la de Adwaita de winit, con esquinas redondeadas y los botones que pide `org.gnome.desktop.wm.preferences button-layout`. GNOME trae por defecto solo el de cerrar; `gsettings set org.gnome.desktop.wm.preferences button-layout 'appmenu:minimize,maximize,close'` añade los otros dos.
+  - En Windows y macOS se mantiene la barra nativa (`chrome::SUPPORTED`) hasta probar allí.
 - La ventana lleva su icono (el PNG de 128 px), para los escritorios que no lo toman de la entrada de menú.
 - Los colores de método y de estado nunca son el único indicador: siempre van con texto.
 - Contraste WCAG AA (4,5:1) en ambos temas, comprobado por un test sobre los tokens de `theme/`: cada color de texto sobre cada fondo, y el texto de los badges sobre su propio tinte.

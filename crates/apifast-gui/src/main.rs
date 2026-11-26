@@ -140,8 +140,18 @@ fn run(
     tracing::info!(?backends, "opening the window");
     let mut setup = WgpuSetupCreateNew::without_display_handle();
     setup.instance_descriptor.backends = backends;
+    // As the settings say, before the window opens, so it never shows the
+    // other title bar first.
+    let settings = FsSettingsStore::new(apifast_history::dirs::settings_file_in(
+        &apifast_history::dirs::config_dir(),
+    ));
+    let own_title_bar = (settings.load().ok())
+        .map(|entries| apifast_gui::settings::Settings::from_entries(&entries).0)
+        .unwrap_or_default()
+        .draws_title_bar();
     let mut viewport = egui::ViewportBuilder::default()
         .with_inner_size([1280.0, 800.0])
+        .with_decorations(!own_title_bar)
         .with_title("apifast")
         // As the desktop file is named (packaging/linux), so the desktop
         // shows the window with its entry and icon.

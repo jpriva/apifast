@@ -680,6 +680,15 @@ fn appearance(ui: &mut egui::Ui, settings: &mut Settings, strings: &Strings) -> 
             .on_hover_text(strings.settings_scale_hint)
             .changed();
         ui.end_row();
+        if crate::chrome::SUPPORTED {
+            ui.label(strings.settings_own_title_bar);
+            changed |= ui
+                .checkbox(&mut settings.own_title_bar, "")
+                .accessible_name(strings.settings_own_title_bar)
+                .on_hover_text(strings.settings_own_title_bar_hint)
+                .changed();
+            ui.end_row();
+        }
         ui.label(strings.settings_density);
         ui.horizontal(|ui| {
             for density in Density::ALL {
