@@ -33,6 +33,11 @@ clap = { version = "4.6.7", features = ["derive"] }
 anyhow = "1.0.104"
 tokio = { version = "1.54.1", features = ["rt", "time", "signal", "macros"] }
 
+# The executable's icon and version details (build_resources.rs). Without
+# `toml`: nothing is read from this manifest.
+[target.'cfg(windows)'.build-dependencies]
+winresource = { workspace = true }
+
 [features]
 default = ["grpc", "git"]
 grpc = ["dep:apifast-grpc"]

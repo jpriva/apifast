@@ -17,6 +17,11 @@ path = "src/main.rs"
 [build-dependencies]
 serde_json.workspace = true
 
+# The executable's icon and version details
+# (../apifast-cli/build_resources.rs).
+[target.'cfg(windows)'.build-dependencies]
+winresource = { workspace = true }
+
 [dependencies]
 apifast-domain.workspace = true
 apifast-template.workspace = true
