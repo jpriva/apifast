@@ -1,18 +1,41 @@
-//! The editor's panes: the request and its response, as tiles with a tab
-//! each (ADR 0015). Dragging a tab puts its pane beside the other, under it
-//! or as a tab of the same place; the line between them resizes them. By
-//! default they stand side by side, the same width, as in Bruno.
+//! Panes as tiles with a tab each (ADR 0015). Dragging a tab puts its pane
+//! beside another, under it or as a tab of the same place; the line between
+//! them resizes them.
+//!
+//! Two sets of panes use it:
+//! - the editor: the request and its response. By default they stand side
+//!   by side, the same width, as in Bruno.
+//! - the sidebar: the collections' tree and the history. By default they
+//!   are two tabs of one place, as the sidebar always had them.
 //!
 //! A pane can go out to a window of its own: it is hidden in the tree,
 //! which keeps its place, and shows again there when it comes back.
+
+use std::fmt::Debug;
+use std::hash::Hash;
 
 use eframe::egui;
 use egui_tiles::{
     Behavior, Container, LinearDir, SimplificationOptions, Tile, TileId, Tiles, Tree, UiResponse,
 };
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 use crate::atoms::{Icon, IconButton};
 use crate::theme;
+
+/// The size a pane's window opens at the first time, in points.
+const WINDOW_SIZE: egui::Vec2 = egui::vec2(640.0, 560.0);
+
+/// A kind of pane: the panes of one tree.
+pub trait PaneKind:
+    Copy + Eq + Hash + Debug + Serialize + DeserializeOwned + Send + Sync + 'static
+{
+    /// Every pane of the tree, once each.
+    const ALL: &'static [Self];
+    /// Names the tree, which must be unique.
+    const TREE: &'static str;
+}
 
 /// A pane of the editor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -23,20 +46,48 @@ pub enum Pane {
     Response,
 }
 
-/// The size a pane's window opens at the first time, in points.
-const WINDOW_SIZE: egui::Vec2 = egui::vec2(640.0, 560.0);
-
-/// Where the editor's panes are.
-#[derive(Debug)]
-pub struct EditorLayout {
-    tree: Tree<Pane>,
-    /// The panes in windows of their own, with the size of each window.
-    out: Vec<(Pane, egui::Vec2)>,
+impl PaneKind for Pane {
+    const ALL: &'static [Self] = &[Self::Request, Self::Response];
+    const TREE: &'static str = "editor-panes";
 }
+
+/// A pane of the sidebar.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum SidePane {
+    /// The workspace's collections, as a tree.
+    Collections,
+    /// The focused collection's history.
+    History,
+}
+
+impl PaneKind for SidePane {
+    const ALL: &'static [Self] = &[Self::Collections, Self::History];
+    const TREE: &'static str = "sidebar-panes";
+}
+
+/// Where the panes of one kind are.
+#[derive(Debug)]
+pub struct TileLayout<P> {
+    tree: Tree<P>,
+    /// The panes in windows of their own, with the size of each window.
+    out: Vec<(P, egui::Vec2)>,
+}
+
+/// Where the request and the response are.
+pub type EditorLayout = TileLayout<Pane>;
+
+/// Where the collections' tree and the history are.
+pub type SidebarLayout = TileLayout<SidePane>;
 
 impl Default for EditorLayout {
     fn default() -> Self {
         Self::side_by_side()
+    }
+}
+
+impl Default for SidebarLayout {
+    fn default() -> Self {
+        Self::with_root(Tiles::insert_tab_tile)
     }
 }
 
@@ -52,28 +103,15 @@ impl EditorLayout {
     }
 
     fn split(dir: LinearDir) -> Self {
-        let mut tiles = Tiles::default();
-        let request = tiles.insert_pane(Pane::Request);
-        let response = tiles.insert_pane(Pane::Response);
-        let request = tiles.insert_tab_tile(vec![request]);
-        let response = tiles.insert_tab_tile(vec![response]);
-        let root = match dir {
-            LinearDir::Horizontal => tiles.insert_horizontal_tile(vec![request, response]),
-            LinearDir::Vertical => tiles.insert_vertical_tile(vec![request, response]),
-        };
-        Self {
-            tree: Tree::new(egui::Id::unique("editor-panes"), root, tiles),
-            out: Vec::new(),
-        }
-    }
-
-    /// How the panes are split at the top: side by side (horizontal), one
-    /// under the other (vertical), or not at all (tabs of one place).
-    pub fn direction(&self) -> Option<LinearDir> {
-        match self.tree.tiles.get(self.tree.root()?)? {
-            Tile::Container(Container::Linear(linear)) => Some(linear.dir),
-            _ => None,
-        }
+        Self::with_root(|tiles, panes| {
+            let tabs = (panes.into_iter())
+                .map(|pane| tiles.insert_tab_tile(vec![pane]))
+                .collect();
+            match dir {
+                LinearDir::Horizontal => tiles.insert_horizontal_tile(tabs),
+                LinearDir::Vertical => tiles.insert_vertical_tile(tabs),
+            }
+        })
     }
 
     /// Side by side becomes one under the other, and the other way round,
@@ -94,6 +132,37 @@ impl EditorLayout {
             None => *self = Self::side_by_side(),
         }
     }
+}
+
+impl<P: PaneKind> TileLayout<P> {
+    /// Every pane, in a tree whose root `root` makes of them.
+    fn with_root(root: impl FnOnce(&mut Tiles<P>, Vec<TileId>) -> TileId) -> Self {
+        let mut tiles = Tiles::default();
+        let panes = (P::ALL.iter())
+            .map(|pane| tiles.insert_pane(*pane))
+            .collect();
+        let root = root(&mut tiles, panes);
+        Self {
+            tree: Tree::new(egui::Id::unique(P::TREE), root, tiles),
+            out: Vec::new(),
+        }
+    }
+
+    /// How the panes are split at the top: side by side (horizontal), one
+    /// under the other (vertical), or not at all (tabs of one place).
+    pub fn direction(&self) -> Option<LinearDir> {
+        match self.tree.tiles.get(self.tree.root()?)? {
+            Tile::Container(Container::Linear(linear)) => Some(linear.dir),
+            _ => None,
+        }
+    }
+
+    /// Shows `pane` if it is a tab behind another; a pane in a window of
+    /// its own stays there.
+    pub fn bring_forward(&mut self, pane: P) {
+        self.tree
+            .make_active(|_, tile| matches!(tile, Tile::Pane(p) if *p == pane));
+    }
 
     /// The layout as data, to keep it in a file: the tree, and the panes
     /// out in windows with their size.
@@ -108,21 +177,21 @@ impl EditorLayout {
     }
 
     /// A layout kept with [`Self::to_json`], if it is one: it reads as a
-    /// tree, and has the request and the response once each. A bare tree,
-    /// as the first version kept it, has no pane out.
+    /// tree, and has every pane once. A bare tree, as the first version
+    /// kept it, has no pane out.
     pub fn from_json(mut value: serde_json::Value) -> Option<Self> {
         let (tree, out) = match value.get_mut("tree") {
             Some(tree) => (tree.take(), value.get("out").cloned()),
             None => (value, None),
         };
-        let tree: Tree<Pane> = serde_json::from_value(tree).ok()?;
-        let out: Vec<(Pane, egui::Vec2)> = (out
+        let tree: Tree<P> = serde_json::from_value(tree).ok()?;
+        let out: Vec<(P, egui::Vec2)> = (out
             .as_ref()
             .and_then(serde_json::Value::as_array)
             .into_iter()
             .flatten())
         .filter_map(|entry| {
-            let pane: Pane = serde_json::from_value(entry.get("pane")?.clone()).ok()?;
+            let pane: P = serde_json::from_value(entry.get("pane")?.clone()).ok()?;
             let size = entry.get("size")?.as_array()?;
             let number = |i: usize| size.get(i)?.as_f64();
             #[expect(clippy::cast_possible_truncation, reason = "a window's size")]
@@ -134,10 +203,11 @@ impl EditorLayout {
             tree,
             out: Vec::new(),
         };
-        let mut panes: Vec<Pane> = layout.panes().into_iter().map(|(_, pane)| pane).collect();
-        panes.sort_by_key(|pane| *pane == Pane::Response);
+        let panes: Vec<P> = layout.panes().into_iter().map(|(_, pane)| pane).collect();
+        let each_once = panes.len() == P::ALL.len()
+            && (P::ALL.iter()).all(|pane| panes.iter().filter(|p| *p == pane).count() == 1);
         let root = layout.tree.root()?;
-        if panes != [Pane::Request, Pane::Response] || layout.tree.tiles.get(root).is_none() {
+        if !each_once || layout.tree.tiles.get(root).is_none() {
             return None;
         }
         for (pane, size) in out {
@@ -148,12 +218,12 @@ impl EditorLayout {
     }
 
     /// The panes in windows of their own, with the size of each window.
-    pub fn out(&self) -> &[(Pane, egui::Vec2)] {
+    pub fn out(&self) -> &[(P, egui::Vec2)] {
         &self.out
     }
 
     /// Takes `pane` out to a window of its own; its place stays, empty.
-    pub fn take_out(&mut self, pane: Pane) {
+    pub fn take_out(&mut self, pane: P) {
         if self.out.iter().any(|(out, _)| *out == pane) {
             return;
         }
@@ -162,13 +232,13 @@ impl EditorLayout {
     }
 
     /// Puts `pane` back in its place.
-    pub fn bring_back(&mut self, pane: Pane) {
+    pub fn bring_back(&mut self, pane: P) {
         self.out.retain(|(out, _)| *out != pane);
         self.set_shown(pane, true);
     }
 
     /// Remembers the size of `pane`'s window.
-    pub fn resized(&mut self, pane: Pane, size: egui::Vec2) {
+    pub fn resized(&mut self, pane: P, size: egui::Vec2) {
         if let Some((_, kept)) = self.out.iter_mut().find(|(out, _)| *out == pane) {
             *kept = size.round();
         }
@@ -176,7 +246,7 @@ impl EditorLayout {
 
     /// Shows or hides `pane` in the tree; with it, its tab container when
     /// it holds only that pane, so the other pane takes the whole place.
-    fn set_shown(&mut self, pane: Pane, shown: bool) {
+    fn set_shown(&mut self, pane: P, shown: bool) {
         let Some((tile, _)) = self.panes().into_iter().find(|(_, p)| *p == pane) else {
             return;
         };
@@ -194,7 +264,7 @@ impl EditorLayout {
     }
 
     /// The pane each tile shows, to find them.
-    pub fn panes(&self) -> Vec<(TileId, Pane)> {
+    pub fn panes(&self) -> Vec<(TileId, P)> {
         (self.tree.tiles.iter())
             .filter_map(|(id, tile)| match tile {
                 Tile::Pane(pane) => Some((*id, *pane)),
@@ -203,18 +273,17 @@ impl EditorLayout {
             .collect()
     }
 
-    /// Draws the panes in `ui`, titled by `titles` (the request's, the
-    /// response's), with a button that takes each out to a window, named
-    /// `take_out`; `draw` fills each. A pane taken out leaves on the next
-    /// frame.
+    /// Draws the panes in `ui`, each titled by `title`, with a button that
+    /// takes it out to a window, named `take_out`; `draw` fills each. A
+    /// pane taken out leaves on the next frame.
     pub fn show(
         &mut self,
         ui: &mut egui::Ui,
-        (titles, take_out): ((&str, &str), &str),
-        mut draw: impl FnMut(&mut egui::Ui, Pane),
+        (title, take_out): (&dyn Fn(P) -> String, &str),
+        mut draw: impl FnMut(&mut egui::Ui, P),
     ) {
         let mut behavior = Panes {
-            titles,
+            title,
             take_out,
             draw: &mut draw,
             taken: None,
@@ -228,34 +297,30 @@ impl EditorLayout {
 
 /// How the panes are drawn: their content by the screen, their tabs with
 /// apifast's theme.
-struct Panes<'a> {
-    titles: (&'a str, &'a str),
+struct Panes<'a, P> {
+    title: &'a dyn Fn(P) -> String,
     /// The name of the button that takes a pane out to a window.
     take_out: &'a str,
-    draw: &'a mut dyn FnMut(&mut egui::Ui, Pane),
+    draw: &'a mut dyn FnMut(&mut egui::Ui, P),
     /// The pane whose button was pressed.
-    taken: Option<Pane>,
+    taken: Option<P>,
 }
 
-impl Behavior<Pane> for Panes<'_> {
-    fn pane_ui(&mut self, ui: &mut egui::Ui, _tile: TileId, pane: &mut Pane) -> UiResponse {
+impl<P: PaneKind> Behavior<P> for Panes<'_, P> {
+    fn pane_ui(&mut self, ui: &mut egui::Ui, _tile: TileId, pane: &mut P) -> UiResponse {
         egui::Frame::NONE
             .inner_margin(theme::space::S)
             .show(ui, |ui| (self.draw)(ui, *pane));
         UiResponse::None
     }
 
-    fn tab_title_for_pane(&mut self, pane: &Pane) -> egui::WidgetText {
-        match pane {
-            Pane::Request => self.titles.0,
-            Pane::Response => self.titles.1,
-        }
-        .into()
+    fn tab_title_for_pane(&mut self, pane: &P) -> egui::WidgetText {
+        (self.title)(*pane).into()
     }
 
     fn top_bar_right_ui(
         &mut self,
-        tiles: &Tiles<Pane>,
+        tiles: &Tiles<P>,
         ui: &mut egui::Ui,
         _tile: TileId,
         tabs: &egui_tiles::Tabs,
@@ -307,6 +372,36 @@ mod tests {
                 Some(Tile::Container(Container::Tabs(_)))
             ));
         }
+    }
+
+    #[test]
+    fn the_sidebar_starts_as_two_tabs_of_one_place() {
+        let mut layout = SidebarLayout::default();
+        assert_eq!(layout.direction(), None);
+        let root = layout.tree.root().unwrap();
+        let Some(Tile::Container(Container::Tabs(tabs))) = layout.tree.tiles.get(root) else {
+            unreachable!()
+        };
+        assert_eq!(tabs.children.len(), 2);
+        let active = |layout: &SidebarLayout| {
+            let Some(Tile::Container(Container::Tabs(tabs))) = layout.tree.tiles.get(root) else {
+                unreachable!()
+            };
+            match layout.tree.tiles.get(tabs.active.unwrap()) {
+                Some(Tile::Pane(pane)) => *pane,
+                _ => unreachable!(),
+            }
+        };
+        assert_eq!(active(&layout), SidePane::Collections);
+        layout.bring_forward(SidePane::History);
+        assert_eq!(active(&layout), SidePane::History);
+
+        // Taken out, the other tab stays; read back, it is still out.
+        layout.take_out(SidePane::History);
+        let back = SidebarLayout::from_json(layout.to_json()).unwrap();
+        assert_eq!(back.out(), [(SidePane::History, WINDOW_SIZE)]);
+        // An editor layout is not a sidebar layout.
+        assert!(SidebarLayout::from_json(EditorLayout::default().to_json()).is_none());
     }
 
     #[test]

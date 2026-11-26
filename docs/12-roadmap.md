@@ -525,7 +525,7 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
     - En el historial lateral, renombrar (en la misma fila) y borrar desde el menú contextual, y vaciar todo tras confirmar. Borrar se lleva también la respuesta guardada.
     - Probado en el modelo, en el archivo (ida y vuelta, formato 1, renombrar, borrar, vaciar, límites con nombres), en el núcleo (enviar, renombrar, borrar con su respuesta, reiniciar y vaciar) y en la interfaz, con capturas.
     - [ ] Reenviar una entrada tal cual, sin volver a renderizar: hoy se copia como texto.
-  - [ ] Disposiciones editables (layouts). Se llaman así para no confundirlas con los workspaces de `workspace.yml`, que agrupan colecciones. Sustituyen a la disposición lado a lado con `Ctrl+J` que quedó fuera de F2.
+  - [x] Disposiciones editables (layouts). Se llaman así para no confundirlas con los workspaces de `workspace.yml`, que agrupan colecciones. Sustituyen a la disposición lado a lado con `Ctrl+J` que quedó fuera de F2.
     - [x] Paso 0, decisión ([ADR 0015](adr/0015-disposiciones-con-egui-tiles.md)):
       - `egui_tiles` 0.18 para los paneles: es de Rerun, divide en cualquier dirección, serializa el árbol y tiene la licencia de apifast. `egui_dock` 0.22 se descartó porque solo saca pestañas a ventanas de egui y arrastra `paste`, sin mantenimiento.
       - Ninguna saca un panel a una ventana del sistema: lo hará apifast con viewports inmediatos de egui, ocultando el panel del árbol mientras está fuera.
@@ -539,7 +539,13 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
       - `layout::workbench` y las esquinas redondeadas de la barra propia no cambian.
       - `egui_tiles` añade 121 KB al binario de la GUI (de 39,04 a 39,16 MB).
       - Pruebas: la disposición inicial y el cambio con `Ctrl+J`, y capturas de las dos disposiciones en los dos temas.
-    - [ ] Paso 1b: el árbol y el historial como paneles. Hoy siguen en la barra lateral, con su animación, `Ctrl+B` y las esquinas de la ventana; pasarlos a mosaicos cambia `layout::workbench` y se hace aparte.
+    - [x] Paso 1b, el árbol y el historial como paneles ([ADR 0015](adr/0015-disposiciones-con-egui-tiles.md), punto 4):
+      - La barra lateral tiene su propio árbol de `egui_tiles` (`layout::SidebarLayout`) con Collection e History. Por defecto son dos pestañas, como antes; se pueden apilar o sacar a su ventana, donde siguen funcionando con la barra lateral oculta.
+      - `layout::editor` pasó a ser genérico (`TileLayout<P: PaneKind>`) para los dos árboles.
+      - No cruzan con el editor: la barra de pestañas y la de URL son del editor, y la barra lateral conserva `Ctrl+B`, su animación y las esquinas.
+      - `layouts.yml` guarda `{editor, sidebar}`; las disposiciones de antes, solo del editor, se siguen leyendo.
+      - "Mostrar historial" trae al frente su pestaña.
+      - Pruebas: la barra lateral por defecto, traer al frente, sacar y leer de vuelta; sacar el historial, usarlo con la barra lateral oculta y devolverlo.
     - [x] Paso 2, guardar y recargar ([docs/09](09-ui-ux.md#layout-principal)):
       - `layouts.yml` en la carpeta de configuración (`FsLayoutStore` en `apifast-storage-fs`) guarda la disposición de la pantalla y las guardadas con nombre. Los árboles van en YAML tal como los serializa `egui_tiles`; el almacén no sabe qué son.
       - La disposición de la pantalla se escribe al soltar un panel, en otro hilo, como los ajustes; al arrancar vuelve como quedó.

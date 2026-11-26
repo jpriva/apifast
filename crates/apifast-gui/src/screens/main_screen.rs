@@ -32,21 +32,11 @@ use crate::theme::{self, ThemeChoice};
 /// Closed tabs remembered, to open again.
 const CLOSED_TABS: usize = 20;
 
-/// What the sidebar shows.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum Sidebar {
-    /// The collection's tree.
-    #[default]
-    Collection,
-    /// The history of sends.
-    History,
-}
-
 /// The state the main screen keeps between frames.
 #[derive(Debug, Default)]
 pub struct MainScreen {
-    /// What the sidebar shows.
-    pub sidebar: Sidebar,
+    /// Where the collections' tree and the history are, in the sidebar.
+    pub sidebar_layout: layout::SidebarLayout,
     tree: TreeView,
     history: HistoryView,
     /// The environment editor window.
@@ -271,7 +261,7 @@ impl MainScreen {
         let (empty, empty_actions) = self.empty_state(ui.ctx(), collection.is_some(), strings);
         let mut empty_pick = None;
         let mut sidebar_shown = !self.sidebar_hidden;
-        let (sidebar, history) = (&mut self.sidebar, &mut self.history);
+        let (sidebar, history) = (&mut self.sidebar_layout, &mut self.history);
         let (tree, tabs, panels, editor) = (
             &mut self.tree,
             &mut self.tabs,
@@ -635,6 +625,54 @@ impl MainScreen {
         std::mem::take(&mut self.unsaved.settings)
     }
 
+    /// The sidebar's panes that are in windows of their own: the tree and
+    /// the history work there as in the sidebar, which may be hidden.
+    /// Returns what they asked for.
+    fn sidebar_windows(
+        &mut self,
+        ctx: &egui::Context,
+        snapshot: &Snapshot,
+        strings: &Strings,
+    ) -> Vec<Command> {
+        let out = self.sidebar_layout.out().to_vec();
+        if out.is_empty() {
+            return Vec::new();
+        }
+        let sending = (snapshot.active_tab()).is_some_and(|tab| tab.response.is_sending());
+        let keys = (&self.keymap, available_actions(sending));
+        let (tree, history) = (&mut self.tree, &mut self.history);
+        let (mut tree_event, mut history_event) = (None, None);
+        let mut draw = |ui: &mut egui::Ui, pane| {
+            let (tree_now, history_now) = side_pane(ui, pane, (tree, history), snapshot, strings);
+            tree_event = tree_now.or(tree_event.take());
+            history_event = history_now.or(history_event.take());
+        };
+        let mut windows = Vec::new();
+        for (pane, size) in out {
+            let title = side_title(pane, strings);
+            let window = pane_window(ctx, (pane, &title, size), &keys, strings, &mut draw);
+            windows.push((pane, window));
+        }
+        let mut pressed = Vec::new();
+        for (pane, window) in windows {
+            if window.back {
+                self.sidebar_layout.bring_back(pane);
+            } else if let Some(size) = window.size {
+                self.sidebar_layout.resized(pane, size);
+            }
+            pressed.extend(window.pressed);
+        }
+        let mut commands = Vec::new();
+        if let Some((root, event)) = tree_event {
+            commands.extend(self.tree_commands(root, event));
+        }
+        commands.extend(history_event.map(history_command));
+        for action in pressed {
+            commands.extend(self.run(action, snapshot, strings));
+        }
+        commands
+    }
+
     /// Takes the layouts kept in a file: the one on screen as data, and
     /// those saved with a name. Tells whether the one on screen could not
     /// be read; the default stands in for it.
@@ -646,14 +684,41 @@ impl MainScreen {
         let Some(current) = current else {
             return false;
         };
-        match layout::EditorLayout::from_json(current) {
-            Some(layout) => {
-                self.layout = layout;
-                self.kept_layout = Some(self.layout.to_json());
-                false
-            }
-            None => true,
+        if self.apply_layouts(current) {
+            self.kept_layout = Some(self.layouts_json());
+            false
+        } else {
+            true
         }
+    }
+
+    /// Both layouts as data: the editor's and the sidebar's.
+    fn layouts_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "editor": self.layout.to_json(),
+            "sidebar": self.sidebar_layout.to_json(),
+        })
+    }
+
+    /// Puts layouts kept with [`Self::layouts_json`] on screen. One with
+    /// the editor's alone, as the first versions kept it, leaves the
+    /// sidebar as it is by default. Returns whether they could be read.
+    fn apply_layouts(&mut self, value: serde_json::Value) -> bool {
+        let (editor, sidebar) = match value.get("editor") {
+            Some(editor) => (editor.clone(), value.get("sidebar").cloned()),
+            None => (value, None),
+        };
+        let Some(editor) = layout::EditorLayout::from_json(editor) else {
+            return false;
+        };
+        let sidebar = match sidebar.map(layout::SidebarLayout::from_json) {
+            Some(Some(sidebar)) => sidebar,
+            Some(None) => return false,
+            None => layout::SidebarLayout::default(),
+        };
+        self.layout = editor;
+        self.sidebar_layout = sidebar;
+        true
     }
 
     /// What to write to the layouts' file, if it changed since it was last
@@ -661,7 +726,7 @@ impl MainScreen {
     pub fn take_layouts_change(
         &mut self,
     ) -> Option<(serde_json::Value, Vec<(String, serde_json::Value)>)> {
-        let current = self.layout.to_json();
+        let current = self.layouts_json();
         let saved = std::mem::take(&mut self.unsaved.layouts);
         if !saved && self.kept_layout.as_ref() == Some(&current) {
             return None;
@@ -673,23 +738,21 @@ impl MainScreen {
     /// Does what was asked in the Layouts window.
     fn layout_event(&mut self, event: crate::organisms::LayoutEvent, strings: &Strings) {
         use crate::organisms::LayoutEvent;
+        if let LayoutEvent::Apply(index) = event {
+            let found = self.saved_layouts.get(index).cloned();
+            if !found.is_some_and(|(_, value)| self.apply_layouts(value)) {
+                self.notice = Some(strings.layout_not_understood.to_owned());
+            }
+            return;
+        }
+        let value = self.layouts_json();
         let saved = &mut self.saved_layouts;
         match event {
-            LayoutEvent::Apply(index) => {
-                let found = saved.get(index).cloned();
-                match found.and_then(|(_, value)| layout::EditorLayout::from_json(value)) {
-                    Some(layout) => self.layout = layout,
-                    None => self.notice = Some(strings.layout_not_understood.to_owned()),
-                }
-                return;
-            }
-            LayoutEvent::SaveAs(name) => {
-                let value = self.layout.to_json();
-                match saved.iter_mut().find(|(other, _)| *other == name) {
-                    Some(same) => same.1 = value,
-                    None => saved.push((name, value)),
-                }
-            }
+            LayoutEvent::Apply(_) => {}
+            LayoutEvent::SaveAs(name) => match saved.iter_mut().find(|(other, _)| *other == name) {
+                Some(same) => same.1 = value,
+                None => saved.push((name, value)),
+            },
             LayoutEvent::Rename(index, name) => {
                 // A layout that had the new name is replaced by this one.
                 let other = saved.iter().position(|(other, _)| *other == name);
@@ -707,6 +770,7 @@ impl MainScreen {
             }
             LayoutEvent::Reset => {
                 self.layout = layout::EditorLayout::default();
+                self.sidebar_layout = layout::SidebarLayout::default();
                 return;
             }
         }
@@ -848,6 +912,7 @@ impl MainScreen {
             self.shortcuts.open = true;
         }
         (self.about).show(&ctx, &self.settings_window.folders, strings);
+        commands.extend(self.sidebar_windows(&ctx, snapshot, strings));
         let names: Vec<String> = (self.saved_layouts.iter())
             .map(|(name, _)| name.clone())
             .collect();
@@ -944,7 +1009,7 @@ impl MainScreen {
             Action::ToggleLayout => self.layout.toggle(),
             Action::ShowHistory => {
                 self.sidebar_hidden = false;
-                self.sidebar = Sidebar::History;
+                self.sidebar_layout.bring_forward(layout::SidePane::History);
             }
             Action::FormatBody => {
                 self.request.tab = crate::organisms::RequestTab::Body;
@@ -1182,14 +1247,14 @@ struct PaneWindow {
 /// 0015): a window of the system, drawn in the same frame as the main one,
 /// or a window inside it where the system cannot open more. `draw` fills
 /// it; a button above puts it back, and so does closing it.
-fn pane_window(
+fn pane_window<P: layout::PaneKind>(
     ctx: &egui::Context,
-    (pane, title, size): (layout::Pane, &str, egui::Vec2),
+    (pane, title, size): (P, &str, egui::Vec2),
     (keymap, available): &(&Keymap, Vec<Action>),
     strings: &Strings,
-    draw: &mut dyn FnMut(&mut egui::Ui, layout::Pane),
+    draw: &mut dyn FnMut(&mut egui::Ui, P),
 ) -> PaneWindow {
-    let id = egui::ViewportId::from_hash_of(("apifast-pane", pane));
+    let id = egui::ViewportId::from_hash_of(("apifast-pane", P::TREE, pane));
     let mut builder = egui::ViewportBuilder::default()
         .with_title(format!("{title} · apifast"))
         .with_inner_size(size)
@@ -1272,14 +1337,18 @@ fn editor_area(
         }
         layout::Pane::Response => response.show(ui, &tab.response, strings),
     };
-    arrangement.show(ui, (titles, strings.pane_take_out), &mut draw);
-    let keys = (keymap, available_actions(sending));
-    for (pane, size) in arrangement.out().to_vec() {
-        let title = match pane {
+    let title = |pane| {
+        match pane {
             layout::Pane::Request => titles.0,
             layout::Pane::Response => titles.1,
-        };
-        let window = pane_window(ui.ctx(), (pane, title, size), &keys, strings, &mut draw);
+        }
+        .to_owned()
+    };
+    arrangement.show(ui, (&title, strings.pane_take_out), &mut draw);
+    let keys = (keymap, available_actions(sending));
+    for (pane, size) in arrangement.out().to_vec() {
+        let title = title(pane);
+        let window = pane_window(ui.ctx(), (pane, &title, size), &keys, strings, &mut draw);
         if window.back {
             arrangement.bring_back(pane);
         } else if let Some(size) = window.size {
@@ -1800,12 +1869,13 @@ enum SidebarAsk {
     RenameWorkspace,
 }
 
-/// The sidebar: the workspace, then a switch between its collections and
-/// the focused collection's history. Returns what the tree reported, with
-/// its collection, what was done in the history and what else was asked for.
+/// The sidebar: the workspace, then its panes, the collections' tree and
+/// the focused collection's history (as tabs by default). Returns what the
+/// tree reported, with its collection, what was done in the history and
+/// what else was asked for.
 fn sidebar_area(
     ui: &mut egui::Ui,
-    (sidebar, tree, history): (&mut Sidebar, &mut TreeView, &mut HistoryView),
+    (sidebar, tree, history): (&mut layout::SidebarLayout, &mut TreeView, &mut HistoryView),
     snapshot: &Snapshot,
     strings: &Strings,
 ) -> (
@@ -1814,41 +1884,60 @@ fn sidebar_area(
     Option<SidebarAsk>,
 ) {
     let ask = workspace_header(ui, snapshot, strings);
-    ui.horizontal(|ui| {
-        ui.selectable_value(sidebar, Sidebar::Collection, strings.sidebar_collection);
-        ui.selectable_value(sidebar, Sidebar::History, strings.sidebar_history);
+    ui.add_space(theme::space::S);
+    let (mut tree_event, mut history_event) = (None, None);
+    let title = |pane| side_title(pane, strings);
+    sidebar.show(ui, (&title, strings.pane_take_out), |ui, pane| {
+        let (tree_now, history_now) = side_pane(ui, pane, (tree, history), snapshot, strings);
+        tree_event = tree_now.or(tree_event.take());
+        history_event = history_now.or(history_event.take());
     });
-    ui.separator();
-    match *sidebar {
-        Sidebar::History => {
+    (tree_event, history_event, ask)
+}
+
+/// The title of a pane of the sidebar.
+fn side_title(pane: layout::SidePane, strings: &Strings) -> String {
+    match pane {
+        layout::SidePane::Collections => strings.sidebar_collection,
+        layout::SidePane::History => strings.sidebar_history,
+    }
+    .to_owned()
+}
+
+/// What a pane of the sidebar shows: the collections' tree, or the
+/// focused collection's history. Returns what each reported.
+fn side_pane(
+    ui: &mut egui::Ui,
+    pane: layout::SidePane,
+    (tree, history): (&mut TreeView, &mut HistoryView),
+    snapshot: &Snapshot,
+    strings: &Strings,
+) -> (Option<(PathBuf, TreeEvent)>, Option<HistoryEvent>) {
+    let muted = theme::palette(ui).text_muted;
+    match pane {
+        layout::SidePane::History => {
             if let Some(collection) = &snapshot.collection {
                 let name = &collection.tree.collection.name;
-                let muted = theme::palette(ui).text_muted;
                 let text = fill(strings.history_of, &[("name", name)]);
                 ui.label(RichText::new(text).color(muted));
             }
-            (
-                None,
-                history.show(ui, &snapshot.history, now_ms(), strings),
-                ask,
-            )
+            (None, history.show(ui, &snapshot.history, now_ms(), strings))
         }
-        Sidebar::Collection if snapshot.collections.is_empty() => {
-            let muted = theme::palette(ui).text_muted;
+        layout::SidePane::Collections if snapshot.collections.is_empty() => {
             ui.label(RichText::new(strings.no_collection).color(muted));
-            (None, None, ask)
+            (None, None)
         }
-        Sidebar::Collection => {
+        layout::SidePane::Collections => {
             let focused = snapshot.collection.as_ref().map(|c| c.root.as_path());
             let selected = snapshot.active.as_ref();
-            let event = tree.show(
+            let tree_event = tree.show(
                 ui,
                 &snapshot.collections,
                 snapshot.version,
                 (selected, focused),
                 strings,
             );
-            (event, None, ask)
+            (tree_event, None)
         }
     }
 }

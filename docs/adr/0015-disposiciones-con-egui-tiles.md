@@ -52,7 +52,12 @@ Una ventana sacada cuesta unos 2,4 MB: su superficie gráfica y sus búferes. Ca
    - Se dibuja en un viewport inmediato (`show_viewport_immediate`), con el mismo estado y en el mismo frame que la ventana principal.
    - Al cerrar esa ventana, el panel vuelve a verse en su sitio.
    - La disposición guardada recuerda qué paneles estaban fuera y el tamaño de sus ventanas. La posición no, porque en Wayland la elige el compositor.
-4. Los viewports son **inmediatos**, no diferidos: un viewport diferido necesita su propio estado compartido entre hilos (`Arc<Mutex>`), y la pantalla de apifast es una sola estructura. El coste es que cada ventana se redibuja cuando se redibuja la principal; está medido arriba.
+4. **La barra lateral tiene su propio árbol** (paso 1b), con el árbol de colecciones y el historial: dos pestañas por defecto, que se pueden poner una encima de la otra o sacar a su ventana. Los paneles no cruzan entre ese árbol y el del editor, por dos razones:
+   - la barra de pestañas de requests y la de URL pertenecen al editor, y un solo árbol con los cuatro paneles obligaría a meterlas dentro de un panel;
+   - la barra lateral conserva lo que ya tenía: se oculta con `Ctrl+B` y su animación, y redondea las esquinas de la ventana propia.
+
+   `layouts.yml` guarda los dos árboles, `{editor, sidebar}`. Una disposición con solo el del editor, como la escribían los pasos 2 y 3, se sigue leyendo, con la barra lateral por defecto.
+5. Los viewports son **inmediatos**, no diferidos: un viewport diferido necesita su propio estado compartido entre hilos (`Arc<Mutex>`), y la pantalla de apifast es una sola estructura. El coste es que cada ventana se redibuja cuando se redibuja la principal; está medido arriba.
 
 ## Consecuencias
 

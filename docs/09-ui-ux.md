@@ -37,7 +37,7 @@ La interfaz se construye con egui (eframe). El objetivo es que resulte familiar 
 | Zona | Contenido |
 |---|---|
 | Barra superior | Nombre de la colección de la pestaña activa, búsqueda y paleta de comandos, selector de entorno de esa colección con su color |
-| Barra lateral | Selector de workspace, árbol con una raíz por colección, historial de la colección activa. Se puede ocultar y redimensionar |
+| Barra lateral | Selector de workspace y, debajo, dos paneles: Collection (árbol con una raíz por colección) e History (historial de la colección activa). Por defecto son dos pestañas; se pueden poner uno encima del otro o sacar a su propia ventana. Se puede ocultar (`Ctrl+B`) y redimensionar |
 | Pestañas | Una por request abierta, de cualquier colección; un punto indica cambios sin guardar. El nombre de la colección aparece en el tooltip, y delante del nombre ("Billing / Health") cuando dos pestañas de colecciones distintas se llaman igual |
 | Barra de URL | Método, URL con resaltado de variables, botón de enviar o cancelar. Pegar un comando cURL convierte la request (ver abajo) |
 | Panel de request | Pestañas de edición. Con la respuesta, en paneles que se mueven y redimensionan (ver abajo) |
@@ -56,7 +56,12 @@ La interfaz se construye con egui (eframe). El objetivo es que resulte familiar 
   - Se recuerda su tamaño, pero no su posición, porque en Wayland la elige el compositor.
   - Donde el sistema no deja abrir más ventanas, el panel sale en una ventana de egui dentro de la principal; así lo prueban las pruebas.
   - Solo hay ventanas sacadas mientras hay una request abierta. Cada una cuesta unos 2,4 MB ([docs/10](10-rendimiento-y-memoria.md#mediciones-de-f10)).
-- La disposición se recuerda, con los paneles que están en su propia ventana: al soltar un panel arrastrado o redimensionado se escribe en `layouts.yml`, en la carpeta de configuración, y al arrancar vuelve como quedó.
+- **La barra lateral** tiene sus propios paneles, Collection e History, que funcionan igual:
+  - Por defecto son dos pestañas de un mismo sitio, como siempre. Arrastrando una pestaña se pueden poner uno encima del otro, para ver el árbol y el historial a la vez.
+  - Cualquiera de los dos se puede sacar a su propia ventana. Ahí sigue funcionando aunque la barra lateral esté oculta.
+  - "Mostrar historial" trae al frente la pestaña History.
+  - No se pueden arrastrar al área del editor, ni la request o la respuesta a la barra lateral: son dos árboles de paneles distintos ([ADR 0015](adr/0015-disposiciones-con-egui-tiles.md)).
+- La disposición se recuerda, la del editor y la de la barra lateral, con los paneles que están en su propia ventana: al soltar un panel arrastrado o redimensionado se escribe en `layouts.yml`, en la carpeta de configuración, y al arrancar vuelve como quedó.
 - La ventana **Layouts…** (menú de la aplicación o paleta) guarda la disposición de la pantalla con un nombre y lista las guardadas. Cada una se puede aplicar, renombrar (en la misma fila: Enter guarda, Esc cancela) o borrar.
   - Guardar con un nombre que ya existe reemplaza esa disposición.
   - "Restore default layout" vuelve a la de Bruno.

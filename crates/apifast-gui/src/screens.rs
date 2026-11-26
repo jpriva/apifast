@@ -3,4 +3,4 @@
 
 mod main_screen;
 
-pub use main_screen::{MainScreen, Sidebar};
+pub use main_screen::MainScreen;

@@ -342,21 +342,51 @@ fn ctrl_j_puts_the_response_under_the_request_and_back_beside_it() {
 fn a_pane_goes_out_to_its_own_window_and_comes_back() {
     use apifast_gui::layout::Pane;
     let mut harness = harness();
-    // The response's button: the second, as its pane is on the right.
+    // The sidebar's button, then the request's and the response's, left to
+    // right.
     let buttons: Vec<_> = harness.get_all_by_label(EN.pane_take_out).collect();
-    assert_eq!(buttons.len(), 2);
-    buttons[1].click();
+    assert_eq!(buttons.len(), 3);
+    buttons[2].click();
     harness.run();
     let out: Vec<Pane> = (harness.state().screen.layout.out().iter())
         .map(|(pane, _)| *pane)
         .collect();
     assert_eq!(out, [Pane::Response]);
     // Without windows of the system, as here, it shows in one of egui's.
-    assert_eq!(harness.get_all_by_label(EN.pane_take_out).count(), 1);
+    assert_eq!(harness.get_all_by_label(EN.pane_take_out).count(), 2);
     harness.get_by_label(EN.pane_bring_back).click();
     harness.run();
     assert_eq!(harness.state().screen.layout.out(), []);
-    assert_eq!(harness.get_all_by_label(EN.pane_take_out).count(), 2);
+    assert_eq!(harness.get_all_by_label(EN.pane_take_out).count(), 3);
+}
+
+#[test]
+fn the_history_goes_out_of_the_sidebar_and_works_there() {
+    use apifast_gui::layout::SidePane;
+    let mut harness = harness();
+    // The History tab, then the button of the sidebar's tabs: the first.
+    harness.get_by_label(EN.sidebar_history).click();
+    harness.run();
+    harness
+        .get_all_by_label(EN.pane_take_out)
+        .next()
+        .unwrap()
+        .click();
+    harness.run();
+    let out: Vec<SidePane> = (harness.state().screen.sidebar_layout.out().iter())
+        .map(|(pane, _)| *pane)
+        .collect();
+    assert_eq!(out, [SidePane::History]);
+    // Still there with the sidebar hidden.
+    press(&mut harness, Modifiers::COMMAND, Key::B);
+    harness.get_by_label(EN.filter_history);
+    harness.get_by_label(EN.pane_bring_back).click();
+    harness.run();
+    assert_eq!(harness.state().screen.sidebar_layout.out(), []);
+    assert!(
+        harness.query_by_label(EN.filter_history).is_none(),
+        "the sidebar is hidden"
+    );
 }
 
 #[test]

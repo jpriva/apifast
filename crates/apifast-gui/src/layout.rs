@@ -2,7 +2,7 @@
 
 mod editor;
 
-pub use editor::{EditorLayout, Pane};
+pub use editor::{EditorLayout, Pane, PaneKind, SidePane, SidebarLayout, TileLayout};
 pub use egui_tiles::LinearDir;
 
 use eframe::egui;
