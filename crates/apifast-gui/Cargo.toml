@@ -133,7 +133,9 @@ libxkbcommon-x11 = "*"
 workspace = true
 
 [dev-dependencies]
-egui_kittest = "0.37.0"
+# `wgpu` and `snapshot` draw the interface for the screenshot tests
+# (tests/gui/snapshots.rs).
+egui_kittest = { version = "0.37.0", features = ["wgpu", "snapshot"] }
 apifast-git-contract.workspace = true
 tempfile.workspace = true
 tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }

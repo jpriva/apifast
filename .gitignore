@@ -33,3 +33,8 @@ heaptrack.*
 *~
 .DS_Store
 Thumbs.db
+
+# Screenshot tests: what the last run drew, and its differences
+/crates/apifast-gui/tests/snapshots/*.new.png
+/crates/apifast-gui/tests/snapshots/*.diff.png
+/crates/apifast-gui/tests/snapshots/*.old.png

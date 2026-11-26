@@ -167,11 +167,11 @@ Cada spike tiene un resultado escrito con cifras, la librería YAML está elegid
 | Pendiente | Motivo |
 |---|---|
 | Buscar y reemplazar en el editor | No bloquea el uso diario |
-| Duplicar, renombrar con `F2`, filtro `Ctrl+F` y disposición lado a lado (`Ctrl+J`) | Funciones de la barra lateral y del diseño aún sin hacer; sus atajos se añaden con ellas |
+| Duplicar, renombrar con `F2`, filtro `Ctrl+F` y disposición lado a lado (`Ctrl+J`) | Funciones de la barra lateral y del diseño aún sin hacer; sus atajos se añaden con ellas. La disposición lado a lado pasa a las disposiciones editables de F10 |
 | Autocompletado de variables en el editor de varias líneas | Enter y las flechas chocan con la edición |
 | Entorno "de cuidado" que tiñe la barra | OpenCollection no tiene esa marca; falta decidir dónde guardarla |
 | Marcar variables como secretas | Llega con la bóveda (F3) |
-| Selector de respuestas anteriores en el panel de respuesta | El historial ya permite abrirlas |
+| Selector de respuestas anteriores en el panel de respuesta | El historial ya permite abrirlas; retomado en F10 como historial al estilo de IntelliJ |
 | Bloqueo de archivo del historial entre dos instancias | Cada línea se escribe de una vez; basta en la práctica |
 | Contraste 3:1 de los bordes de los campos | Los campos se distinguen por el fondo; se revisará en el repaso de accesibilidad |
 
@@ -510,6 +510,42 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
     - Transiciones: la barra lateral se desliza; las ventanas usan el fundido de egui.
     - Revisado en los dos temas con capturas sin ventana (`egui_kittest` con `wgpu`), que encontraron el método mal alineado en el árbol y botones cortados en la barra lateral.
     - [ ] La × de las ventanas es la de egui: cambiarla pide una barra de título propia para cada ventana.
+    - [ ] Tablas clave/valor (params, headers, campos de formulario, path params) al estilo de Bruno:
+      - Una tabla de verdad: un solo marco con líneas finas entre filas y columnas, campos sin borde propio y la fila resaltada al pasar el ratón.
+      - Fila de encabezado con la casilla, «Name» y «Value» en texto tenue.
+      - Nombre y valor en monoespaciada, con las variables resaltadas como ahora.
+      - Papelera dibujada en lugar de la ×, visible al pasar por la fila; filas desactivadas atenuadas.
+    - [ ] El editor del Body ocupa todo el alto disponible, con números de línea activados por defecto.
+  - [ ] Historial de respuestas al estilo del HTTP Client de IntelliJ:
+    - Cada entrada guarda también lo enviado: método, URL final, headers y body ya resueltos (el body hasta un límite, en el almacén de respuestas), con los secretos enmascarados como en la timeline. Migración del formato sin perder las entradas existentes.
+    - En el panel de respuesta, un botón «History (n)» con las respuestas anteriores de esa request (fecha, estado, tiempo y nombre), para abrirlas, renombrarlas o borrarlas. Sustituye al «Selector de respuestas anteriores» que quedó fuera de F2.
+    - Una entrada abierta muestra las pestañas de siempre y una pestaña Request con lo enviado, para copiarlo o reenviarlo tal cual.
+    - Renombrar una entrada la fija: la limpieza automática no la borra.
+    - En el historial lateral, renombrar y borrar desde el menú contextual, y borrar todo tras confirmar.
+  - [ ] Disposiciones editables (layouts). Se llaman así para no confundirlas con los workspaces de `workspace.yml`, que agrupan colecciones. Sustituyen a la disposición lado a lado con `Ctrl+J` que quedó fuera de F2.
+    - [ ] Paso 0, decisión (ADR):
+      - Elegir entre `egui_tiles`, `egui_dock` o paneles propios, según cuál tenga versión para egui 0.37, su licencia (cargo-deny) y si deja sacar un panel a otra ventana.
+      - Medir en un prototipo el coste en memoria y por frame de cada ventana extra, contra los presupuestos de [rendimiento](10-rendimiento-y-memoria.md).
+    - [ ] Paso 1, paneles acoplables:
+      - Request, respuesta, historial y árbol pasan a ser paneles con pestaña: se arrastran para ponerlos al lado, debajo o como pestaña de otro, y se redimensionan con los divisores.
+      - La disposición predeterminada es la de Bruno: request a la izquierda y respuesta a la derecha, del mismo tamaño.
+      - `Ctrl+J` alterna entre lado a lado y uno encima del otro.
+      - El layout de `layout::workbench` y las esquinas redondeadas de la barra propia siguen funcionando.
+    - [ ] Paso 2, guardar y recargar:
+      - La disposición (qué panel va dónde, sus tamaños y las ventanas sacadas) se guarda serializada en la configuración personal (`layouts.yml`), no en la colección.
+      - Varias disposiciones con nombre: guardar como, cambiar, renombrar y borrar desde la paleta y el menú de la aplicación. Al arrancar se restaura la última.
+      - Un archivo de otra versión que no se entiende se ignora con un aviso y se usa la predeterminada.
+      - Hay siempre una acción para volver a la predeterminada.
+    - [ ] Paso 3, sacar un panel a otra ventana:
+      - Un botón «Sacar a ventana» en la pestaña lo abre en una ventana del sistema propia (viewport de egui). Al cerrarla vuelve a su sitio.
+      - Se recuerda su tamaño. En Wayland no se puede recordar la posición, porque la elige el compositor.
+      - Esas ventanas llevan la barra del sistema; dibujar la propia en ellas queda para después.
+      - Los atajos funcionan también con el foco en la ventana sacada.
+    - [ ] Pruebas:
+      - Mover, partir y cerrar paneles, y guardar y restaurar el estado, con `egui_kittest`.
+      - Capturas en los dos temas.
+      - Medición de memoria con una y con dos ventanas sacadas.
+    - [ ] Documentar en [docs/09](09-ui-ux.md): sección de disposiciones y atajos.
 
 ### Criterio de salida
 

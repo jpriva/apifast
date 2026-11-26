@@ -15,7 +15,7 @@ use eframe::egui;
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 
-fn tree() -> CollectionTree {
+pub(crate) fn tree() -> CollectionTree {
     CollectionTree {
         collection: Collection::new("API"),
         items: vec![

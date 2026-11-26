@@ -54,6 +54,10 @@ jobs:
       # Installs the version pinned in rust-toolchain.toml.
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
+      # Lavapipe (Vulkan on the CPU) draws the interface's screenshot tests,
+      # which run only on Linux.
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
       - run: cargo test --workspace --locked
       - run: cargo test -p apifast-cli -p apifast-gui --no-default-features --locked
 

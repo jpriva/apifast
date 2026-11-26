@@ -174,6 +174,26 @@ cargo test -p apifast-gui --test gui flow         # las que tienen "flow" en el 
 
 Un texto nuevo de la interfaz va en `crates/apifast-gui/src/strings/en.rs` y en `es.rs` (ver [docs/09, "Idiomas"](09-ui-ux.md#idiomas)); las pruebas lo buscan por su campo (`EN.send`), no por la frase.
 
+### Las capturas
+
+`tests/gui/snapshots.rs` dibuja algunas partes de la interfaz con `wgpu`, en los dos temas, y compara cada imagen con la guardada en `crates/apifast-gui/tests/snapshots/`. Encuentran lo que el árbol de accesibilidad no ve:
+- un elemento desalineado o un botón cortado;
+- un glifo que falta en las fuentes: epaint entra en pánico solo al dibujarlo.
+
+Las imágenes se dibujan con lavapipe, el Vulkan por CPU de Mesa, que `egui_kittest` prefiere si está instalado. En Fedora viene en `mesa-vulkan-drivers`, y en Debian y Ubuntu en el paquete del mismo nombre; el CI lo instala.
+
+Otros drivers y sistemas dibujan algunos píxeles distintos. Por eso:
+- en macOS y Windows estas pruebas se ignoran;
+- en Linux sin lavapipe pueden fallar por diferencias mínimas.
+
+Tras un cambio que altera el aspecto a propósito, se regeneran las imágenes y se revisan antes del commit:
+
+```sh
+UPDATE_SNAPSHOTS=1 cargo test -p apifast-gui --test gui snapshots
+```
+
+Si una falla, junto a la imagen quedan `<nombre>.new.png`, con lo que se dibujó, y `<nombre>.diff.png`, con las diferencias. Git las ignora.
+
 ## Medir el rendimiento
 
 Las herramientas y cómo se usan están en `tools/bench/README.md`, y los presupuestos y las últimas mediciones en [docs/10](10-rendimiento-y-memoria.md). Siempre en release. Algunas abren la ventana real unos segundos.
