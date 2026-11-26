@@ -1534,7 +1534,13 @@ fn a_folder_without_a_collection_is_remembered_to_offer_one() {
     assert!(core.snapshot().default_parent.starts_with(data.path()));
     core.send(Command::OpenCollection(dir.path().to_path_buf()));
     let snapshot = wait(&core, "the error", |s| s.error.is_some());
-    assert_eq!(snapshot.missing_collection.as_deref(), Some(dir.path()));
+    // The folder as the core keeps it: resolved (`/private/var` on macOS,
+    // `\\?\C:\…` on Windows).
+    let resolved = dir.path().canonicalize().unwrap();
+    assert_eq!(
+        snapshot.missing_collection.as_deref(),
+        Some(resolved.as_path())
+    );
     // A folder that does not exist is not offered.
     core.send(Command::OpenCollection(dir.path().join("nope")));
     let snapshot = wait(&core, "the second error", |s| {
@@ -1789,13 +1795,15 @@ fn a_workspace_file_changed_outside_updates_the_list() {
 fn a_collection_whose_folder_is_gone_shows_why() {
     let dir = collection(server(Duration::ZERO));
     let data = tempfile::tempdir().unwrap();
-    {
+    let root = {
         let core = core_in(data.path());
         let root = open_root(&core, dir.path());
-        core.send(Command::CloseCollection(root));
+        core.send(Command::CloseCollection(root.clone()));
         wait(&core, "closed", |s| s.collection.is_none());
-    }
-    let gone = dir.path().to_path_buf();
+        // As the workspace lists it: resolved, as the interface would send it.
+        root
+    };
+    let gone = root;
     drop(dir);
     assert!(!gone.exists());
     let core = core_in(data.path());
@@ -2350,7 +2358,8 @@ fn a_postman_export_is_reviewed_then_imported_and_opened() {
 
     let target = dir.path().join("imported-shop");
     core.send(Command::ApplyImport(target.clone()));
-    let root = target.canonicalize().unwrap_or(target.clone());
+    // Resolved by its parent, which exists: the target does not yet.
+    let root = dir.path().canonicalize().unwrap().join("imported-shop");
     let snapshot = wait(&core, "the collection open", |s| {
         s.import.is_none() && s.collection.as_ref().is_some_and(|c| c.root == root)
     });
