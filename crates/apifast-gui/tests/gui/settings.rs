@@ -88,8 +88,9 @@ fn each_section_shows_its_settings_and_changes_them() {
         .get_by_role_and_label(Role::CheckBox, EN.settings_line_numbers)
         .click();
     harness.run();
+    // On by default: the click turns them off.
     let screen = &mut harness.state_mut().screen;
-    assert!(screen.settings.line_numbers);
+    assert!(!screen.settings.line_numbers);
     assert!(screen.take_settings_change());
 
     harness.get_by_label(EN.settings_network).click();
@@ -115,6 +116,7 @@ fn the_editor_options_apply_once_set() {
     let mut harness = harness(Vec::new());
     harness.state_mut().screen.settings.tab_size = 4;
     harness.state_mut().screen.settings.wrap_lines = false;
+    harness.state_mut().screen.settings.line_numbers = false;
     harness.run();
     let options = EditorOptions::of(&harness.ctx);
     assert_eq!(

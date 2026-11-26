@@ -6,10 +6,10 @@
 //! many rows at once.
 
 use apifast_domain::{FormField, Header, Param};
-use eframe::egui::{self, Id};
+use eframe::egui::{self, Id, RichText};
 
 use crate::atoms::{
-    CloseButton, TemplateField, TemplateFieldTexts, VariableHints, completions, refocus,
+    Icon, IconButton, TemplateField, TemplateFieldTexts, VariableHints, completions, refocus,
     suggestions,
 };
 use crate::strings::Strings;
@@ -22,6 +22,8 @@ const NAME_SHARE: f32 = 0.35;
 const MIN_FIELDS: f32 = 200.0;
 /// Rows the bulk editor shows before scrolling.
 const BULK_ROWS: usize = 8;
+/// How visible the name and value of a row that is not sent are.
+const DISABLED_OPACITY: f32 = 0.5;
 /// Starts a disabled row in the bulk text.
 const DISABLED: &str = "//";
 
@@ -237,69 +239,78 @@ impl<'a, T: KvRow> KvTable<'a, T> {
         };
         // Rows laid out by hand, not with a grid: a field in a grid cell only
         // gets the width its column measured before, so it never grows.
-        let widths = Widths::new(ui, fixed_names);
+        let columns = Columns::new(ui, fixed_names);
         let mut changed = false;
         let mut remove = None;
-        for (index, row) in rows.iter_mut().enumerate() {
-            if !shows(row) {
-                continue;
+        ui.scope(|ui| {
+            // The lines between rows are their only gap.
+            ui.spacing_mut().item_spacing.y = 0.0;
+            let top = ui.cursor().min.y;
+            header(ui, &columns, strings);
+            for (index, row) in rows.iter_mut().enumerate() {
+                if !shows(row) {
+                    continue;
+                }
+                let cells = Row::new(ui, &columns);
+                let enabled = *row.enabled();
+                cells.cell(ui, Column::Check, true, |ui| {
+                    changed |= ui
+                        .add(egui::Checkbox::without_text(row.enabled()))
+                        .accessible_name(strings.enabled)
+                        .on_hover_text(strings.enabled)
+                        .changed();
+                });
+                cells.cell(ui, Column::Name, enabled, |ui| {
+                    if fixed_names {
+                        ui.add_space(f32::from(theme::cell_frame().inner_margin.left));
+                        ui.label(RichText::new(row.name().as_str()).monospace());
+                    } else {
+                        let cell = (id.with((index, 0)), columns.name);
+                        changed |= name_field(ui, row.name(), cell, names, strings.name, true);
+                    }
+                });
+                cells.cell(ui, Column::Value, enabled, |ui| {
+                    changed |= value_field(ui, row.value(), id.with((index, 1)), hints, texts);
+                });
+                if !fixed_names {
+                    cells.cell(ui, Column::Remove, true, |ui| {
+                        let button = IconButton::new(Icon::Trash, strings.remove_row)
+                            .side(columns.remove * 0.75)
+                            .quiet(!cells.hovered);
+                        if ui.add(button).clicked() {
+                            remove = Some(index);
+                        }
+                    });
+                }
+                cells.end(ui);
             }
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = theme::space::S;
-                changed |= ui
-                    .checkbox(row.enabled(), "")
-                    .accessible_name(strings.enabled)
-                    .on_hover_text(strings.enabled)
-                    .changed();
-                if fixed_names {
-                    let size = egui::vec2(widths.name, ui.spacing().interact_size.y);
-                    ui.allocate_ui_with_layout(
-                        size,
-                        egui::Layout::left_to_right(egui::Align::Center),
-                        |ui| ui.label(egui::RichText::new(row.name().as_str()).monospace()),
-                    );
-                } else {
-                    let cell = id.with((index, 0));
-                    changed |= name_field(ui, row.name(), cell, widths.name, names, strings.name);
-                }
-                changed |= TemplateField::new(row.value(), hints, texts)
-                    .id(id.with((index, 1)))
-                    .desired_width(widths.value)
-                    .accessible_name(strings.value)
-                    .show(ui)
-                    .changed();
-                if !fixed_names && ui.add(CloseButton::new(strings.remove_row)).clicked() {
-                    remove = Some(index);
-                }
-            });
-        }
-        if !fixed_names {
-            // The empty row. Its fields have the ids the row will have once
-            // added, so typing keeps the focus.
-            let index = rows.len();
-            let (mut name, mut value) = (String::new(), String::new());
-            let (typed_name, typed_value) = ui
-                .horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = theme::space::S;
+            if !fixed_names {
+                // The empty row. Its fields have the ids the row will have
+                // once added, so typing keeps the focus.
+                let index = rows.len();
+                let (mut name, mut value) = (String::new(), String::new());
+                let cells = Row::new(ui, &columns);
+                cells.cell(ui, Column::Check, true, |ui| {
                     ui.add_enabled(false, egui::Checkbox::without_text(&mut true))
                         .accessible_name(strings.enabled);
-                    let cell = id.with((index, 0));
-                    let typed_name =
-                        name_field(ui, &mut name, cell, widths.name, names, strings.name);
-                    let typed_value = TemplateField::new(&mut value, hints, texts)
-                        .id(id.with((index, 1)))
-                        .desired_width(widths.value)
-                        .accessible_name(strings.value)
-                        .show(ui)
-                        .changed();
-                    (typed_name, typed_value)
-                })
-                .inner;
-            if typed_name || typed_value {
-                rows.push(new(name, value));
-                changed = true;
+                });
+                let mut typed = false;
+                cells.cell(ui, Column::Name, true, |ui| {
+                    let cell = (id.with((index, 0)), columns.name);
+                    typed |= name_field(ui, &mut name, cell, names, strings.name, true);
+                });
+                cells.cell(ui, Column::Value, true, |ui| {
+                    typed |= value_field(ui, &mut value, id.with((index, 1)), hints, texts);
+                });
+                cells.end(ui);
+                if typed {
+                    rows.push(new(name, value));
+                    changed = true;
+                }
             }
-        }
+            let bottom = ui.cursor().min.y;
+            columns.paint_lines(ui, top, bottom);
+        });
         if let Some(index) = remove {
             rows.remove(index);
             changed = true;
@@ -308,46 +319,225 @@ impl<'a, T: KvRow> KvTable<'a, T> {
     }
 }
 
-/// Widths of the name and value fields of a row, from the space there is.
-struct Widths {
-    name: f32,
-    value: f32,
+/// A value cell. Returns whether the value changed.
+fn value_field(
+    ui: &mut egui::Ui,
+    value: &mut String,
+    id: Id,
+    hints: &VariableHints,
+    texts: TemplateFieldTexts<'_>,
+) -> bool {
+    let response = TemplateField::new(value, hints, texts)
+        .id(id)
+        .frame(false)
+        .desired_width(ui.available_width())
+        .accessible_name(texts.placeholder)
+        .show(ui);
+    outline_focused(ui, &response);
+    response.changed()
 }
 
-impl Widths {
+/// Outlines the cell of `field` with the accent while it has the focus:
+/// a field without a frame shows nothing else but its cursor.
+fn outline_focused(ui: &egui::Ui, field: &egui::Response) {
+    if field.has_focus() {
+        let stroke = egui::Stroke::new(1.0, theme::palette(ui).accent);
+        let rect = ui.max_rect().shrink(1.0);
+        ui.painter()
+            .rect_stroke(rect, 0, stroke, egui::StrokeKind::Inside);
+    }
+}
+
+/// The columns of the table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Column {
+    Check,
+    Name,
+    Value,
+    Remove,
+}
+
+/// Where the columns of the table are, from the space there is, and how
+/// tall its rows are.
+struct Columns {
+    left: f32,
+    width: f32,
+    check: f32,
+    name: f32,
+    value: f32,
+    remove: f32,
+    height: f32,
+}
+
+impl Columns {
     fn new(ui: &egui::Ui, fixed_names: bool) -> Self {
-        let gap = theme::space::S;
-        let check = ui.spacing().icon_width;
-        let close = ui.spacing().interact_size.y.min(18.0);
+        let height = ui.spacing().interact_size.y;
+        let check = ui.spacing().icon_width + 2.0 * theme::space::S;
         // Without a remove button, the value takes its place.
-        let buttons = if fixed_names { 0.0 } else { close + gap };
-        let flexible = (ui.available_width() - check - 2.0 * gap - buttons).max(MIN_FIELDS);
+        let remove = if fixed_names { 0.0 } else { height };
+        let width = ui.available_width().max(MIN_FIELDS + check + remove);
+        let flexible = width - check - remove;
         let name = flexible * NAME_SHARE;
         Self {
+            left: ui.cursor().min.x,
+            width,
+            check,
             name,
             value: flexible - name,
+            remove,
+            height,
+        }
+    }
+
+    /// Where `column` starts and how wide it is.
+    fn span(&self, column: Column) -> (f32, f32) {
+        match column {
+            Column::Check => (0.0, self.check),
+            Column::Name => (self.check, self.name),
+            Column::Value => (self.check + self.name, self.value),
+            Column::Remove => (self.check + self.name + self.value, self.remove),
+        }
+    }
+
+    /// The table's frame, and the lines between its rows and columns,
+    /// from `top` to `bottom`.
+    fn paint_lines(&self, ui: &egui::Ui, top: f32, bottom: f32) {
+        let stroke = egui::Stroke::new(1.0, theme::palette(ui).border);
+        let painter = ui.painter();
+        let rect = egui::Rect::from_x_y_ranges(self.left..=self.left + self.width, top..=bottom);
+        painter.rect_stroke(rect, theme::radius::SMALL, stroke, egui::StrokeKind::Inside);
+        let mut y = top + self.height;
+        while y < bottom - 1.0 {
+            painter.hline(rect.x_range().shrink(1.0), y, stroke);
+            y += self.height;
+        }
+        for column in [Column::Name, Column::Value] {
+            let x = self.left + self.span(column).0;
+            painter.vline(x, rect.y_range().shrink(1.0), stroke);
+        }
+        if self.remove > 0.0 {
+            let x = self.left + self.span(Column::Remove).0;
+            painter.vline(x, rect.y_range().shrink(1.0), stroke);
         }
     }
 }
 
-/// A name cell, with `names` suggested as it is typed; `label` is its
-/// placeholder and accessible name. Returns whether the name changed.
+/// The titles of the columns, muted.
+fn header(ui: &mut egui::Ui, columns: &Columns, strings: &Strings) {
+    let cells = Row::new(ui, columns);
+    let muted = theme::palette(ui).text_muted;
+    for (column, title) in [
+        (Column::Name, strings.column_name),
+        (Column::Value, strings.column_value),
+    ] {
+        cells.cell(ui, column, true, |ui| {
+            ui.add_space(f32::from(theme::cell_frame().inner_margin.left));
+            ui.label(RichText::new(title).small().strong().color(muted));
+        });
+    }
+    cells.end(ui);
+}
+
+/// A row of the table: its cells are drawn into it, then [`Row::end`]
+/// takes its place, below the row before.
+struct Row<'c> {
+    columns: &'c Columns,
+    rect: egui::Rect,
+    /// Whether the pointer is over it, which lights it up.
+    hovered: bool,
+}
+
+impl<'c> Row<'c> {
+    fn new(ui: &mut egui::Ui, columns: &'c Columns) -> Self {
+        let size = egui::vec2(columns.width, columns.height);
+        let min = egui::pos2(columns.left, ui.cursor().min.y);
+        let rect = egui::Rect::from_min_size(min, size);
+        let hovered = ui.rect_contains_pointer(rect);
+        if hovered {
+            let fill = ui
+                .visuals()
+                .widgets
+                .hovered
+                .weak_bg_fill
+                .gamma_multiply(0.5);
+            ui.painter().rect_filled(rect.shrink(1.0), 0, fill);
+        }
+        Self {
+            columns,
+            rect,
+            hovered,
+        }
+    }
+
+    /// Takes the row's place, so the next one goes under it. After the
+    /// cells: the last one placed would else decide where the next row
+    /// starts, and a centered button is shorter than the row.
+    fn end(self, ui: &mut egui::Ui) {
+        ui.allocate_rect(self.rect, egui::Sense::hover());
+    }
+
+    /// Draws `add` into `column`'s cell, centered in its height; dimmed
+    /// unless `enabled`, and outlined with the accent while one of its
+    /// fields has the focus.
+    fn cell(
+        &self,
+        ui: &mut egui::Ui,
+        column: Column,
+        enabled: bool,
+        add: impl FnOnce(&mut egui::Ui),
+    ) {
+        let (x, width) = self.columns.span(column);
+        let rect = egui::Rect::from_min_size(
+            self.rect.min + egui::vec2(x, 0.0),
+            egui::vec2(width, self.rect.height()),
+        );
+        // The checkbox and the button, centered in their cells; the fields
+        // fill theirs.
+        let rect = match column {
+            Column::Check => egui::Rect::from_center_size(
+                rect.center(),
+                egui::vec2(ui.spacing().icon_width, rect.height()),
+            ),
+            Column::Remove => {
+                egui::Rect::from_center_size(rect.center(), egui::Vec2::splat(width * 0.75))
+            }
+            Column::Name | Column::Value => rect,
+        };
+        let layout = egui::Layout::left_to_right(egui::Align::Center);
+        ui.scope_builder(egui::UiBuilder::new().max_rect(rect).layout(layout), |ui| {
+            if !enabled {
+                ui.multiply_opacity(DISABLED_OPACITY);
+            }
+            add(ui);
+        });
+    }
+}
+
+/// A name field, with `names` suggested as it is typed; `label` is its
+/// placeholder and accessible name. As a table's `cell`, it has no frame
+/// and its text is monospace. Returns whether the name changed.
 pub(crate) fn name_field(
     ui: &mut egui::Ui,
     name: &mut String,
-    id: Id,
-    width: f32,
+    (id, width): (Id, f32),
     names: &[&str],
     label: &str,
+    cell: bool,
 ) -> bool {
-    let field = ui
-        .add(
-            egui::TextEdit::singleline(name)
-                .id(id)
-                .hint_text(label)
-                .desired_width(width),
-        )
-        .accessible_name(label);
+    let mut edit = egui::TextEdit::singleline(name)
+        .id(id)
+        .hint_text(label)
+        .desired_width(width);
+    if cell {
+        edit = edit
+            .frame(theme::cell_frame())
+            .font(egui::TextStyle::Monospace)
+            .desired_width(ui.available_width());
+    }
+    let field = ui.add(edit).accessible_name(label);
+    if cell {
+        outline_focused(ui, &field);
+    }
     let mut changed = field.changed();
     if !names.is_empty() && !name.is_empty() {
         let found = completions(name, names.iter().copied());

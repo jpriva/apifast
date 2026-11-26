@@ -490,6 +490,12 @@ impl ThemeChoice {
     }
 }
 
+/// The frame of a field inside a table's cell: none, only room around the
+/// text; the table's lines frame the cell.
+pub fn cell_frame() -> egui::Frame {
+    egui::Frame::NONE.inner_margin(egui::Margin::symmetric(6, 3))
+}
+
 /// Uses `choice` from the next frame on.
 pub fn apply(ctx: &egui::Context, choice: ThemeChoice) {
     ctx.set_theme(choice.preference());

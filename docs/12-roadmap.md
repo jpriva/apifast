@@ -510,12 +510,13 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
     - Transiciones: la barra lateral se desliza; las ventanas usan el fundido de egui.
     - Revisado en los dos temas con capturas sin ventana (`egui_kittest` con `wgpu`), que encontraron el método mal alineado en el árbol y botones cortados en la barra lateral.
     - [ ] La × de las ventanas es la de egui: cambiarla pide una barra de título propia para cada ventana.
-    - [ ] Tablas clave/valor (params, headers, campos de formulario, path params) al estilo de Bruno:
-      - Una tabla de verdad: un solo marco con líneas finas entre filas y columnas, campos sin borde propio y la fila resaltada al pasar el ratón.
-      - Fila de encabezado con la casilla, «Name» y «Value» en texto tenue.
-      - Nombre y valor en monoespaciada, con las variables resaltadas como ahora.
+    - [x] Tablas clave/valor (params, headers, campos de formulario, path params) al estilo de Bruno ([docs/09](09-ui-ux.md#tablas-clavevalor)):
+      - Un solo marco con líneas finas entre filas y columnas, campos sin borde propio, la fila resaltada al pasar el ratón y la celda con el foco marcada con el acento.
+      - Fila de encabezado con «Name» y «Value» en texto tenue.
+      - Nombre y valor en monoespaciada, con las variables resaltadas como antes.
       - Papelera dibujada en lugar de la ×, visible al pasar por la fila; filas desactivadas atenuadas.
-    - [ ] El editor del Body ocupa todo el alto disponible, con números de línea activados por defecto.
+      - Las capturas (`tests/gui/snapshots.rs`) cubren params, headers y una fila con el ratón encima y una celda con el foco.
+    - [x] El editor del Body ocupa todo el alto disponible, con números de línea activados por defecto. Quien ya guardó `line_numbers: false` en sus ajustes lo conserva.
   - [ ] Historial de respuestas al estilo del HTTP Client de IntelliJ:
     - Cada entrada guarda también lo enviado: método, URL final, headers y body ya resueltos (el body hasta un límite, en el almacén de respuestas), con los secretos enmascarados como en la timeline. Migración del formato sin perder las entradas existentes.
     - En el panel de respuesta, un botón «History (n)» con las respuestas anteriores de esa request (fecha, estado, tiempo y nombre), para abrirlas, renombrarlas o borrarlas. Sustituye al «Selector de respuestas anteriores» que quedó fuera de F2.

@@ -133,7 +133,14 @@ fn assertions(
 }
 
 fn expression(ui: &mut egui::Ui, text: &mut String, id: Id, width: f32, strings: &Strings) -> bool {
-    name_field(ui, text, id, width, EXPRESSIONS, strings.expression)
+    name_field(
+        ui,
+        text,
+        (id, width),
+        EXPRESSIONS,
+        strings.expression,
+        false,
+    )
 }
 
 /// The operator menu. Switching to an operator that takes no value drops

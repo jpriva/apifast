@@ -125,7 +125,7 @@ impl Default for Settings {
             code_size: crate::theme::text::CODE,
             tab_size: 2,
             wrap_lines: true,
-            line_numbers: false,
+            line_numbers: true,
             timeout_s: 30,
             pretty_limit_mb: 2,
             history_entries: 1000,

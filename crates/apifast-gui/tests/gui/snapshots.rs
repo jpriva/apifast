@@ -21,6 +21,7 @@ use apifast_gui::organisms::{RequestPanel, RequestTab, TreeView};
 use apifast_gui::strings::EN;
 use apifast_gui::theme;
 use eframe::egui;
+use egui_kittest::kittest::Queryable;
 use egui_kittest::{Harness, SnapshotResults};
 
 /// Builds a harness that draws `content` in `theme`, on a panel's
@@ -76,7 +77,7 @@ fn request() -> HttpRequest {
     request
 }
 
-fn request_panel(tab: RequestTab, name: &str) {
+fn request_panel(tab: RequestTab, name: &str, before: fn(&mut Harness<'static>)) {
     // One result for both themes: a harness dropped with its own fails.
     let mut results = SnapshotResults::new();
     for (theme, suffix) in themes() {
@@ -97,6 +98,7 @@ fn request_panel(tab: RequestTab, name: &str) {
         let mut harness = harness(egui::vec2(720.0, 260.0), theme, move |ui| {
             panel.show(ui, &mut request, &context, &hints, &EN);
         });
+        before(&mut harness);
         harness.snapshot(format!("{name}_{suffix}"));
         results.extend_harness(&mut harness);
     }
@@ -106,19 +108,33 @@ fn request_panel(tab: RequestTab, name: &str) {
 #[test]
 #[cfg_attr(not(target_os = "linux"), ignore = "drawn only on Linux")]
 fn the_headers_table() {
-    request_panel(RequestTab::Headers, "headers");
+    request_panel(RequestTab::Headers, "headers", |_| {});
+}
+
+/// A hovered row shows its remove button; the field with the focus is
+/// outlined.
+#[test]
+#[cfg_attr(not(target_os = "linux"), ignore = "drawn only on Linux")]
+fn a_hovered_row_and_a_focused_cell() {
+    request_panel(RequestTab::Headers, "headers_hover", |harness| {
+        harness.get_all_by_label(EN.value).nth(2).unwrap().focus();
+        harness.run();
+        let row = harness.get_all_by_label(EN.name).nth(1).unwrap().rect();
+        harness.hover_at(row.center());
+        harness.run();
+    });
 }
 
 #[test]
 #[cfg_attr(not(target_os = "linux"), ignore = "drawn only on Linux")]
 fn the_params_table() {
-    request_panel(RequestTab::Params, "params");
+    request_panel(RequestTab::Params, "params", |_| {});
 }
 
 #[test]
 #[cfg_attr(not(target_os = "linux"), ignore = "drawn only on Linux")]
 fn the_json_body() {
-    request_panel(RequestTab::Body, "body");
+    request_panel(RequestTab::Body, "body", |_| {});
 }
 
 #[test]

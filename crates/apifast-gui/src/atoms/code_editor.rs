@@ -119,7 +119,7 @@ impl Default for EditorOptions {
         Self {
             tab_size: 2,
             wrap: true,
-            line_numbers: false,
+            line_numbers: true,
         }
     }
 }
@@ -193,21 +193,42 @@ fn paint_line_numbers(
     }
 }
 
+/// How many rows an editor of `rows` shows: when it should `fill`, as
+/// many as fit in the height left in `ui`, leaving room for its margins
+/// and a scroll bar under it.
+fn editor_rows(ui: &egui::Ui, rows: usize, fill: bool) -> usize {
+    if !fill {
+        return rows;
+    }
+    let font = TextStyle::Monospace.resolve(ui.style());
+    let row = ui.fonts_mut(|f| f.row_height(&font)).max(1.0);
+    let room = ui.available_height() - FILL_ROOM;
+    // Truncation wanted: whole rows only; a negative room gives none.
+    #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let fit = (room / row).floor().max(0.0) as usize;
+    rows.max(fit)
+}
+
+/// Height an editor needs besides its rows when it fills the space: its
+/// margins and a horizontal scroll bar, in points.
+const FILL_ROOM: f32 = 24.0;
+
 /// What lays out the text of an editor.
 type Layouter<'a> = dyn FnMut(&egui::Ui, &dyn egui::TextBuffer, f32) -> Arc<Galley> + 'a;
 
-/// The text edit of an editor: `rows` high, laid out by `layouter` if
+/// The text edit of an editor: `rows` high (more if it should fill the
+/// space, see [`editor_rows`]), laid out by `layouter` if
 /// given, and scrolling sideways when it does not `wrap`.
 fn text_edit(
     ui: &mut egui::Ui,
     text: &mut String,
-    (id, rows, wrap): (egui::Id, usize, bool),
+    (id, (rows, fill), wrap): (egui::Id, (usize, bool), bool),
     layouter: Option<&mut Layouter<'_>>,
 ) -> egui::text_edit::TextEditOutput {
     let edit = egui::TextEdit::multiline(text)
         .id(id)
         .code_editor()
-        .desired_rows(rows)
+        .desired_rows(editor_rows(ui, rows, fill))
         .desired_width(f32::INFINITY);
     let edit = match layouter {
         Some(layouter) => edit.layouter(layouter),
@@ -271,6 +292,7 @@ pub struct CodeEditor<'a> {
     texts: TemplateFieldTexts<'a>,
     id: Option<egui::Id>,
     rows: usize,
+    fill: bool,
     name: Option<&'a str>,
     completer: Option<Completer<'a>>,
 }
@@ -291,9 +313,18 @@ impl<'a> CodeEditor<'a> {
             texts,
             id: None,
             rows: 12,
+            fill: false,
             name: None,
             completer: None,
         }
+    }
+
+    /// As tall as the space left below it, and at least its rows: for the
+    /// only editor of a panel, like a request's body.
+    #[must_use]
+    pub fn fill_height(mut self) -> Self {
+        self.fill = true;
+        self
     }
 
     /// Suggests what to type at the cursor, with `completer`.
@@ -334,6 +365,7 @@ impl<'a> CodeEditor<'a> {
             texts,
             id,
             rows,
+            fill,
             name,
             completer,
         } = self;
@@ -397,7 +429,7 @@ impl<'a> CodeEditor<'a> {
         let gutter = options.line_numbers.then(|| gutter_width(ui, text, &font));
         let layouter: Option<&mut Layouter<'_>> = highlight.then_some(&mut layouter);
         let output = with_gutter(ui, gutter, &font, |ui| {
-            text_edit(ui, text, (id, rows, options.wrap), layouter)
+            text_edit(ui, text, (id, (rows, fill), options.wrap), layouter)
         });
         if let Some(completer) = completer {
             let typed = output.response.response.changed();

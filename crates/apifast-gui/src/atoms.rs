@@ -164,6 +164,8 @@ pub enum Icon {
     NewRequest,
     /// A folder with a plus: a new folder.
     NewFolder,
+    /// A bin: remove.
+    Trash,
 }
 
 impl Icon {
@@ -221,6 +223,21 @@ impl Icon {
                 folder();
                 plus(at(0.5, 0.6), w * 0.15);
             }
+            Self::Trash => {
+                // The lid and its handle, and the bin, narrower at the bottom.
+                painter.line_segment([at(0.0, 0.18), at(1.0, 0.18)], stroke);
+                let handle = vec![
+                    at(0.35, 0.18),
+                    at(0.38, 0.02),
+                    at(0.62, 0.02),
+                    at(0.65, 0.18),
+                ];
+                painter.add(egui::Shape::line(handle, stroke));
+                let bin = vec![at(0.12, 0.18), at(0.2, 1.0), at(0.8, 1.0), at(0.88, 0.18)];
+                painter.add(egui::Shape::line(bin, stroke));
+                painter.line_segment([at(0.4, 0.38), at(0.42, 0.8)], stroke);
+                painter.line_segment([at(0.6, 0.38), at(0.58, 0.8)], stroke);
+            }
         }
     }
 }
@@ -231,25 +248,49 @@ impl Icon {
 pub struct IconButton<'a> {
     icon: Icon,
     name: &'a str,
+    side: Option<f32>,
+    quiet: bool,
 }
 
 impl<'a> IconButton<'a> {
     /// A button showing `icon`, named `name`.
     pub fn new(icon: Icon, name: &'a str) -> Self {
-        Self { icon, name }
+        Self {
+            icon,
+            name,
+            side: None,
+            quiet: false,
+        }
+    }
+
+    /// `side` points square, instead of as tall as a control.
+    #[must_use]
+    pub fn side(mut self, side: f32) -> Self {
+        self.side = Some(side);
+        self
+    }
+
+    /// Draws the icon only while the button is hovered or focused, when
+    /// `quiet`: for the buttons of a row, shown as the row is hovered.
+    /// The button is there all the same, for the keyboard and screen
+    /// readers.
+    #[must_use]
+    pub fn quiet(mut self, quiet: bool) -> Self {
+        self.quiet = quiet;
+        self
     }
 }
 
 impl Widget for IconButton<'_> {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        let side = ui.spacing().interact_size.y;
+        let side = self.side.unwrap_or(ui.spacing().interact_size.y);
         let (rect, response) = ui.allocate_exact_size(egui::vec2(side, side), Sense::click());
         response.widget_info(|| {
             egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), self.name)
         });
-        if ui.is_rect_visible(rect) {
+        let hot = response.hovered() || response.has_focus();
+        if ui.is_rect_visible(rect) && (hot || !self.quiet) {
             let palette = theme::palette(ui);
-            let hot = response.hovered() || response.has_focus();
             if hot {
                 let fill = ui.visuals().widgets.hovered.weak_bg_fill;
                 ui.painter().rect_filled(rect, theme::radius::MEDIUM, fill);

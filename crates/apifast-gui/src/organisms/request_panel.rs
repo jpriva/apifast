@@ -637,7 +637,7 @@ fn body(
         Body::None => {}
         Body::Json(text) | Body::Text(text) | Body::Xml(text) | Body::Sparql(text) => {
             let language = language.unwrap_or(Language::Text);
-            let target = (editor, strings.body);
+            let target = (editor, strings.body, true);
             changed |= code_body(ui, text, (language, None), target, format, hints, strings);
         }
         Body::GraphQl { query, variables } => {
@@ -778,7 +778,7 @@ fn ws_messages(
         .add(egui::TextEdit::singleline(&mut message.name).hint_text(strings.ws_message_name))
         .accessible_name(strings.ws_message_name)
         .changed();
-    let target = (editor, strings.ws_messages);
+    let target = (editor, strings.ws_messages, true);
     changed |= code_body(
         ui,
         &mut message.data,
@@ -821,7 +821,7 @@ fn graphql_editors(
 ) -> bool {
     let mut changed = false;
     ui.label(muted(ui, strings.graphql_query));
-    let target = (editor, strings.graphql_query);
+    let target = (editor, strings.graphql_query, false);
     // With a schema, the operation is completed from it.
     let complete = |text: &str, at: usize| {
         schema.map_or_else(code::Completion::default, |s| code::complete(text, at, s))
@@ -833,7 +833,7 @@ fn graphql_editors(
     changed |= code_body(ui, query, language, target, false, hints, strings);
     ui.add_space(theme::space::S);
     ui.label(muted(ui, strings.graphql_variables));
-    let target = (editor.with("variables"), strings.graphql_variables);
+    let target = (editor.with("variables"), strings.graphql_variables, false);
     changed |= code_body(
         ui,
         variables,
@@ -874,7 +874,7 @@ pub(super) fn code_body(
     ui: &mut egui::Ui,
     text: &mut String,
     (language, completer): (Language, Option<Completer<'_>>),
-    (editor, name): (egui::Id, &str),
+    (editor, name, fills): (egui::Id, &str, bool),
     format: bool,
     hints: &VariableHints,
     strings: &Strings,
@@ -908,6 +908,9 @@ pub(super) fn code_body(
         .id(editor)
         .desired_rows(BODY_ROWS)
         .accessible_name(name);
+    if fills {
+        code_editor = code_editor.fill_height();
+    }
     if let Some(completer) = completer {
         code_editor = code_editor.completer(completer);
     }

@@ -134,7 +134,12 @@ La cabecera de la barra lateral tiene:
 
 ### Tablas clave/valor
 
-- Casilla para habilitar o deshabilitar cada fila.
+Params, headers, path params y los campos de un formulario usan la misma tabla, al estilo de Bruno:
+- Un solo marco con líneas finas entre filas y columnas, y una fila de encabezado (Name, Value) en texto tenue.
+- Los campos no tienen borde propio. La celda con el foco se marca con el acento, y la fila bajo el ratón se resalta.
+- Nombre y valor van en monoespaciada; las variables se resaltan en el valor.
+- Casilla para habilitar o deshabilitar cada fila. Una fila deshabilitada se ve atenuada.
+- La papelera para quitar la fila solo se ve al pasar por ella, aunque el botón está siempre ahí para el teclado y los lectores de pantalla.
 - Siempre hay una fila vacía al final para añadir.
 - Modo de edición masiva: la tabla como texto, una línea por entrada con el formato `nombre: valor`; las que empiezan por `//` se conservan sin enviarse.
 - Autocompletado de nombres de header y de variables.
@@ -217,7 +222,7 @@ A la derecha de la barra superior hay un botón de menú, al estilo de GNOME. Su
 |---|---|
 | General | Idioma (`language`). Abrir el último espacio de trabajo al iniciar (`reopen_workspace`; si no, el de por defecto). Preguntar antes de cerrar con cambios sin guardar (`confirm_close`, apagado por defecto: los borradores se guardan igual y vuelven al abrir). |
 | Apariencia | Tema (`theme`). En Linux, barra de título de apifast o del sistema (`own_title_bar`). Color de acento (`accent`: `blue`, `green`, `teal`, `purple`, `pink`, `orange`; cada uno con un tono claro y otro oscuro que cumplen AA). Escala (`ui_scale`). Densidad (`density`: `compact`, `normal`, `comfortable`), que cambia el espacio entre controles y dentro de los botones. |
-| Editor | Fuente del código (`code_font`: un archivo TTF u OTF, que va antes que la incluida; vacío, la incluida). Tamaño del código (`code_size`, de 9 a 24 pt). Lo que inserta Tab (`tab_size`: 0 para un tabulador, o 2, 4 u 8 espacios; Shift+Tab sigue quitando sangría). Ajustar las líneas largas (`wrap_lines`; si no, desplazamiento horizontal). Números de línea (`line_numbers`). Y el tamaño máximo de una respuesta que se muestra formateada (`pretty_limit_mb`). |
+| Editor | Fuente del código (`code_font`: un archivo TTF u OTF, que va antes que la incluida; vacío, la incluida). Tamaño del código (`code_size`, de 9 a 24 pt). Lo que inserta Tab (`tab_size`: 0 para un tabulador, o 2, 4 u 8 espacios; Shift+Tab sigue quitando sangría). Ajustar las líneas largas (`wrap_lines`; si no, desplazamiento horizontal). Números de línea (`line_numbers`, activados por defecto). Y el tamaño máximo de una respuesta que se muestra formateada (`pretty_limit_mb`). |
 | Red | Tiempo de espera por defecto (`timeout_s`; 0 es sin límite), para las requests cuya colección, carpetas y request no ponen uno: el panel de ajustes de la request lo muestra como el valor por defecto. Proxy, TLS y cookies, descritos abajo. |
 | Atajos | Un botón que abre el editor de atajos. |
 | Datos | Historial y respuestas guardadas, el registro, y las carpetas en uso (datos, configuración y registro), cada una con un botón que la abre en el gestor de archivos. Debajo, el espacio que ocupa la carpeta de datos, medido en segundo plano. |
@@ -356,6 +361,8 @@ Mientras la paleta está abierta o el editor espera una combinación, los demás
 - Tema claro y oscuro, siguiendo el del sistema por defecto; se puede fijar uno desde la paleta. El color de acento y la densidad se eligen en los ajustes; `theme::palette` reconoce el acento por el color de enlace de los visuals.
 - Las ventanas usan el color de fondo y los campos el de superficie, con borde, para que un campo se distinga siempre de lo que lo rodea.
 - Las tablas con campos editables se componen fila a fila con anchos repartidos, no con `egui::Grid`: en una celda de grid un campo solo recibe el ancho que su columna midió el frame anterior y no crece.
+- En la tabla clave/valor, cada fila se reserva entera después de dibujar sus celdas (`Row::end`). Si no, la última celda colocada decide dónde empieza la siguiente fila, y un botón centrado es más bajo que la fila.
+- El editor del body ocupa todo el alto que queda en el panel (`CodeEditor::fill_height`), y como mínimo 12 líneas. Lo mismo el mensaje de WebSocket y gRPC. Los dos editores de GraphQL (query y variables) no, para que quepan los dos.
 - Escala de interfaz configurable en los ajustes (`Ctrl+,`), que también siguen `Ctrl+=`, `Ctrl+-` y `Ctrl+0`; la escala aumenta el texto con todo lo demás.
 - Altura de controles según la densidad (`Density::control_height`: 22, 26 o 30 puntos). Botones, campos de texto, desplegables y filas del árbol comparten esa altura, así que los campos ya no quedan más bajos que los botones de al lado.
 - Tamaños de texto solo desde los tokens de `theme::text`: 11 el pequeño, 13 el cuerpo y los botones, 17 los títulos, y el del código según los ajustes.

@@ -271,7 +271,7 @@ fn messages(
         .add(egui::TextEdit::singleline(&mut message.name).hint_text(strings.ws_message_name))
         .accessible_name(strings.ws_message_name)
         .changed();
-    let target = (editor, strings.ws_messages);
+    let target = (editor, strings.ws_messages, true);
     let complete = |text: &str, at: usize| {
         schema.map_or_else(code::Completion::default, |(catalog, input)| {
             code::complete_message(text, at, catalog, input)

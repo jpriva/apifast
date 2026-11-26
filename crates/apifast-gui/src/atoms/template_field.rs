@@ -104,6 +104,7 @@ pub struct TemplateField<'a> {
     id: Option<egui::Id>,
     password: bool,
     name: Option<&'a str>,
+    frame: bool,
 }
 
 impl<'a> TemplateField<'a> {
@@ -121,7 +122,16 @@ impl<'a> TemplateField<'a> {
             id: None,
             password: false,
             name: None,
+            frame: true,
         }
+    }
+
+    /// Without its own frame, when `frame` is false: for a table's cell,
+    /// whose lines frame it.
+    #[must_use]
+    pub fn frame(mut self, frame: bool) -> Self {
+        self.frame = frame;
+        self
     }
 
     /// Names the field for screen readers, when no visible label does.
@@ -164,6 +174,7 @@ impl<'a> TemplateField<'a> {
             id,
             password,
             name,
+            frame,
         } = self;
         let font = TextStyle::Monospace.resolve(ui.style());
         let palette = theme::palette(ui);
@@ -183,6 +194,9 @@ impl<'a> TemplateField<'a> {
         let mut edit = egui::TextEdit::singleline(text)
             .hint_text(texts.placeholder)
             .desired_width(width.min(ui.available_width()));
+        if !frame {
+            edit = edit.frame(theme::cell_frame());
+        }
         if let Some(id) = id {
             edit = edit.id(id);
         }
