@@ -215,6 +215,11 @@ Además:
 - **Secret scanning y push protection** están activos: GitHub rechaza un push que lleve un token o una clave reconocible.
 - **Dependabot:** avisa de vulnerabilidades en las dependencias y propone sus parches de seguridad.
 - **Actions fijadas:** las actions de los workflows van fijadas a un commit (`uses: owner/action@<sha> # vX.Y.Z`), así que un tag movido no cambia lo que corre en el CI. Dependabot propone cada mes sus actualizaciones (`.github/dependabot.yml`).
+- **El CI, más corto:**
+  - Un cambio que solo toca `docs/` o archivos `.md` no compila nada: los jobs dan su check por bueno en segundos.
+  - Los tests se compilan sin información de depuración y se enlazan con `mold` en Linux.
+  - Los de las variantes sin funciones opcionales corren solo en Linux.
+  - Solo `main` guarda la caché de compilación; los PRs la leen.
 - **Workflows con permisos mínimos:** tienen permiso de solo lectura por defecto, y el código de un contribuidor externo no corre en el CI hasta que se aprueba.
 
 ## Medir el rendimiento

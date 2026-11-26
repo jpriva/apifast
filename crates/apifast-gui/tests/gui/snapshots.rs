@@ -14,6 +14,8 @@
     allow(dead_code, reason = "the tests run only on Linux")
 )]
 
+use std::sync::{Mutex, MutexGuard, PoisonError};
+
 use apifast_domain::{Body, Header, HttpRequest, Method, Param, ParamKind};
 use apifast_gui::atoms::{VariableHint, VariableHints};
 use apifast_gui::core::{CollectionEntry, TabContext};
@@ -23,6 +25,17 @@ use apifast_gui::theme;
 use eframe::egui;
 use egui_kittest::kittest::Queryable;
 use egui_kittest::{Harness, SnapshotResults};
+
+/// Lets one screenshot test draw at a time, for as long as it holds it.
+///
+/// Lavapipe crashed (SIGSEGV) in CI on Ubuntu when several tests drew with
+/// wgpu at once; one device at a time costs little, the tests take under
+/// two seconds together.
+fn one_at_a_time() -> MutexGuard<'static, ()> {
+    static GPU: Mutex<()> = Mutex::new(());
+    // A test that failed while holding it leaves it poisoned, not unusable.
+    GPU.lock().unwrap_or_else(PoisonError::into_inner)
+}
 
 /// Builds a harness that draws `content` in `theme`, on a panel's
 /// background, with apifast's style installed before the first frame.
@@ -108,6 +121,7 @@ fn request_panel(tab: RequestTab, name: &str, before: fn(&mut Harness<'static>))
 #[test]
 #[cfg_attr(not(target_os = "linux"), ignore = "drawn only on Linux")]
 fn the_headers_table() {
+    let _gpu = one_at_a_time();
     request_panel(RequestTab::Headers, "headers", |_| {});
 }
 
@@ -116,6 +130,7 @@ fn the_headers_table() {
 #[test]
 #[cfg_attr(not(target_os = "linux"), ignore = "drawn only on Linux")]
 fn a_hovered_row_and_a_focused_cell() {
+    let _gpu = one_at_a_time();
     request_panel(RequestTab::Headers, "headers_hover", |harness| {
         harness.get_all_by_label(EN.value).nth(2).unwrap().focus();
         harness.run();
@@ -128,18 +143,21 @@ fn a_hovered_row_and_a_focused_cell() {
 #[test]
 #[cfg_attr(not(target_os = "linux"), ignore = "drawn only on Linux")]
 fn the_params_table() {
+    let _gpu = one_at_a_time();
     request_panel(RequestTab::Params, "params", |_| {});
 }
 
 #[test]
 #[cfg_attr(not(target_os = "linux"), ignore = "drawn only on Linux")]
 fn the_json_body() {
+    let _gpu = one_at_a_time();
     request_panel(RequestTab::Body, "body", |_| {});
 }
 
 #[test]
 #[cfg_attr(not(target_os = "linux"), ignore = "drawn only on Linux")]
 fn the_collection_tree() {
+    let _gpu = one_at_a_time();
     let mut results = SnapshotResults::new();
     for (theme, suffix) in themes() {
         let collections = [CollectionEntry::loaded("/c", crate::organisms::tree())];
@@ -158,6 +176,7 @@ fn the_collection_tree() {
 #[test]
 #[cfg_attr(not(target_os = "linux"), ignore = "drawn only on Linux")]
 fn a_window_with_its_own_title_bar() {
+    let _gpu = one_at_a_time();
     let mut results = SnapshotResults::new();
     for (theme, suffix) in themes() {
         let mut open = true;
@@ -191,6 +210,7 @@ fn the_request_sent_and_the_earlier_responses() {
     use apifast_gui::organisms::{HistoryOf, ResponseTab, ResponseView};
     use std::sync::Arc;
 
+    let _gpu = one_at_a_time();
     let head = |status: u16, elapsed_ms: u64| ResponseHead {
         status,
         version: "HTTP/1.1".into(),
@@ -268,6 +288,7 @@ fn the_editor_panes_side_by_side_and_stacked() {
     use apifast_gui::screens::MainScreen;
     use std::sync::Arc;
 
+    let _gpu = one_at_a_time();
     let mut results = SnapshotResults::new();
     for (theme, suffix) in themes() {
         let saved = request();
@@ -318,6 +339,8 @@ fn the_editor_panes_side_by_side_and_stacked() {
 #[cfg_attr(not(target_os = "linux"), ignore = "drawn only on Linux")]
 fn the_layouts_window() {
     use apifast_gui::organisms::LayoutsWindow;
+
+    let _gpu = one_at_a_time();
     let mut results = SnapshotResults::new();
     for (theme, suffix) in themes() {
         let mut window = LayoutsWindow::default();
