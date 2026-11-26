@@ -1,0 +1,12 @@
+# The workflows' actions are pinned to a commit, so a tag that is moved
+# cannot change what runs in CI. Dependabot proposes their updates, each as
+# a pull request with its own CI run.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]

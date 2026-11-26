@@ -29,10 +29,10 @@ jobs:
     # Ubuntu 22.04: glibc 2.35, the oldest the packages promise.
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       # Installs the version pinned in rust-toolchain.toml.
       - run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Tools
         run: |
           sudo apt-get update
@@ -62,7 +62,7 @@ jobs:
           ln -s "$PWD"/target/packages/apifast-*-x86_64.AppImage target/apifast
           target/apifast --version
       - run: packaging/linux/check-glibc.sh 2.35
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: linux-packages
           path: target/packages/*
