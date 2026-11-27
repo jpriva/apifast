@@ -977,6 +977,8 @@ enum Message {
     External(u64, Changes),
     /// The `workspace.yml` of workspace opening number `.0` changed.
     WorkspaceChanged(u64),
+    /// The global environments of workspace opening number `.0` changed.
+    GlobalEnvironmentsChanged(u64),
     /// Hide what was shown of the vault, if it is still show number `.0`.
     HideShown(u64),
     WriteSession,
@@ -1253,6 +1255,9 @@ impl State {
                     }
                 }
                 Message::WorkspaceChanged(opened) => self.workspace_changed(opened),
+                Message::GlobalEnvironmentsChanged(opened) => {
+                    self.global_environments_changed(opened);
+                }
                 Message::WriteSession => {
                     self.session_pending = false;
                     self.write_session();

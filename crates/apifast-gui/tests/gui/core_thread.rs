@@ -3205,3 +3205,46 @@ fn global_values_scripts_persist_are_saved_when_the_user_agrees() {
     let team = &snapshot.global_environment_files[0];
     assert!(team.variables.iter().any(|v| v.name == "shared"));
 }
+
+#[test]
+fn global_environments_changed_outside_are_read_again() {
+    let team = tempfile::tempdir().unwrap();
+    std::fs::write(
+        team.path().join("workspace.yml"),
+        "opencollection: 1.0.0\ninfo:\n  name: Team\n  type: workspace\ncollections:\n",
+    )
+    .unwrap();
+    let (core, _, _data) = start();
+    core.send(Command::OpenWorkspace(team.path().to_path_buf()));
+    wait(&core, "the team workspace", |s| {
+        s.workspace.as_ref().is_some_and(|w| w.name == "Team")
+    });
+
+    // Bruno makes the folder and a first environment.
+    std::fs::create_dir(team.path().join("environments")).unwrap();
+    let file = team.path().join("environments/shared.yml");
+    std::fs::write(
+        &file,
+        "name: shared\nvariables:\n  - name: region\n    value: eu\n",
+    )
+    .unwrap();
+    wait(&core, "the new environment", |s| {
+        s.global_environment_files
+            .iter()
+            .any(|e| e.name == "shared")
+    });
+
+    // And changes it.
+    std::fs::write(
+        &file,
+        "name: shared\nvariables:\n  - name: region\n    value: us\n",
+    )
+    .unwrap();
+    wait(&core, "the change", |s| {
+        s.global_environment_files.iter().any(|e| {
+            e.variables
+                .iter()
+                .any(|v| v.value.as_ref().is_some_and(|v| v.data == "us"))
+        })
+    });
+}

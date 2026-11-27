@@ -28,6 +28,8 @@ pub(super) struct ActiveWorkspace {
     opened: u64,
     /// Watches its folder, not its subfolders, for `workspace.yml`.
     _watcher: Option<FsWatcher>,
+    /// Watches its `environments/`, once it exists.
+    globals_watcher: Option<FsWatcher>,
     /// Its global environments, as in their files.
     pub(super) global_files: Arc<Vec<Environment>>,
     /// The active global environment.
@@ -121,13 +123,19 @@ impl State {
         let opened = self.next_revision();
         let messages = self.messages.clone();
         let watcher = FsWatcher::start_shallow(folder, move |changes| {
-            if (changes.rescan || changes.paths.contains(WORKSPACE_FILE))
-                && let Some(messages) = messages.upgrade()
-            {
+            let Some(messages) = messages.upgrade() else {
+                return;
+            };
+            if changes.rescan || changes.paths.contains(WORKSPACE_FILE) {
                 let _ = messages.send(Message::WorkspaceChanged(opened));
+            }
+            // Its environments/ made or removed.
+            if changes.rescan || changes.paths.contains(GLOBALS_DIR) {
+                let _ = messages.send(Message::GlobalEnvironmentsChanged(opened));
             }
         })
         .ok();
+        let globals_watcher = watch_globals(folder, opened, self.messages.clone());
         let global_files = repo.environments().unwrap_or_else(|e| {
             self.snapshot.error = Some(e.say(self.strings));
             Vec::new()
@@ -144,6 +152,7 @@ impl State {
             state,
             opened,
             _watcher: watcher,
+            globals_watcher,
             global_files: Arc::new(global_files),
             global_environment,
         });
@@ -374,18 +383,41 @@ impl State {
         if let Err(e) = result {
             self.snapshot.error = Some(e.say(self.strings));
         }
-        let files = repo.environments().unwrap_or_else(|e| {
+        if let (GlobalCommand::Rename { from, to }, Some(active)) = (command, &mut self.workspace)
+            && active.global_environment.as_deref() == Some(from.as_str())
+        {
+            active.global_environment = Some(to.clone());
+        }
+        self.reload_globals();
+    }
+
+    /// The workspace's `environments/`, or the folder itself, changed
+    /// outside apifast (or by it): reads them again, and watches the
+    /// folder once it exists.
+    pub(super) fn global_environments_changed(&mut self, opened: u64) {
+        let Some(active) = self.workspace.as_mut().filter(|w| w.opened == opened) else {
+            return;
+        };
+        if active.globals_watcher.is_none() {
+            active.globals_watcher =
+                watch_globals(active.repo.folder(), opened, self.messages.clone());
+        }
+        self.reload_globals();
+    }
+
+    /// Reads the global environments again and gives every tab what they
+    /// say. An active one that is gone is none.
+    fn reload_globals(&mut self) {
+        let Some(active) = &self.workspace else {
+            return;
+        };
+        let files = active.repo.environments().unwrap_or_else(|e| {
             self.snapshot.error = Some(e.say(self.strings));
             Vec::new()
         });
         let Some(active) = &mut self.workspace else {
             return;
         };
-        if let GlobalCommand::Rename { from, to } = command
-            && active.global_environment.as_deref() == Some(from.as_str())
-        {
-            active.global_environment = Some(to.clone());
-        }
         active.global_environment =
             (active.global_environment.take()).filter(|name| files.iter().any(|e| &e.name == name));
         active.global_files = Arc::new(files);
@@ -417,6 +449,28 @@ impl State {
             self.snapshot.error = Some(e.say(self.strings));
         }
     }
+}
+
+/// The folder of a workspace's global environments.
+const GLOBALS_DIR: &str = "environments";
+
+/// Watches the global environments of the workspace in `folder`, opening
+/// number `opened`; `None` while it has no `environments/`.
+fn watch_globals(
+    folder: &Path,
+    opened: u64,
+    messages: tokio::sync::mpsc::WeakUnboundedSender<Message>,
+) -> Option<FsWatcher> {
+    let dir = folder.join(GLOBALS_DIR);
+    if !dir.is_dir() {
+        return None;
+    }
+    FsWatcher::start_shallow(&dir, move |_| {
+        if let Some(messages) = messages.upgrade() {
+            let _ = messages.send(Message::GlobalEnvironmentsChanged(opened));
+        }
+    })
+    .ok()
 }
 
 /// The collections of `workspace`, expanded as `state` says.
