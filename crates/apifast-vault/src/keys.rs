@@ -217,7 +217,15 @@ pub(crate) fn owner_only(path: &Path) -> io::Result<fs::File> {
     Ok(file)
 }
 
-/// Makes `path` readable and writable only by its owner.
+/// Makes `path` readable and writable only by its owner. Only on Unix:
+/// elsewhere the file keeps the permissions of its folder.
+#[cfg_attr(
+    not(unix),
+    allow(
+        clippy::unnecessary_wraps,
+        reason = "it can fail only on Unix, where it changes the permissions"
+    )
+)]
 fn restrict(path: &Path) -> io::Result<()> {
     #[cfg(unix)]
     {
