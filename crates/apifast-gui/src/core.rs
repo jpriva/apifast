@@ -481,7 +481,7 @@ pub enum Command {
     SaveEnvironment(Box<Environment>),
     /// Deletes an environment.
     DeleteEnvironment(String),
-    /// Writes the values captured for the active environment of the
+    /// Writes the values captured for the active environment and for the
     /// collection at `root` (`save`), or forgets them.
     SaveCaptures {
         /// The collection.
@@ -510,6 +510,15 @@ pub enum Command {
         folder: Option<String>,
         /// Its scripts.
         scripts: Vec<apifast_domain::ScriptBlock>,
+    },
+    /// Saves the variables of a folder, or of the collection at `root`.
+    SaveVariables {
+        /// The collection.
+        root: PathBuf,
+        /// The folder, relative to it; `None` for the collection.
+        folder: Option<String>,
+        /// Its variables.
+        variables: Vec<apifast_domain::Variable>,
     },
     /// Saves the proxy, the client certificates and the DNS overrides of
     /// the collection at `root` into its files, and sends with them from
@@ -668,13 +677,17 @@ impl Snapshot {
     }
 }
 
-/// Values captured for an environment, waiting to be written there.
+/// Values captured for the active environment and for the collection, or
+/// that scripts asked to keep, waiting to be written there.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PendingCaptures {
-    /// The environment.
+    /// The environment; empty when none is active.
     pub environment: String,
-    /// The variables, in capture order. Their values stay in the core.
+    /// The environment's variables, in capture order. Their values stay in
+    /// the core.
     pub names: Vec<String>,
+    /// The collection's variables, in capture order.
+    pub collection: Vec<String>,
 }
 
 /// A workspace.
@@ -761,6 +774,9 @@ pub struct TabContext {
     /// Names of the request's folders, outermost first, for
     /// [`Origin::Folder`].
     pub folders: Vec<String>,
+    /// The names of `variables` from the runtime that a script set, not a
+    /// capture.
+    pub scripted: std::collections::BTreeSet<String>,
     /// Headers from the collection and folders.
     pub inherited_headers: Vec<Resolved<Header>>,
     /// The auth the request gets when it inherits.
@@ -791,6 +807,33 @@ pub enum TokenState {
     Unreadable(String),
 }
 
+impl TabContext {
+    /// Where the variable `name`, from `origin`, comes from, ready to
+    /// show: a runtime value says whether a script set it or a response
+    /// gave it.
+    pub fn origin(&self, name: &str, origin: &Origin, strings: &crate::strings::Strings) -> String {
+        if *origin == Origin::Runtime && self.scripted.contains(name) {
+            return strings.origin_script.to_owned();
+        }
+        strings.origin(origin, &self.folders)
+    }
+}
+
+/// Keeps in `scripted` the runtime names a script set last: captures go
+/// first and scripts after, as the runtime takes them.
+fn note_scripted(scripted: &mut std::collections::BTreeSet<String>, checks: &Checks) {
+    for capture in checks.captures.iter().filter(|c| c.value.is_ok()) {
+        scripted.remove(&capture.variable);
+    }
+    for change in &checks.scripts.variables {
+        if change.value.is_some() {
+            scripted.insert(change.name.clone());
+        } else {
+            scripted.remove(&change.name);
+        }
+    }
+}
+
 impl Default for TabContext {
     fn default() -> Self {
         let nothing = resolve(Chain::new(
@@ -801,6 +844,7 @@ impl Default for TabContext {
         Self {
             variables: ResolvedVariables::default(),
             folders: Vec::new(),
+            scripted: std::collections::BTreeSet::new(),
             inherited_headers: Vec::new(),
             inherited_auth: Resolved::new(AuthScheme::None, Origin::Default),
             inherited_settings: nothing.settings().clone(),
@@ -1268,19 +1312,14 @@ impl State {
             }
             Command::Send => self.start_send(),
             Command::SendMessage(index) => self.send_message(index),
-            Command::Cancel => {
-                if let Some(sending) =
-                    (self.snapshot.active.as_ref()).and_then(|key| self.sending.get(key))
-                {
-                    sending.cancel.cancel();
-                }
-            }
+            Command::Cancel => self.cancel_send(),
             Command::CreateRequest { .. }
             | Command::CreateFolder { .. }
             | Command::Rename { .. }
             | Command::Delete { .. }
             | Command::Move { .. }
-            | Command::SaveScripts { .. } => self.handle_tree(command),
+            | Command::SaveScripts { .. }
+            | Command::SaveVariables { .. } => self.handle_tree(command),
             Command::OpenHistory(_) | Command::History(_) => self.handle_history(command),
             Command::Configure { .. }
             | Command::SetProxyPassword(_)
@@ -1386,6 +1425,13 @@ impl State {
                 folder,
                 scripts,
             } => self.save_scripts(&root, folder.as_deref(), scripts),
+            Command::SaveVariables {
+                root,
+                folder,
+                variables,
+            } => self.save_defaults(&root, folder.as_deref(), |defaults| {
+                defaults.variables = variables;
+            }),
             Command::Rename { root, item, name } => {
                 if let Some(new) = self.organize(&root, |repo| rename_item(repo, &item, &name)) {
                     self.follow_move(&root, &item, &new);
@@ -1572,9 +1618,17 @@ impl State {
             &*open.repo,
             &loaded,
             open.environment.as_deref(),
-            &[],
+            &open.runtime,
         )
         .unwrap_or_default();
+        let scripted = (open.scripted.iter())
+            .filter(|name| {
+                variables
+                    .get(name)
+                    .is_some_and(|v| v.origin == Origin::Runtime)
+            })
+            .cloned()
+            .collect();
         // The request with nothing of its own shows what it inherits.
         let mut bare = request.clone();
         bare.headers.clear();
@@ -1601,10 +1655,19 @@ impl State {
             methods,
             variables,
             folders: loaded.folders.iter().map(|f| f.name.clone()).collect(),
+            scripted,
             inherited_headers: inherited.headers().to_vec(),
             inherited_auth: inherited.auth().clone(),
             inherited_settings: inherited.settings().clone(),
             revision: 0,
+        }
+    }
+
+    /// Cancels the send of the active tab, if one is going.
+    fn cancel_send(&self) {
+        if let Some(sending) = (self.snapshot.active.as_ref()).and_then(|key| self.sending.get(key))
+        {
+            sending.cancel.cancel();
         }
     }
 
@@ -1761,10 +1824,13 @@ impl State {
                     apply_captures(&mut open.runtime, &checks.captures);
                     apply_script_variables(&mut open.runtime, &checks.scripts.variables);
                     keep_script_changes(&mut open.script_changes, &checks.scripts.variables);
+                    note_scripted(&mut open.scripted, checks);
                 }
-                self.note_environment_captures(&key.root, &checks.captures);
+                // The tabs show the values the next sends will use.
+                self.refresh_collection(&key.root);
+                self.note_captures(&key.root, &checks.captures);
                 let persisted = captures::persisted(&checks.scripts.variables);
-                self.note_environment_captures(&key.root, &persisted);
+                self.note_captures(&key.root, &persisted);
                 ResponseState::Received(received)
             }
             Err(AppError::Transport(TransportError::Cancelled)) => ResponseState::Cancelled,

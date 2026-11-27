@@ -120,7 +120,7 @@ La cabecera de la barra lateral tiene:
 | Headers | Tabla clave/valor; los heredados aparecen atenuados con su origen |
 | Body | Selector de tipo y editor: código, tabla de formulario, partes multipart o archivo (ver abajo) |
 | Auth | Selector de tipo y sus campos; "heredada" muestra de quién. Con OAuth 2.0 (propia o heredada), el estado del token guardado ("valid for 52 min", "expired", ninguno) y los botones "Get new token" y "Forget token" |
-| Vars | Variables de la request y capturas |
+| Vars | Variables propias de la request (`Vars (2)`: cuántas están activas): activa, nombre, valor con `{{…}}` y tipo, y una fila vacía para añadir otra. Tapan las de la colección, el entorno y las carpetas. Se guardan en `runtime.variables` del archivo con la request. Las de una carpeta o de la colección, en la ventana "Variables…" del menú del árbol |
 | Tests | Aserciones (expresión, operador, valor esperado) y capturas (expresión, variable, ámbito) |
 | Scripts | Un editor de JavaScript por tipo: Before request, After response y Test script (`Scripts (2)`: cuántos tipos tienen código). Los de una carpeta o de la colección, en la ventana "Scripts…" del menú del árbol |
 | Docs | Markdown con vista previa |
@@ -171,7 +171,7 @@ Params, headers, path params y los campos de un formulario usan la misma tabla, 
 - La expresión sugiere `res.status`, `res.headers.`, `res.body.`, `res.responseTime` y `res.size` mientras se escribe.
 - El operador es un menú con los 28 de Bruno. Al elegir uno que no lleva valor (`isNull`, `isEmpty`…), el campo del valor esperado se sustituye por "no value" y el valor se descarta; al volver a uno que lo lleva, empieza vacío.
 - El valor esperado es un campo de plantilla: resalta las variables como el resto.
-- El ámbito de una captura es `runtime`, `request` o `environment`.
+- El ámbito de una captura es `runtime`, `request`, `environment` o `collection`. Lo capturado para el entorno activo o para la colección se usa al momento, y un aviso sobre el editor ofrece guardarlo en su archivo o descartarlo; ese aviso también recoge lo que los scripts piden conservar con `{persist: true}`.
 
 ### Editor de código
 
@@ -222,7 +222,13 @@ La edición con resaltado se limita a unos 200 KB: con más texto, egui tarda de
 - Marcar una variable como secreta la hace **solo local**. Compartirla con el equipo es una acción aparte (la casilla Shared, con una explicación breve de lo que implica).
 - El valor de un secreto se escribe en un campo oculto. Su estado (guardado en esta máquina, compartido, bloqueado porque falta la clave de la colección, o sin valor) se ve en el campo vacío, al pasar el ratón y en su nombre accesible. Reveal lo muestra 15 segundos.
 - Los valores guardados que ya no usa ninguna variable secreta se listan bajo la tabla, con un botón para olvidarlos.
+- **Editar una variable desde donde se usa**, como en Bruno: `Ctrl+clic` sobre una `{{variable}}` de cualquier campo (URL, tablas, editores de body y de auth), o `F2` con el cursor de texto dentro, abre una ventana pequeña. Muestra lo que vale ahora y de dónde viene, un campo con el valor y "Guardar en": la request, cada una de sus carpetas, el entorno activo o la colección. Viene elegido el ámbito donde está escrito el valor que ve la request; si un script o una captura lo tapan, el del archivo que tapan; si no existe, la request.
+  - En la request va a su borrador, que se guarda con `Ctrl+S`; en una carpeta o la colección se escribe en su archivo, y en el entorno, en el suyo.
+  - Un secreto no se escribe ahí: el de un entorno se cambia en la ventana de entornos, y los demás ámbitos no guardan valores secretos.
+  - "Global" no aparece mientras no exista el ámbito `Global`.
+- El tooltip de una variable recuerda cómo editarla.
 - Vista "todas las variables": cada variable efectiva con su valor y el ámbito del que procede.
+- Esa vista y el tooltip de una `{{variable}}` muestran lo que usará el próximo envío. Eso incluye lo que fijaron los scripts (`bru.setVar`, `bru.setCollectionVar`, `bru.setEnvVar`…) y las capturas, que tapan los valores de los archivos mientras la colección está cargada. El origen dice "Fijada por un script" o "Capturada de una respuesta", y la columna de lo tapado nombra el ámbito del archivo. Tras cada envío se recalculan todas las pestañas de la colección, no solo la enviada.
 
 ## Menú de la aplicación y "Acerca de"
 
@@ -259,6 +265,8 @@ Con "Preguntar antes de cerrar", cerrar la ventana con pestañas sin guardar abr
 En los ajustes de la aplicación, la sección TLS tiene un archivo de CA adicional (con "Choose…") y "Do not check certificates", que muestra un aviso en rojo mientras está activa. La sección Proxy elige el del sistema, ninguno o uno manual, para las colecciones que heredan el suyo. Su contraseña se guarda aparte con "Save password", sellada; el campo muestra "saved, sealed" cuando hay una.
 
 ## Cookies
+
+"Variables…" en el menú de la raíz de una colección cargada o de una carpeta abre sus variables, con la misma tabla que la pestaña Vars. Las ven todas las requests de dentro. Se guardan en `request.variables` de `opencollection.yml` o de `folder.yml` al pulsar "Save", conservando el resto del archivo, y las pestañas abiertas las ven en el momento. Un secreto conserva su nombre y su marca, pero no se le puede escribir valor: solo los entornos guardan valores secretos, en la bóveda.
 
 "Cookies…" en el menú de la raíz de una colección cargada, o la acción "Cookies" de la paleta, abre el tarro de la colección enfocada:
 
@@ -352,6 +360,7 @@ Búsqueda difusa, resultados recientes primero y el atajo de cada acción a la d
 | Cambiar disposición de paneles | `Ctrl+J` |
 | Duplicar / renombrar | `Ctrl+D` / `F2` |
 | Formatear body | `Alt+Shift+F` |
+| Editar la variable bajo el cursor | `F2` con el cursor de texto dentro de una `{{variable}}`, o `Ctrl+clic` sobre ella. Renombrar con `F2` es sobre una fila del árbol, así que no chocan |
 | Zoom | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` |
 | Mostrar historial | (sin atajo) |
 | Editor de atajos | (sin atajo; desde la paleta o el menú) |

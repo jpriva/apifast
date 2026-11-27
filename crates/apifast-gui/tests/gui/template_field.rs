@@ -14,6 +14,7 @@ const TEXTS: TemplateFieldTexts<'static> = TemplateFieldTexts {
     placeholder: "URL",
     missing: "not defined",
     generated: "made when sending",
+    edit: "edit",
 };
 
 fn hints() -> VariableHints {
@@ -132,4 +133,60 @@ fn hovering_plain_text_shows_nothing() {
     hover_char(&mut harness, 10);
     assert!(harness.query_by_label("http://localhost:8080").is_none());
     assert!(harness.query_by_label("not defined").is_none());
+}
+
+/// Clicks the `n`th character of the field's text, with `modifiers` held.
+fn click_char(harness: &mut Harness<'_, State>, n: usize, modifiers: egui::Modifiers) {
+    hover_char(harness, n);
+    let rect = harness.get_by_role(egui::accesskit::Role::TextInput).rect();
+    let State {
+        char_width, margin, ..
+    } = *harness.state();
+    #[expect(clippy::cast_precision_loss, reason = "a small character count")]
+    let pos = egui::pos2(
+        rect.left() + margin + char_width * (n as f32 + 0.5),
+        rect.center().y,
+    );
+    harness
+        .input_mut()
+        .events
+        .push(egui::Event::ModifiersChanged(modifiers));
+    for pressed in [true, false] {
+        harness.input_mut().events.push(egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers,
+        });
+        harness.step();
+    }
+    harness
+        .input_mut()
+        .events
+        .push(egui::Event::ModifiersChanged(egui::Modifiers::NONE));
+    harness.run_steps(2);
+}
+
+#[test]
+fn ctrl_click_on_a_variable_asks_to_edit_it_and_the_cursor_notes_it() {
+    use apifast_gui::atoms::variable_edit;
+    let mut harness = field("{{host}}/users/{{id}}");
+    hover_char(&mut harness, 3);
+    harness.get_by_label(TEXTS.edit);
+
+    // A plain click only places the text cursor, and the field notes the
+    // variable under it for the shortcut.
+    click_char(&mut harness, 17, egui::Modifiers::NONE);
+    assert_eq!(variable_edit::take(&harness.ctx), None);
+    assert_eq!(
+        variable_edit::at_cursor(&harness.ctx).as_deref(),
+        Some("id")
+    );
+
+    // Ctrl+click asks, for a variable defined or not.
+    click_char(&mut harness, 3, egui::Modifiers::COMMAND);
+    assert_eq!(variable_edit::take(&harness.ctx).as_deref(), Some("host"));
+    assert_eq!(variable_edit::take(&harness.ctx), None, "taken once");
+    click_char(&mut harness, 10, egui::Modifiers::COMMAND);
+    assert_eq!(variable_edit::take(&harness.ctx), None, "plain text");
 }

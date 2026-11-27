@@ -208,7 +208,7 @@ pub enum VariableScope {
     /// The active environment (`bru.setEnvVar`).
     Environment,
     /// The collection (`bru.setCollectionVar`), for this run: the
-    /// collection file is not changed.
+    /// collection file is only changed when the script asks to `persist`.
     Collection,
     /// The global ones (`bru.setGlobalEnvVar`), for this run.
     Global,
@@ -223,8 +223,9 @@ pub struct VariableChange {
     pub name: String,
     /// Its new value; `None` when deleted.
     pub value: Option<VariableValue>,
-    /// Whether to save it to the environment's file
-    /// (`bru.setEnvVar(name, value, {persist: true})`).
+    /// Whether to save it to the file of its scope, the environment's or
+    /// the collection's (`bru.setEnvVar(name, value, {persist: true})`,
+    /// `bru.setCollectionVar(name, value, {persist: true})`).
     pub persist: bool,
 }
 

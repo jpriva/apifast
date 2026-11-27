@@ -382,10 +382,10 @@
         getFolderVar: (name) => scopes.folders.get(name),
         getCollectionVar: (name) => scopes.collection.get(name),
         hasCollectionVar: (name) => scopes.collection.has(name),
-        setCollectionVar(name, value) {
+        setCollectionVar(name, value, options) {
             validName(name);
             scopes.collection.set(name, value);
-            change('collection', name, value, false);
+            change('collection', name, value, Boolean(options?.persist));
         },
         deleteCollectionVar(name) {
             scopes.collection.delete(name);

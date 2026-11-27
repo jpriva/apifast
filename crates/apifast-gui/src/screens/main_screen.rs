@@ -113,6 +113,10 @@ pub struct MainScreen {
     pub collection_settings: crate::organisms::CollectionSettingsWindow,
     /// The scripts of a folder or a collection.
     pub scripts_window: crate::organisms::ScriptsWindow,
+    /// The variables of a folder or the collection.
+    pub variables_window: crate::organisms::VariablesWindow,
+    /// The editor of one `{{variable}}`, opened from a field.
+    pub variable_editor: crate::organisms::VariableEditor,
     /// The collections and their proxies at the last frame, for the
     /// settings window to start from.
     last_collections: Vec<CollectionProxyEntry>,
@@ -132,18 +136,160 @@ struct CollectionProxyEntry {
     tree: std::sync::Arc<apifast_app::CollectionTree>,
 }
 
-/// The scripts of the folder at `path` in `items`.
-fn folder_scripts(
-    items: &[apifast_app::TreeItem],
+/// What the folder at `path` in `items` gives every request inside.
+fn folder_defaults<'a>(
+    items: &'a [apifast_app::TreeItem],
     path: &str,
-) -> Option<Vec<apifast_domain::ScriptBlock>> {
+) -> Option<&'a apifast_domain::RequestDefaults> {
     items.iter().find_map(|item| match item {
         apifast_app::TreeItem::Folder {
             path: p, folder, ..
-        } if p == path => Some(folder.defaults.scripts.clone()),
-        apifast_app::TreeItem::Folder { children, .. } => folder_scripts(children, path),
+        } if p == path => Some(&folder.defaults),
+        apifast_app::TreeItem::Folder { children, .. } => folder_defaults(children, path),
         _ => None,
     })
+}
+
+/// The folder at `path` in `items`.
+fn folder_at<'a>(
+    items: &'a [apifast_app::TreeItem],
+    path: &str,
+) -> Option<&'a apifast_domain::Folder> {
+    items.iter().find_map(|item| match item {
+        apifast_app::TreeItem::Folder {
+            path: p, folder, ..
+        } if p == path => Some(folder),
+        apifast_app::TreeItem::Folder { children, .. } => folder_at(children, path),
+        _ => None,
+    })
+}
+
+/// Where the variable `name` of the request in `tab` can be saved: the
+/// request, its folders (outermost first), the active environment and the
+/// collection, each with what it defines now; and the one to pick: where
+/// the value the request sees is written, or the request.
+fn variable_homes(
+    name: &str,
+    tab: &crate::core::Tab,
+    snapshot: &Snapshot,
+    strings: &Strings,
+) -> (Vec<crate::organisms::HomeChoice>, usize) {
+    use crate::organisms::{HomeChoice, VariableHome};
+    use apifast_domain::{Origin, Variable};
+    let own = |list: &[Variable]| list.iter().find(|v| v.name == name).cloned();
+    let mut choices = vec![HomeChoice {
+        home: VariableHome::Request,
+        label: strings.origin_request.to_owned(),
+        current: own(&tab.request().variables),
+    }];
+    let tree = (snapshot.collection.as_ref())
+        .filter(|c| c.root == tab.root)
+        .map(|c| c.tree.clone());
+    if let Some(tree) = &tree {
+        let path = tab.path.as_str();
+        let ancestors = (path.match_indices('/')).map(|(at, _)| &path[..at]);
+        for folder_path in ancestors {
+            if let Some(folder) = folder_at(&tree.items, folder_path) {
+                choices.push(HomeChoice {
+                    home: VariableHome::Folder(folder_path.to_owned()),
+                    label: format!("{} {}", strings.origin_folder, folder.name),
+                    current: own(&folder.defaults.variables),
+                });
+            }
+        }
+    }
+    if let Some(environment) = (snapshot.environment.as_ref()).and_then(|active| {
+        snapshot
+            .environment_files
+            .iter()
+            .find(|e| &e.name == active)
+    }) {
+        choices.push(HomeChoice {
+            home: VariableHome::Environment(environment.name.clone()),
+            label: format!("{} {}", strings.origin_environment, environment.name),
+            current: own(&environment.variables),
+        });
+    }
+    if let Some(tree) = &tree {
+        choices.push(HomeChoice {
+            home: VariableHome::Collection,
+            label: strings.origin_collection.to_owned(),
+            current: own(&tree.collection.defaults.variables),
+        });
+    }
+    // The value the request sees, or the file one a runtime value hides.
+    let resolved = tab.context.variables.get(name);
+    let origins = resolved.map(|v| {
+        std::iter::once(&v.origin)
+            .chain(v.overridden.iter().rev())
+            .cloned()
+            .collect::<Vec<_>>()
+    });
+    let chosen = (origins.unwrap_or_default().iter())
+        .find_map(|origin| {
+            choices
+                .iter()
+                .position(|choice| match (origin, &choice.home) {
+                    (Origin::Request, VariableHome::Request)
+                    | (Origin::Collection, VariableHome::Collection)
+                    | (Origin::Environment(_), VariableHome::Environment(_)) => true,
+                    (Origin::Folder(index), VariableHome::Folder(_)) => {
+                        let folder = tab.context.folders.get(*index);
+                        folder.is_some_and(|name| choice.label.ends_with(name.as_str()))
+                    }
+                    _ => false,
+                })
+        })
+        .unwrap_or(0);
+    (choices, chosen)
+}
+
+/// The command that saves `edit`, for the request in `tab`.
+fn variable_command(
+    edit: crate::organisms::VariableEdit,
+    tab: &crate::core::Tab,
+    snapshot: &Snapshot,
+) -> Option<Command> {
+    use crate::organisms::{VariableHome, set_variable};
+    let crate::organisms::VariableEdit { name, home, value } = edit;
+    let tree = (snapshot.collection.as_ref())
+        .filter(|c| c.root == tab.root)
+        .map(|c| c.tree.clone());
+    match home {
+        VariableHome::Request => {
+            let mut request = tab.request().clone();
+            set_variable(&mut request.variables, &name, value);
+            Some(Command::Edit {
+                tab: tab.key(),
+                request: Box::new(request),
+            })
+        }
+        VariableHome::Folder(path) => {
+            let tree = tree?;
+            let mut variables = folder_at(&tree.items, &path)?.defaults.variables.clone();
+            set_variable(&mut variables, &name, value);
+            Some(Command::SaveVariables {
+                root: tab.root.clone(),
+                folder: Some(path),
+                variables,
+            })
+        }
+        VariableHome::Environment(environment) => {
+            let files = snapshot.environment_files.iter();
+            let mut environment = files.into_iter().find(|e| e.name == environment)?.clone();
+            set_variable(&mut environment.variables, &name, value);
+            Some(Command::SaveEnvironment(Box::new(environment)))
+        }
+        VariableHome::Collection => {
+            let mut variables = tree?.collection.defaults.variables.clone();
+            set_variable(&mut variables, &name, value);
+            Some(Command::SaveVariables {
+                root: tab.root.clone(),
+                folder: None,
+                variables,
+            })
+        }
+    }
 }
 
 /// The settings of each loaded collection, for the settings window.
@@ -566,7 +712,8 @@ impl MainScreen {
                 if let Some(entry) = self.last_collections.iter().find(|c| c.root == root) {
                     let scripts = match &folder {
                         None => Some(entry.tree.collection.defaults.scripts.clone()),
-                        Some(path) => folder_scripts(&entry.tree.items, path),
+                        Some(path) => folder_defaults(&entry.tree.items, path)
+                            .map(|defaults| defaults.scripts.clone()),
                     };
                     if let Some(scripts) = scripts {
                         let target = crate::organisms::ScriptsTarget {
@@ -574,6 +721,23 @@ impl MainScreen {
                             folder,
                         };
                         self.scripts_window.open_for(target, label, scripts);
+                    }
+                }
+                vec![focus]
+            }
+            TreeEvent::Variables { folder, label } => {
+                if let Some(entry) = self.last_collections.iter().find(|c| c.root == root) {
+                    let defaults = match &folder {
+                        None => Some(&entry.tree.collection.defaults),
+                        Some(path) => folder_defaults(&entry.tree.items, path),
+                    };
+                    if let Some(defaults) = defaults {
+                        let variables = defaults.variables.clone();
+                        let target = crate::organisms::VariablesTarget {
+                            root: root.clone(),
+                            folder,
+                        };
+                        self.variables_window.open_for(target, label, variables);
                     }
                 }
                 vec![focus]
@@ -832,6 +996,86 @@ impl MainScreen {
         std::mem::take(&mut self.unsaved.keymap)
     }
 
+    /// The editor of one `{{variable}}`: a field asks for it (Ctrl+click),
+    /// or the shortcut does for the variable under the text cursor. It
+    /// edits for the active request, and saves where the user chooses.
+    fn variable_window(
+        &mut self,
+        ctx: &egui::Context,
+        snapshot: &Snapshot,
+        hints: &VariableHints,
+        strings: &Strings,
+    ) -> Vec<Command> {
+        use crate::atoms::variable_edit;
+        if std::mem::take(&mut self.variable_editor.at_cursor)
+            && let Some(name) = variable_edit::at_cursor(ctx)
+        {
+            variable_edit::ask(ctx, &name);
+        }
+        let tab = snapshot.active_tab();
+        if let Some(name) = variable_edit::take(ctx)
+            && let Some(tab) = tab
+        {
+            let (choices, chosen) = variable_homes(&name, tab, snapshot, strings);
+            let resolved = tab.context.variables.get(&name);
+            let fallback = (resolved.filter(|v| !v.secret))
+                .and_then(|v| v.value.as_ref())
+                .map(|v| v.data.clone())
+                .unwrap_or_default();
+            let now = hints.get(&name).cloned();
+            (self.variable_editor).open((name, now), choices, chosen, fallback);
+        }
+        let (Some(edit), Some(tab)) = (self.variable_editor.show(ctx, strings), tab) else {
+            return Vec::new();
+        };
+        // The request's own go to the copy being edited, which the screen
+        // keeps until the tab's revision changes.
+        if edit.home == crate::organisms::VariableHome::Request
+            && let Some(editor) = self.editor.as_mut().filter(|e| e.key == tab.key())
+        {
+            crate::organisms::set_variable(&mut editor.request.variables, &edit.name, edit.value);
+            return vec![Command::Edit {
+                tab: editor.key.clone(),
+                request: Box::new(editor.request.clone()),
+            }];
+        }
+        variable_command(edit, tab, snapshot).into_iter().collect()
+    }
+
+    /// The windows of a collection or a folder: its scripts, its variables
+    /// and the collection's settings. What to save, once the user saves.
+    fn collection_windows(
+        &mut self,
+        ctx: &egui::Context,
+        hints: &VariableHints,
+        strings: &Strings,
+    ) -> Vec<Command> {
+        let mut commands = Vec::new();
+        if let Some((target, scripts)) = self.scripts_window.show(ctx, strings) {
+            commands.push(Command::SaveScripts {
+                root: target.root,
+                folder: target.folder,
+                scripts,
+            });
+        }
+        if let Some((target, variables)) = self.variables_window.show(ctx, hints, strings) {
+            commands.push(Command::SaveVariables {
+                root: target.root,
+                folder: target.folder,
+                variables,
+            });
+        }
+        if let Some((root, settings)) = self.collection_settings.show(ctx, strings) {
+            commands.push(Command::SaveCollectionSettings {
+                root,
+                proxy: settings.proxy,
+                client_certificates: settings.client_certificates,
+                dns_overrides: settings.dns_overrides,
+            });
+        }
+        commands
+    }
+
     /// The windows over the screen: environments, shortcuts and the
     /// palette. Returns the commands they ask for.
     fn windows(
@@ -876,21 +1120,8 @@ impl MainScreen {
             crate::organisms::ReimportEvent::Apply(keys) => Command::ApplyReimport(keys),
             crate::organisms::ReimportEvent::Close => Command::CloseReimport,
         }));
-        if let Some((target, scripts)) = self.scripts_window.show(&ctx, strings) {
-            commands.push(Command::SaveScripts {
-                root: target.root,
-                folder: target.folder,
-                scripts,
-            });
-        }
-        if let Some((root, settings)) = self.collection_settings.show(&ctx, strings) {
-            commands.push(Command::SaveCollectionSettings {
-                root,
-                proxy: settings.proxy,
-                client_certificates: settings.client_certificates,
-                dns_overrides: settings.dns_overrides,
-            });
-        }
+        commands.extend(self.collection_windows(&ctx, hints, strings));
+        commands.extend(self.variable_window(&ctx, snapshot, hints, strings));
         commands.extend(
             self.runner
                 .show(&ctx, snapshot.run.as_ref(), strings)
@@ -1015,6 +1246,7 @@ impl MainScreen {
                 self.request.tab = crate::organisms::RequestTab::Body;
                 self.request.format_now = true;
             }
+            Action::EditVariable => self.variable_editor.at_cursor = true,
             Action::Quit => {
                 if self.closing == Closing::No {
                     self.closing = Closing::Quit;
@@ -1103,6 +1335,7 @@ impl MainScreen {
             | Action::ToggleLayout
             | Action::ShowHistory
             | Action::FormatBody
+            | Action::EditVariable
             | Action::Quit => Vec::new(),
             Action::OpenCollection => {
                 self.collections.open_collection();
@@ -1513,7 +1746,7 @@ fn hints(context: &TabContext, strings: &Strings) -> VariableHints {
                 (Some(value), false) => value.data.clone(),
                 _ => strings.secret_hidden.to_owned(),
             };
-            let origin = strings.origin(&variable.origin, &context.folders);
+            let origin = context.origin(name, &variable.origin, strings);
             (name.to_owned(), VariableHint { value, origin })
         })
         .collect()
@@ -1644,8 +1877,8 @@ fn banners(
     (key, captures)
 }
 
-/// Offers to write the values captured for the active environment there.
-/// Returns whether to, once the user chooses.
+/// Offers to write the values captured for the active environment and for
+/// the collection there. Returns whether to, once the user chooses.
 fn captures_banner(
     ui: &mut egui::Ui,
     captured: &crate::core::PendingCaptures,
@@ -1653,6 +1886,27 @@ fn captures_banner(
 ) -> Option<bool> {
     let accent = theme::palette(ui).accent;
     let mut choice = None;
+    let mut texts = Vec::new();
+    if !captured.names.is_empty() {
+        texts.push(
+            strings
+                .captured_for_environment
+                .replace("{environment}", &captured.environment)
+                .replace("{names}", &captured.names.join(", ")),
+        );
+    }
+    if !captured.collection.is_empty() {
+        texts.push(
+            strings
+                .captured_for_collection
+                .replace("{names}", &captured.collection.join(", ")),
+        );
+    }
+    let save = match (captured.names.is_empty(), captured.collection.is_empty()) {
+        (false, true) => strings.save_to_environment,
+        (true, false) => strings.save_to_collection,
+        _ => strings.save,
+    };
     egui::Frame::new()
         .fill(accent.gamma_multiply(theme::BADGE_TINT))
         .stroke(egui::Stroke::new(1.0, accent))
@@ -1660,12 +1914,8 @@ fn captures_banner(
         .inner_margin(theme::space::M)
         .show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
-                let text = strings
-                    .captured_for_environment
-                    .replace("{environment}", &captured.environment)
-                    .replace("{names}", &captured.names.join(", "));
-                ui.label(text);
-                if ui.button(strings.save_to_environment).clicked() {
+                ui.label(texts.join(" "));
+                if ui.button(save).clicked() {
                     choice = Some(true);
                 }
                 if ui.button(strings.discard_captures).clicked() {
@@ -2107,6 +2357,21 @@ mod tests {
         assert_eq!(hints["resource"].origin, "Folder Users");
         assert_eq!(hints["token"].value, EN.secret_hidden);
         assert!(hints.values().all(|h| !h.value.contains("s3cr3t")));
+    }
+
+    #[test]
+    fn hints_tell_a_value_a_script_set_from_a_captured_one() {
+        let runtime = [Variable::text("seen", "yes"), Variable::text("id", "7")];
+        let context = TabContext {
+            variables: resolve_variables(vec![(Origin::Runtime, &runtime[..])]),
+            scripted: ["seen".to_owned()].into(),
+            revision: 1,
+            ..TabContext::default()
+        };
+        let hints = hints(&context, &EN);
+        assert_eq!(hints["seen"].origin, EN.origin_script);
+        assert_eq!(hints["seen"].value, "yes");
+        assert_eq!(hints["id"].origin, EN.origin_runtime);
     }
 
     #[test]

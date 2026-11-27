@@ -179,6 +179,8 @@ pub enum CaptureScope {
     Request,
     /// Written to the active environment.
     Environment,
+    /// Written to the collection's variables (`opencollection.yml`).
+    Collection,
     /// One this version does not know, as written.
     Other(String),
 }
@@ -190,6 +192,7 @@ impl CaptureScope {
             "runtime" => Self::Runtime,
             "request" => Self::Request,
             "environment" => Self::Environment,
+            "collection" => Self::Collection,
             other => Self::Other(other.to_owned()),
         }
     }
@@ -200,6 +203,7 @@ impl CaptureScope {
             Self::Runtime => "runtime",
             Self::Request => "request",
             Self::Environment => "environment",
+            Self::Collection => "collection",
             Self::Other(name) => name,
         }
     }

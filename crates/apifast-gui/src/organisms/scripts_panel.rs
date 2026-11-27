@@ -83,6 +83,7 @@ pub fn scripts_editor(
         placeholder: "",
         missing: strings.variable_missing,
         generated: strings.variable_generated,
+        edit: strings.variable_edit,
     };
     let changed = CodeEditor::new(&mut code, Language::JavaScript, &hints, texts)
         .id(id.with(("code", shown)))

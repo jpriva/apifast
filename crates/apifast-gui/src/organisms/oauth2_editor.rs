@@ -35,6 +35,7 @@ pub fn oauth2_fields(
         placeholder: strings.value,
         missing: strings.variable_missing,
         generated: strings.variable_generated,
+        edit: strings.variable_edit,
     };
     let mut changed = flow_menu(ui, auth, strings);
     let (code, password) = (

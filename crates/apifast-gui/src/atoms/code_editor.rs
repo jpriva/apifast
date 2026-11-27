@@ -18,7 +18,7 @@ use std::sync::Arc;
 
 use eframe::egui::{self, FontId, Galley, TextFormat, TextStyle, text::LayoutJob};
 
-use super::template_field::{hover, span_at, variable_format};
+use super::template_field::{variable_format, variables_under};
 use super::{SpanKind, TemplateFieldTexts, VariableHints, spans};
 use crate::code::{HIGHLIGHT_LIMIT, Language, TokenKind, tokens};
 use crate::theme;
@@ -435,27 +435,15 @@ impl<'a> CodeEditor<'a> {
             let typed = output.response.response.changed();
             completion::after(ui, (id, &output), text, (completer, typed, forced));
         }
-        let mut response = output.response.response;
+        let mut response = output.response.response.clone();
         if picked {
             response.mark_changed();
         }
         if let Some(name) = name {
             response.clone().accessible_name(name);
         }
-        if highlight
-            && language != Language::JavaScript
-            && let Some(pointer) = response.hover_pos()
-        {
-            let index = output
-                .galley
-                .cursor_from_pos(pointer - output.galley_pos)
-                .index
-                .0;
-            if let Some(span) = span_at(text, index, hints) {
-                response
-                    .clone()
-                    .on_hover_ui_at_pointer(|ui| hover(ui, &span, hints, texts));
-            }
+        if highlight && language != Language::JavaScript {
+            variables_under(ui, &response, &output, text, (hints, texts));
         }
         response
     }

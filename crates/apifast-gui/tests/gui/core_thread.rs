@@ -467,13 +467,19 @@ fn names(items: &[TreeItem]) -> Vec<String> {
 fn a_created_request_appears_in_the_tree_and_opens() {
     let dir = collection(server(Duration::ZERO));
     let (core, _, _data) = start();
-    let snapshot = open(&core, dir.path());
+    open(&core, dir.path());
     core.send(Command::CreateRequest {
         root: root(&core),
         folder: String::new(),
         name: "New one".into(),
     });
-    let snapshot = next(&core, snapshot.version);
+    // The next snapshot may be another message's (the history loaded):
+    // wait for the request to open.
+    let snapshot = wait(&core, "the new request", |s| {
+        let shown = (s.collection.as_ref())
+            .is_some_and(|c| names(&c.tree.items).contains(&"New one".to_owned()));
+        s.error.is_some() || (shown && s.active_tab().is_some())
+    });
     assert_eq!(snapshot.error, None);
     let tree = &snapshot.collection.as_ref().unwrap().tree;
     assert_eq!(names(&tree.items), ["Users", "Health", "New one"]);
@@ -1951,6 +1957,78 @@ fn environment_captures_are_saved_when_the_user_agrees_and_secrets_go_to_the_vau
 }
 
 #[test]
+fn collection_values_scripts_persist_and_captures_are_saved_when_the_user_agrees() {
+    use apifast_domain::{ScriptBlock, ScriptKind, Variable};
+    let dir = collection(server(Duration::ZERO));
+    std::fs::write(
+        dir.path().join("users/get.yml"),
+        "info:\n  name: Get\n  type: http\nhttp:\n  method: GET\n  url: \"{{host}}/users/1\"\nruntime:\n  actions:\n    - type: set-variable\n      phase: after-response\n      selector:\n        expression: res.status\n        method: jsonq\n      variable:\n        name: last_status\n        scope: collection\n",
+    )
+    .unwrap();
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::SaveVariables {
+        root: root(&core),
+        folder: None,
+        variables: vec![Variable::text("greeting", "hi")],
+    });
+    core.send(Command::SaveScripts {
+        root: root(&core),
+        folder: None,
+        scripts: vec![ScriptBlock::new(
+            ScriptKind::AfterResponse,
+            "bru.setCollectionVar('greeting', 'ho' + 'la', { persist: true }); bru.setCollectionVar('for_now', 1)",
+        )],
+    });
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    core.send(Command::OpenRequest(at(&core, "users/get.yml")));
+    wait(&core, "the request", |s| s.active_tab().is_some());
+    core.send(Command::Send);
+    let snapshot = wait(&core, "the values to keep", |s| s.captured.is_some());
+    let captured = snapshot.captured.as_ref().unwrap();
+    assert_eq!(captured.collection, ["last_status", "greeting"]);
+    assert!(captured.names.is_empty(), "{captured:?}");
+
+    let file = dir.path().join("opencollection.yml");
+    core.send(Command::SaveCaptures {
+        root: root(&core),
+        save: false,
+    });
+    wait(&core, "discarded", |s| s.captured.is_none());
+    assert!(!std::fs::read_to_string(&file).unwrap().contains("hola"));
+
+    core.send(Command::Send);
+    wait(&core, "the values again", |s| s.captured.is_some());
+    core.send(Command::SaveCaptures {
+        root: root(&core),
+        save: true,
+    });
+    let snapshot = wait(&core, "saved", |s| {
+        s.captured.is_none()
+            && s.collection
+                .as_ref()
+                .is_some_and(|c| c.tree.collection.defaults.variables.len() == 2)
+    });
+    let text = std::fs::read_to_string(&file).unwrap();
+    assert!(text.contains("hola"), "{text}");
+    assert!(text.contains("last_status"), "{text}");
+    assert!(
+        !text.contains("- name: for_now"),
+        "only what asked to persist: {text}"
+    );
+    let variables = &snapshot
+        .collection
+        .as_ref()
+        .unwrap()
+        .tree
+        .collection
+        .defaults
+        .variables;
+    let greeting = variables.iter().find(|v| v.name == "greeting").unwrap();
+    assert_eq!(greeting.value.as_ref().unwrap().data, "hola");
+}
+
+#[test]
 fn the_runner_runs_a_folder_in_the_background_and_opens_a_step() {
     use apifast_gui::core::RunSettings;
     let dir = collection(server(Duration::ZERO));
@@ -2767,6 +2845,112 @@ fn collection_scripts_are_saved_in_its_file() {
     });
     let file = std::fs::read_to_string(dir.path().join("opencollection.yml")).unwrap();
     assert!(file.contains("console.log(1)"), "{file}");
+}
+
+#[test]
+fn collection_and_folder_variables_are_saved_and_reach_the_open_tab() {
+    use apifast_domain::{Origin, Variable};
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::OpenRequest(at(&core, "users/get.yml")));
+    wait(&core, "the tab", |s| s.active_tab().is_some());
+    core.send(Command::SaveVariables {
+        root: root(&core),
+        folder: None,
+        variables: vec![Variable::text("greeting", "hi"), Variable::text("id", "1")],
+    });
+    core.send(Command::SaveVariables {
+        root: root(&core),
+        folder: Some("users".into()),
+        variables: vec![Variable::text("id", "2")],
+    });
+    let snapshot = wait(&core, "the variables in the tab", |s| {
+        s.active_tab().is_some_and(|t| {
+            let variables = &t.context.variables;
+            variables.get("greeting").is_some()
+                && variables
+                    .get("id")
+                    .is_some_and(|v| v.value.as_ref().is_some_and(|value| value.data == "2"))
+        })
+    });
+    let variables = &snapshot.active_tab().unwrap().context.variables;
+    assert_eq!(
+        variables.get("greeting").unwrap().origin,
+        Origin::Collection
+    );
+    // The folder's overrides the collection's.
+    assert!(matches!(
+        variables.get("id").unwrap().origin,
+        Origin::Folder(_)
+    ));
+    let file = std::fs::read_to_string(dir.path().join("opencollection.yml")).unwrap();
+    assert!(file.contains("greeting"), "{file}");
+    assert!(
+        file.contains("info:\n  name: API"),
+        "the rest is kept: {file}"
+    );
+    let folder = std::fs::read_to_string(dir.path().join("users/folder.yml")).unwrap();
+    assert!(folder.contains("name: id"), "{folder}");
+}
+
+#[test]
+fn values_scripts_set_reach_the_tabs_with_where_they_come_from() {
+    use apifast_domain::{Origin, ScriptBlock, ScriptKind, Variable};
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::SaveVariables {
+        root: root(&core),
+        folder: None,
+        variables: vec![Variable::text("greeting", "hi")],
+    });
+    core.send(Command::SaveScripts {
+        root: root(&core),
+        folder: None,
+        scripts: vec![ScriptBlock::new(
+            ScriptKind::AfterResponse,
+            "bru.setVar('seen', 'yes'); bru.setCollectionVar('greeting', 'hola')",
+        )],
+    });
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
+    core.send(Command::OpenRequest(at(&core, "users/get.yml")));
+    let snapshot = wait(&core, "the tab", |s| {
+        s.active_tab().is_some_and(|t| {
+            t.context
+                .variables
+                .get("greeting")
+                .is_some_and(|v| v.origin == Origin::Collection)
+        })
+    });
+    assert!(
+        snapshot
+            .active_tab()
+            .unwrap()
+            .context
+            .variables
+            .get("seen")
+            .is_none()
+    );
+    core.send(Command::Send);
+    let snapshot = wait(&core, "the values in the tabs", |s| {
+        s.tabs
+            .iter()
+            .all(|t| t.context.variables.get("seen").is_some())
+    });
+    // Every tab of the collection sees them, not only the one sent.
+    for tab in &snapshot.tabs {
+        let context = &tab.context;
+        let greeting = context.variables.get("greeting").unwrap();
+        assert_eq!(greeting.value.as_ref().unwrap().data, "hola");
+        assert_eq!(greeting.origin, Origin::Runtime);
+        assert!(greeting.overridden.contains(&Origin::Collection));
+        assert_eq!(
+            context.origin("seen", &Origin::Runtime, &apifast_gui::strings::EN),
+            apifast_gui::strings::EN.origin_script
+        );
+    }
 }
 
 /// Tells `core` the settings a test needs: the default timeout, and

@@ -69,6 +69,7 @@ fn texts(strings: &Strings, placeholder: &'static str) -> TemplateFieldTexts<'st
         placeholder,
         missing: strings.variable_missing,
         generated: strings.variable_generated,
+        edit: strings.variable_edit,
     }
 }
 
@@ -199,7 +200,7 @@ fn expected(
         .changed()
 }
 
-const SCOPES: [&str; 3] = ["runtime", "request", "environment"];
+const SCOPES: [&str; 4] = ["runtime", "request", "environment", "collection"];
 
 fn captures(ui: &mut egui::Ui, rows: &mut Vec<Capture>, strings: &Strings) -> bool {
     let id = ui.make_persistent_id("captures");

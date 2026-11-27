@@ -879,6 +879,11 @@ pub struct Strings {
     pub save_to_environment: &'static str,
     /// Forgets the captured values.
     pub discard_captures: &'static str,
+    /// Banner over the editor; `{names}` is replaced: values for the
+    /// collection's variables, from captures or scripts.
+    pub captured_for_collection: &'static str,
+    /// Writes the captured values to the collection's file.
+    pub save_to_collection: &'static str,
     /// Title of the runner window.
     pub runner: &'static str,
     /// Tree menu: open the runner on a collection or folder.
@@ -1104,6 +1109,18 @@ pub struct Strings {
     pub scripts_menu: &'static str,
     /// Above the scripts: what they are and what they see.
     pub scripts_hint: &'static str,
+    /// Request tab and window title: the variables of the request, a folder
+    /// or the collection.
+    pub variables: &'static str,
+    /// Menu of a folder or the collection: edit its variables.
+    pub variables_menu: &'static str,
+    /// Above the variables of a folder or the collection: who sees them and
+    /// what overrides them.
+    pub variables_hint: &'static str,
+    /// Above the variables of a request: what they override.
+    pub request_variables_hint: &'static str,
+    /// In place of the value of a secret that is not an environment's.
+    pub variable_secret_elsewhere: &'static str,
     /// When a file has several scripts of one kind: only the first is
     /// edited.
     pub scripts_more: &'static str,
@@ -1201,6 +1218,17 @@ pub struct Strings {
     pub variable_missing: &'static str,
     /// Hover of a tag whose value is made when sending.
     pub variable_generated: &'static str,
+    /// Under a variable in a field: how to edit it or add it.
+    pub variable_edit: &'static str,
+    /// Action: edit the variable under the text cursor.
+    pub action_edit_variable: &'static str,
+    /// Variable editor: the choice of where the value is saved.
+    pub variable_save_in: &'static str,
+    /// Variable editor: what the variable is now, before the value.
+    pub variable_now: &'static str,
+    /// Variable editor: a secret of an environment is changed in the
+    /// environments window.
+    pub variable_secret_in_environments: &'static str,
     /// Shown instead of a secret's value.
     pub secret_hidden: &'static str,
     /// Origin: apifast's default.
@@ -1217,6 +1245,9 @@ pub struct Strings {
     pub origin_request: &'static str,
     /// Origin: captured from a response.
     pub origin_runtime: &'static str,
+    /// Origin: set by a script (`bru.setVar` and the like), for the next
+    /// sends while the collection is loaded.
+    pub origin_script: &'static str,
     /// Origin: typed in for this send.
     pub origin_prompt: &'static str,
     /// Request tab: query and path parameters.

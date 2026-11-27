@@ -143,6 +143,7 @@ impl<'a> UrlBar<'a> {
                     placeholder: strings.url_placeholder,
                     missing: strings.variable_missing,
                     generated: strings.variable_generated,
+                    edit: strings.variable_edit,
                 };
                 let id = ui.make_persistent_id("url-field");
                 // Taken before the field sees it: a one-line field would

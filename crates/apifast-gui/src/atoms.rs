@@ -4,6 +4,7 @@
 mod code_editor;
 mod suggestions;
 mod template_field;
+pub mod variable_edit;
 
 pub use code_editor::{CodeEditor, Completer, EditorOptions, code_layout, syntax_layout};
 pub use suggestions::{MAX_SUGGESTIONS, completions, refocus, suggestions};

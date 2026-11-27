@@ -152,6 +152,7 @@ fn editor(options: EditorOptions) -> Harness<'static, String> {
                     placeholder: "",
                     missing: "missing",
                     generated: "generated",
+                    edit: "edit",
                 };
                 CodeEditor::new(text, Language::Json, &hints, texts)
                     .accessible_name("Body")

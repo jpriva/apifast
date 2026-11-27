@@ -42,6 +42,8 @@ pub(super) struct Open {
     /// What scripts changed in the environment, the collection and the
     /// globals, which the next scripts read; for as long as the runtime.
     pub(super) script_changes: Vec<apifast_app::VariableChange>,
+    /// The names in `runtime` a script set last, not a capture.
+    pub(super) scripted: std::collections::BTreeSet<String>,
     /// OAuth 2.0 tokens, kept while the collection is loaded.
     pub(super) tokens: Arc<dyn apifast_app::TokenStore>,
     /// Its cookie jar, shared with its transport.
@@ -343,6 +345,7 @@ impl State {
                 vault,
                 runtime: Vec::new(),
                 script_changes: Vec::new(),
+                scripted: std::collections::BTreeSet::new(),
                 tokens,
                 cookie_view: Arc::new(cookies.jar().cookies().to_vec()),
                 cookies,
@@ -484,6 +487,17 @@ impl State {
         folder: Option<&str>,
         scripts: Vec<apifast_domain::ScriptBlock>,
     ) {
+        self.save_defaults(root, folder, |defaults| defaults.scripts = scripts);
+    }
+
+    /// Changes with `change` what `folder`, or the collection at `root`,
+    /// gives every request inside, keeping the rest of its file.
+    pub(super) fn save_defaults(
+        &mut self,
+        root: &Path,
+        folder: Option<&str>,
+        change: impl FnOnce(&mut apifast_domain::RequestDefaults),
+    ) {
         let found = (self.open.get(root)).and_then(|open| match folder {
             None => Some(None),
             Some(path) => find_folder(&open.tree.items, path).map(Some),
@@ -494,11 +508,11 @@ impl State {
         self.organize(root, |repo| {
             use apifast_app::CollectionRepository as _;
             if let (Some(path), Some(mut saved)) = (folder, found) {
-                saved.defaults.scripts = scripts;
+                change(&mut saved.defaults);
                 repo.save_folder(path, &saved)?;
             } else {
                 let mut collection = repo.collection()?;
-                collection.defaults.scripts = scripts;
+                change(&mut collection.defaults);
                 repo.save_collection(&collection)?;
             }
             Ok(())

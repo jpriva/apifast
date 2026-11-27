@@ -52,6 +52,8 @@ pub enum Action {
     ShowHistory,
     /// Format the body being edited.
     FormatBody,
+    /// Edit, or add, the `{{variable}}` under the text cursor.
+    EditVariable,
     /// Open the editor of these shortcuts.
     Shortcuts,
     /// Follow the system's theme.
@@ -117,6 +119,7 @@ pub const ALL: &[Action] = &[
     Action::Layouts,
     Action::ShowHistory,
     Action::FormatBody,
+    Action::EditVariable,
     Action::Shortcuts,
     Action::ThemeSystem,
     Action::ThemeLight,
@@ -166,6 +169,7 @@ impl Action {
             Self::Layouts => "layouts".into(),
             Self::ShowHistory => "show_history".into(),
             Self::FormatBody => "format_body".into(),
+            Self::EditVariable => "edit_variable".into(),
             Self::Shortcuts => "shortcuts".into(),
             Self::ThemeSystem => "theme_system".into(),
             Self::ThemeLight => "theme_light".into(),
@@ -213,6 +217,7 @@ impl Action {
             Self::Layouts => strings.action_layouts,
             Self::ShowHistory => strings.action_show_history,
             Self::FormatBody => strings.action_format_body,
+            Self::EditVariable => strings.action_edit_variable,
             Self::Shortcuts => strings.action_shortcuts,
             Self::ThemeSystem => strings.action_theme_system,
             Self::ThemeLight => strings.action_theme_light,
@@ -271,6 +276,7 @@ impl Action {
             Self::ToggleLayout => one(key(CTRL, Key::J)),
             Self::Quit => one(key(CTRL, Key::Q)),
             Self::FormatBody => one(key(Modifiers::ALT.plus(Modifiers::SHIFT), Key::F)),
+            Self::EditVariable => one(key(Modifiers::NONE, Key::F2)),
             Self::ShowHistory
             | Self::Shortcuts
             | Self::ThemeSystem

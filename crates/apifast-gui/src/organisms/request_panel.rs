@@ -32,6 +32,8 @@ pub enum RequestTab {
     Body,
     /// Authentication.
     Auth,
+    /// The request's own variables.
+    Vars,
     /// Assertions and captures.
     Tests,
     /// JavaScript scripts.
@@ -149,6 +151,13 @@ impl RequestPanel {
                 (RequestTab::Headers, counted(headers_label, headers)),
                 (RequestTab::Body, body),
                 (RequestTab::Auth, strings.auth.to_owned()),
+                (
+                    RequestTab::Vars,
+                    counted(
+                        strings.variables,
+                        request.variables.iter().filter(|v| v.enabled).count(),
+                    ),
+                ),
                 (RequestTab::Tests, counted(strings.tests, tests)),
                 (
                     RequestTab::Scripts,
@@ -238,6 +247,15 @@ impl RequestPanel {
                             .or(self.token_action.take());
                     }
                     changed.then_some(RequestChange::Other)
+                }
+                RequestTab::Vars => {
+                    let muted = theme::palette(ui).text_muted;
+                    let hint = strings.request_variables_hint;
+                    ui.label(RichText::new(hint).color(muted).small());
+                    ui.add_space(theme::space::S);
+                    let id = ui.make_persistent_id("request-variables");
+                    super::variables_table(ui, &mut request.variables, id, hints, strings)
+                        .then_some(RequestChange::Other)
                 }
                 RequestTab::Tests => crate::organisms::tests_panel(ui, request, hints, strings)
                     .then_some(RequestChange::Other),
@@ -375,6 +393,7 @@ fn texts(strings: &Strings) -> TemplateFieldTexts<'_> {
         placeholder: strings.value,
         missing: strings.variable_missing,
         generated: strings.variable_generated,
+        edit: strings.variable_edit,
     }
 }
 

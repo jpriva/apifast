@@ -495,6 +495,7 @@ impl eframe::App for TypingBench {
             placeholder: "",
             missing: "",
             generated: "",
+            edit: "",
         };
         egui::CentralPanel::default().show(ui, |ui| {
             CodeEditor::new(&mut self.code, Language::Json, &self.hints, texts)

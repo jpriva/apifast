@@ -133,15 +133,15 @@ pub fn variable_value(json: &Json) -> VariableValue {
 }
 
 /// Keeps the captured values for the next requests: those of scope
-/// `runtime` and `environment` (the caller writes the latter to the
-/// environment when it wants to). Values of scope `request` end with their
+/// `runtime`, `environment` and `collection` (the caller writes the last
+/// two to their files when it wants to). Values of scope `request` end with their
 /// send.
 pub fn apply_captures(runtime: &mut Vec<Variable>, captures: &[CaptureOutcome]) {
     for capture in captures {
         let Ok(value) = &capture.value else { continue };
         if !matches!(
             capture.scope,
-            CaptureScope::Runtime | CaptureScope::Environment
+            CaptureScope::Runtime | CaptureScope::Environment | CaptureScope::Collection
         ) {
             continue;
         }
