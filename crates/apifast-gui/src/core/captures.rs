@@ -23,6 +23,10 @@ pub(super) struct Captured {
     environment: Vec<(String, VariableValue, bool)>,
     /// Name and value of the collection's, in capture order.
     collection: Vec<(String, VariableValue)>,
+    /// The global environment the values of `global` are for.
+    global_name: Option<String>,
+    /// Name and value of the global environment's, in order.
+    global: Vec<(String, VariableValue)>,
 }
 
 impl Captured {
@@ -40,11 +44,13 @@ impl Captured {
                 .iter()
                 .map(|(name, _)| name.clone())
                 .collect(),
+            global_environment: self.global_name.clone().unwrap_or_default(),
+            global: self.global.iter().map(|(name, _)| name.clone()).collect(),
         }
     }
 
     fn is_empty(&self) -> bool {
-        self.environment.is_empty() && self.collection.is_empty()
+        self.environment.is_empty() && self.collection.is_empty() && self.global.is_empty()
     }
 }
 
@@ -121,6 +127,60 @@ impl State {
         open.captured = (!pending.is_empty()).then_some(pending);
     }
 
+    /// Notes the values scripts asked to keep in the workspace's active
+    /// global environment (`bru.setGlobalEnvVar(…, {persist: true})`),
+    /// adding to those still waiting. Without an active one they stay
+    /// runtime values.
+    pub(super) fn note_global(&mut self, root: &PathBuf, changes: &[VariableChange]) {
+        let active = (self.workspace.as_ref()).and_then(|w| w.global_environment.clone());
+        let Some(open) = self.open.get_mut(root) else {
+            return;
+        };
+        let Some(active) = active else {
+            return;
+        };
+        let values: Vec<_> = (changes.iter())
+            .filter(|c| c.scope == VariableScope::Global && c.persist)
+            .filter_map(|c| Some((c.name.clone(), c.value.clone()?)))
+            .collect();
+        if values.is_empty() {
+            return;
+        }
+        let mut pending = open.captured.take().unwrap_or_default();
+        if pending.global_name.as_deref() != Some(active.as_str()) {
+            pending.global.clear();
+            pending.global_name = Some(active);
+        }
+        for (name, value) in values {
+            pending.global.retain(|(n, _)| *n != name);
+            pending.global.push((name, value));
+        }
+        open.captured = Some(pending);
+    }
+
+    /// Writes the waiting values for the global environment into its file.
+    /// A variable it declares secret is left as it is.
+    fn write_global_captures(&mut self, name: &str, values: Vec<(String, VariableValue)>) {
+        let files = (self.workspace.as_ref()).map(|w| w.global_files.clone());
+        let Some(mut environment) =
+            files.and_then(|files| files.iter().find(|e| e.name == name).cloned())
+        else {
+            let errors = &self.strings.errors;
+            self.snapshot.error = Some(crate::strings::fill(
+                errors.environment_gone,
+                &[("name", &name)],
+            ));
+            return;
+        };
+        for (variable, value) in values {
+            let secret = (environment.variables.iter()).any(|v| v.name == variable && v.secret);
+            if !secret {
+                set(&mut environment.variables, variable, value);
+            }
+        }
+        self.global_environment(&super::GlobalCommand::Save(Box::new(environment)));
+    }
+
     /// Writes the waiting captures of the collection at `root` to their
     /// environment and to the collection (`save`), or forgets them.
     pub(super) fn save_captures(&mut self, root: &Path, save: bool) {
@@ -141,6 +201,9 @@ impl State {
         }
         if !pending.collection.is_empty() {
             self.write_collection_captures(root, pending.collection);
+        }
+        if let Some(name) = pending.global_name.filter(|_| !pending.global.is_empty()) {
+            self.write_global_captures(&name, pending.global);
         }
     }
 

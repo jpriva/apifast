@@ -31,7 +31,8 @@ impl<'a> EnvironmentSelector<'a> {
     /// Draws the selector. Returns the new choice when the user changes it.
     pub fn show(self, ui: &mut egui::Ui) -> Option<Option<String>> {
         let mut choice = None;
-        let response = egui::ComboBox::from_id_salt("environment")
+        // Told apart by its name: the global one sits next to it.
+        let response = egui::ComboBox::from_id_salt(("environment", self.label))
             .selected_text(self.active.unwrap_or(self.none_label))
             .show_ui(ui, |ui| {
                 if ui

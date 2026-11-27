@@ -333,7 +333,7 @@ impl State {
     }
 
     /// Hides what is shown after [`SHOWN_FOR`].
-    fn hide_later(&mut self) {
+    pub(super) fn hide_later(&mut self) {
         self.shown += 1;
         let shown = self.shown;
         let messages = self.messages.clone();
@@ -352,6 +352,7 @@ impl State {
                 open.vault_view.revealed = None;
                 open.vault_view.shareable_key = None;
             }
+            self.snapshot.global_vault.revealed = None;
         }
     }
 }

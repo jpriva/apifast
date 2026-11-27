@@ -3028,3 +3028,303 @@ fn the_settings_choose_whether_the_last_workspace_opens_at_the_start() {
     assert_eq!(workspace_at_start(true), "Team");
     assert_eq!(workspace_at_start(false), "My workspace");
 }
+
+#[test]
+fn the_workspace_global_environment_is_under_the_collection_and_kept() {
+    use apifast_domain::Origin;
+    let dir = collection(server(Duration::ZERO));
+    std::fs::write(
+        dir.path().join("opencollection.yml"),
+        "opencollection: 1.0.0\ninfo:\n  name: API\nrequest:\n  variables:\n    - name: tenant\n      value: from-collection\n",
+    )
+    .unwrap();
+    let team = tempfile::tempdir().unwrap();
+    std::fs::write(
+        team.path().join("workspace.yml"),
+        "opencollection: 1.0.0\ninfo:\n  name: Team\n  type: workspace\ncollections:\n",
+    )
+    .unwrap();
+    std::fs::create_dir(team.path().join("environments")).unwrap();
+    std::fs::write(
+        team.path().join("environments/shared.yml"),
+        "name: shared\nvariables:\n  - name: tenant\n    value: from-global\n  - name: region\n    value: eu\n",
+    )
+    .unwrap();
+
+    let (core, _, data) = start();
+    core.send(Command::OpenWorkspace(team.path().to_path_buf()));
+    let snapshot = wait(&core, "the team workspace", |s| {
+        s.workspace.as_ref().is_some_and(|w| w.name == "Team")
+    });
+    let names: Vec<_> = (snapshot.global_environment_files.iter())
+        .map(|e| e.name.as_str())
+        .collect();
+    assert_eq!(names, ["shared"]);
+    assert_eq!(snapshot.global_environment, None);
+    open(&core, dir.path());
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
+    wait(&core, "the tab", |s| s.active_tab().is_some());
+
+    core.send(Command::SelectGlobalEnvironment(Some("shared".into())));
+    let snapshot = wait(&core, "the global values", |s| {
+        s.active_tab()
+            .is_some_and(|t| t.context.variables.get("region").is_some())
+    });
+    assert_eq!(snapshot.global_environment.as_deref(), Some("shared"));
+    let variables = &snapshot.active_tab().unwrap().context.variables;
+    assert_eq!(variables.get("region").unwrap().origin, Origin::Global);
+    // The collection's value hides the global one.
+    let tenant = variables.get("tenant").unwrap();
+    assert_eq!(tenant.origin, Origin::Collection);
+    assert_eq!(tenant.overridden, [Origin::Global]);
+    drop(core);
+
+    // This machine remembers it.
+    let core = core_in(data.path());
+    core.send(Command::Restore);
+    let snapshot = wait(&core, "restored", |s| s.workspace.is_some());
+    assert_eq!(snapshot.global_environment.as_deref(), Some("shared"));
+}
+
+#[test]
+fn global_environments_are_created_saved_renamed_and_deleted() {
+    use apifast_domain::{Origin, Variable};
+    use apifast_gui::core::GlobalCommand;
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    let snapshot = wait(&core, "a workspace", |s| s.workspace.is_some());
+    let folder = snapshot.workspace.clone().unwrap().folder;
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
+    wait(&core, "the tab", |s| s.active_tab().is_some());
+
+    core.send(Command::GlobalEnvironment(GlobalCommand::Create(
+        "team".into(),
+    )));
+    let snapshot = wait(&core, "the new one", |s| {
+        !s.global_environment_files.is_empty()
+    });
+    let mut team = snapshot.global_environment_files[0].clone();
+    team.variables.push(Variable::text("region", "eu"));
+    core.send(Command::GlobalEnvironment(GlobalCommand::Save(Box::new(
+        team,
+    ))));
+    core.send(Command::SelectGlobalEnvironment(Some("team".into())));
+    wait(&core, "its value in the tab", |s| {
+        s.active_tab().is_some_and(|t| {
+            t.context
+                .variables
+                .get("region")
+                .is_some_and(|v| v.origin == Origin::Global)
+        })
+    });
+    let file = std::fs::read_to_string(folder.join("environments/team.yml")).unwrap();
+    assert!(file.contains("name: region"), "{file}");
+
+    // The active one follows a rename, and is none once deleted.
+    core.send(Command::GlobalEnvironment(GlobalCommand::Rename {
+        from: "team".into(),
+        to: "crew".into(),
+    }));
+    let snapshot = wait(&core, "renamed", |s| {
+        s.global_environment.as_deref() == Some("crew")
+    });
+    assert!(
+        snapshot
+            .active_tab()
+            .unwrap()
+            .context
+            .variables
+            .get("region")
+            .is_some()
+    );
+    core.send(Command::GlobalEnvironment(GlobalCommand::Delete(
+        "crew".into(),
+    )));
+    let snapshot = wait(&core, "deleted", |s| s.global_environment_files.is_empty());
+    assert_eq!(snapshot.global_environment, None);
+    assert!(
+        snapshot
+            .active_tab()
+            .unwrap()
+            .context
+            .variables
+            .get("region")
+            .is_none()
+    );
+}
+
+#[test]
+fn global_values_scripts_persist_are_saved_when_the_user_agrees() {
+    use apifast_domain::{ScriptBlock, ScriptKind};
+    use apifast_gui::core::GlobalCommand;
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    let snapshot = wait(&core, "a workspace", |s| s.workspace.is_some());
+    let folder = snapshot.workspace.clone().unwrap().folder;
+    core.send(Command::GlobalEnvironment(GlobalCommand::Create(
+        "team".into(),
+    )));
+    core.send(Command::SelectGlobalEnvironment(Some("team".into())));
+    core.send(Command::SaveScripts {
+        root: root(&core),
+        folder: None,
+        scripts: vec![ScriptBlock::new(
+            ScriptKind::AfterResponse,
+            "bru.setGlobalEnvVar('shared', 'x' + 'y', { persist: true }); bru.setGlobalEnvVar('passing', 1)",
+        )],
+    });
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
+    wait(&core, "the tab", |s| {
+        s.active_tab().is_some() && s.global_environment.as_deref() == Some("team")
+    });
+    core.send(Command::Send);
+    let snapshot = wait(&core, "the values to keep", |s| s.captured.is_some());
+    let captured = snapshot.captured.as_ref().unwrap();
+    assert_eq!(captured.global_environment, "team");
+    assert_eq!(captured.global, ["shared"]);
+    assert!(captured.names.is_empty() && captured.collection.is_empty());
+
+    core.send(Command::SaveCaptures {
+        root: root(&core),
+        save: true,
+    });
+    let file = folder.join("environments/team.yml");
+    let snapshot = wait(&core, "saved", |s| {
+        s.captured.is_none()
+            && std::fs::read_to_string(&file).is_ok_and(|text| text.contains("name: shared"))
+    });
+    let text = std::fs::read_to_string(&file).unwrap();
+    assert!(text.contains("value: xy"), "{text}");
+    assert!(
+        !text.contains("name: passing"),
+        "only what asked to persist: {text}"
+    );
+    let team = &snapshot.global_environment_files[0];
+    assert!(team.variables.iter().any(|v| v.name == "shared"));
+}
+
+#[test]
+fn global_environments_changed_outside_are_read_again() {
+    let team = tempfile::tempdir().unwrap();
+    std::fs::write(
+        team.path().join("workspace.yml"),
+        "opencollection: 1.0.0\ninfo:\n  name: Team\n  type: workspace\ncollections:\n",
+    )
+    .unwrap();
+    let (core, _, _data) = start();
+    core.send(Command::OpenWorkspace(team.path().to_path_buf()));
+    wait(&core, "the team workspace", |s| {
+        s.workspace.as_ref().is_some_and(|w| w.name == "Team")
+    });
+
+    // Bruno makes the folder and a first environment.
+    std::fs::create_dir(team.path().join("environments")).unwrap();
+    let file = team.path().join("environments/shared.yml");
+    std::fs::write(
+        &file,
+        "name: shared\nvariables:\n  - name: region\n    value: eu\n",
+    )
+    .unwrap();
+    wait(&core, "the new environment", |s| {
+        s.global_environment_files
+            .iter()
+            .any(|e| e.name == "shared")
+    });
+
+    // And changes it.
+    std::fs::write(
+        &file,
+        "name: shared\nvariables:\n  - name: region\n    value: us\n",
+    )
+    .unwrap();
+    wait(&core, "the change", |s| {
+        s.global_environment_files.iter().any(|e| {
+            e.variables
+                .iter()
+                .any(|v| v.value.as_ref().is_some_and(|v| v.data == "us"))
+        })
+    });
+}
+
+#[test]
+fn a_global_secret_is_kept_on_this_machine_and_reaches_the_sends() {
+    use apifast_domain::{Origin, Secret};
+    use apifast_gui::core::GlobalCommand;
+    let dir = collection(server(Duration::ZERO));
+    let team = tempfile::tempdir().unwrap();
+    std::fs::write(
+        team.path().join("workspace.yml"),
+        "opencollection: 1.0.0\ninfo:\n  name: Team\n  type: workspace\ncollections:\n",
+    )
+    .unwrap();
+    std::fs::create_dir(team.path().join("environments")).unwrap();
+    let file = team.path().join("environments/shared.yml");
+    std::fs::write(
+        &file,
+        "name: shared\nvariables:\n  - name: token\n    secret: true\n",
+    )
+    .unwrap();
+
+    let (core, _, data) = start();
+    core.send(Command::OpenWorkspace(team.path().to_path_buf()));
+    wait(&core, "the team workspace", |s| {
+        s.workspace.as_ref().is_some_and(|w| w.name == "Team")
+    });
+    open(&core, dir.path());
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
+    core.send(Command::SelectGlobalEnvironment(Some("shared".into())));
+    core.send(Command::GlobalEnvironment(GlobalCommand::Secret {
+        environment: "shared".into(),
+        name: "token".into(),
+        value: Secret::new("g10bal"),
+    }));
+    let snapshot = wait(&core, "its value in the tab", |s| {
+        s.active_tab().is_some_and(|t| {
+            t.context
+                .variables
+                .get("token")
+                .is_some_and(|v| v.value.is_some())
+        })
+    });
+    let token = snapshot
+        .active_tab()
+        .unwrap()
+        .context
+        .variables
+        .get("token")
+        .cloned()
+        .unwrap();
+    assert_eq!(token.origin, Origin::Global);
+    assert!(token.secret, "masked wherever it shows");
+    assert_eq!(token.value.unwrap().data, "g10bal");
+    assert_eq!(
+        snapshot.global_vault.status("shared", "token"),
+        apifast_gui::core::SecretStatus::Local
+    );
+    // The file keeps only its name; the vault keeps it sealed.
+    assert!(!std::fs::read_to_string(&file).unwrap().contains("g10bal"));
+    let vault = std::fs::read_dir(data.path().join("vault")).unwrap();
+    for entry in vault.flatten() {
+        let text = std::fs::read_to_string(entry.path()).unwrap();
+        assert!(!text.contains("g10bal"), "sealed: {text}");
+    }
+
+    core.send(Command::GlobalEnvironment(GlobalCommand::Reveal {
+        environment: "shared".into(),
+        name: "token".into(),
+    }));
+    let snapshot = wait(&core, "shown", |s| s.global_vault.revealed.is_some());
+    assert_eq!(
+        snapshot
+            .global_vault
+            .revealed
+            .as_ref()
+            .unwrap()
+            .value
+            .expose(),
+        "g10bal"
+    );
+}

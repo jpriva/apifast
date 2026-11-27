@@ -42,6 +42,9 @@ pub(super) struct Open {
     /// What scripts changed in the environment, the collection and the
     /// globals, which the next scripts read; for as long as the runtime.
     pub(super) script_changes: Vec<apifast_app::VariableChange>,
+    /// The variables of the workspace's active global environment, as every
+    /// send of this collection sees them.
+    pub(super) globals: Arc<Vec<Variable>>,
     /// The names in `runtime` a script set last, not a capture.
     pub(super) scripted: std::collections::BTreeSet<String>,
     /// OAuth 2.0 tokens, kept while the collection is loaded.
@@ -335,6 +338,7 @@ impl State {
             Ok(watcher) => (Some(watcher), error),
             Err(e) => (None, error.or_else(|| Some(e.to_string()))),
         };
+        let globals = self.global_variables();
         self.open.insert(
             root.to_path_buf(),
             Open {
@@ -347,6 +351,7 @@ impl State {
                 vault,
                 runtime: Vec::new(),
                 script_changes: Vec::new(),
+                globals,
                 scripted: std::collections::BTreeSet::new(),
                 tokens,
                 cookie_view: Arc::new(cookies.jar().cookies().to_vec()),

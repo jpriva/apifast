@@ -368,6 +368,10 @@ pub enum Command {
     ForgetWorkspace(PathBuf),
     /// Picks the active environment of the focused collection, or none.
     SelectEnvironment(Option<String>),
+    /// Picks the workspace's active global environment, or none.
+    SelectGlobalEnvironment(Option<String>),
+    /// Changes the workspace's global environments.
+    GlobalEnvironment(GlobalCommand),
     /// Opens a request in a tab, or shows its tab if it is open.
     OpenRequest(TabKey),
     /// Shows an open tab.
@@ -628,6 +632,10 @@ pub struct Snapshot {
     pub environment_files: Arc<Vec<Environment>>,
     /// Its active environment.
     pub environment: Option<String>,
+    /// The active workspace's global environments, as in their files.
+    pub global_environment_files: Arc<Vec<Environment>>,
+    /// The active global environment, if any.
+    pub global_environment: Option<String>,
     /// Open tabs, of any collection, in order.
     pub tabs: Vec<Tab>,
     /// The active tab.
@@ -646,6 +654,9 @@ pub struct Snapshot {
     pub history: Arc<Vec<HistoryEntry>>,
     /// What the interface sees of the focused collection's vault.
     pub vault: VaultView,
+    /// What the interface sees of the secrets of the workspace's global
+    /// environments, kept on this machine only.
+    pub global_vault: VaultView,
     /// The cookies of the focused collection's jar, in its order.
     pub cookies: Arc<Vec<apifast_domain::Cookie>>,
     /// The focused collection's git repository, if it is in one.
@@ -688,6 +699,10 @@ pub struct PendingCaptures {
     pub names: Vec<String>,
     /// The collection's variables, in capture order.
     pub collection: Vec<String>,
+    /// The global environment; empty when none is active.
+    pub global_environment: String,
+    /// The global environment's variables, in order.
+    pub global: Vec<String>,
 }
 
 /// A workspace.
@@ -737,6 +752,44 @@ pub struct CollectionView {
     pub root: PathBuf,
     /// Its folders and requests.
     pub tree: Arc<CollectionTree>,
+}
+
+/// A change to the active workspace's global environments.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GlobalCommand {
+    /// Create an empty one with this name.
+    Create(String),
+    /// Rename one.
+    Rename {
+        /// Its name.
+        from: String,
+        /// The new name.
+        to: String,
+    },
+    /// Save these contents, matched by name.
+    Save(Box<Environment>),
+    /// Delete one.
+    Delete(String),
+    /// Store the value of a secret, on this machine.
+    Secret {
+        /// Its environment.
+        environment: String,
+        /// Its variable.
+        name: String,
+        /// The value.
+        value: apifast_domain::Secret,
+    },
+    /// Show the value of a secret for a while.
+    Reveal {
+        /// Its environment.
+        environment: String,
+        /// Its variable.
+        name: String,
+    },
+    /// Hide a value shown.
+    Hide,
+    /// Forget a stored value no secret uses.
+    Forget(apifast_vault::Orphan),
 }
 
 /// An open request.
@@ -947,6 +1000,8 @@ enum Message {
     External(u64, Changes),
     /// The `workspace.yml` of workspace opening number `.0` changed.
     WorkspaceChanged(u64),
+    /// The global environments of workspace opening number `.0` changed.
+    GlobalEnvironmentsChanged(u64),
     /// Hide what was shown of the vault, if it is still show number `.0`.
     HideShown(u64),
     WriteSession,
@@ -1223,6 +1278,9 @@ impl State {
                     }
                 }
                 Message::WorkspaceChanged(opened) => self.workspace_changed(opened),
+                Message::GlobalEnvironmentsChanged(opened) => {
+                    self.global_environments_changed(opened);
+                }
                 Message::WriteSession => {
                     self.session_pending = false;
                     self.write_session();
@@ -1280,6 +1338,8 @@ impl State {
                 }
                 self.refresh_variables(None);
             }
+            Command::SelectGlobalEnvironment(name) => self.select_global_environment(name),
+            Command::GlobalEnvironment(command) => self.global_environment(&command),
             Command::OpenRequest(key) => self.open_request(&key),
             Command::ActivateTab(key) => {
                 if self.tab(&key).is_some() {
@@ -1617,7 +1677,7 @@ impl State {
             &*open.repo,
             &*open.repo,
             &loaded,
-            open.environment.as_deref(),
+            (open.environment.as_deref(), &open.globals),
             &open.runtime,
         )
         .unwrap_or_default();
@@ -1703,6 +1763,7 @@ impl State {
         let written = (request.method.as_str().to_owned(), request.url.clone());
         let options = SendOptions {
             environment: open.environment.clone(),
+            globals: open.globals.to_vec(),
             draft: self.tab(&key).and_then(|tab| tab.draft.clone()),
             runtime: open.runtime.clone(),
             script_changes: open.script_changes.clone(),
@@ -1831,6 +1892,7 @@ impl State {
                 self.note_captures(&key.root, &checks.captures);
                 let persisted = captures::persisted(&checks.scripts.variables);
                 self.note_captures(&key.root, &persisted);
+                self.note_global(&key.root, &checks.scripts.variables);
                 ResponseState::Received(received)
             }
             Err(AppError::Transport(TransportError::Cancelled)) => ResponseState::Cancelled,

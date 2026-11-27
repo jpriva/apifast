@@ -27,7 +27,7 @@ Cuando el mismo nombre existe en varios ámbitos, gana el más específico. De m
 
 | # | Ámbito | Dónde se define |
 |---|---|---|
-| 1 | Global | Entorno global del workspace |
+| 1 | Global | El entorno global activo del workspace: `environments/` de su carpeta, como en Bruno, incluyendo lo heredado por `extends` |
 | 2 | Colección | `request.variables` en `opencollection.yml` |
 | 3 | Entorno activo | `environments/<nombre>.yml`, incluyendo lo heredado por `extends` |
 | 4 | Carpetas | `request.variables` en cada `folder.yml`, de la más externa a la más interna |

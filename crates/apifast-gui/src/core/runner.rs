@@ -161,6 +161,7 @@ impl State {
             data,
             send: SendOptions {
                 environment: open.environment.clone(),
+                globals: open.globals.to_vec(),
                 runtime: open.runtime.clone(),
                 script_changes: open.script_changes.clone(),
                 default_timeout_ms: Some(self.default_timeout_ms),

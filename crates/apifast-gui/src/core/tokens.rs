@@ -37,6 +37,7 @@ pub(super) fn token_state(
 fn options(open: &Open, request: &HttpRequest) -> SendOptions {
     SendOptions {
         environment: open.environment.clone(),
+        globals: open.globals.to_vec(),
         runtime: open.runtime.clone(),
         script_changes: open.script_changes.clone(),
         draft: Some(request.clone()),

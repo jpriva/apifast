@@ -210,7 +210,9 @@ pub enum VariableScope {
     /// The collection (`bru.setCollectionVar`), for this run: the
     /// collection file is only changed when the script asks to `persist`.
     Collection,
-    /// The global ones (`bru.setGlobalEnvVar`), for this run.
+    /// The workspace's global environment (`bru.setGlobalEnvVar`), for
+    /// this run: its file is only changed when the script asks to
+    /// `persist`.
     Global,
 }
 

@@ -22,6 +22,8 @@ pub struct DescribeArgs {
     /// Active environment, by name.
     #[arg(short, long)]
     env: Option<String>,
+    #[command(flatten)]
+    globals: crate::globals::GlobalArgs,
     /// The collection folder; by default, the nearest folder above the file
     /// with an opencollection.yml.
     #[arg(long)]
@@ -45,6 +47,7 @@ pub fn run(args: &DescribeArgs) -> Result<ExitCode> {
     } = wire(&located.root, &args.tls)?;
     let (clock, random) = (system::SystemClock, system::SystemRandom::new());
     let options = SendOptions {
+        globals: args.globals.variables(&located.root)?,
         environment: args.env.clone(),
         runtime: (args.vars.iter())
             .map(|(n, v)| Variable::text(n, v))

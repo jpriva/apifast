@@ -128,6 +128,36 @@ impl WorkspaceRepository for FsWorkspace {
     }
 }
 
+/// The workspace's environments, in its `environments/`: those Bruno
+/// calls global, which every collection of the workspace sees.
+impl apifast_app::EnvironmentRepository for FsWorkspace {
+    fn environments(&self) -> Result<Vec<apifast_domain::Environment>, RepositoryError> {
+        crate::FsEnvironments::new(&self.folder).all()
+    }
+
+    fn save_environment(
+        &self,
+        environment: &apifast_domain::Environment,
+    ) -> Result<(), RepositoryError> {
+        crate::FsEnvironments::new(&self.folder).save(environment)
+    }
+
+    fn rename_environment(&self, from: &str, to: &str) -> Result<(), RepositoryError> {
+        crate::FsEnvironments::new(&self.folder).rename(from, to)
+    }
+
+    fn delete_environment(&self, name: &str) -> Result<(), RepositoryError> {
+        crate::FsEnvironments::new(&self.folder).delete(name)
+    }
+
+    /// The process's: a workspace has no `.env` of its own.
+    fn process_env(&self) -> Result<std::collections::BTreeMap<String, String>, RepositoryError> {
+        Ok(std::env::vars_os()
+            .filter_map(|(k, v)| Some((k.into_string().ok()?, v.into_string().ok()?)))
+            .collect())
+    }
+}
+
 fn read(doc: &Value) -> Workspace {
     Workspace {
         name: text_or_empty(get_in(doc, &["info", "name"])),
@@ -205,6 +235,8 @@ pub struct WorkspaceStateData {
     pub tabs: Vec<(PathBuf, RequestPath)>,
     /// The active tab.
     pub active: Option<(PathBuf, RequestPath)>,
+    /// The active global environment, by name.
+    pub global_environment: Option<String>,
 }
 
 /// The personal state of one workspace, in its own file.
@@ -242,6 +274,7 @@ impl FsWorkspaceState {
                 .collect(),
             tabs: items(get(&doc, "tabs")).iter().filter_map(tab).collect(),
             active: get(&doc, "active").and_then(tab),
+            global_environment: text(get(&doc, "global_environment")),
         })
     }
 
@@ -273,6 +306,10 @@ impl FsWorkspaceState {
                 Some(Value::Sequence(state.tabs.iter().map(tab).collect())),
             ),
             ("active", state.active.as_ref().map(tab)),
+            (
+                "global_environment",
+                state.global_environment.as_deref().map(string),
+            ),
         ]);
         save_yaml(&self.file, &doc)
     }

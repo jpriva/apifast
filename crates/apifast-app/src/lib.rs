@@ -105,7 +105,7 @@ pub use scripts::{
     ScriptVariables, TestOutcome, VariableChange, VariableScope,
 };
 pub use use_cases::{
-    SendOptions, SendOutcome, SendPorts, load_request, open_collection, resolve_request_variables,
-    save_request, send_request,
+    SendOptions, SendOutcome, SendPorts, global_variables, load_request, open_collection,
+    resolve_request_variables, save_request, send_request,
 };
 pub use websocket::{WsHandler, WsOutbox, WsTransport, connect_request};

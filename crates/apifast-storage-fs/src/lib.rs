@@ -12,6 +12,7 @@
 
 mod convert;
 mod diff;
+mod environments;
 mod examples;
 mod fs;
 mod keymap;
@@ -36,6 +37,7 @@ use apifast_domain::{Collection, CollectionId, DnsOverride, Environment, Folder,
 use oneyaml::Value;
 
 pub use convert::yaml_to_json;
+use environments::FsEnvironments;
 pub use keymap::FsKeymapStore;
 pub use layouts::{FsLayoutStore, LayoutFile};
 pub use session::FsSessionStore;
@@ -48,7 +50,6 @@ pub use workspace::{
 
 const COLLECTION_FILE: &str = "opencollection.yml";
 const FOLDER_FILE: &str = "folder.yml";
-const ENVIRONMENTS_DIR: &str = "environments";
 const APIFAST_DIR: &str = ".apifast";
 const APIFAST_COLLECTION_FILE: &str = ".apifast/collection.yml";
 
@@ -262,53 +263,6 @@ impl FsCollection {
                 message: e.to_string(),
             },
         }
-    }
-
-    /// Environment files with their parsed content, sorted by file name.
-    /// Writes `environment` to the file at `relative`, keeping what the file
-    /// has that the model does not.
-    fn save_environment_at(
-        &self,
-        relative: &str,
-        environment: &Environment,
-    ) -> Result<(), RepositoryError> {
-        let stem = relative
-            .trim_start_matches("environments/")
-            .rsplit_once('.')
-            .map_or(relative, |(s, _)| s)
-            .to_owned();
-        self.save_document(
-            relative,
-            environment,
-            |doc| Ok(read::environment(doc, &stem)),
-            write::update_environment,
-            write::new_environment,
-        )
-    }
-
-    fn environment_files(&self) -> Result<Vec<(String, Environment)>, RepositoryError> {
-        let dir = self.root.join(ENVIRONMENTS_DIR);
-        let entries = match std::fs::read_dir(&dir) {
-            Ok(entries) => entries,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(e) => return Err(io_error(ENVIRONMENTS_DIR, &e)),
-        };
-        let mut names: Vec<String> = entries
-            .filter_map(Result::ok)
-            .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
-            .filter_map(|e| e.file_name().to_str().map(str::to_owned))
-            .filter(|n| is_yaml(n))
-            .collect();
-        names.sort();
-        let mut out = Vec::with_capacity(names.len());
-        for name in names {
-            let relative = format!("{ENVIRONMENTS_DIR}/{name}");
-            if let Some(doc) = self.read_value(&relative)? {
-                let stem = name.rsplit_once('.').map_or(name.as_str(), |(s, _)| s);
-                out.push((relative.clone(), read::environment(&doc, stem)));
-            }
-        }
-        Ok(out)
     }
 
     /// Writes the DNS overrides into `.apifast/collection.yml`, keeping the
@@ -532,59 +486,19 @@ impl CollectionRepository for FsCollection {
 
 impl EnvironmentRepository for FsCollection {
     fn environments(&self) -> Result<Vec<Environment>, RepositoryError> {
-        Ok(self
-            .environment_files()?
-            .into_iter()
-            .map(|(_, env)| env)
-            .collect())
+        FsEnvironments::new(&self.root).all()
     }
 
     fn save_environment(&self, environment: &Environment) -> Result<(), RepositoryError> {
-        let files = self.environment_files()?;
-        let relative = match files.iter().find(|(_, e)| e.name == environment.name) {
-            Some((relative, _)) => relative.clone(),
-            None => free_environment_file(&files, &environment.name),
-        };
-        self.save_environment_at(&relative, environment)
+        FsEnvironments::new(&self.root).save(environment)
     }
 
     fn rename_environment(&self, from: &str, to: &str) -> Result<(), RepositoryError> {
-        let files = self.environment_files()?;
-        if files.iter().any(|(_, e)| e.name == to) {
-            return Err(RepositoryError::Invalid {
-                path: to.to_owned(),
-                message: "an environment with that name already exists".into(),
-            });
-        }
-        let (relative, environment) = files
-            .iter()
-            .find(|(_, e)| e.name == from)
-            .ok_or_else(|| RepositoryError::NotFound(from.to_owned()))?;
-        // Bruno names the file after the environment: follow the new name.
-        let others: Vec<_> = files
-            .iter()
-            .filter(|(r, _)| r != relative)
-            .cloned()
-            .collect();
-        let target = free_environment_file(&others, to);
-        if target != *relative {
-            std::fs::rename(self.root.join(relative), self.root.join(&target))
-                .map_err(|e| io_error(relative, &e))?;
-        }
-        let renamed = Environment {
-            name: to.to_owned(),
-            ..environment.clone()
-        };
-        self.save_environment_at(&target, &renamed)
+        FsEnvironments::new(&self.root).rename(from, to)
     }
 
     fn delete_environment(&self, name: &str) -> Result<(), RepositoryError> {
-        let files = self.environment_files()?;
-        let (relative, _) = files
-            .iter()
-            .find(|(_, e)| e.name == name)
-            .ok_or_else(|| RepositoryError::NotFound(name.to_owned()))?;
-        std::fs::remove_file(self.root.join(relative)).map_err(|e| io_error(relative, &e))
+        FsEnvironments::new(&self.root).delete(name)
     }
 
     fn process_env(&self) -> Result<BTreeMap<String, String>, RepositoryError> {
@@ -596,20 +510,6 @@ impl EnvironmentRepository for FsCollection {
         }
         Ok(vars)
     }
-}
-
-/// A path in `environments/` for an environment named `name`, after the
-/// name and not taken by any of `files`.
-fn free_environment_file(files: &[(String, Environment)], name: &str) -> String {
-    let base = fs::file_name_for(name);
-    let taken = |candidate: &str| files.iter().any(|(r, _)| r == candidate);
-    let mut candidate = format!("{ENVIRONMENTS_DIR}/{base}.yml");
-    let mut n = 2;
-    while taken(&candidate) {
-        candidate = format!("{ENVIRONMENTS_DIR}/{base}-{n}.yml");
-        n += 1;
-    }
-    candidate
 }
 
 /// Folder of the shared secrets, one file per environment.

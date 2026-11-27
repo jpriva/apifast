@@ -91,6 +91,7 @@ impl State {
         };
         let options = SendOptions {
             environment: open.environment.clone(),
+            globals: open.globals.to_vec(),
             runtime: open.runtime.clone(),
             script_changes: open.script_changes.clone(),
             draft: Some(request),

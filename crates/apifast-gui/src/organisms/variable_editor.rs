@@ -23,6 +23,8 @@ pub enum VariableHome {
     Environment(String),
     /// The collection.
     Collection,
+    /// The workspace's global environment of this name.
+    Global(String),
 }
 
 /// One place to save the variable in, as the editor offers it.
@@ -159,10 +161,10 @@ impl VariableEditor {
                 let choice = &editing.choices[editing.chosen];
                 let secret = choice.current.as_ref().is_some_and(|v| v.secret);
                 if secret {
-                    let why = if matches!(choice.home, VariableHome::Environment(_)) {
-                        strings.variable_secret_in_environments
-                    } else {
-                        strings.variable_secret_elsewhere
+                    let why = match choice.home {
+                        VariableHome::Environment(_) => strings.variable_secret_in_environments,
+                        VariableHome::Global(_) => strings.variable_secret_in_global,
+                        _ => strings.variable_secret_elsewhere,
                     };
                     ui.label(RichText::new(why).color(muted));
                 } else {

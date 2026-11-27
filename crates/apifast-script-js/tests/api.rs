@@ -605,10 +605,12 @@ async fn bru_sets_collection_variables_and_reads_every_environment_variable() {
 }
 
 #[tokio::test]
-async fn a_collection_variable_asks_to_be_kept_only_with_persist() {
+async fn collection_and_global_variables_ask_to_be_kept_only_with_persist() {
     let outcome = run(r"
         bru.setCollectionVar('kept', 1, { persist: true });
         bru.setCollectionVar('for_now', 2);
+        bru.setGlobalEnvVar('shared', 3, { persist: true });
+        bru.setGlobalEnvVar('passing', 4);
     ")
     .await;
     assert_eq!(outcome.error, None);
@@ -620,6 +622,8 @@ async fn a_collection_variable_asks_to_be_kept_only_with_persist() {
         [
             (VariableScope::Collection, "kept", true),
             (VariableScope::Collection, "for_now", false),
+            (VariableScope::Global, "shared", true),
+            (VariableScope::Global, "passing", false),
         ]
     );
 }

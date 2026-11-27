@@ -237,6 +237,59 @@ fn sends_a_request_with_inheritance_variables_and_auth() {
 }
 
 #[test]
+fn the_global_environment_is_under_every_other_scope() {
+    let world = users_world();
+    let globals = apifast_app::global_variables(
+        &[
+            env(
+                "team",
+                None,
+                vec![
+                    Variable::text("host", "http://global"),
+                    Variable::text("api_version", "v0"),
+                    Variable::text("user_id", "1"),
+                    Variable::text("tenant", "base"),
+                ],
+            ),
+            env(
+                "team-prod",
+                Some("team"),
+                vec![Variable::text("tenant", "acme")],
+            ),
+        ],
+        Some("team-prod"),
+        &apifast_app::NoSecrets,
+    )
+    .unwrap();
+    // What it extends is under it.
+    let tenant = globals.iter().find(|v| v.name == "tenant").unwrap();
+    assert_eq!(tenant.value.as_ref().unwrap().data, "acme");
+
+    let mut request = apifast_app::CollectionRepository::request(
+        &world.collections,
+        &RequestPath::new("users/create.yml"),
+    )
+    .unwrap();
+    request.request.url = "{{host}}/{{api_version}}/{{tenant}}".into();
+    request.request.params.clear();
+    let options = SendOptions {
+        globals,
+        draft: Some(request.request),
+        ..prod()
+    };
+    world.send("users/create.yml", &options).unwrap();
+    // The environment and the collection hide the global ones; what only
+    // the global environment has is used.
+    assert_eq!(world.last_sent().url(), "https://api.test/v1/acme");
+
+    assert_eq!(
+        apifast_app::global_variables(&[], None, &apifast_app::NoSecrets).unwrap(),
+        []
+    );
+    assert!(apifast_app::global_variables(&[], Some("gone"), &apifast_app::NoSecrets).is_err());
+}
+
+#[test]
 fn a_missing_variable_fails_unless_allowed() {
     let world = users_world();
     let no_env = SendOptions {

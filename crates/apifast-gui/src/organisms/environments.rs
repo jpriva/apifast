@@ -83,6 +83,11 @@ pub enum EnvironmentsView {
 pub struct EnvironmentEditor {
     /// Whether the window is open.
     pub open: bool,
+    /// It edits the workspace's global environments, not a collection's:
+    /// its own window, and secrets kept on this machine only.
+    pub global: bool,
+    /// The user asked for the global environments' window.
+    pub open_global: bool,
     /// Which part is shown.
     pub view: EnvironmentsView,
     /// The environment chosen in the list.
@@ -149,27 +154,45 @@ impl EnvironmentEditor {
         self.follow(environments);
         let mut open = self.open;
         let mut events = Vec::new();
+        let (title, id) = if self.global {
+            (strings.global_environments, "global-environment-editor")
+        } else {
+            (strings.environments, "environment-editor")
+        };
+        if self.global {
+            self.view = EnvironmentsView::Environments;
+        }
         crate::molecules::window(
             ctx,
-            egui::Window::new(strings.environments)
-                .id(egui::Id::unique("environment-editor"))
+            egui::Window::new(title)
+                .id(egui::Id::unique(id))
                 .default_size([920.0, 460.0])
                 .resizable(true),
-            (strings.environments, strings.close_window),
+            (title, strings.close_window),
             &mut open,
             |ui| {
-                ui.horizontal(|ui| {
-                    ui.selectable_value(
-                        &mut self.view,
-                        EnvironmentsView::Environments,
-                        strings.environments,
-                    );
-                    ui.selectable_value(
-                        &mut self.view,
-                        EnvironmentsView::Variables,
-                        strings.all_variables,
-                    );
-                });
+                if self.global {
+                    let muted = theme::palette(ui).text_muted;
+                    ui.label(RichText::new(strings.global_environments_hint).color(muted));
+                } else {
+                    ui.horizontal(|ui| {
+                        ui.selectable_value(
+                            &mut self.view,
+                            EnvironmentsView::Environments,
+                            strings.environments,
+                        );
+                        ui.selectable_value(
+                            &mut self.view,
+                            EnvironmentsView::Variables,
+                            strings.all_variables,
+                        );
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button(strings.global_environments_menu).clicked() {
+                                self.open_global = true;
+                            }
+                        });
+                    });
+                }
                 ui.separator();
                 match self.view {
                     EnvironmentsView::Environments => {
@@ -366,6 +389,7 @@ impl EnvironmentEditor {
             environment: &base.name,
             vault,
             values: &mut self.secret_values,
+            shareable: !self.global,
         };
         events.extend(variables(ui, &mut work.variables, secrets, hints, strings));
         ui.add_space(theme::space::S);
@@ -486,6 +510,9 @@ struct Secrets<'a> {
     environment: &'a str,
     vault: &'a VaultView,
     values: &'a mut BTreeMap<String, Pending>,
+    /// Whether a secret can be shared with the team: a global one stays on
+    /// this machine.
+    shareable: bool,
 }
 
 /// The table of an environment's variables, with an empty row to add one.
@@ -622,10 +649,15 @@ fn row(
     kind_choice(ui, variable, id.with((index, 2)), columns.kind, strings);
     cell(ui, columns.secret, |ui| {
         let mut secret = variable.secret;
+        let hint = if secrets.shareable {
+            strings.secret_hint
+        } else {
+            strings.global_secret_hint
+        };
         let changed = ui
             .add(egui::Checkbox::without_text(&mut secret))
             .accessible_name(strings.secret)
-            .on_hover_text(strings.secret_hint)
+            .on_hover_text(hint)
             .changed();
         if changed {
             make_secret(variable, secret, secrets.values);
@@ -702,8 +734,10 @@ fn secret_value(
                 status_text(status, strings)
             ))
             .on_hover_text(status_text(status, strings));
-            ui.checkbox(&mut pending.shared, strings.shared)
-                .on_hover_text(strings.shared_hint);
+            if secrets.shareable {
+                ui.checkbox(&mut pending.shared, strings.shared)
+                    .on_hover_text(strings.shared_hint);
+            }
         }
         let stored = matches!(status, SecretStatus::Local | SecretStatus::Shared);
         if revealed.is_some() {

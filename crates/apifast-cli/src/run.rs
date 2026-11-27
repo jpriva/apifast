@@ -30,6 +30,8 @@ pub struct RunArgs {
     /// Active environment, by name.
     #[arg(short, long)]
     env: Option<String>,
+    #[command(flatten)]
+    globals: crate::globals::GlobalArgs,
     /// A value that overrides every scope, as `NAME=VALUE`. Repeatable.
     #[arg(long = "var", visible_alias = "env-var", value_name = "NAME=VALUE", value_parser = parse_var)]
     vars: Vec<(String, String)>,
@@ -122,7 +124,8 @@ pub fn run(args: &RunArgs) -> Result<ExitCode> {
         secrets,
     } = wire(&root, &args.tls)?;
     let (clock, random) = (system::SystemClock, system::SystemRandom::new());
-    let options = run_options(args, folder, data.unwrap_or_default());
+    let globals = args.globals.variables(&root)?;
+    let options = run_options(args, folder, (data.unwrap_or_default(), globals));
     let console = Console {
         color: !args.no_color
             && std::env::var_os("NO_COLOR").is_none()
@@ -202,7 +205,11 @@ pub fn run(args: &RunArgs) -> Result<ExitCode> {
 }
 
 /// What to run, from the command line.
-fn run_options(args: &RunArgs, folder: Option<String>, data: Vec<Vec<Variable>>) -> RunOptions {
+fn run_options(
+    args: &RunArgs,
+    folder: Option<String>,
+    (data, globals): (Vec<Vec<Variable>>, Vec<Variable>),
+) -> RunOptions {
     RunOptions {
         folder,
         recursive: args.recursive,
@@ -213,6 +220,7 @@ fn run_options(args: &RunArgs, folder: Option<String>, data: Vec<Vec<Variable>>)
         iterations: args.iterations,
         data,
         send: SendOptions {
+            globals,
             environment: args.env.clone(),
             runtime: args
                 .vars
