@@ -121,6 +121,17 @@ Los datos asociados de cada sobre son los de la variable (`apifast/v1|<collectio
 
 Si la colección ya tiene *challenge* pero esta máquina no tiene su clave, compartir falla y se pide la clave al equipo: crear otra dejaría a los demás sin poder abrir lo nuevo. El archivo se nombra como el entorno (con los caracteres no válidos sustituidos) y guarda el nombre real en `environment`; si se queda sin secretos, se borra.
 
+### Secretos de los entornos globales del workspace
+
+Un entorno global no pertenece a ninguna colección, así que no tiene clave de colección ni `.apifast/secrets/`. Sus secretos son **solo locales**, como en Bruno:
+
+- El archivo del entorno guarda solo el nombre (`secret: true`). El valor va a la bóveda local de esta máquina, `vault/workspace-<hash>.vault`, sellado con la clave maestra.
+- El identificador es `workspace-` seguido del hash de la ruta de la carpeta del workspace, el mismo que nombra su estado personal (`apifast_history::dirs::workspace_id`). Mover la carpeta lo convierte en otro workspace: hay que volver a escribir sus secretos.
+- Los datos asociados son los de un secreto local, con ese identificador en lugar del de la colección: un valor copiado a otra variable, otro entorno u otro workspace no se abre.
+- No se comparten: el editor de entornos globales no ofrece la casilla "Shared".
+- Al renombrar un entorno global, sus valores se vuelven a sellar con el nombre nuevo.
+- La interfaz y `apifast --global-env` leen la bóveda solo si el entorno global declara algún secreto. Si no se puede leer (un keyring bloqueado), lo dicen y siguen sin esos valores.
+
 ### Abrir una colección clonada
 
 1. apifast lee `vault.challenge` de `.apifast/collection.yml`.

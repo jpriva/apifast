@@ -61,6 +61,16 @@ pub fn workspace_state_file_in(data_dir: &Path, folder: &Path) -> PathBuf {
         .join("state.yml")
 }
 
+/// What this machine calls the workspace in `folder`, from a hash of its
+/// path, as its state: the vault keeps the secrets of its global
+/// environments under it. Moving the folder makes it another one.
+pub fn workspace_id(folder: &Path) -> String {
+    format!(
+        "workspace-{:016x}",
+        fnv1a(folder.to_string_lossy().as_bytes())
+    )
+}
+
 /// Folder for the responses of the collection at `root`, under
 /// [`data_dir`]. The key is the collection id when it has one, or a hash of
 /// its path, so opening or sending never writes into the collection.

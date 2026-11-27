@@ -94,14 +94,17 @@ pub fn resolve_request_variables(
 
 /// The variables of the global environment `active` among the workspace's
 /// `environments`, with what it extends under it: a later one hides an
-/// earlier one of the same name. None without an active one.
+/// earlier one of the same name. None without an active one. A secret
+/// takes its value from `secrets`, under the environment that declares it.
 ///
 /// # Errors
 ///
-/// If `active` does not exist or its `extends` chain is broken.
+/// If `active` does not exist or its `extends` chain is broken, or
+/// `secrets` cannot be read.
 pub fn global_variables(
     environments: &[apifast_domain::Environment],
     active: Option<&str>,
+    secrets: &dyn SecretStore,
 ) -> Result<Vec<Variable>, AppError> {
     let Some(active) = active else {
         return Ok(Vec::new());
@@ -109,8 +112,15 @@ pub fn global_variables(
     let mut variables: Vec<Variable> = Vec::new();
     for environment in environment_chain(active, environments)? {
         for variable in &environment.variables {
+            let mut variable = variable.clone();
+            if variable.secret
+                && variable.value.is_none()
+                && let Some(value) = secrets.secret(&environment.name, &variable.name)?
+            {
+                variable.value = Some(VariableValue::text(value.expose()));
+            }
             variables.retain(|v| v.name != variable.name);
-            variables.push(variable.clone());
+            variables.push(variable);
         }
     }
     Ok(variables)

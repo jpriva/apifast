@@ -528,3 +528,59 @@ fn a_global_environment_of_the_workspace_is_under_the_collections() {
         text(&out.stderr)
     );
 }
+
+#[test]
+fn a_global_secret_comes_from_this_machines_vault() {
+    let server = Server::start();
+    let dir = collection(server.port);
+    let data = tempfile::tempdir().unwrap();
+    let team = tempfile::tempdir().unwrap();
+    std::fs::write(
+        team.path().join("workspace.yml"),
+        "opencollection: 1.0.0\ninfo:\n  name: Team\n  type: workspace\ncollections:\n",
+    )
+    .unwrap();
+    std::fs::create_dir(team.path().join("environments")).unwrap();
+    std::fs::write(
+        team.path().join("environments/shared.yml"),
+        "name: shared\nvariables:\n  - name: token\n    secret: true\n",
+    )
+    .unwrap();
+    // As the interface stores it: under the workspace's id, sealed with
+    // the master key in the data directory.
+    let folder = dunce::canonicalize(team.path()).unwrap();
+    apifast_vault::VaultSecrets::for_collection(
+        data.path(),
+        &apifast_history::dirs::workspace_id(&folder),
+        std::sync::Arc::new(apifast_app::memory::MemorySharedSecrets::default()),
+        apifast_vault::SystemKeyring::off(),
+    )
+    .unwrap()
+    .set_local("shared", "token", "g10bal")
+    .unwrap();
+
+    let workspace = team.path().to_str().unwrap();
+    let host = format!("host=http://127.0.0.1:{}", server.port);
+    let out = apifast(
+        dir.path(),
+        data.path(),
+        &[
+            "send",
+            "users/get.yml",
+            "--var",
+            &host,
+            "--var",
+            "user_id=7",
+            "--global-env",
+            "shared",
+            "--workspace",
+            workspace,
+        ],
+    );
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let request = &server.seen()[0];
+    assert!(
+        request.contains("authorization: Bearer g10bal"),
+        "{request}"
+    );
+}

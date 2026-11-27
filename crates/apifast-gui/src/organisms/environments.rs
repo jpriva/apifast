@@ -84,7 +84,7 @@ pub struct EnvironmentEditor {
     /// Whether the window is open.
     pub open: bool,
     /// It edits the workspace's global environments, not a collection's:
-    /// its own window, and no secret values yet.
+    /// its own window, and secrets kept on this machine only.
     pub global: bool,
     /// The user asked for the global environments' window.
     pub open_global: bool,
@@ -389,7 +389,7 @@ impl EnvironmentEditor {
             environment: &base.name,
             vault,
             values: &mut self.secret_values,
-            allowed: !self.global,
+            shareable: !self.global,
         };
         events.extend(variables(ui, &mut work.variables, secrets, hints, strings));
         ui.add_space(theme::space::S);
@@ -510,8 +510,9 @@ struct Secrets<'a> {
     environment: &'a str,
     vault: &'a VaultView,
     values: &'a mut BTreeMap<String, Pending>,
-    /// Whether a variable can be made secret: not in a global one yet.
-    allowed: bool,
+    /// Whether a secret can be shared with the team: a global one stays on
+    /// this machine.
+    shareable: bool,
 }
 
 /// The table of an environment's variables, with an empty row to add one.
@@ -648,16 +649,15 @@ fn row(
     kind_choice(ui, variable, id.with((index, 2)), columns.kind, strings);
     cell(ui, columns.secret, |ui| {
         let mut secret = variable.secret;
-        let hint = if secrets.allowed {
+        let hint = if secrets.shareable {
             strings.secret_hint
         } else {
-            strings.global_secret_later
+            strings.global_secret_hint
         };
         let changed = ui
-            .add_enabled(secrets.allowed, egui::Checkbox::without_text(&mut secret))
+            .add(egui::Checkbox::without_text(&mut secret))
             .accessible_name(strings.secret)
             .on_hover_text(hint)
-            .on_disabled_hover_text(hint)
             .changed();
         if changed {
             make_secret(variable, secret, secrets.values);
@@ -734,8 +734,10 @@ fn secret_value(
                 status_text(status, strings)
             ))
             .on_hover_text(status_text(status, strings));
-            ui.checkbox(&mut pending.shared, strings.shared)
-                .on_hover_text(strings.shared_hint);
+            if secrets.shareable {
+                ui.checkbox(&mut pending.shared, strings.shared)
+                    .on_hover_text(strings.shared_hint);
+            }
         }
         let stored = matches!(status, SecretStatus::Local | SecretStatus::Shared);
         if revealed.is_some() {

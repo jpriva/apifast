@@ -30,6 +30,8 @@ pub(super) struct ActiveWorkspace {
     _watcher: Option<FsWatcher>,
     /// Watches its `environments/`, once it exists.
     globals_watcher: Option<FsWatcher>,
+    /// The secrets of its global environments, on this machine only.
+    global_vault: Option<Arc<apifast_vault::VaultSecrets>>,
     /// Its global environments, as in their files.
     pub(super) global_files: Arc<Vec<Environment>>,
     /// The active global environment.
@@ -136,6 +138,15 @@ impl State {
         })
         .ok();
         let globals_watcher = watch_globals(folder, opened, self.messages.clone());
+        let global_vault = apifast_vault::VaultSecrets::for_collection(
+            &self.data_dir,
+            &apifast_history::dirs::workspace_id(folder),
+            Arc::new(apifast_app::memory::MemorySharedSecrets::default()),
+            self.keyring,
+        )
+        .map(Arc::new)
+        .map_err(|e| self.snapshot.error = Some(e.say(self.strings)))
+        .ok();
         let global_files = repo.environments().unwrap_or_else(|e| {
             self.snapshot.error = Some(e.say(self.strings));
             Vec::new()
@@ -153,6 +164,7 @@ impl State {
             opened,
             _watcher: watcher,
             globals_watcher,
+            global_vault,
             global_files: Arc::new(global_files),
             global_environment,
         });
@@ -322,20 +334,87 @@ impl State {
         self.listed = listed;
     }
 
-    /// The variables of the active global environment, for the sends. A
-    /// broken `extends` says why and gives none.
+    /// The variables of the active global environment, for the sends, its
+    /// secrets with their values from this machine's vault. A broken
+    /// `extends` says why and gives none; a vault that cannot be read says
+    /// why and gives them without the secrets' values.
     pub(super) fn global_variables(&mut self) -> Arc<Vec<Variable>> {
         let Some(active) = &self.workspace else {
             return Arc::default();
         };
         let name = active.global_environment.as_deref();
-        match apifast_app::global_variables(&active.global_files, name) {
+        let files = &active.global_files;
+        // The keyring is read only when a secret needs it.
+        let secret = files.iter().any(|e| e.variables.iter().any(|v| v.secret));
+        let vault: &dyn apifast_app::SecretStore = match &active.global_vault {
+            Some(vault) if secret => &**vault,
+            _ => &apifast_app::NoSecrets,
+        };
+        let result = apifast_app::global_variables(files, name, vault).or_else(|e| {
+            self.snapshot.error = Some(e.say(self.strings));
+            apifast_app::global_variables(files, name, &apifast_app::NoSecrets)
+        });
+        match result {
             Ok(variables) => Arc::new(variables),
             Err(e) => {
                 self.snapshot.error = Some(e.say(self.strings));
                 Arc::default()
             }
         }
+    }
+
+    /// What the interface sees of the global environments' secrets.
+    fn refresh_global_vault(&mut self) {
+        let master_in_file = apifast_vault::KeyFile::in_dir(&self.data_dir).holds_key();
+        let Some(active) = &self.workspace else {
+            return;
+        };
+        let revealed = self.snapshot.global_vault.revealed.take();
+        let view = match &active.global_vault {
+            Some(vault) => {
+                super::vault::view(vault, &active.global_files, master_in_file, self.strings)
+            }
+            None => Ok(super::VaultView::default()),
+        };
+        match view {
+            Ok(view) => self.snapshot.global_vault = view,
+            Err(e) => self.snapshot.error = Some(e),
+        }
+        self.snapshot.global_vault.revealed = revealed;
+    }
+
+    /// A command about the global environments' secrets.
+    fn global_secret(&mut self, command: &super::GlobalCommand) -> Result<(), String> {
+        use super::GlobalCommand;
+        let strings = self.strings;
+        let error = |e: apifast_vault::KeyStoreError| e.say(strings);
+        let vault = (self.workspace.as_ref())
+            .and_then(|w| w.global_vault.clone())
+            .ok_or(strings.errors.vault_unavailable)?;
+        match command {
+            GlobalCommand::Secret {
+                environment,
+                name,
+                value,
+            } => vault
+                .set_local(environment, name, value.expose())
+                .map_err(error)?,
+            GlobalCommand::Reveal { environment, name } => {
+                let value = vault.reveal(environment, name).map_err(error)?;
+                self.snapshot.global_vault.revealed = value.map(|value| super::Revealed {
+                    environment: environment.clone(),
+                    name: name.clone(),
+                    value,
+                });
+                self.hide_later();
+            }
+            GlobalCommand::Hide => self.snapshot.global_vault.revealed = None,
+            GlobalCommand::Forget(orphan) => vault
+                .forget(&orphan.environment, &orphan.name, orphan.kind)
+                .map_err(error)?,
+            _ => {}
+        }
+        Ok(())
     }
 
     /// Makes `name` the active global environment, or none, and every tab
@@ -350,6 +429,7 @@ impl State {
             .global_environment
             .clone_from(&active.global_environment);
         self.write_workspace_state();
+        self.refresh_global_vault();
         self.spread_globals();
     }
 
@@ -368,6 +448,20 @@ impl State {
     /// and is none once deleted.
     pub(super) fn global_environment(&mut self, command: &super::GlobalCommand) {
         use super::GlobalCommand;
+        if matches!(
+            command,
+            GlobalCommand::Secret { .. }
+                | GlobalCommand::Reveal { .. }
+                | GlobalCommand::Hide
+                | GlobalCommand::Forget(_)
+        ) {
+            if let Err(message) = self.global_secret(command) {
+                self.snapshot.error = Some(message);
+            }
+            self.refresh_global_vault();
+            self.spread_globals();
+            return;
+        }
         let Some(active) = &self.workspace else {
             return;
         };
@@ -379,7 +473,17 @@ impl State {
             }
             GlobalCommand::Save(environment) => apifast_app::save_environment(&repo, environment),
             GlobalCommand::Delete(name) => apifast_app::delete_environment(&repo, name),
+            _ => Ok(()),
         };
+        // A secret's value is sealed with its environment's name.
+        if let (GlobalCommand::Rename { from, to }, Ok(()), Some(vault)) = (
+            command,
+            &result,
+            self.workspace.as_ref().and_then(|w| w.global_vault.clone()),
+        ) && let Err(e) = vault.rename_environment(from, to)
+        {
+            self.snapshot.error = Some(e.say(self.strings));
+        }
         if let Err(e) = result {
             self.snapshot.error = Some(e.say(self.strings));
         }

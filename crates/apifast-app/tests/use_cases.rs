@@ -258,6 +258,7 @@ fn the_global_environment_is_under_every_other_scope() {
             ),
         ],
         Some("team-prod"),
+        &apifast_app::NoSecrets,
     )
     .unwrap();
     // What it extends is under it.
@@ -281,8 +282,11 @@ fn the_global_environment_is_under_every_other_scope() {
     // the global environment has is used.
     assert_eq!(world.last_sent().url(), "https://api.test/v1/acme");
 
-    assert_eq!(apifast_app::global_variables(&[], None).unwrap(), []);
-    assert!(apifast_app::global_variables(&[], Some("gone")).is_err());
+    assert_eq!(
+        apifast_app::global_variables(&[], None, &apifast_app::NoSecrets).unwrap(),
+        []
+    );
+    assert!(apifast_app::global_variables(&[], Some("gone"), &apifast_app::NoSecrets).is_err());
 }
 
 #[test]

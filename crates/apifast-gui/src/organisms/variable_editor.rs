@@ -163,7 +163,7 @@ impl VariableEditor {
                 if secret {
                     let why = match choice.home {
                         VariableHome::Environment(_) => strings.variable_secret_in_environments,
-                        VariableHome::Global(_) => strings.global_secret_later,
+                        VariableHome::Global(_) => strings.variable_secret_in_global,
                         _ => strings.variable_secret_elsewhere,
                     };
                     ui.label(RichText::new(why).color(muted));

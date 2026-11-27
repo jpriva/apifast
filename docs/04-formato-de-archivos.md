@@ -557,7 +557,7 @@ docs: ''
 
 - Al añadir o quitar una colección se cambian solo sus líneas, como en el resto de archivos.
 - Una misma colección puede aparecer en varios workspaces.
-- Los entornos de `environments/` son los globales del workspace: el mismo formato que los de una colección, también con `extends`. El activo es del estado personal del workspace (`global_environment`) y forma el ámbito `Global`, el de menor prioridad ([docs/05](05-variables-y-plantillas.md#ámbitos-y-precedencia)). Sus secretos todavía no guardan valor.
+- Los entornos de `environments/` son los globales del workspace: el mismo formato que los de una colección, también con `extends`. El activo es del estado personal del workspace (`global_environment`) y forma el ámbito `Global`, el de menor prioridad ([docs/05](05-variables-y-plantillas.md#ámbitos-y-precedencia)). Sus secretos guardan el valor solo en esta máquina ([docs/06](06-boveda-de-secretos.md#secretos-de-los-entornos-globales-del-workspace)).
 - Lo personal (qué colecciones están desplegadas, las pestañas abiertas) no va en este archivo: ver "Estado local".
 - Cada colección sigue guardando su sesión: sus borradores y su entorno activo. Las pestañas abiertas y su orden son del workspace. Un borrador de una request sin pestaña (por ejemplo, tras cerrar su colección) vuelve al abrir esa request.
 

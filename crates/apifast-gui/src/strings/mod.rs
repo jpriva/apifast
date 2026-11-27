@@ -273,8 +273,11 @@ pub struct Strings {
     pub global_environment: &'static str,
     /// Selector of the active global environment: none chosen.
     pub no_global_environment: &'static str,
-    /// Why a global variable cannot be made secret yet.
-    pub global_secret_later: &'static str,
+    /// Over the secret box of a global environment: where its value goes.
+    pub global_secret_hint: &'static str,
+    /// Variable editor: a secret of a global environment is changed in its
+    /// window.
+    pub variable_secret_in_global: &'static str,
     /// Accessible name of the environment selector.
     pub environment: &'static str,
     /// Button that sends the request.

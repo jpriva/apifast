@@ -1031,10 +1031,10 @@ impl MainScreen {
         }
         let files = (
             snapshot.global_environment_files.as_slice(),
-            &crate::core::VaultView::default(),
+            &snapshot.global_vault,
         );
         let events = (self.global_environments).show(ctx, files, None, hints, strings);
-        events.into_iter().filter_map(global_command).collect()
+        events.into_iter().map(global_command).collect()
     }
 
     /// The editor of one `{{variable}}`: a field asks for it (Ctrl+click),
@@ -2160,18 +2160,31 @@ fn global_selector(ui: &mut egui::Ui, snapshot: &Snapshot, strings: &Strings) ->
     .map(Command::SelectGlobalEnvironment)
 }
 
-/// What the editor of the global environments asks of the core: secrets
-/// are not kept for them yet.
-fn global_command(event: EnvironmentEvent) -> Option<Command> {
+/// What the editor of the global environments asks of the core. Their
+/// secrets stay on this machine: a value is never shared.
+fn global_command(event: EnvironmentEvent) -> Command {
     use crate::core::GlobalCommand;
-    let command = match event {
+    Command::GlobalEnvironment(match event {
         EnvironmentEvent::Create(name) => GlobalCommand::Create(name),
         EnvironmentEvent::Rename { from, to } => GlobalCommand::Rename { from, to },
         EnvironmentEvent::Save(environment) => GlobalCommand::Save(Box::new(environment)),
         EnvironmentEvent::Delete(name) => GlobalCommand::Delete(name),
-        _ => return None,
-    };
-    Some(Command::GlobalEnvironment(command))
+        EnvironmentEvent::Secret {
+            environment,
+            name,
+            value,
+            ..
+        } => GlobalCommand::Secret {
+            environment,
+            name,
+            value,
+        },
+        EnvironmentEvent::Reveal { environment, name } => {
+            GlobalCommand::Reveal { environment, name }
+        }
+        EnvironmentEvent::Hide => GlobalCommand::Hide,
+        EnvironmentEvent::Forget(orphan) => GlobalCommand::Forget(orphan),
+    })
 }
 
 fn environment_command(event: EnvironmentEvent) -> Command {

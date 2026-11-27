@@ -654,6 +654,9 @@ pub struct Snapshot {
     pub history: Arc<Vec<HistoryEntry>>,
     /// What the interface sees of the focused collection's vault.
     pub vault: VaultView,
+    /// What the interface sees of the secrets of the workspace's global
+    /// environments, kept on this machine only.
+    pub global_vault: VaultView,
     /// The cookies of the focused collection's jar, in its order.
     pub cookies: Arc<Vec<apifast_domain::Cookie>>,
     /// The focused collection's git repository, if it is in one.
@@ -767,6 +770,26 @@ pub enum GlobalCommand {
     Save(Box<Environment>),
     /// Delete one.
     Delete(String),
+    /// Store the value of a secret, on this machine.
+    Secret {
+        /// Its environment.
+        environment: String,
+        /// Its variable.
+        name: String,
+        /// The value.
+        value: apifast_domain::Secret,
+    },
+    /// Show the value of a secret for a while.
+    Reveal {
+        /// Its environment.
+        environment: String,
+        /// Its variable.
+        name: String,
+    },
+    /// Hide a value shown.
+    Hide,
+    /// Forget a stored value no secret uses.
+    Forget(apifast_vault::Orphan),
 }
 
 /// An open request.

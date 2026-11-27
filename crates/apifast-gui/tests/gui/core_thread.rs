@@ -3248,3 +3248,83 @@ fn global_environments_changed_outside_are_read_again() {
         })
     });
 }
+
+#[test]
+fn a_global_secret_is_kept_on_this_machine_and_reaches_the_sends() {
+    use apifast_domain::{Origin, Secret};
+    use apifast_gui::core::GlobalCommand;
+    let dir = collection(server(Duration::ZERO));
+    let team = tempfile::tempdir().unwrap();
+    std::fs::write(
+        team.path().join("workspace.yml"),
+        "opencollection: 1.0.0\ninfo:\n  name: Team\n  type: workspace\ncollections:\n",
+    )
+    .unwrap();
+    std::fs::create_dir(team.path().join("environments")).unwrap();
+    let file = team.path().join("environments/shared.yml");
+    std::fs::write(
+        &file,
+        "name: shared\nvariables:\n  - name: token\n    secret: true\n",
+    )
+    .unwrap();
+
+    let (core, _, data) = start();
+    core.send(Command::OpenWorkspace(team.path().to_path_buf()));
+    wait(&core, "the team workspace", |s| {
+        s.workspace.as_ref().is_some_and(|w| w.name == "Team")
+    });
+    open(&core, dir.path());
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
+    core.send(Command::SelectGlobalEnvironment(Some("shared".into())));
+    core.send(Command::GlobalEnvironment(GlobalCommand::Secret {
+        environment: "shared".into(),
+        name: "token".into(),
+        value: Secret::new("g10bal"),
+    }));
+    let snapshot = wait(&core, "its value in the tab", |s| {
+        s.active_tab().is_some_and(|t| {
+            t.context
+                .variables
+                .get("token")
+                .is_some_and(|v| v.value.is_some())
+        })
+    });
+    let token = snapshot
+        .active_tab()
+        .unwrap()
+        .context
+        .variables
+        .get("token")
+        .cloned()
+        .unwrap();
+    assert_eq!(token.origin, Origin::Global);
+    assert!(token.secret, "masked wherever it shows");
+    assert_eq!(token.value.unwrap().data, "g10bal");
+    assert_eq!(
+        snapshot.global_vault.status("shared", "token"),
+        apifast_gui::core::SecretStatus::Local
+    );
+    // The file keeps only its name; the vault keeps it sealed.
+    assert!(!std::fs::read_to_string(&file).unwrap().contains("g10bal"));
+    let vault = std::fs::read_dir(data.path().join("vault")).unwrap();
+    for entry in vault.flatten() {
+        let text = std::fs::read_to_string(entry.path()).unwrap();
+        assert!(!text.contains("g10bal"), "sealed: {text}");
+    }
+
+    core.send(Command::GlobalEnvironment(GlobalCommand::Reveal {
+        environment: "shared".into(),
+        name: "token".into(),
+    }));
+    let snapshot = wait(&core, "shown", |s| s.global_vault.revealed.is_some());
+    assert_eq!(
+        snapshot
+            .global_vault
+            .revealed
+            .as_ref()
+            .unwrap()
+            .value
+            .expose(),
+        "g10bal"
+    );
+}

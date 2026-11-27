@@ -55,7 +55,28 @@ impl GlobalArgs {
                 }
             );
         }
-        Ok(apifast_app::global_variables(&environments, Some(name))?)
+        // The secrets' values are on this machine, under the workspace's
+        // id; the keyring is read only when a secret needs it.
+        let secret = (environments.iter()).any(|e| e.variables.iter().any(|v| v.secret));
+        if !secret {
+            return Ok(apifast_app::global_variables(
+                &environments,
+                Some(name),
+                &apifast_app::NoSecrets,
+            )?);
+        }
+        let folder = dunce::canonicalize(&folder).unwrap_or(folder);
+        let vault = apifast_vault::VaultSecrets::for_collection(
+            &apifast_history::dirs::data_dir(),
+            &apifast_history::dirs::workspace_id(&folder),
+            std::sync::Arc::new(apifast_app::memory::MemorySharedSecrets::default()),
+            crate::vault::keyring(),
+        )?;
+        Ok(apifast_app::global_variables(
+            &environments,
+            Some(name),
+            &vault,
+        )?)
     }
 }
 
