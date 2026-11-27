@@ -41,6 +41,8 @@ pub struct MainScreen {
     history: HistoryView,
     /// The environment editor window.
     pub environments: EnvironmentEditor,
+    /// The editor of the workspace's global environments.
+    pub global_environments: EnvironmentEditor,
     tabs: TabBar,
     request: RequestPanel,
     response: ResponseView,
@@ -217,6 +219,15 @@ fn variable_homes(
             current: own(&tree.collection.defaults.variables),
         });
     }
+    if let Some(global) = (snapshot.global_environment.as_ref())
+        .and_then(|active| (snapshot.global_environment_files.iter()).find(|e| &e.name == active))
+    {
+        choices.push(HomeChoice {
+            home: VariableHome::Global(global.name.clone()),
+            label: format!("{} {}", strings.origin_global, global.name),
+            current: own(&global.variables),
+        });
+    }
     // The value the request sees, or the file one a runtime value hides.
     let resolved = tab.context.variables.get(name);
     let origins = resolved.map(|v| {
@@ -232,6 +243,7 @@ fn variable_homes(
                 .position(|choice| match (origin, &choice.home) {
                     (Origin::Request, VariableHome::Request)
                     | (Origin::Collection, VariableHome::Collection)
+                    | (Origin::Global, VariableHome::Global(_))
                     | (Origin::Environment(_), VariableHome::Environment(_)) => true,
                     (Origin::Folder(index), VariableHome::Folder(_)) => {
                         let folder = tab.context.folders.get(*index);
@@ -279,6 +291,14 @@ fn variable_command(
             let mut environment = files.into_iter().find(|e| e.name == environment)?.clone();
             set_variable(&mut environment.variables, &name, value);
             Some(Command::SaveEnvironment(Box::new(environment)))
+        }
+        VariableHome::Global(global) => {
+            let files = snapshot.global_environment_files.iter();
+            let mut environment = files.into_iter().find(|e| e.name == global)?.clone();
+            set_variable(&mut environment.variables, &name, value);
+            Some(Command::GlobalEnvironment(
+                crate::core::GlobalCommand::Save(Box::new(environment)),
+            ))
         }
         VariableHome::Collection => {
             let mut variables = tree?.collection.defaults.variables.clone();
@@ -996,6 +1016,27 @@ impl MainScreen {
         std::mem::take(&mut self.unsaved.keymap)
     }
 
+    /// The window of the workspace's global environments, opened from the
+    /// environments window.
+    fn global_environments_window(
+        &mut self,
+        ctx: &egui::Context,
+        snapshot: &Snapshot,
+        hints: &VariableHints,
+        strings: &Strings,
+    ) -> Vec<Command> {
+        if std::mem::take(&mut self.environments.open_global) {
+            self.global_environments.global = true;
+            self.global_environments.open = true;
+        }
+        let files = (
+            snapshot.global_environment_files.as_slice(),
+            &crate::core::VaultView::default(),
+        );
+        let events = (self.global_environments).show(ctx, files, None, hints, strings);
+        events.into_iter().filter_map(global_command).collect()
+    }
+
     /// The editor of one `{{variable}}`: a field asks for it (Ctrl+click),
     /// or the shortcut does for the variable under the text cursor. It
     /// edits for the active request, and saves where the user chooses.
@@ -1091,6 +1132,7 @@ impl MainScreen {
         let files = (snapshot.environment_files.as_slice(), &snapshot.vault);
         let events = self.environments.show(&ctx, files, context, hints, strings);
         commands.extend(events.into_iter().map(environment_command));
+        commands.extend(self.global_environments_window(&ctx, snapshot, hints, strings));
         let vault = self.vault_window.show(&ctx, &snapshot.vault, strings);
         commands.extend(vault.into_iter().map(Command::Vault));
         let collection = (snapshot.collection.as_ref()).map(|c| c.tree.collection.name.as_str());
@@ -2073,11 +2115,50 @@ fn top_bar(
             )
             .show(ui);
             ui.add(ColorSwatch::new(color));
-            (choice.map(Command::SelectEnvironment), edit, menu)
+            let global = global_selector(ui, snapshot, strings);
+            let command = choice.map(Command::SelectEnvironment).or(global);
+            (command, edit, menu)
         })
         .inner
     })
     .inner
+}
+
+/// The workspace's active global environment, when it has any: the
+/// command to pick another, once the user changes it.
+fn global_selector(ui: &mut egui::Ui, snapshot: &Snapshot, strings: &Strings) -> Option<Command> {
+    if snapshot.global_environment_files.is_empty() {
+        return None;
+    }
+    let names: Vec<String> = (snapshot.global_environment_files.iter())
+        .map(|e| e.name.clone())
+        .collect();
+    let color = (snapshot.global_environment_files.iter())
+        .find(|e| Some(e.name.as_str()) == snapshot.global_environment.as_deref())
+        .and_then(|e| e.color.as_deref());
+    ui.add(ColorSwatch::new(color));
+    EnvironmentSelector::new(
+        &names,
+        snapshot.global_environment.as_deref(),
+        strings.no_global_environment,
+        strings.global_environment,
+    )
+    .show(ui)
+    .map(Command::SelectGlobalEnvironment)
+}
+
+/// What the editor of the global environments asks of the core: secrets
+/// are not kept for them yet.
+fn global_command(event: EnvironmentEvent) -> Option<Command> {
+    use crate::core::GlobalCommand;
+    let command = match event {
+        EnvironmentEvent::Create(name) => GlobalCommand::Create(name),
+        EnvironmentEvent::Rename { from, to } => GlobalCommand::Rename { from, to },
+        EnvironmentEvent::Save(environment) => GlobalCommand::Save(Box::new(environment)),
+        EnvironmentEvent::Delete(name) => GlobalCommand::Delete(name),
+        _ => return None,
+    };
+    Some(Command::GlobalEnvironment(command))
 }
 
 fn environment_command(event: EnvironmentEvent) -> Command {

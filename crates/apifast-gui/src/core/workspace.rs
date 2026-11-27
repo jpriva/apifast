@@ -354,6 +354,49 @@ impl State {
         self.refresh_variables(None);
     }
 
+    /// Changes the workspace's global environments, reads them again and
+    /// gives every tab what they now say. The active one follows a rename
+    /// and is none once deleted.
+    pub(super) fn global_environment(&mut self, command: &super::GlobalCommand) {
+        use super::GlobalCommand;
+        let Some(active) = &self.workspace else {
+            return;
+        };
+        let repo = active.repo.clone();
+        let result = match command {
+            GlobalCommand::Create(name) => apifast_app::create_environment(&repo, name).map(|_| ()),
+            GlobalCommand::Rename { from, to } => {
+                apifast_app::rename_environment(&repo, from, to).map(|_| ())
+            }
+            GlobalCommand::Save(environment) => apifast_app::save_environment(&repo, environment),
+            GlobalCommand::Delete(name) => apifast_app::delete_environment(&repo, name),
+        };
+        if let Err(e) = result {
+            self.snapshot.error = Some(e.say(self.strings));
+        }
+        let files = repo.environments().unwrap_or_else(|e| {
+            self.snapshot.error = Some(e.say(self.strings));
+            Vec::new()
+        });
+        let Some(active) = &mut self.workspace else {
+            return;
+        };
+        if let GlobalCommand::Rename { from, to } = command
+            && active.global_environment.as_deref() == Some(from.as_str())
+        {
+            active.global_environment = Some(to.clone());
+        }
+        active.global_environment =
+            (active.global_environment.take()).filter(|name| files.iter().any(|e| &e.name == name));
+        active.global_files = Arc::new(files);
+        self.snapshot.global_environment_files = active.global_files.clone();
+        self.snapshot
+            .global_environment
+            .clone_from(&active.global_environment);
+        self.write_workspace_state();
+        self.spread_globals();
+    }
+
     /// Writes what this machine keeps of the active workspace.
     pub(super) fn write_workspace_state(&mut self) {
         let Some(active) = &self.workspace else {

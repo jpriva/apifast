@@ -3085,3 +3085,71 @@ fn the_workspace_global_environment_is_under_the_collection_and_kept() {
     let snapshot = wait(&core, "restored", |s| s.workspace.is_some());
     assert_eq!(snapshot.global_environment.as_deref(), Some("shared"));
 }
+
+#[test]
+fn global_environments_are_created_saved_renamed_and_deleted() {
+    use apifast_domain::{Origin, Variable};
+    use apifast_gui::core::GlobalCommand;
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    let snapshot = wait(&core, "a workspace", |s| s.workspace.is_some());
+    let folder = snapshot.workspace.clone().unwrap().folder;
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
+    wait(&core, "the tab", |s| s.active_tab().is_some());
+
+    core.send(Command::GlobalEnvironment(GlobalCommand::Create(
+        "team".into(),
+    )));
+    let snapshot = wait(&core, "the new one", |s| {
+        !s.global_environment_files.is_empty()
+    });
+    let mut team = snapshot.global_environment_files[0].clone();
+    team.variables.push(Variable::text("region", "eu"));
+    core.send(Command::GlobalEnvironment(GlobalCommand::Save(Box::new(
+        team,
+    ))));
+    core.send(Command::SelectGlobalEnvironment(Some("team".into())));
+    wait(&core, "its value in the tab", |s| {
+        s.active_tab().is_some_and(|t| {
+            t.context
+                .variables
+                .get("region")
+                .is_some_and(|v| v.origin == Origin::Global)
+        })
+    });
+    let file = std::fs::read_to_string(folder.join("environments/team.yml")).unwrap();
+    assert!(file.contains("name: region"), "{file}");
+
+    // The active one follows a rename, and is none once deleted.
+    core.send(Command::GlobalEnvironment(GlobalCommand::Rename {
+        from: "team".into(),
+        to: "crew".into(),
+    }));
+    let snapshot = wait(&core, "renamed", |s| {
+        s.global_environment.as_deref() == Some("crew")
+    });
+    assert!(
+        snapshot
+            .active_tab()
+            .unwrap()
+            .context
+            .variables
+            .get("region")
+            .is_some()
+    );
+    core.send(Command::GlobalEnvironment(GlobalCommand::Delete(
+        "crew".into(),
+    )));
+    let snapshot = wait(&core, "deleted", |s| s.global_environment_files.is_empty());
+    assert_eq!(snapshot.global_environment, None);
+    assert!(
+        snapshot
+            .active_tab()
+            .unwrap()
+            .context
+            .variables
+            .get("region")
+            .is_none()
+    );
+}

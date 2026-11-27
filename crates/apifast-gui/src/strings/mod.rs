@@ -263,6 +263,18 @@ pub struct Strings {
     pub open: &'static str,
     /// Environment selector entry for "no environment".
     pub no_environment: &'static str,
+    /// Title of the window with the workspace's global environments.
+    pub global_environments: &'static str,
+    /// Button of the environments window that opens the global ones.
+    pub global_environments_menu: &'static str,
+    /// Above the global environments: what they are.
+    pub global_environments_hint: &'static str,
+    /// Selector of the active global environment: its name.
+    pub global_environment: &'static str,
+    /// Selector of the active global environment: none chosen.
+    pub no_global_environment: &'static str,
+    /// Why a global variable cannot be made secret yet.
+    pub global_secret_later: &'static str,
     /// Accessible name of the environment selector.
     pub environment: &'static str,
     /// Button that sends the request.

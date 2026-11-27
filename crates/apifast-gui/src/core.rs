@@ -370,6 +370,8 @@ pub enum Command {
     SelectEnvironment(Option<String>),
     /// Picks the workspace's active global environment, or none.
     SelectGlobalEnvironment(Option<String>),
+    /// Changes the workspace's global environments.
+    GlobalEnvironment(GlobalCommand),
     /// Opens a request in a tab, or shows its tab if it is open.
     OpenRequest(TabKey),
     /// Shows an open tab.
@@ -743,6 +745,24 @@ pub struct CollectionView {
     pub root: PathBuf,
     /// Its folders and requests.
     pub tree: Arc<CollectionTree>,
+}
+
+/// A change to the active workspace's global environments.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GlobalCommand {
+    /// Create an empty one with this name.
+    Create(String),
+    /// Rename one.
+    Rename {
+        /// Its name.
+        from: String,
+        /// The new name.
+        to: String,
+    },
+    /// Save these contents, matched by name.
+    Save(Box<Environment>),
+    /// Delete one.
+    Delete(String),
 }
 
 /// An open request.
@@ -1287,6 +1307,7 @@ impl State {
                 self.refresh_variables(None);
             }
             Command::SelectGlobalEnvironment(name) => self.select_global_environment(name),
+            Command::GlobalEnvironment(command) => self.global_environment(&command),
             Command::OpenRequest(key) => self.open_request(&key),
             Command::ActivateTab(key) => {
                 if self.tab(&key).is_some() {

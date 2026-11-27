@@ -227,6 +227,7 @@ La edición con resaltado se limita a unos 200 KB: con más texto, egui tarda de
   - Un secreto no se escribe ahí: el de un entorno se cambia en la ventana de entornos, y los demás ámbitos no guardan valores secretos.
   - "Global" no aparece mientras no exista el ámbito `Global`.
 - El tooltip de una variable recuerda cómo editarla.
+- Entornos globales del workspace: cuando el workspace tiene alguno, la barra superior muestra un segundo selector, "Global environment", junto al del entorno de la colección. Se editan en su propia ventana, "Global environments…", desde la ventana de entornos, con la misma tabla. Todavía no guardan valores secretos, así que su casilla de secreto está desactivada. El editor de `{{variable}}` ofrece también el entorno global activo.
 - Vista "todas las variables": cada variable efectiva con su valor y el ámbito del que procede.
 - Esa vista y el tooltip de una `{{variable}}` muestran lo que usará el próximo envío. Eso incluye lo que fijaron los scripts (`bru.setVar`, `bru.setCollectionVar`, `bru.setEnvVar`…) y las capturas, que tapan los valores de los archivos mientras la colección está cargada. El origen dice "Fijada por un script" o "Capturada de una respuesta", y la columna de lo tapado nombra el ámbito del archivo. Tras cada envío se recalculan todas las pestañas de la colección, no solo la enviada.
 
