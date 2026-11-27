@@ -8,6 +8,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+dunce.workspace = true
 oneyaml.workspace = true
 serde_json.workspace = true
 apifast-domain.workspace = true

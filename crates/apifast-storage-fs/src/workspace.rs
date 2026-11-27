@@ -87,7 +87,7 @@ impl FsWorkspace {
     /// The entry for the collection in `root`: its path relative to the
     /// workspace when it is inside its folder, absolute otherwise.
     pub fn entry_for(&self, root: &Path, name: &str) -> WorkspaceEntry {
-        let canonical = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+        let canonical = |p: &Path| dunce::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
         let (root, folder) = (canonical(root), canonical(&self.folder));
         let path = match root.strip_prefix(&folder) {
             Ok(inside)

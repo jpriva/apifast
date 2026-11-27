@@ -496,7 +496,7 @@ fn two_collections_and_a_second_workspace() {
     // Next to the first one, in the data directory here.
     assert_eq!(
         workspace.folder,
-        data.path().canonicalize().unwrap().join("team")
+        dunce::canonicalize(data.path()).unwrap().join("team")
     );
     assert_eq!(snapshot.workspaces.len(), 2);
     // Empty: how to start, in the sidebar and in the middle.

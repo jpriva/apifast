@@ -42,7 +42,7 @@ impl GixRepository {
         let Some(workdir) = repo.workdir() else {
             return Ok(None);
         };
-        let canonical = |path: &Path| path.canonicalize().map_err(failed);
+        let canonical = |path: &Path| dunce::canonicalize(path).map_err(failed);
         let (workdir, root) = (canonical(workdir)?, canonical(root)?);
         let Ok(relative) = root.strip_prefix(&workdir) else {
             return Ok(None);

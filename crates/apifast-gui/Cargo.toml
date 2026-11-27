@@ -23,6 +23,7 @@ serde_json.workspace = true
 winresource = { workspace = true }
 
 [dependencies]
+dunce.workspace = true
 apifast-domain.workspace = true
 apifast-template.workspace = true
 apifast-history.workspace = true

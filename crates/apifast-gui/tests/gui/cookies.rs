@@ -105,7 +105,7 @@ fn wait(core: &Core, what: &str, done: impl Fn(&Snapshot) -> bool) -> Arc<Snapsh
 }
 
 fn open(core: &Core, dir: &Path) -> std::path::PathBuf {
-    let root = dir.canonicalize().unwrap();
+    let root = dunce::canonicalize(dir).unwrap();
     core.send(Command::OpenCollection(dir.to_path_buf()));
     wait(core, "the collection", |s| {
         s.collection.as_ref().is_some_and(|c| c.root == root)

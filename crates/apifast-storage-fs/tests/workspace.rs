@@ -124,16 +124,18 @@ fn paths_are_relative_inside_the_workspace_and_absolute_outside() {
     let entry = repo.entry_for(&inside, "Shop API");
     assert_eq!(entry.path, "collections/shop");
     assert_eq!(
-        repo.resolve(&entry).canonicalize().unwrap(),
-        inside.canonicalize().unwrap()
+        dunce::canonicalize(repo.resolve(&entry)).unwrap(),
+        dunce::canonicalize(inside).unwrap()
     );
 
     let elsewhere = tempfile::tempdir().unwrap();
     let entry = repo.entry_for(elsewhere.path(), "Elsewhere");
     assert!(Path::new(&entry.path).is_absolute(), "{}", entry.path);
+    // Bruno reads it too: never Windows' `\\?\` form of the path.
+    assert!(!entry.path.starts_with(r"\\?\"), "{}", entry.path);
     assert_eq!(
-        repo.resolve(&entry).canonicalize().unwrap(),
-        elsewhere.path().canonicalize().unwrap()
+        dunce::canonicalize(repo.resolve(&entry)).unwrap(),
+        dunce::canonicalize(elsewhere.path()).unwrap()
     );
 }
 

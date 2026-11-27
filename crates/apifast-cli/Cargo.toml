@@ -12,6 +12,7 @@ name = "apifast"
 path = "src/main.rs"
 
 [dependencies]
+dunce.workspace = true
 apifast-domain.workspace = true
 apifast-template.workspace = true
 apifast-app.workspace = true

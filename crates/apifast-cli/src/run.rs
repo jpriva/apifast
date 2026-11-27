@@ -92,9 +92,8 @@ fn target(path: &Path) -> Result<(PathBuf, Option<String>)> {
         );
     }
     let root = locate::collection_root(path)?;
-    let folder = path
-        .canonicalize()
-        .with_context(|| format!("cannot open `{}`", path.display()))?;
+    let folder =
+        dunce::canonicalize(path).with_context(|| format!("cannot open `{}`", path.display()))?;
     let relative = folder.strip_prefix(&root).unwrap_or(Path::new(""));
     let folder: Vec<String> = relative
         .components()

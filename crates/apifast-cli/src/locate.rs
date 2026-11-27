@@ -15,12 +15,10 @@ pub struct Located {
 /// Finds the collection of `file`: `collection` if given, otherwise the
 /// nearest folder above `file` that holds `opencollection.yml`.
 pub fn locate(file: &Path, collection: Option<&Path>) -> Result<Located> {
-    let file = file
-        .canonicalize()
-        .with_context(|| format!("cannot open `{}`", file.display()))?;
+    let file =
+        dunce::canonicalize(file).with_context(|| format!("cannot open `{}`", file.display()))?;
     let root = match collection {
-        Some(dir) => dir
-            .canonicalize()
+        Some(dir) => dunce::canonicalize(dir)
             .with_context(|| format!("cannot open the collection folder `{}`", dir.display()))?,
         None => file
             .ancestors()
@@ -64,9 +62,8 @@ pub fn locate(file: &Path, collection: Option<&Path>) -> Result<Located> {
 ///
 /// If `dir` cannot be opened or is not inside a collection.
 pub fn collection_root(dir: &Path) -> Result<PathBuf> {
-    let dir = dir
-        .canonicalize()
-        .with_context(|| format!("cannot open `{}`", dir.display()))?;
+    let dir =
+        dunce::canonicalize(dir).with_context(|| format!("cannot open `{}`", dir.display()))?;
     dir.ancestors()
         .find(|d| d.join("opencollection.yml").is_file())
         .map(Path::to_path_buf)
@@ -94,7 +91,8 @@ mod tests {
     fn finds_the_nearest_collection_above_the_file() {
         let dir = collection();
         let located = locate(&dir.path().join("users/admin/list.yml"), None).unwrap();
-        assert_eq!(located.root, dir.path().canonicalize().unwrap());
+        assert_eq!(located.root, dunce::canonicalize(dir.path()).unwrap());
+        assert!(!located.root.to_string_lossy().starts_with(r"\\?\"));
         assert_eq!(located.request, RequestPath::new("users/admin/list.yml"));
     }
 
