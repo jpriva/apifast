@@ -467,13 +467,19 @@ fn names(items: &[TreeItem]) -> Vec<String> {
 fn a_created_request_appears_in_the_tree_and_opens() {
     let dir = collection(server(Duration::ZERO));
     let (core, _, _data) = start();
-    let snapshot = open(&core, dir.path());
+    open(&core, dir.path());
     core.send(Command::CreateRequest {
         root: root(&core),
         folder: String::new(),
         name: "New one".into(),
     });
-    let snapshot = next(&core, snapshot.version);
+    // The next snapshot may be another message's (the history loaded):
+    // wait for the request to open.
+    let snapshot = wait(&core, "the new request", |s| {
+        let shown = (s.collection.as_ref())
+            .is_some_and(|c| names(&c.tree.items).contains(&"New one".to_owned()));
+        s.error.is_some() || (shown && s.active_tab().is_some())
+    });
     assert_eq!(snapshot.error, None);
     let tree = &snapshot.collection.as_ref().unwrap().tree;
     assert_eq!(names(&tree.items), ["Users", "Health", "New one"]);
