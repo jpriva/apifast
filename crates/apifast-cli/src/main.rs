@@ -6,6 +6,7 @@
 mod describe;
 mod export;
 mod git;
+mod globals;
 mod import;
 mod locate;
 mod run;
@@ -95,6 +96,8 @@ struct SendArgs {
     /// Active environment, by name.
     #[arg(short, long)]
     env: Option<String>,
+    #[command(flatten)]
+    globals: globals::GlobalArgs,
     /// The collection folder; by default, the nearest folder above the file
     /// with an opencollection.yml.
     #[arg(long)]
@@ -375,6 +378,7 @@ fn run_send(args: &SendArgs) -> Result<ExitCode> {
     let (clock, random) = (system::SystemClock, system::SystemRandom::new());
     let options = SendOptions {
         environment: args.env.clone(),
+        globals: args.globals.variables(&located.root)?,
         runtime: args
             .vars
             .iter()

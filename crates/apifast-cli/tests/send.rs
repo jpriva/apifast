@@ -453,3 +453,78 @@ fn a_websocket_request_connects_sends_its_messages_and_prints_what_arrives() {
     // The collection's bearer token went with the handshake.
     assert_eq!(authorization.recv().unwrap(), "Bearer t0k3n");
 }
+
+#[test]
+fn a_global_environment_of_the_workspace_is_under_the_collections() {
+    let server = Server::start();
+    let dir = collection(server.port);
+    let data = tempfile::tempdir().unwrap();
+    let team = tempfile::tempdir().unwrap();
+    std::fs::write(
+        team.path().join("workspace.yml"),
+        "opencollection: 1.0.0\ninfo:\n  name: Team\n  type: workspace\ncollections:\n",
+    )
+    .unwrap();
+    std::fs::create_dir(team.path().join("environments")).unwrap();
+    std::fs::write(
+        team.path().join("environments/shared.yml"),
+        format!(
+            "name: shared\nvariables:\n  - name: host\n    value: http://127.0.0.1:{}\n  - name: user_id\n    value: \"99\"\n  - name: token\n    value: g10bal\n",
+            server.port
+        ),
+    )
+    .unwrap();
+    let workspace = team.path().to_str().unwrap();
+
+    // Alone, it gives every value.
+    let out = apifast(
+        dir.path(),
+        data.path(),
+        &[
+            "send",
+            "users/get.yml",
+            "--global-env",
+            "shared",
+            "--workspace",
+            workspace,
+        ],
+    );
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let request = &server.seen()[0];
+    assert!(request.starts_with("GET /users/99 HTTP/1.1"), "{request}");
+    assert!(
+        request.contains("authorization: Bearer g10bal"),
+        "{request}"
+    );
+
+    // The collection's environment hides it.
+    let out = apifast(
+        dir.path(),
+        data.path(),
+        &[
+            "send",
+            "users/get.yml",
+            "--env",
+            "local",
+            "--global-env",
+            "shared",
+            "--workspace",
+            workspace,
+        ],
+    );
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert!(server.seen()[1].starts_with("GET /users/7 HTTP/1.1"));
+
+    // Without a workspace above the collection, it says how to give one.
+    let out = apifast(
+        dir.path(),
+        data.path(),
+        &["send", "users/get.yml", "--global-env", "shared"],
+    );
+    assert!(!out.status.success());
+    assert!(
+        text(&out.stderr).contains("--workspace"),
+        "{}",
+        text(&out.stderr)
+    );
+}

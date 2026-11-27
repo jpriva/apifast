@@ -242,9 +242,11 @@ En la interfaz, el runner muestra el progreso en vivo y permite abrir la respues
 
 La CLI usa los mismos casos de uso que la interfaz.
 
+`--global-env` elige un entorno global del workspace, el ámbito de menor prioridad ([docs/05](05-variables-y-plantillas.md#ámbitos-y-precedencia)). El workspace es la carpeta con `workspace.yml` más cercana por encima de la colección, como los organiza Bruno, o la de `--workspace`. Sirve en `send`, `describe` y `run`. Lo que los scripts piden conservar con `persist` no se escribe desde la CLI.
+
 ```
-apifast send <archivo.yml> [--env <nombre>]
-apifast describe <archivo.yml> [--env <nombre>]
+apifast send <archivo.yml> [--env <nombre>] [--global-env <nombre> [--workspace <carpeta>]]
+apifast describe <archivo.yml> [--env <nombre>] [--global-env <nombre> [--workspace <carpeta>]]
 apifast run <ruta> [opciones]
 apifast import <formato> <origen> --out <directorio>
 apifast export postman --out <archivo> [--env <nombre>]...
@@ -399,6 +401,8 @@ La carpeta es la colección o una de sus carpetas; por defecto, la actual. La co
 | Opción | Descripción |
 |---|---|
 | `-e`, `--env <nombre>` | Entorno activo |
+| `--global-env <nombre>` | Entorno global del workspace (arriba) |
+| `--workspace <carpeta>` | El workspace de `--global-env`, si no está por encima de la colección |
 | `--var <k=v>` (o `--env-var`) | Sobrescribe una variable (repetible) |
 | `-r`, `--recursive` | Incluye subcarpetas |
 | `--tags <a,b>` / `--exclude-tags <a,b>` | Filtro por tags |

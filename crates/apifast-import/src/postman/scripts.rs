@@ -26,7 +26,10 @@ const TRANSLATIONS: &[(&str, &str)] = &[
     (r"pm\.collectionVariables\.get\(", "bru.getCollectionVar("),
     (r"pm\.collectionVariables\.set\(", "bru.setCollectionVar("),
     (r"pm\.collectionVariables\.has\(", "bru.hasCollectionVar("),
-    (r"pm\.collectionVariables\.unset\(", "bru.deleteCollectionVar("),
+    (
+        r"pm\.collectionVariables\.unset\(",
+        "bru.deleteCollectionVar(",
+    ),
     (r"pm\.globals\.get\(", "bru.getGlobalEnvVar("),
     (r"pm\.globals\.set\(", "bru.setGlobalEnvVar("),
     (r"pm\.globals\.has\(", "bru.hasGlobalEnvVar("),

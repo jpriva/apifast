@@ -491,7 +491,7 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
   - [x] Interfaz: el selector "Global environment" en la barra superior, junto al de la colección, cuando el workspace tiene alguno; la ventana "Global environments…" (desde la de entornos) con el mismo editor, sin secretos todavía; el origen "Global environment" en el tooltip y en "All variables"; la opción del entorno global activo en el editor de `{{variable}}`. El núcleo crea, guarda, renombra y borra los globales (`GlobalCommand`), y el activo sigue un renombre.
   - [x] Scripts: `bru.getGlobalEnvVar` lee el entorno global activo, y `bru.setGlobalEnvVar(…, {persist: true})` se ofrece en el mismo aviso que los de entorno y colección; al aceptar se escribe en su archivo, sin tocar los secretos que declara.
   - [ ] Secretos de un entorno global: el valor va a la bóveda local de la máquina, como hace Bruno, y no se comparte. La bóveda guarda hoy por colección y entorno; hace falta un espacio por workspace.
-  - [ ] CLI: elegir el entorno global en `apifast run` y `apifast send`.
+  - [x] CLI: `--global-env <nombre>` en `send`, `describe` y `run`. El workspace es el `workspace.yml` más cercano por encima de la colección, o el de `--workspace`; si no hay, el error dice cómo darlo.
   - [x] Importar de Postman: `pm.globals` (y `postman.get/setGlobalVariable`) a `bru.*GlobalEnvVar`, y `pm.collectionVariables` a `bru.*CollectionVar`. Antes iban a las de runtime, y `bru.getVar` no veía las variables de la colección importadas.
 - [ ] Guía de usuario.
 - [ ] Auditoría de seguridad de la bóveda.
