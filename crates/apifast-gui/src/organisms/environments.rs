@@ -8,12 +8,13 @@
 
 use std::collections::BTreeMap;
 
-use apifast_domain::{Environment, Secret, ValueKind, Variable, VariableValue};
+use apifast_domain::{Environment, Secret, Variable, VariableValue};
 use apifast_vault::{Orphan, SecretKind};
 use eframe::egui::{self, RichText};
 
 use crate::atoms::{CloseButton, ColorSwatch, TemplateField, TemplateFieldTexts, VariableHints};
 use crate::core::{SecretStatus, TabContext, VaultView};
+use crate::organisms::variables_table::{cell, kind_choice};
 use crate::strings::{Strings, fill};
 use crate::theme;
 
@@ -405,15 +406,6 @@ impl EnvironmentEditor {
     }
 }
 
-fn kind_label(kind: ValueKind, strings: &Strings) -> &str {
-    match kind {
-        ValueKind::String => strings.kind_text,
-        ValueKind::Number => strings.kind_number,
-        ValueKind::Bool => strings.kind_bool,
-        ValueKind::Object => strings.kind_object,
-    }
-}
-
 /// Widths of the columns of the variables table.
 struct Columns {
     check: f32,
@@ -439,20 +431,6 @@ impl Columns {
             secret,
         }
     }
-}
-
-/// A cell of `width`, its contents centered on the row's line.
-fn cell<R>(ui: &mut egui::Ui, width: f32, content: impl FnOnce(&mut egui::Ui) -> R) -> R {
-    let size = egui::vec2(width, ui.spacing().interact_size.y);
-    ui.allocate_ui_with_layout(
-        size,
-        egui::Layout::left_to_right(egui::Align::Center),
-        |ui| {
-            ui.set_min_width(width);
-            content(ui)
-        },
-    )
-    .inner
 }
 
 /// Save, Revert and Delete. Save writes the environment if it changed, and
@@ -640,33 +618,7 @@ fn row(
             .accessible_name(strings.value)
             .show(ui);
     }
-    let kind = variable
-        .value
-        .as_ref()
-        .map_or(ValueKind::String, |v| v.kind);
-    ui.add_enabled_ui(!variable.secret, |ui| {
-        egui::ComboBox::from_id_salt(id.with((index, 2)))
-            .selected_text(kind_label(kind, strings))
-            .width(columns.kind)
-            .show_ui(ui, |ui| {
-                for option in [
-                    ValueKind::String,
-                    ValueKind::Number,
-                    ValueKind::Bool,
-                    ValueKind::Object,
-                ] {
-                    if ui
-                        .selectable_label(option == kind, kind_label(option, strings))
-                        .clicked()
-                        && let Some(value) = variable.value.as_mut()
-                    {
-                        value.kind = option;
-                    }
-                }
-            })
-            .response
-            .on_hover_text(strings.kind);
-    });
+    kind_choice(ui, variable, id.with((index, 2)), columns.kind, strings);
     cell(ui, columns.secret, |ui| {
         let mut secret = variable.secret;
         let changed = ui

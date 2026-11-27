@@ -33,6 +33,7 @@ mod tabs;
 mod tests_panel;
 mod tree;
 mod url_bar;
+mod variables_table;
 mod vault_window;
 
 pub use about_window::AboutWindow;
@@ -69,4 +70,5 @@ pub use tabs::{TabBar, TabEvent};
 pub use tests_panel::tests_panel;
 pub use tree::{TreeEvent, TreeView};
 pub use url_bar::{UrlBar, UrlBarEvent};
+pub use variables_table::{VariablesTarget, VariablesWindow, variables_table};
 pub use vault_window::{VaultWindow, paste_key};

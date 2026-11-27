@@ -511,6 +511,15 @@ pub enum Command {
         /// Its scripts.
         scripts: Vec<apifast_domain::ScriptBlock>,
     },
+    /// Saves the variables of a folder, or of the collection at `root`.
+    SaveVariables {
+        /// The collection.
+        root: PathBuf,
+        /// The folder, relative to it; `None` for the collection.
+        folder: Option<String>,
+        /// Its variables.
+        variables: Vec<apifast_domain::Variable>,
+    },
     /// Saves the proxy, the client certificates and the DNS overrides of
     /// the collection at `root` into its files, and sends with them from
     /// then on.
@@ -1268,19 +1277,14 @@ impl State {
             }
             Command::Send => self.start_send(),
             Command::SendMessage(index) => self.send_message(index),
-            Command::Cancel => {
-                if let Some(sending) =
-                    (self.snapshot.active.as_ref()).and_then(|key| self.sending.get(key))
-                {
-                    sending.cancel.cancel();
-                }
-            }
+            Command::Cancel => self.cancel_send(),
             Command::CreateRequest { .. }
             | Command::CreateFolder { .. }
             | Command::Rename { .. }
             | Command::Delete { .. }
             | Command::Move { .. }
-            | Command::SaveScripts { .. } => self.handle_tree(command),
+            | Command::SaveScripts { .. }
+            | Command::SaveVariables { .. } => self.handle_tree(command),
             Command::OpenHistory(_) | Command::History(_) => self.handle_history(command),
             Command::Configure { .. }
             | Command::SetProxyPassword(_)
@@ -1386,6 +1390,13 @@ impl State {
                 folder,
                 scripts,
             } => self.save_scripts(&root, folder.as_deref(), scripts),
+            Command::SaveVariables {
+                root,
+                folder,
+                variables,
+            } => self.save_defaults(&root, folder.as_deref(), |defaults| {
+                defaults.variables = variables;
+            }),
             Command::Rename { root, item, name } => {
                 if let Some(new) = self.organize(&root, |repo| rename_item(repo, &item, &name)) {
                     self.follow_move(&root, &item, &new);
@@ -1605,6 +1616,14 @@ impl State {
             inherited_auth: inherited.auth().clone(),
             inherited_settings: inherited.settings().clone(),
             revision: 0,
+        }
+    }
+
+    /// Cancels the send of the active tab, if one is going.
+    fn cancel_send(&self) {
+        if let Some(sending) = (self.snapshot.active.as_ref()).and_then(|key| self.sending.get(key))
+        {
+            sending.cancel.cancel();
         }
     }
 

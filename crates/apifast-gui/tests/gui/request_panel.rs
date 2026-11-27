@@ -828,6 +828,34 @@ fn scripts_are_written_in_their_tab_one_kind_at_a_time() {
 }
 
 #[test]
+fn the_request_variables_are_edited_in_their_tab() {
+    use apifast_domain::Variable;
+    let mut request = request();
+    request.variables = vec![Variable::secret("token")];
+    let mut harness = harness(RequestTab::Vars, request);
+    // A secret keeps its name: only environments keep secret values.
+    assert!(
+        harness
+            .query_by_label(EN.variable_secret_elsewhere)
+            .is_some()
+    );
+    harness
+        .get_by_role_and_label(Role::TextInput, EN.new_variable)
+        .focus();
+    harness.run();
+    type_slowly(&mut harness, "page");
+    let variables = &harness.state().request.variables;
+    assert_eq!(variables.len(), 2);
+    assert_eq!(variables[1].name, "page");
+    assert!(harness.state().changes.contains(&RequestChange::Other));
+    assert!(
+        harness
+            .query_by_label(&format!("{} (2)", EN.variables))
+            .is_some()
+    );
+}
+
+#[test]
 fn a_websocket_request_only_has_scripts_before_its_handshake() {
     let mut request = request();
     request.body = apifast_domain::Body::WebSocket(Vec::new());

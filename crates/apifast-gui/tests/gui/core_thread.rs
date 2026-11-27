@@ -2769,6 +2769,53 @@ fn collection_scripts_are_saved_in_its_file() {
     assert!(file.contains("console.log(1)"), "{file}");
 }
 
+#[test]
+fn collection_and_folder_variables_are_saved_and_reach_the_open_tab() {
+    use apifast_domain::{Origin, Variable};
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::OpenRequest(at(&core, "users/get.yml")));
+    wait(&core, "the tab", |s| s.active_tab().is_some());
+    core.send(Command::SaveVariables {
+        root: root(&core),
+        folder: None,
+        variables: vec![Variable::text("greeting", "hi"), Variable::text("id", "1")],
+    });
+    core.send(Command::SaveVariables {
+        root: root(&core),
+        folder: Some("users".into()),
+        variables: vec![Variable::text("id", "2")],
+    });
+    let snapshot = wait(&core, "the variables in the tab", |s| {
+        s.active_tab().is_some_and(|t| {
+            let variables = &t.context.variables;
+            variables.get("greeting").is_some()
+                && variables
+                    .get("id")
+                    .is_some_and(|v| v.value.as_ref().is_some_and(|value| value.data == "2"))
+        })
+    });
+    let variables = &snapshot.active_tab().unwrap().context.variables;
+    assert_eq!(
+        variables.get("greeting").unwrap().origin,
+        Origin::Collection
+    );
+    // The folder's overrides the collection's.
+    assert!(matches!(
+        variables.get("id").unwrap().origin,
+        Origin::Folder(_)
+    ));
+    let file = std::fs::read_to_string(dir.path().join("opencollection.yml")).unwrap();
+    assert!(file.contains("greeting"), "{file}");
+    assert!(
+        file.contains("info:\n  name: API"),
+        "the rest is kept: {file}"
+    );
+    let folder = std::fs::read_to_string(dir.path().join("users/folder.yml")).unwrap();
+    assert!(folder.contains("name: id"), "{folder}");
+}
+
 /// Tells `core` the settings a test needs: the default timeout, and
 /// whether the workspace used last opens at the start.
 fn configure(core: &Core, timeout_ms: u64, reopen_last: bool) {

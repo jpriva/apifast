@@ -120,7 +120,7 @@ La cabecera de la barra lateral tiene:
 | Headers | Tabla clave/valor; los heredados aparecen atenuados con su origen |
 | Body | Selector de tipo y editor: código, tabla de formulario, partes multipart o archivo (ver abajo) |
 | Auth | Selector de tipo y sus campos; "heredada" muestra de quién. Con OAuth 2.0 (propia o heredada), el estado del token guardado ("valid for 52 min", "expired", ninguno) y los botones "Get new token" y "Forget token" |
-| Vars | Variables de la request y capturas |
+| Vars | Variables propias de la request (`Vars (2)`: cuántas están activas): activa, nombre, valor con `{{…}}` y tipo, y una fila vacía para añadir otra. Tapan las de la colección, el entorno y las carpetas. Se guardan en `runtime.variables` del archivo con la request. Las de una carpeta o de la colección, en la ventana "Variables…" del menú del árbol |
 | Tests | Aserciones (expresión, operador, valor esperado) y capturas (expresión, variable, ámbito) |
 | Scripts | Un editor de JavaScript por tipo: Before request, After response y Test script (`Scripts (2)`: cuántos tipos tienen código). Los de una carpeta o de la colección, en la ventana "Scripts…" del menú del árbol |
 | Docs | Markdown con vista previa |
@@ -259,6 +259,8 @@ Con "Preguntar antes de cerrar", cerrar la ventana con pestañas sin guardar abr
 En los ajustes de la aplicación, la sección TLS tiene un archivo de CA adicional (con "Choose…") y "Do not check certificates", que muestra un aviso en rojo mientras está activa. La sección Proxy elige el del sistema, ninguno o uno manual, para las colecciones que heredan el suyo. Su contraseña se guarda aparte con "Save password", sellada; el campo muestra "saved, sealed" cuando hay una.
 
 ## Cookies
+
+"Variables…" en el menú de la raíz de una colección cargada o de una carpeta abre sus variables, con la misma tabla que la pestaña Vars. Las ven todas las requests de dentro. Se guardan en `request.variables` de `opencollection.yml` o de `folder.yml` al pulsar "Save", conservando el resto del archivo, y las pestañas abiertas las ven en el momento. Un secreto conserva su nombre y su marca, pero no se le puede escribir valor: solo los entornos guardan valores secretos, en la bóveda.
 
 "Cookies…" en el menú de la raíz de una colección cargada, o la acción "Cookies" de la paleta, abre el tarro de la colección enfocada:
 

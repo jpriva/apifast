@@ -332,6 +332,60 @@ fn the_scripts_window_edits_a_folders_scripts_and_saves_them() {
 }
 
 #[test]
+fn the_variables_window_edits_a_collections_variables_and_saves_them() {
+    use apifast_domain::Variable;
+    use apifast_gui::organisms::{VariablesTarget, VariablesWindow};
+    struct State {
+        window: VariablesWindow,
+        saved: Option<(VariablesTarget, Vec<Variable>)>,
+    }
+    let target = VariablesTarget {
+        root: "/shop".into(),
+        folder: None,
+    };
+    let mut window = VariablesWindow::default();
+    let secret = Variable::secret("token");
+    window.open_for(
+        target.clone(),
+        "Shop".into(),
+        vec![secret.clone(), Variable::text("host", "a")],
+    );
+    let hints = VariableHints::new();
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(800.0, 600.0))
+        .build_ui_state(
+            move |ui, state: &mut State| {
+                let ctx = ui.ctx().clone();
+                if let Some(saved) = state.window.show(&ctx, &hints, &EN) {
+                    state.saved = Some(saved);
+                }
+            },
+            State {
+                window,
+                saved: None,
+            },
+        );
+    harness.run();
+    assert!(
+        harness
+            .query_by_label(EN.variable_secret_elsewhere)
+            .is_some()
+    );
+    let enabled = harness.get_all_by_label(EN.enabled).nth(1).unwrap();
+    enabled.click();
+    harness.run();
+    harness.get_by_label(EN.save).click();
+    harness.run();
+    let (saved_target, variables) = harness.state().saved.clone().unwrap();
+    assert_eq!(saved_target, target);
+    let mut host = Variable::text("host", "a");
+    host.enabled = false;
+    // The secret is kept as it was.
+    assert_eq!(variables, [secret, host]);
+    assert!(!harness.state().window.is_open());
+}
+
+#[test]
 fn pasting_a_curl_command_into_the_url_is_an_event_and_not_text() {
     let mut events = Vec::new();
     let (mut method, mut url) = (Method::Get, String::new());

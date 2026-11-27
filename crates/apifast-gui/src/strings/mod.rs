@@ -1104,6 +1104,18 @@ pub struct Strings {
     pub scripts_menu: &'static str,
     /// Above the scripts: what they are and what they see.
     pub scripts_hint: &'static str,
+    /// Request tab and window title: the variables of the request, a folder
+    /// or the collection.
+    pub variables: &'static str,
+    /// Menu of a folder or the collection: edit its variables.
+    pub variables_menu: &'static str,
+    /// Above the variables of a folder or the collection: who sees them and
+    /// what overrides them.
+    pub variables_hint: &'static str,
+    /// Above the variables of a request: what they override.
+    pub request_variables_hint: &'static str,
+    /// In place of the value of a secret that is not an environment's.
+    pub variable_secret_elsewhere: &'static str,
     /// When a file has several scripts of one kind: only the first is
     /// edited.
     pub scripts_more: &'static str,

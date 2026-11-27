@@ -113,6 +113,8 @@ pub struct MainScreen {
     pub collection_settings: crate::organisms::CollectionSettingsWindow,
     /// The scripts of a folder or a collection.
     pub scripts_window: crate::organisms::ScriptsWindow,
+    /// The variables of a folder or the collection.
+    pub variables_window: crate::organisms::VariablesWindow,
     /// The collections and their proxies at the last frame, for the
     /// settings window to start from.
     last_collections: Vec<CollectionProxyEntry>,
@@ -132,16 +134,16 @@ struct CollectionProxyEntry {
     tree: std::sync::Arc<apifast_app::CollectionTree>,
 }
 
-/// The scripts of the folder at `path` in `items`.
-fn folder_scripts(
-    items: &[apifast_app::TreeItem],
+/// What the folder at `path` in `items` gives every request inside.
+fn folder_defaults<'a>(
+    items: &'a [apifast_app::TreeItem],
     path: &str,
-) -> Option<Vec<apifast_domain::ScriptBlock>> {
+) -> Option<&'a apifast_domain::RequestDefaults> {
     items.iter().find_map(|item| match item {
         apifast_app::TreeItem::Folder {
             path: p, folder, ..
-        } if p == path => Some(folder.defaults.scripts.clone()),
-        apifast_app::TreeItem::Folder { children, .. } => folder_scripts(children, path),
+        } if p == path => Some(&folder.defaults),
+        apifast_app::TreeItem::Folder { children, .. } => folder_defaults(children, path),
         _ => None,
     })
 }
@@ -566,7 +568,8 @@ impl MainScreen {
                 if let Some(entry) = self.last_collections.iter().find(|c| c.root == root) {
                     let scripts = match &folder {
                         None => Some(entry.tree.collection.defaults.scripts.clone()),
-                        Some(path) => folder_scripts(&entry.tree.items, path),
+                        Some(path) => folder_defaults(&entry.tree.items, path)
+                            .map(|defaults| defaults.scripts.clone()),
                     };
                     if let Some(scripts) = scripts {
                         let target = crate::organisms::ScriptsTarget {
@@ -574,6 +577,23 @@ impl MainScreen {
                             folder,
                         };
                         self.scripts_window.open_for(target, label, scripts);
+                    }
+                }
+                vec![focus]
+            }
+            TreeEvent::Variables { folder, label } => {
+                if let Some(entry) = self.last_collections.iter().find(|c| c.root == root) {
+                    let defaults = match &folder {
+                        None => Some(&entry.tree.collection.defaults),
+                        Some(path) => folder_defaults(&entry.tree.items, path),
+                    };
+                    if let Some(defaults) = defaults {
+                        let variables = defaults.variables.clone();
+                        let target = crate::organisms::VariablesTarget {
+                            root: root.clone(),
+                            folder,
+                        };
+                        self.variables_window.open_for(target, label, variables);
                     }
                 }
                 vec![focus]
@@ -832,6 +852,40 @@ impl MainScreen {
         std::mem::take(&mut self.unsaved.keymap)
     }
 
+    /// The windows of a collection or a folder: its scripts, its variables
+    /// and the collection's settings. What to save, once the user saves.
+    fn collection_windows(
+        &mut self,
+        ctx: &egui::Context,
+        hints: &VariableHints,
+        strings: &Strings,
+    ) -> Vec<Command> {
+        let mut commands = Vec::new();
+        if let Some((target, scripts)) = self.scripts_window.show(ctx, strings) {
+            commands.push(Command::SaveScripts {
+                root: target.root,
+                folder: target.folder,
+                scripts,
+            });
+        }
+        if let Some((target, variables)) = self.variables_window.show(ctx, hints, strings) {
+            commands.push(Command::SaveVariables {
+                root: target.root,
+                folder: target.folder,
+                variables,
+            });
+        }
+        if let Some((root, settings)) = self.collection_settings.show(ctx, strings) {
+            commands.push(Command::SaveCollectionSettings {
+                root,
+                proxy: settings.proxy,
+                client_certificates: settings.client_certificates,
+                dns_overrides: settings.dns_overrides,
+            });
+        }
+        commands
+    }
+
     /// The windows over the screen: environments, shortcuts and the
     /// palette. Returns the commands they ask for.
     fn windows(
@@ -876,21 +930,7 @@ impl MainScreen {
             crate::organisms::ReimportEvent::Apply(keys) => Command::ApplyReimport(keys),
             crate::organisms::ReimportEvent::Close => Command::CloseReimport,
         }));
-        if let Some((target, scripts)) = self.scripts_window.show(&ctx, strings) {
-            commands.push(Command::SaveScripts {
-                root: target.root,
-                folder: target.folder,
-                scripts,
-            });
-        }
-        if let Some((root, settings)) = self.collection_settings.show(&ctx, strings) {
-            commands.push(Command::SaveCollectionSettings {
-                root,
-                proxy: settings.proxy,
-                client_certificates: settings.client_certificates,
-                dns_overrides: settings.dns_overrides,
-            });
-        }
+        commands.extend(self.collection_windows(&ctx, hints, strings));
         commands.extend(
             self.runner
                 .show(&ctx, snapshot.run.as_ref(), strings)

@@ -484,6 +484,17 @@ impl State {
         folder: Option<&str>,
         scripts: Vec<apifast_domain::ScriptBlock>,
     ) {
+        self.save_defaults(root, folder, |defaults| defaults.scripts = scripts);
+    }
+
+    /// Changes with `change` what `folder`, or the collection at `root`,
+    /// gives every request inside, keeping the rest of its file.
+    pub(super) fn save_defaults(
+        &mut self,
+        root: &Path,
+        folder: Option<&str>,
+        change: impl FnOnce(&mut apifast_domain::RequestDefaults),
+    ) {
         let found = (self.open.get(root)).and_then(|open| match folder {
             None => Some(None),
             Some(path) => find_folder(&open.tree.items, path).map(Some),
@@ -494,11 +505,11 @@ impl State {
         self.organize(root, |repo| {
             use apifast_app::CollectionRepository as _;
             if let (Some(path), Some(mut saved)) = (folder, found) {
-                saved.defaults.scripts = scripts;
+                change(&mut saved.defaults);
                 repo.save_folder(path, &saved)?;
             } else {
                 let mut collection = repo.collection()?;
-                collection.defaults.scripts = scripts;
+                change(&mut collection.defaults);
                 repo.save_collection(&collection)?;
             }
             Ok(())
