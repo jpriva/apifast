@@ -7,7 +7,8 @@
 //!
 //! The workspace forbids `unsafe`, which calling the Windows API needs, so
 //! this runs `icacls.exe` and `whoami.exe`, both part of Windows, by their
-//! full path in the system folder. Each run takes some 50 ms.
+//! full path in the system folder. Each run takes some 50 ms, and closing
+//! a file takes two.
 
 use std::io;
 use std::os::windows::process::CommandExt as _;
@@ -87,29 +88,23 @@ fn icacls(path: &Path, arguments: &[&str]) -> io::Result<()> {
     }
 }
 
-/// Leaves a file just made open only to its owner. A new file has nothing
-/// but what it inherits from its folder, so dropping that and granting the
-/// user is the whole list.
+/// Leaves `path` open only to its owner, whatever it was given: one entry,
+/// full access for the user, nothing inherited.
+///
+/// It first goes back to what the folder passes down, which drops every
+/// entry of the file's own. That matters for a new file too: where the
+/// folder passes nothing down, Windows gives it the entries of the user's
+/// token (the system, the administrators, the user), and they are the
+/// file's own, not inherited. Then inheritance is cut and the user granted.
 ///
 /// # Errors
 ///
-/// If the tools cannot run, or the file is where Windows keeps no access
-/// lists (a FAT drive, some network shares).
-pub(crate) fn close_new(path: &Path) -> io::Result<()> {
-    let grant = format!("*{}:F", user_sid()?);
-    icacls(path, &["/inheritance:r", "/grant:r", &grant])
-}
-
-/// Leaves a file that was already there open only to its owner, whatever
-/// was granted on it since. It first goes back to what its folder gives,
-/// which drops every entry of its own.
-///
-/// # Errors
-///
-/// As [`close_new`].
+/// If the tools cannot run, or the file is not there or is where Windows
+/// keeps no access lists (a FAT drive, some network shares).
 pub(crate) fn close(path: &Path) -> io::Result<()> {
+    let grant = format!("*{}:F", user_sid()?);
     icacls(path, &["/reset"])?;
-    close_new(path)
+    icacls(path, &["/inheritance:r", "/grant:r", &grant])
 }
 
 #[cfg(test)]

@@ -223,7 +223,7 @@ pub(crate) fn owner_only(path: &Path) -> io::Result<fs::File> {
     }
     let file = options.open(path)?;
     #[cfg(windows)]
-    crate::windows_acl::close_new(path)?;
+    crate::windows_acl::close(path)?;
     #[cfg(not(windows))]
     restrict(path)?;
     Ok(file)
