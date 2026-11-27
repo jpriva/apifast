@@ -879,6 +879,11 @@ pub struct Strings {
     pub save_to_environment: &'static str,
     /// Forgets the captured values.
     pub discard_captures: &'static str,
+    /// Banner over the editor; `{names}` is replaced: values for the
+    /// collection's variables, from captures or scripts.
+    pub captured_for_collection: &'static str,
+    /// Writes the captured values to the collection's file.
+    pub save_to_collection: &'static str,
     /// Title of the runner window.
     pub runner: &'static str,
     /// Tree menu: open the runner on a collection or folder.

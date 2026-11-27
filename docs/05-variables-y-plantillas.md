@@ -32,7 +32,7 @@ Cuando el mismo nombre existe en varios ámbitos, gana el más específico. De m
 | 3 | Entorno activo | `environments/<nombre>.yml`, incluyendo lo heredado por `extends` |
 | 4 | Carpetas | `request.variables` en cada `folder.yml`, de la más externa a la más interna |
 | 5 | Request | `runtime.variables` en el archivo de la request |
-| 6 | Runtime | Capturas de respuestas anteriores (en memoria) y, en el runner, las columnas de la fila de datos |
+| 6 | Runtime | Capturas de respuestas anteriores y lo que fijan los scripts (`bru.setVar`, `setEnvVar`, `setCollectionVar`…), en memoria, y, en el runner, las columnas de la fila de datos. Las capturas de ámbito `environment` o `collection` y los cambios con `{persist: true}` se ofrecen además para guardarlos en su archivo ([docs/08](08-tests-y-runner.md#capturas)) |
 | 7 | Pregunta | Valores introducidos por el usuario para este envío |
 
 `process.env.*` es un espacio de nombres aparte y no participa en esta cadena.

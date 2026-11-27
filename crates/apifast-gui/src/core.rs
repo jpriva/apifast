@@ -481,7 +481,7 @@ pub enum Command {
     SaveEnvironment(Box<Environment>),
     /// Deletes an environment.
     DeleteEnvironment(String),
-    /// Writes the values captured for the active environment of the
+    /// Writes the values captured for the active environment and for the
     /// collection at `root` (`save`), or forgets them.
     SaveCaptures {
         /// The collection.
@@ -677,13 +677,17 @@ impl Snapshot {
     }
 }
 
-/// Values captured for an environment, waiting to be written there.
+/// Values captured for the active environment and for the collection, or
+/// that scripts asked to keep, waiting to be written there.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PendingCaptures {
-    /// The environment.
+    /// The environment; empty when none is active.
     pub environment: String,
-    /// The variables, in capture order. Their values stay in the core.
+    /// The environment's variables, in capture order. Their values stay in
+    /// the core.
     pub names: Vec<String>,
+    /// The collection's variables, in capture order.
+    pub collection: Vec<String>,
 }
 
 /// A workspace.
@@ -1824,9 +1828,9 @@ impl State {
                 }
                 // The tabs show the values the next sends will use.
                 self.refresh_collection(&key.root);
-                self.note_environment_captures(&key.root, &checks.captures);
+                self.note_captures(&key.root, &checks.captures);
                 let persisted = captures::persisted(&checks.scripts.variables);
-                self.note_environment_captures(&key.root, &persisted);
+                self.note_captures(&key.root, &persisted);
                 ResponseState::Received(received)
             }
             Err(AppError::Transport(TransportError::Cancelled)) => ResponseState::Cancelled,

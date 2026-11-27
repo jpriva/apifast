@@ -531,6 +531,8 @@ pub const STRINGS: Strings = Strings {
     captured_for_environment: "Captured for the environment {environment}: {names}. They are used for now; save them to keep them.",
     save_to_environment: "Save to environment",
     discard_captures: "Discard",
+    captured_for_collection: "For the collection: {names}. They are used for now; save them to keep them.",
+    save_to_collection: "Save to collection",
     runner: "Runner",
     run_menu: "Run…",
     run_recursive: "Subfolders",

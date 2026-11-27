@@ -171,7 +171,7 @@ Params, headers, path params y los campos de un formulario usan la misma tabla, 
 - La expresión sugiere `res.status`, `res.headers.`, `res.body.`, `res.responseTime` y `res.size` mientras se escribe.
 - El operador es un menú con los 28 de Bruno. Al elegir uno que no lleva valor (`isNull`, `isEmpty`…), el campo del valor esperado se sustituye por "no value" y el valor se descarta; al volver a uno que lo lleva, empieza vacío.
 - El valor esperado es un campo de plantilla: resalta las variables como el resto.
-- El ámbito de una captura es `runtime`, `request` o `environment`.
+- El ámbito de una captura es `runtime`, `request`, `environment` o `collection`. Lo capturado para el entorno activo o para la colección se usa al momento, y un aviso sobre el editor ofrece guardarlo en su archivo o descartarlo; ese aviso también recoge lo que los scripts piden conservar con `{persist: true}`.
 
 ### Editor de código
 

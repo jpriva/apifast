@@ -1951,6 +1951,78 @@ fn environment_captures_are_saved_when_the_user_agrees_and_secrets_go_to_the_vau
 }
 
 #[test]
+fn collection_values_scripts_persist_and_captures_are_saved_when_the_user_agrees() {
+    use apifast_domain::{ScriptBlock, ScriptKind, Variable};
+    let dir = collection(server(Duration::ZERO));
+    std::fs::write(
+        dir.path().join("users/get.yml"),
+        "info:\n  name: Get\n  type: http\nhttp:\n  method: GET\n  url: \"{{host}}/users/1\"\nruntime:\n  actions:\n    - type: set-variable\n      phase: after-response\n      selector:\n        expression: res.status\n        method: jsonq\n      variable:\n        name: last_status\n        scope: collection\n",
+    )
+    .unwrap();
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::SaveVariables {
+        root: root(&core),
+        folder: None,
+        variables: vec![Variable::text("greeting", "hi")],
+    });
+    core.send(Command::SaveScripts {
+        root: root(&core),
+        folder: None,
+        scripts: vec![ScriptBlock::new(
+            ScriptKind::AfterResponse,
+            "bru.setCollectionVar('greeting', 'ho' + 'la', { persist: true }); bru.setCollectionVar('for_now', 1)",
+        )],
+    });
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    core.send(Command::OpenRequest(at(&core, "users/get.yml")));
+    wait(&core, "the request", |s| s.active_tab().is_some());
+    core.send(Command::Send);
+    let snapshot = wait(&core, "the values to keep", |s| s.captured.is_some());
+    let captured = snapshot.captured.as_ref().unwrap();
+    assert_eq!(captured.collection, ["last_status", "greeting"]);
+    assert!(captured.names.is_empty(), "{captured:?}");
+
+    let file = dir.path().join("opencollection.yml");
+    core.send(Command::SaveCaptures {
+        root: root(&core),
+        save: false,
+    });
+    wait(&core, "discarded", |s| s.captured.is_none());
+    assert!(!std::fs::read_to_string(&file).unwrap().contains("hola"));
+
+    core.send(Command::Send);
+    wait(&core, "the values again", |s| s.captured.is_some());
+    core.send(Command::SaveCaptures {
+        root: root(&core),
+        save: true,
+    });
+    let snapshot = wait(&core, "saved", |s| {
+        s.captured.is_none()
+            && s.collection
+                .as_ref()
+                .is_some_and(|c| c.tree.collection.defaults.variables.len() == 2)
+    });
+    let text = std::fs::read_to_string(&file).unwrap();
+    assert!(text.contains("hola"), "{text}");
+    assert!(text.contains("last_status"), "{text}");
+    assert!(
+        !text.contains("- name: for_now"),
+        "only what asked to persist: {text}"
+    );
+    let variables = &snapshot
+        .collection
+        .as_ref()
+        .unwrap()
+        .tree
+        .collection
+        .defaults
+        .variables;
+    let greeting = variables.iter().find(|v| v.name == "greeting").unwrap();
+    assert_eq!(greeting.value.as_ref().unwrap().data, "hola");
+}
+
+#[test]
 fn the_runner_runs_a_folder_in_the_background_and_opens_a_step() {
     use apifast_gui::core::RunSettings;
     let dir = collection(server(Duration::ZERO));

@@ -605,6 +605,26 @@ async fn bru_sets_collection_variables_and_reads_every_environment_variable() {
 }
 
 #[tokio::test]
+async fn a_collection_variable_asks_to_be_kept_only_with_persist() {
+    let outcome = run(r"
+        bru.setCollectionVar('kept', 1, { persist: true });
+        bru.setCollectionVar('for_now', 2);
+    ")
+    .await;
+    assert_eq!(outcome.error, None);
+    let persist: Vec<_> = (outcome.variables.iter())
+        .map(|c| (c.scope, c.name.as_str(), c.persist))
+        .collect();
+    assert_eq!(
+        persist,
+        [
+            (VariableScope::Collection, "kept", true),
+            (VariableScope::Collection, "for_now", false),
+        ]
+    );
+}
+
+#[tokio::test]
 async fn timers_fire_and_a_pending_timeout_is_waited_for() {
     let outcome = run(r"
         await new Promise((resolve) => setTimeout(() => { console.log('awaited'); resolve(); }, 10));

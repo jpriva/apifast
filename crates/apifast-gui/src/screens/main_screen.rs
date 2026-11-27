@@ -1684,8 +1684,8 @@ fn banners(
     (key, captures)
 }
 
-/// Offers to write the values captured for the active environment there.
-/// Returns whether to, once the user chooses.
+/// Offers to write the values captured for the active environment and for
+/// the collection there. Returns whether to, once the user chooses.
 fn captures_banner(
     ui: &mut egui::Ui,
     captured: &crate::core::PendingCaptures,
@@ -1693,6 +1693,27 @@ fn captures_banner(
 ) -> Option<bool> {
     let accent = theme::palette(ui).accent;
     let mut choice = None;
+    let mut texts = Vec::new();
+    if !captured.names.is_empty() {
+        texts.push(
+            strings
+                .captured_for_environment
+                .replace("{environment}", &captured.environment)
+                .replace("{names}", &captured.names.join(", ")),
+        );
+    }
+    if !captured.collection.is_empty() {
+        texts.push(
+            strings
+                .captured_for_collection
+                .replace("{names}", &captured.collection.join(", ")),
+        );
+    }
+    let save = match (captured.names.is_empty(), captured.collection.is_empty()) {
+        (false, true) => strings.save_to_environment,
+        (true, false) => strings.save_to_collection,
+        _ => strings.save,
+    };
     egui::Frame::new()
         .fill(accent.gamma_multiply(theme::BADGE_TINT))
         .stroke(egui::Stroke::new(1.0, accent))
@@ -1700,12 +1721,8 @@ fn captures_banner(
         .inner_margin(theme::space::M)
         .show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
-                let text = strings
-                    .captured_for_environment
-                    .replace("{environment}", &captured.environment)
-                    .replace("{names}", &captured.names.join(", "));
-                ui.label(text);
-                if ui.button(strings.save_to_environment).clicked() {
+                ui.label(texts.join(" "));
+                if ui.button(save).clicked() {
                     choice = Some(true);
                 }
                 if ui.button(strings.discard_captures).clicked() {
