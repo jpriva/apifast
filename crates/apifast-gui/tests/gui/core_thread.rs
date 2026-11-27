@@ -2816,6 +2816,65 @@ fn collection_and_folder_variables_are_saved_and_reach_the_open_tab() {
     assert!(folder.contains("name: id"), "{folder}");
 }
 
+#[test]
+fn values_scripts_set_reach_the_tabs_with_where_they_come_from() {
+    use apifast_domain::{Origin, ScriptBlock, ScriptKind, Variable};
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    core.send(Command::SaveVariables {
+        root: root(&core),
+        folder: None,
+        variables: vec![Variable::text("greeting", "hi")],
+    });
+    core.send(Command::SaveScripts {
+        root: root(&core),
+        folder: None,
+        scripts: vec![ScriptBlock::new(
+            ScriptKind::AfterResponse,
+            "bru.setVar('seen', 'yes'); bru.setCollectionVar('greeting', 'hola')",
+        )],
+    });
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
+    core.send(Command::OpenRequest(at(&core, "users/get.yml")));
+    let snapshot = wait(&core, "the tab", |s| {
+        s.active_tab().is_some_and(|t| {
+            t.context
+                .variables
+                .get("greeting")
+                .is_some_and(|v| v.origin == Origin::Collection)
+        })
+    });
+    assert!(
+        snapshot
+            .active_tab()
+            .unwrap()
+            .context
+            .variables
+            .get("seen")
+            .is_none()
+    );
+    core.send(Command::Send);
+    let snapshot = wait(&core, "the values in the tabs", |s| {
+        s.tabs
+            .iter()
+            .all(|t| t.context.variables.get("seen").is_some())
+    });
+    // Every tab of the collection sees them, not only the one sent.
+    for tab in &snapshot.tabs {
+        let context = &tab.context;
+        let greeting = context.variables.get("greeting").unwrap();
+        assert_eq!(greeting.value.as_ref().unwrap().data, "hola");
+        assert_eq!(greeting.origin, Origin::Runtime);
+        assert!(greeting.overridden.contains(&Origin::Collection));
+        assert_eq!(
+            context.origin("seen", &Origin::Runtime, &apifast_gui::strings::EN),
+            apifast_gui::strings::EN.origin_script
+        );
+    }
+}
+
 /// Tells `core` the settings a test needs: the default timeout, and
 /// whether the workspace used last opens at the start.
 fn configure(core: &Core, timeout_ms: u64, reopen_last: bool) {

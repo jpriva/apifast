@@ -787,7 +787,7 @@ fn all_variables(ui: &mut egui::Ui, context: Option<&TabContext>, strings: &Stri
                             _ => strings.secret_hidden,
                         };
                         ui.label(RichText::new(value).monospace());
-                        ui.label(strings.origin(&variable.origin, &context.folders));
+                        ui.label(context.origin(name, &variable.origin, strings));
                         let overridden: Vec<String> = (variable.overridden.iter())
                             .map(|origin| strings.origin(origin, &context.folders))
                             .collect();

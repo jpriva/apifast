@@ -1229,6 +1229,9 @@ pub struct Strings {
     pub origin_request: &'static str,
     /// Origin: captured from a response.
     pub origin_runtime: &'static str,
+    /// Origin: set by a script (`bru.setVar` and the like), for the next
+    /// sends while the collection is loaded.
+    pub origin_script: &'static str,
     /// Origin: typed in for this send.
     pub origin_prompt: &'static str,
     /// Request tab: query and path parameters.

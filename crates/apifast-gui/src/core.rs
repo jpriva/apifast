@@ -770,6 +770,9 @@ pub struct TabContext {
     /// Names of the request's folders, outermost first, for
     /// [`Origin::Folder`].
     pub folders: Vec<String>,
+    /// The names of `variables` from the runtime that a script set, not a
+    /// capture.
+    pub scripted: std::collections::BTreeSet<String>,
     /// Headers from the collection and folders.
     pub inherited_headers: Vec<Resolved<Header>>,
     /// The auth the request gets when it inherits.
@@ -800,6 +803,33 @@ pub enum TokenState {
     Unreadable(String),
 }
 
+impl TabContext {
+    /// Where the variable `name`, from `origin`, comes from, ready to
+    /// show: a runtime value says whether a script set it or a response
+    /// gave it.
+    pub fn origin(&self, name: &str, origin: &Origin, strings: &crate::strings::Strings) -> String {
+        if *origin == Origin::Runtime && self.scripted.contains(name) {
+            return strings.origin_script.to_owned();
+        }
+        strings.origin(origin, &self.folders)
+    }
+}
+
+/// Keeps in `scripted` the runtime names a script set last: captures go
+/// first and scripts after, as the runtime takes them.
+fn note_scripted(scripted: &mut std::collections::BTreeSet<String>, checks: &Checks) {
+    for capture in checks.captures.iter().filter(|c| c.value.is_ok()) {
+        scripted.remove(&capture.variable);
+    }
+    for change in &checks.scripts.variables {
+        if change.value.is_some() {
+            scripted.insert(change.name.clone());
+        } else {
+            scripted.remove(&change.name);
+        }
+    }
+}
+
 impl Default for TabContext {
     fn default() -> Self {
         let nothing = resolve(Chain::new(
@@ -810,6 +840,7 @@ impl Default for TabContext {
         Self {
             variables: ResolvedVariables::default(),
             folders: Vec::new(),
+            scripted: std::collections::BTreeSet::new(),
             inherited_headers: Vec::new(),
             inherited_auth: Resolved::new(AuthScheme::None, Origin::Default),
             inherited_settings: nothing.settings().clone(),
@@ -1583,9 +1614,17 @@ impl State {
             &*open.repo,
             &loaded,
             open.environment.as_deref(),
-            &[],
+            &open.runtime,
         )
         .unwrap_or_default();
+        let scripted = (open.scripted.iter())
+            .filter(|name| {
+                variables
+                    .get(name)
+                    .is_some_and(|v| v.origin == Origin::Runtime)
+            })
+            .cloned()
+            .collect();
         // The request with nothing of its own shows what it inherits.
         let mut bare = request.clone();
         bare.headers.clear();
@@ -1612,6 +1651,7 @@ impl State {
             methods,
             variables,
             folders: loaded.folders.iter().map(|f| f.name.clone()).collect(),
+            scripted,
             inherited_headers: inherited.headers().to_vec(),
             inherited_auth: inherited.auth().clone(),
             inherited_settings: inherited.settings().clone(),
@@ -1780,7 +1820,10 @@ impl State {
                     apply_captures(&mut open.runtime, &checks.captures);
                     apply_script_variables(&mut open.runtime, &checks.scripts.variables);
                     keep_script_changes(&mut open.script_changes, &checks.scripts.variables);
+                    note_scripted(&mut open.scripted, checks);
                 }
+                // The tabs show the values the next sends will use.
+                self.refresh_collection(&key.root);
                 self.note_environment_captures(&key.root, &checks.captures);
                 let persisted = captures::persisted(&checks.scripts.variables);
                 self.note_environment_captures(&key.root, &persisted);

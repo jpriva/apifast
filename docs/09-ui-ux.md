@@ -223,6 +223,7 @@ La edición con resaltado se limita a unos 200 KB: con más texto, egui tarda de
 - El valor de un secreto se escribe en un campo oculto. Su estado (guardado en esta máquina, compartido, bloqueado porque falta la clave de la colección, o sin valor) se ve en el campo vacío, al pasar el ratón y en su nombre accesible. Reveal lo muestra 15 segundos.
 - Los valores guardados que ya no usa ninguna variable secreta se listan bajo la tabla, con un botón para olvidarlos.
 - Vista "todas las variables": cada variable efectiva con su valor y el ámbito del que procede.
+- Esa vista y el tooltip de una `{{variable}}` muestran lo que usará el próximo envío. Eso incluye lo que fijaron los scripts (`bru.setVar`, `bru.setCollectionVar`, `bru.setEnvVar`…) y las capturas, que tapan los valores de los archivos mientras la colección está cargada. El origen dice "Fijada por un script" o "Capturada de una respuesta", y la columna de lo tapado nombra el ámbito del archivo. Tras cada envío se recalculan todas las pestañas de la colección, no solo la enviada.
 
 ## Menú de la aplicación y "Acerca de"
 

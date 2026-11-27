@@ -42,6 +42,8 @@ pub(super) struct Open {
     /// What scripts changed in the environment, the collection and the
     /// globals, which the next scripts read; for as long as the runtime.
     pub(super) script_changes: Vec<apifast_app::VariableChange>,
+    /// The names in `runtime` a script set last, not a capture.
+    pub(super) scripted: std::collections::BTreeSet<String>,
     /// OAuth 2.0 tokens, kept while the collection is loaded.
     pub(super) tokens: Arc<dyn apifast_app::TokenStore>,
     /// Its cookie jar, shared with its transport.
@@ -343,6 +345,7 @@ impl State {
                 vault,
                 runtime: Vec::new(),
                 script_changes: Vec::new(),
+                scripted: std::collections::BTreeSet::new(),
                 tokens,
                 cookie_view: Arc::new(cookies.jar().cookies().to_vec()),
                 cookies,

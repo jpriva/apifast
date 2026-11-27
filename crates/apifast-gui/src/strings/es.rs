@@ -707,6 +707,7 @@ pub const STRINGS: Strings = Strings {
     origin_folder: "Carpeta",
     origin_request: "Petición",
     origin_runtime: "Capturada de una respuesta",
+    origin_script: "Fijada por un script",
     origin_prompt: "Escrita para este envío",
     params: "Parámetros",
     query_params: "Query",

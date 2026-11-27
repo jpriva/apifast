@@ -707,6 +707,7 @@ pub const STRINGS: Strings = Strings {
     origin_folder: "Folder",
     origin_request: "Request",
     origin_runtime: "Captured from a response",
+    origin_script: "Set by a script",
     origin_prompt: "Typed in for this send",
     params: "Params",
     query_params: "Query",

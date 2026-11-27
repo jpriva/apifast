@@ -1553,7 +1553,7 @@ fn hints(context: &TabContext, strings: &Strings) -> VariableHints {
                 (Some(value), false) => value.data.clone(),
                 _ => strings.secret_hidden.to_owned(),
             };
-            let origin = strings.origin(&variable.origin, &context.folders);
+            let origin = context.origin(name, &variable.origin, strings);
             (name.to_owned(), VariableHint { value, origin })
         })
         .collect()
@@ -2147,6 +2147,21 @@ mod tests {
         assert_eq!(hints["resource"].origin, "Folder Users");
         assert_eq!(hints["token"].value, EN.secret_hidden);
         assert!(hints.values().all(|h| !h.value.contains("s3cr3t")));
+    }
+
+    #[test]
+    fn hints_tell_a_value_a_script_set_from_a_captured_one() {
+        let runtime = [Variable::text("seen", "yes"), Variable::text("id", "7")];
+        let context = TabContext {
+            variables: resolve_variables(vec![(Origin::Runtime, &runtime[..])]),
+            scripted: ["seen".to_owned()].into(),
+            revision: 1,
+            ..TabContext::default()
+        };
+        let hints = hints(&context, &EN);
+        assert_eq!(hints["seen"].origin, EN.origin_script);
+        assert_eq!(hints["seen"].value, "yes");
+        assert_eq!(hints["id"].origin, EN.origin_runtime);
     }
 
     #[test]
