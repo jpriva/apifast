@@ -235,6 +235,8 @@ pub struct WorkspaceStateData {
     pub tabs: Vec<(PathBuf, RequestPath)>,
     /// The active tab.
     pub active: Option<(PathBuf, RequestPath)>,
+    /// The active global environment, by name.
+    pub global_environment: Option<String>,
 }
 
 /// The personal state of one workspace, in its own file.
@@ -272,6 +274,7 @@ impl FsWorkspaceState {
                 .collect(),
             tabs: items(get(&doc, "tabs")).iter().filter_map(tab).collect(),
             active: get(&doc, "active").and_then(tab),
+            global_environment: text(get(&doc, "global_environment")),
         })
     }
 
@@ -303,6 +306,10 @@ impl FsWorkspaceState {
                 Some(Value::Sequence(state.tabs.iter().map(tab).collect())),
             ),
             ("active", state.active.as_ref().map(tab)),
+            (
+                "global_environment",
+                state.global_environment.as_deref().map(string),
+            ),
         ]);
         save_yaml(&self.file, &doc)
     }

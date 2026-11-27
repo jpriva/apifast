@@ -51,7 +51,7 @@ where
         ports.collections,
         ports.environments,
         &loaded,
-        options.environment.as_deref(),
+        (options.environment.as_deref(), &options.globals),
         &options.runtime,
     )?;
     for (name, environment) in variables.secrets_without_value() {

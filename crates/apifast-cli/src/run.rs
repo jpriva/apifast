@@ -213,6 +213,7 @@ fn run_options(args: &RunArgs, folder: Option<String>, data: Vec<Vec<Variable>>)
         iterations: args.iterations,
         data,
         send: SendOptions {
+            globals: Vec::new(),
             environment: args.env.clone(),
             runtime: args
                 .vars

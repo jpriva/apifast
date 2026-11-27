@@ -49,6 +49,7 @@ impl State {
         };
         let options = SendOptions {
             environment: open.environment.clone(),
+            globals: open.globals.to_vec(),
             draft: self.tab(&key).and_then(|tab| tab.draft.clone()),
             runtime: open.runtime.clone(),
             script_changes: open.script_changes.clone(),

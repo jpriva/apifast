@@ -65,8 +65,9 @@ pub fn save_request(
 }
 
 /// Builds the variables visible to a request, with their origins, following
-/// the documented precedence: collection, environment (with `extends`),
-/// folders, request and runtime.
+/// the documented precedence: the workspace's global environment
+/// (`globals`, from [`global_variables`]), collection, environment (with
+/// `extends`), folders, request and runtime.
 ///
 /// # Errors
 ///
@@ -75,7 +76,7 @@ pub fn resolve_request_variables(
     collections: &impl CollectionRepository,
     environments: &impl EnvironmentRepository,
     loaded: &LoadedRequest,
-    environment: Option<&str>,
+    (environment, globals): (Option<&str>, &[Variable]),
     runtime: &[Variable],
 ) -> Result<ResolvedVariables, AppError> {
     let collection = collections.collection()?;
@@ -85,9 +86,34 @@ pub fn resolve_request_variables(
         None => Vec::new(),
     };
     let chain = Chain::new(&collection, &loaded.folders, &loaded.request);
-    let mut layers = chain.variable_layers(&env_chain);
+    let mut layers = vec![(Origin::Global, globals)];
+    layers.extend(chain.variable_layers(&env_chain));
     layers.push((Origin::Runtime, runtime));
     Ok(resolve_variables(layers))
+}
+
+/// The variables of the global environment `active` among the workspace's
+/// `environments`, with what it extends under it: a later one hides an
+/// earlier one of the same name. None without an active one.
+///
+/// # Errors
+///
+/// If `active` does not exist or its `extends` chain is broken.
+pub fn global_variables(
+    environments: &[apifast_domain::Environment],
+    active: Option<&str>,
+) -> Result<Vec<Variable>, AppError> {
+    let Some(active) = active else {
+        return Ok(Vec::new());
+    };
+    let mut variables: Vec<Variable> = Vec::new();
+    for environment in environment_chain(active, environments)? {
+        for variable in &environment.variables {
+            variables.retain(|v| v.name != variable.name);
+            variables.push(variable.clone());
+        }
+    }
+    Ok(variables)
 }
 
 /// Ports needed by [`send_request`].
@@ -140,6 +166,9 @@ impl<C, E, T, S> Copy for SendPorts<'_, C, E, T, S> {}
 pub struct SendOptions {
     /// Active environment.
     pub environment: Option<String>,
+    /// The variables of the workspace's active global environment, from
+    /// [`global_variables`]: the scope under every other.
+    pub globals: Vec<Variable>,
     /// Values captured from previous responses.
     pub runtime: Vec<Variable>,
     /// Send even if some variables are missing (they render empty).
@@ -486,7 +515,7 @@ where
         ports.collections,
         ports.environments,
         &loaded,
-        options.environment.as_deref(),
+        (options.environment.as_deref(), &options.globals),
         &options.runtime,
     )?;
     // Secrets come from the vault only now, for this send.
@@ -567,6 +596,7 @@ where
     let scopes = Scopes {
         collection,
         environment: (options.environment.as_deref(), &environment),
+        globals: &options.globals,
         runtime: &options.runtime,
         changed: &options.script_changes,
         in_run: options.in_run,
@@ -664,6 +694,7 @@ where
 {
     let dependency_options = SendOptions {
         environment: options.environment.clone(),
+        globals: options.globals.clone(),
         runtime: options.runtime.clone(),
         allow_unresolved: options.allow_unresolved,
         draft: None,

@@ -180,6 +180,7 @@ fn personal_state_and_the_known_list_round_trip() {
             (PathBuf::from("/b/pay"), RequestPath::new("charge.yml")),
         ],
         active: Some((PathBuf::from("/b/pay"), RequestPath::new("charge.yml"))),
+        global_environment: Some("Team prod".into()),
     };
     state.save(&data).unwrap();
     assert_eq!(state.load().unwrap(), data);

@@ -45,6 +45,7 @@ pub fn run(args: &DescribeArgs) -> Result<ExitCode> {
     } = wire(&located.root, &args.tls)?;
     let (clock, random) = (system::SystemClock, system::SystemRandom::new());
     let options = SendOptions {
+        globals: Vec::new(),
         environment: args.env.clone(),
         runtime: (args.vars.iter())
             .map(|(n, v)| Variable::text(n, v))

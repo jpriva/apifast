@@ -4,8 +4,10 @@
 
 use crate::messages::Say as _;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use apifast_app::{Workspace, WorkspaceRepository};
+use apifast_app::{EnvironmentRepository as _, Workspace, WorkspaceRepository};
+use apifast_domain::{Environment, Variable};
 use apifast_storage_fs::{
     FsKnownWorkspaces, FsWorkspace, FsWorkspaceState, KnownWorkspaces, WORKSPACE_FILE,
     WorkspaceStateData,
@@ -26,6 +28,10 @@ pub(super) struct ActiveWorkspace {
     opened: u64,
     /// Watches its folder, not its subfolders, for `workspace.yml`.
     _watcher: Option<FsWatcher>,
+    /// Its global environments, as in their files.
+    pub(super) global_files: Arc<Vec<Environment>>,
+    /// The active global environment.
+    pub(super) global_environment: Option<String>,
 }
 
 impl State {
@@ -122,11 +128,24 @@ impl State {
             }
         })
         .ok();
+        let global_files = repo.environments().unwrap_or_else(|e| {
+            self.snapshot.error = Some(e.say(self.strings));
+            Vec::new()
+        });
+        // One the files no longer have is not active.
+        let global_environment = (saved.global_environment.clone())
+            .filter(|name| global_files.iter().any(|e| &e.name == name));
+        self.snapshot.global_environment_files = Arc::new(global_files.clone());
+        self.snapshot
+            .global_environment
+            .clone_from(&global_environment);
         self.workspace = Some(ActiveWorkspace {
             repo,
             state,
             opened,
             _watcher: watcher,
+            global_files: Arc::new(global_files),
+            global_environment,
         });
         self.snapshot.workspace = Some(WorkspaceView {
             folder: folder.to_path_buf(),
@@ -294,6 +313,47 @@ impl State {
         self.listed = listed;
     }
 
+    /// The variables of the active global environment, for the sends. A
+    /// broken `extends` says why and gives none.
+    pub(super) fn global_variables(&mut self) -> Arc<Vec<Variable>> {
+        let Some(active) = &self.workspace else {
+            return Arc::default();
+        };
+        let name = active.global_environment.as_deref();
+        match apifast_app::global_variables(&active.global_files, name) {
+            Ok(variables) => Arc::new(variables),
+            Err(e) => {
+                self.snapshot.error = Some(e.say(self.strings));
+                Arc::default()
+            }
+        }
+    }
+
+    /// Makes `name` the active global environment, or none, and every tab
+    /// sees it.
+    pub(super) fn select_global_environment(&mut self, name: Option<String>) {
+        let Some(active) = &mut self.workspace else {
+            return;
+        };
+        active.global_environment =
+            name.filter(|n| active.global_files.iter().any(|e| &e.name == n));
+        self.snapshot
+            .global_environment
+            .clone_from(&active.global_environment);
+        self.write_workspace_state();
+        self.spread_globals();
+    }
+
+    /// Gives every loaded collection the active global environment's
+    /// variables, and works out again what its tabs see.
+    pub(super) fn spread_globals(&mut self) {
+        let globals = self.global_variables();
+        for open in self.open.values_mut() {
+            open.globals = globals.clone();
+        }
+        self.refresh_variables(None);
+    }
+
     /// Writes what this machine keeps of the active workspace.
     pub(super) fn write_workspace_state(&mut self) {
         let Some(active) = &self.workspace else {
@@ -308,6 +368,7 @@ impl State {
                 .map(|tab| (tab.root.clone(), tab.path.clone()))
                 .collect(),
             active: (self.snapshot.active.as_ref()).map(|key| (key.root.clone(), key.path.clone())),
+            global_environment: active.global_environment.clone(),
         };
         if let Err(e) = active.state.save(&state) {
             self.snapshot.error = Some(e.say(self.strings));

@@ -368,6 +368,8 @@ pub enum Command {
     ForgetWorkspace(PathBuf),
     /// Picks the active environment of the focused collection, or none.
     SelectEnvironment(Option<String>),
+    /// Picks the workspace's active global environment, or none.
+    SelectGlobalEnvironment(Option<String>),
     /// Opens a request in a tab, or shows its tab if it is open.
     OpenRequest(TabKey),
     /// Shows an open tab.
@@ -628,6 +630,10 @@ pub struct Snapshot {
     pub environment_files: Arc<Vec<Environment>>,
     /// Its active environment.
     pub environment: Option<String>,
+    /// The active workspace's global environments, as in their files.
+    pub global_environment_files: Arc<Vec<Environment>>,
+    /// The active global environment, if any.
+    pub global_environment: Option<String>,
     /// Open tabs, of any collection, in order.
     pub tabs: Vec<Tab>,
     /// The active tab.
@@ -1280,6 +1286,7 @@ impl State {
                 }
                 self.refresh_variables(None);
             }
+            Command::SelectGlobalEnvironment(name) => self.select_global_environment(name),
             Command::OpenRequest(key) => self.open_request(&key),
             Command::ActivateTab(key) => {
                 if self.tab(&key).is_some() {
@@ -1617,7 +1624,7 @@ impl State {
             &*open.repo,
             &*open.repo,
             &loaded,
-            open.environment.as_deref(),
+            (open.environment.as_deref(), &open.globals),
             &open.runtime,
         )
         .unwrap_or_default();
@@ -1703,6 +1710,7 @@ impl State {
         let written = (request.method.as_str().to_owned(), request.url.clone());
         let options = SendOptions {
             environment: open.environment.clone(),
+            globals: open.globals.to_vec(),
             draft: self.tab(&key).and_then(|tab| tab.draft.clone()),
             runtime: open.runtime.clone(),
             script_changes: open.script_changes.clone(),

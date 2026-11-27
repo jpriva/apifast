@@ -3028,3 +3028,60 @@ fn the_settings_choose_whether_the_last_workspace_opens_at_the_start() {
     assert_eq!(workspace_at_start(true), "Team");
     assert_eq!(workspace_at_start(false), "My workspace");
 }
+
+#[test]
+fn the_workspace_global_environment_is_under_the_collection_and_kept() {
+    use apifast_domain::Origin;
+    let dir = collection(server(Duration::ZERO));
+    std::fs::write(
+        dir.path().join("opencollection.yml"),
+        "opencollection: 1.0.0\ninfo:\n  name: API\nrequest:\n  variables:\n    - name: tenant\n      value: from-collection\n",
+    )
+    .unwrap();
+    let team = tempfile::tempdir().unwrap();
+    std::fs::write(
+        team.path().join("workspace.yml"),
+        "opencollection: 1.0.0\ninfo:\n  name: Team\n  type: workspace\ncollections:\n",
+    )
+    .unwrap();
+    std::fs::create_dir(team.path().join("environments")).unwrap();
+    std::fs::write(
+        team.path().join("environments/shared.yml"),
+        "name: shared\nvariables:\n  - name: tenant\n    value: from-global\n  - name: region\n    value: eu\n",
+    )
+    .unwrap();
+
+    let (core, _, data) = start();
+    core.send(Command::OpenWorkspace(team.path().to_path_buf()));
+    let snapshot = wait(&core, "the team workspace", |s| {
+        s.workspace.as_ref().is_some_and(|w| w.name == "Team")
+    });
+    let names: Vec<_> = (snapshot.global_environment_files.iter())
+        .map(|e| e.name.as_str())
+        .collect();
+    assert_eq!(names, ["shared"]);
+    assert_eq!(snapshot.global_environment, None);
+    open(&core, dir.path());
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
+    wait(&core, "the tab", |s| s.active_tab().is_some());
+
+    core.send(Command::SelectGlobalEnvironment(Some("shared".into())));
+    let snapshot = wait(&core, "the global values", |s| {
+        s.active_tab()
+            .is_some_and(|t| t.context.variables.get("region").is_some())
+    });
+    assert_eq!(snapshot.global_environment.as_deref(), Some("shared"));
+    let variables = &snapshot.active_tab().unwrap().context.variables;
+    assert_eq!(variables.get("region").unwrap().origin, Origin::Global);
+    // The collection's value hides the global one.
+    let tenant = variables.get("tenant").unwrap();
+    assert_eq!(tenant.origin, Origin::Collection);
+    assert_eq!(tenant.overridden, [Origin::Global]);
+    drop(core);
+
+    // This machine remembers it.
+    let core = core_in(data.path());
+    core.send(Command::Restore);
+    let snapshot = wait(&core, "restored", |s| s.workspace.is_some());
+    assert_eq!(snapshot.global_environment.as_deref(), Some("shared"));
+}

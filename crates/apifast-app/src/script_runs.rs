@@ -145,6 +145,8 @@ pub(crate) struct SendScripts {
 pub(crate) struct Scopes<'a> {
     pub(crate) collection: &'a Collection,
     pub(crate) environment: (Option<&'a str>, &'a [Variable]),
+    /// The workspace's active global environment.
+    pub(crate) globals: &'a [Variable],
     pub(crate) runtime: &'a [Variable],
     /// What scripts of earlier requests changed, by scope.
     pub(crate) changed: &'a [VariableChange],
@@ -205,7 +207,7 @@ impl SendScripts {
                 filled(&scopes.collection.defaults.variables),
             ),
             environment: changed(VariableScope::Environment, filled(scopes.environment.1)),
-            globals: changed(VariableScope::Global, Vec::new()),
+            globals: changed(VariableScope::Global, filled(scopes.globals)),
             folders: filled(
                 &(folders.iter())
                     .flat_map(|f| f.defaults.variables.iter().cloned())
