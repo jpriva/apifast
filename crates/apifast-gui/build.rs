@@ -1,6 +1,7 @@
 //! The interface's build script: the commit it is built from, the list of
-//! its languages, one per file of `src/strings/` (see that module), and the
-//! dependencies it is built with and their licenses, for the About window.
+//! its languages, one per file of `src/strings/` (see that module), the
+//! dependencies it is built with and their licenses, for the About window,
+//! and, on Windows, the executable's icon and version details.
 
 #![allow(
     clippy::print_stdout,
@@ -12,9 +13,12 @@ use std::path::Path;
 
 #[path = "../apifast-cli/build_commit.rs"]
 mod build_commit;
+#[path = "../apifast-cli/build_resources.rs"]
+mod build_resources;
 
 fn main() {
     build_commit::emit();
+    build_resources::embed("apifast-gui", "apifast");
     licenses();
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/strings");
     let mut codes: Vec<String> = std::fs::read_dir(&dir)

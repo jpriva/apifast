@@ -2,7 +2,7 @@
 
 Los comandos para compilar apifast y armar sus paquetes a mano: `.rpm`, `.deb` y AppImage en Linux, y la aplicación en Windows y macOS. No se publica nada en ningún sitio: todo queda en `target/`.
 
-Todos los comandos se ejecutan desde la raíz del repositorio. Los de Linux están probados en Fedora 45 y en un contenedor de Ubuntu 22.04. Los de Windows y macOS no se han ejecutado en esas máquinas: el CI compila y prueba el código en las dos, pero no arma ningún paquete.
+Todos los comandos se ejecutan desde la raíz del repositorio. Los de Linux están probados en Fedora 45 y en un contenedor de Ubuntu 22.04. Los de compilar en Windows se han ejecutado en Windows 11; su instalador está sin probar. Los de macOS no se han ejecutado en un Mac. El CI compila y prueba el código en los dos, pero no arma ningún paquete para ellos.
 
 ## Qué se compila
 
@@ -186,40 +186,56 @@ En un sistema sin FUSE (contenedores, algunos CI), se ejecuta con `APPIMAGE_EXTR
 
 ## Windows
 
-Sin probar en una máquina Windows: el CI compila y pasa las pruebas en `windows-latest`, pero todavía no hay instalador.
+Compilado en Windows 11 con Visual Studio Build Tools 2026. El instalador está sin probar: falta compilarlo con Inno Setup y ejecutarlo. El CI compila y pasa las pruebas en `windows-latest`, pero no arma los paquetes.
 
 ### Requisitos
 
-1. [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) con la carga de trabajo **"Desarrollo para el escritorio con C++"**: el enlazador MSVC, el SDK de Windows y el compilador de C para QuickJS.
+1. [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) con la carga de trabajo **"Desarrollo para el escritorio con C++"**: el enlazador MSVC, el compilador de C para QuickJS y el SDK de Windows, cuyo compilador de recursos (`rc.exe`) mete el icono en los `.exe`.
 2. [rustup](https://rustup.rs) (`rustup-init.exe`), con la toolchain por defecto `x86_64-pc-windows-msvc`.
 3. Git, para clonar el repositorio.
+4. [Inno Setup 6](https://jrsoftware.org/isinfo.php), solo para el instalador: `winget install JRSoftware.InnoSetup`.
 
 ### Compilar (PowerShell)
 
 ```powershell
 rustup toolchain install
+cargo fetch --locked
 cargo build --release --locked -p apifast-cli -p apifast-gui
 .\target\release\apifast.exe --version
 .\target\release\apifast-gui.exe
 ```
 
-### Armar un `.zip` portable
+`cargo fetch` descarga todos los crates de `Cargo.lock`, también los de otros sistemas. Sin él, la primera compilación en una máquina avisa de que la ventana Acerca de no listará las dependencias: su script de compilación las lee con `cargo metadata --offline`, que necesita tenerlos todos.
+
+Los dos `.exe` llevan el icono (`packaging/windows/apifast.ico`) y sus datos de versión: el script de compilación de cada uno los mete con el crate `winresource` (`crates/apifast-cli/build_resources.rs`). Si no encuentra `rc.exe`, avisa y compila sin ellos.
+
+### El `.zip` portable y el instalador
 
 ```powershell
-$version = (cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).packages |
-    Where-Object name -eq 'apifast-gui' | Select-Object -ExpandProperty version
-$dir = "target\packages\apifast-$version-windows-x86_64"
-New-Item -ItemType Directory -Force $dir | Out-Null
-Copy-Item target\release\apifast-gui.exe, target\release\apifast.exe, LICENSE-MIT, LICENSE-APACHE $dir
-Compress-Archive -Force -Path "$dir\*" -DestinationPath "$dir.zip"
+packaging\windows\build.ps1            # compila y empaqueta
+packaging\windows\build.ps1 -NoBuild   # empaqueta lo que hay en target\release
 ```
 
-Para usarlo, se descomprime donde se quiera. Para lanzar `apifast` desde cualquier terminal, se añade esa carpeta al `PATH` del usuario.
+Deja en `target\packages`:
+
+- `apifast-<versión>-windows-x86_64.zip`: los dos ejecutables y las licencias. Se descomprime donde se quiera; para lanzar `apifast` desde cualquier terminal, se añade esa carpeta al `PATH` del usuario.
+- `apifast-<versión>-windows-x86_64-setup.exe`: el instalador, hecho con Inno Setup desde `packaging/windows/apifast.iss`. Sin Inno Setup se arma solo el `.zip` y el script termina con error diciendo qué falta.
+
+El instalador:
+
+- Instala para el usuario actual, sin permisos de administrador, en `%LOCALAPPDATA%\Programs\apifast`. Su primer diálogo ofrece instalar para todos los usuarios (en `C:\Program Files\apifast`), y entonces sí los pide.
+- Añade apifast al menú Inicio y, si se elige, al escritorio.
+- Añade su carpeta al `PATH` (una tarea, marcada por defecto), para lanzar `apifast` desde cualquier terminal que se abra después. Al desinstalar la quita.
+- Registra el desinstalador en "Aplicaciones instaladas".
+- Está en inglés y en español, según el sistema.
+
+Instalar una versión más nueva encima actualiza la instalada: lo que le dice a Windows que es la misma aplicación es el `AppId` de `apifast.iss`, que no debe cambiar. En silencio, para scripts: `apifast-<versión>-windows-x86_64-setup.exe /VERYSILENT /CURRENTUSER`.
 
 ### Pendiente en Windows
 
 - `apifast-gui` compilado en release no abre ventana de consola (`windows_subsystem = "windows"`); en debug sí, para ver lo que escribe. Por eso, en release, `APIFAST_TIMINGS` no muestra nada en Windows.
-- El `.exe` no lleva todavía `packaging/windows/apifast.ico` como recurso, así que el Explorador lo muestra sin icono (la ventana sí lo tiene). No tiene entrada en el menú Inicio. Tampoco hay instalador (MSI o MSIX) ni firma de código; sin firma, SmartScreen puede avisar la primera vez.
+- Sin firma de código, SmartScreen puede avisar la primera vez que se ejecuta el instalador.
+- El CI no arma el instalador: `.github/workflows/packages.yml` solo hace los paquetes de Linux.
 
 ## macOS
 
@@ -324,12 +340,12 @@ packaging/icons.sh
 Escribe:
 
 - `packaging/linux/icons/hicolor/<n>x<n>/apps/com.tryxtek.apifast.png`, de 16 a 512 px: para los escritorios que no dibujan SVG. Van en los paquetes y en `install-local.sh`. El de 128 px va además dentro de `apifast-gui`, como icono de la ventana (X11, Windows).
-- `packaging/windows/apifast.ico`, de 16 a 256 px.
+- `packaging/windows/apifast.ico`, de 16 a 256 px: va dentro de `apifast-gui.exe` y `apifast.exe`, y es el icono del instalador.
 - `packaging/macos/icon-1024.png`, del que sale el `.icns` de macOS.
 
 Los PNG salen iguales byte a byte con el mismo SVG. Después de cambiar el SVG se ejecuta de nuevo y se hace commit de lo que cambie.
 
-El icono del `.exe` en el Explorador de Windows necesita además meter el `.ico` como recurso al compilar en Windows; está pendiente, con el resto del empaquetado de Windows. Mientras tanto, la ventana y la barra de tareas usan el icono de la ventana.
+El icono del `.exe` en el Explorador de Windows es ese `.ico`, que el script de compilación mete como recurso al compilar en Windows (ver [Windows](#windows)). El instalador lo usa también como icono propio.
 
 ## Versiones y actualizaciones
 

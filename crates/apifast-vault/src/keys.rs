@@ -1,5 +1,6 @@
 //! Where the master key lives: the system keyring, or a file readable only
-//! by its owner when there is no keyring (docs/06, ADR 0005).
+//! by its owner when there is no keyring (docs/06, ADR 0005). On Windows,
+//! "only by its owner" is the work of `windows_acl`.
 //!
 //! The file is a fallback for systems without a keyring, never for a keyring
 //! that fails: if the keyring is there but locked or broken, that is an
@@ -212,12 +213,32 @@ pub(crate) fn owner_only(path: &Path) -> io::Result<fs::File> {
         use std::os::unix::fs::OpenOptionsExt as _;
         options.mode(0o600);
     }
+    // On Windows the file is closed to others once made, while it is still
+    // empty. What an interrupted write left is removed first: it would
+    // bring whatever was granted on it.
+    #[cfg(windows)]
+    match fs::remove_file(path) {
+        Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
+        _ => {}
+    }
     let file = options.open(path)?;
+    #[cfg(windows)]
+    crate::windows_acl::close(path)?;
+    #[cfg(not(windows))]
     restrict(path)?;
     Ok(file)
 }
 
-/// Makes `path` readable and writable only by its owner.
+/// Makes `path`, a file that is already there, readable and writable only
+/// by its owner: mode `0600` on Unix, an access list with only the user on
+/// Windows. On other systems it does nothing.
+#[cfg_attr(
+    not(any(unix, windows)),
+    allow(
+        clippy::unnecessary_wraps,
+        reason = "it can fail only where it changes the permissions"
+    )
+)]
 fn restrict(path: &Path) -> io::Result<()> {
     #[cfg(unix)]
     {
@@ -227,7 +248,9 @@ fn restrict(path: &Path) -> io::Result<()> {
             fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
         }
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    crate::windows_acl::close(path)?;
+    #[cfg(not(any(unix, windows)))]
     let _ = path;
     Ok(())
 }

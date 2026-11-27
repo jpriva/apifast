@@ -18,6 +18,8 @@ mod sealed;
 mod secrets;
 mod shareable;
 mod tokens;
+#[cfg(windows)]
+mod windows_acl;
 
 pub use collection::{CollectionKeyStore, check_challenge, new_challenge};
 pub use cookies::FsCookieStore;

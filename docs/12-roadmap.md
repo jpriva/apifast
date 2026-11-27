@@ -463,6 +463,8 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
       - el commit por gix podía ocultar cambios ("racy git") y dejar una caché de árboles obsoleta;
       - el diálogo "New collection" crecía con una ruta larga hasta dejar "Create" fuera de alcance;
       - varias pruebas suponían rutas sin enlaces (`/var` → `/private/var` en macOS) o sin `\r\n` (Windows).
+    - [x] Windows: los `.exe` llevan el icono y sus datos de versión (`winresource`, en el script de compilación), y `packaging/windows/build.ps1` arma un `.zip` portable y un instalador con Inno Setup, por usuario y sin administrador, con entrada en el menú Inicio, `PATH` y desinstalador ([docs/13](13-compilar-y-empaquetar.md#windows)). Falta la firma de código y armarlo en CI.
+    - [x] Windows: los archivos `0600` de la bóveda quedan abiertos solo a su usuario, con `icacls` ([docs/06](06-boveda-de-secretos.md#clave-maestra)). Antes heredaban los accesos de su carpeta. Falta medir lo que añade a un envío con cookies.
     - [ ] En Windows, `canonicalize` da rutas `\\?\C:\…` y el núcleo las guarda así, y así podrían verse en la interfaz. Hay que resolver las rutas sin ese prefijo (como hace el crate `dunce`) en el núcleo y en `apifast-storage-fs`, y probarlo en Windows.
 - [x] Actualizaciones.
   - [x] Versiones: `tools/release.sh <versión>` la pone en el workspace y en el metainfo, hace el commit y el tag `v<versión>`, sin publicar nada. `apifast --version` y la ventana de ajustes dicen la versión y el commit compilado.
