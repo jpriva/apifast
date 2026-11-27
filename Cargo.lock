@@ -329,6 +329,7 @@ dependencies = [
  "apifast-vault",
  "apifast-ws",
  "clap",
+ "dunce",
  "futures-util",
  "http",
  "prost",
@@ -358,6 +359,7 @@ dependencies = [
  "apifast-domain",
  "apifast-git-contract",
  "apifast-storage-fs",
+ "dunce",
  "gix",
 ]
 
@@ -415,6 +417,7 @@ dependencies = [
  "apifast-vault",
  "apifast-watch",
  "apifast-ws",
+ "dunce",
  "eframe",
  "egui_kittest",
  "egui_tiles",
@@ -533,6 +536,7 @@ version = "0.1.0"
 dependencies = [
  "apifast-app",
  "apifast-domain",
+ "dunce",
  "oneyaml",
  "proptest",
  "serde_json",
@@ -568,6 +572,7 @@ dependencies = [
 name = "apifast-watch"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "notify",
  "tempfile",
  "thiserror 2.0.21",

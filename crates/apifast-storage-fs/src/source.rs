@@ -8,7 +8,7 @@ use std::path::{Component, Path, PathBuf};
 /// `/` form; absolute if they share no ancestor (other drives).
 pub fn import_source(root: &Path, file: &Path) -> String {
     let absolute = |p: &Path| {
-        std::fs::canonicalize(p).unwrap_or_else(|_| {
+        dunce::canonicalize(p).unwrap_or_else(|_| {
             std::env::current_dir().map_or_else(|_| p.to_path_buf(), |dir| dir.join(p))
         })
     };
@@ -45,8 +45,8 @@ mod tests {
         std::fs::write(&spec, "x").unwrap();
         let source = import_source(&root, &spec);
         assert_eq!(source, "../../specs/pets.yaml");
-        let back = std::fs::canonicalize(import_source_path(&root, &source)).unwrap();
-        assert_eq!(back, std::fs::canonicalize(&spec).unwrap());
+        let back = dunce::canonicalize(import_source_path(&root, &source)).unwrap();
+        assert_eq!(back, dunce::canonicalize(&spec).unwrap());
         let inside = root.join("api.yaml");
         std::fs::write(&inside, "x").unwrap();
         assert_eq!(import_source(&root, &inside), "api.yaml");

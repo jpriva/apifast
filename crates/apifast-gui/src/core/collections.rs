@@ -95,9 +95,11 @@ pub(super) struct Listed {
     pub(super) error: Option<String>,
 }
 
-/// `path` without `.` and `..` and symbolic links, when it exists.
+/// `path` without `.` and `..` and symbolic links, when it exists. On
+/// Windows, without the `\\?\` prefix `canonicalize` adds, where the path
+/// can do without it.
 pub(super) fn canonical(path: &Path) -> PathBuf {
-    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+    dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 impl State {

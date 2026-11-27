@@ -97,7 +97,10 @@ impl FsWatcher {
         };
         // Events carry absolute paths, which may be resolved (macOS reports
         // `/private/var` for `/var`): try both forms of the root.
-        let roots = vec![root.to_owned(), root.canonicalize().map_err(|e| error(&e))?];
+        let roots = vec![
+            root.to_owned(),
+            dunce::canonicalize(root).map_err(|e| error(&e))?,
+        ];
         let (sender, receiver) = mpsc::channel();
         let mut watcher = notify::recommended_watcher(sender).map_err(|e| error(&e))?;
         watcher.watch(root, mode).map_err(|e| error(&e))?;

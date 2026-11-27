@@ -143,6 +143,11 @@ fn opens_a_collection_with_its_tree_and_environments() {
         .collect();
     assert_eq!(names, ["Users", "Health"]);
     assert_eq!(snapshot.environments, ["local", "staging"]);
+    // The root is shown and written: never Windows' `\\?\` form of it.
+    for entry in &snapshot.collections {
+        let root = entry.root.to_string_lossy();
+        assert!(!root.starts_with(r"\\?\"), "{root}");
+    }
     assert!(
         repaints.load(Ordering::Relaxed) >= 1,
         "the interface was not told to repaint"
@@ -1542,7 +1547,7 @@ fn a_folder_without_a_collection_is_remembered_to_offer_one() {
     let snapshot = wait(&core, "the error", |s| s.error.is_some());
     // The folder as the core keeps it: resolved (`/private/var` on macOS,
     // `\\?\C:\…` on Windows).
-    let resolved = dir.path().canonicalize().unwrap();
+    let resolved = dunce::canonicalize(dir.path()).unwrap();
     assert_eq!(
         snapshot.missing_collection.as_deref(),
         Some(resolved.as_path())
@@ -1564,7 +1569,7 @@ fn core_in(data: &Path) -> Core {
 
 /// Opens the collection in `dir` and waits until it is the focused one.
 fn open_root(core: &Core, dir: &Path) -> std::path::PathBuf {
-    let root = dir.canonicalize().unwrap();
+    let root = dunce::canonicalize(dir).unwrap();
     core.send(Command::OpenCollection(dir.to_path_buf()));
     wait(core, "the collection focused", |s| {
         s.collection.as_ref().is_some_and(|c| c.root == root)
@@ -1746,7 +1751,7 @@ fn workspaces_switch_with_their_own_collections_and_tabs() {
     assert_eq!(snapshot.collections.len(), 2);
     assert_eq!(
         snapshot.default_parent,
-        team.path().join("team").canonicalize().unwrap()
+        dunce::canonicalize(team.path().join("team")).unwrap()
     );
 
     core.send(Command::OpenWorkspace(default.folder.clone()));
@@ -2437,7 +2442,9 @@ fn a_postman_export_is_reviewed_then_imported_and_opened() {
     let target = dir.path().join("imported-shop");
     core.send(Command::ApplyImport(target.clone()));
     // Resolved by its parent, which exists: the target does not yet.
-    let root = dir.path().canonicalize().unwrap().join("imported-shop");
+    let root = dunce::canonicalize(dir.path())
+        .unwrap()
+        .join("imported-shop");
     let snapshot = wait(&core, "the collection open", |s| {
         s.import.is_none() && s.collection.as_ref().is_some_and(|c| c.root == root)
     });
@@ -2558,7 +2565,7 @@ fn an_imported_collection_is_imported_again_with_the_chosen_changes() {
         s.import.is_none() && s.collection.is_some()
     });
     let root = snapshot.collection.as_ref().unwrap().root.clone();
-    assert_eq!(root, target.canonicalize().unwrap());
+    assert_eq!(root, dunce::canonicalize(&target).unwrap());
 
     // The spec changes a request and adds one.
     let extra = "  /owners:\n    get: {operationId: listOwners, summary: List owners}\n";
@@ -2567,8 +2574,12 @@ fn an_imported_collection_is_imported_again_with_the_chosen_changes() {
     let snapshot = wait(&core, "the reimport", |s| s.reimport.is_some());
     let view = snapshot.reimport.clone().unwrap();
     assert!(view.plan.is_none());
-    let previous = view.previous_source.unwrap().canonicalize().unwrap();
-    assert_eq!(previous, spec.canonicalize().unwrap(), "proposed again");
+    let previous = dunce::canonicalize(view.previous_source.unwrap()).unwrap();
+    assert_eq!(
+        previous,
+        dunce::canonicalize(&spec).unwrap(),
+        "proposed again"
+    );
 
     core.send(Command::PlanReimport(spec.clone()));
     let snapshot = wait(&core, "the reimport plan", |s| {
