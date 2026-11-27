@@ -401,10 +401,10 @@
         },
         getGlobalEnvVar: (name) => scopes.global.get(name),
         hasGlobalEnvVar: (name) => scopes.global.has(name),
-        setGlobalEnvVar(name, value) {
+        setGlobalEnvVar(name, value, options) {
             validName(name);
             scopes.global.set(name, value);
-            change('global', name, value, false);
+            change('global', name, value, Boolean(options?.persist));
         },
         deleteGlobalEnvVar(name) {
             scopes.global.delete(name);

@@ -3153,3 +3153,55 @@ fn global_environments_are_created_saved_renamed_and_deleted() {
             .is_none()
     );
 }
+
+#[test]
+fn global_values_scripts_persist_are_saved_when_the_user_agrees() {
+    use apifast_domain::{ScriptBlock, ScriptKind};
+    use apifast_gui::core::GlobalCommand;
+    let dir = collection(server(Duration::ZERO));
+    let (core, _, _data) = start();
+    open(&core, dir.path());
+    let snapshot = wait(&core, "a workspace", |s| s.workspace.is_some());
+    let folder = snapshot.workspace.clone().unwrap().folder;
+    core.send(Command::GlobalEnvironment(GlobalCommand::Create(
+        "team".into(),
+    )));
+    core.send(Command::SelectGlobalEnvironment(Some("team".into())));
+    core.send(Command::SaveScripts {
+        root: root(&core),
+        folder: None,
+        scripts: vec![ScriptBlock::new(
+            ScriptKind::AfterResponse,
+            "bru.setGlobalEnvVar('shared', 'x' + 'y', { persist: true }); bru.setGlobalEnvVar('passing', 1)",
+        )],
+    });
+    core.send(Command::SelectEnvironment(Some("local".into())));
+    core.send(Command::OpenRequest(at(&core, "health.yml")));
+    wait(&core, "the tab", |s| {
+        s.active_tab().is_some() && s.global_environment.as_deref() == Some("team")
+    });
+    core.send(Command::Send);
+    let snapshot = wait(&core, "the values to keep", |s| s.captured.is_some());
+    let captured = snapshot.captured.as_ref().unwrap();
+    assert_eq!(captured.global_environment, "team");
+    assert_eq!(captured.global, ["shared"]);
+    assert!(captured.names.is_empty() && captured.collection.is_empty());
+
+    core.send(Command::SaveCaptures {
+        root: root(&core),
+        save: true,
+    });
+    let file = folder.join("environments/team.yml");
+    let snapshot = wait(&core, "saved", |s| {
+        s.captured.is_none()
+            && std::fs::read_to_string(&file).is_ok_and(|text| text.contains("name: shared"))
+    });
+    let text = std::fs::read_to_string(&file).unwrap();
+    assert!(text.contains("value: xy"), "{text}");
+    assert!(
+        !text.contains("name: passing"),
+        "only what asked to persist: {text}"
+    );
+    let team = &snapshot.global_environment_files[0];
+    assert!(team.variables.iter().any(|v| v.name == "shared"));
+}

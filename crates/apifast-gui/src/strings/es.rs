@@ -539,6 +539,7 @@ pub const STRINGS: Strings = Strings {
     discard_captures: "Descartar",
     captured_for_collection: "Para la colección: {names}. Se usan por ahora; guárdalas para conservarlas.",
     save_to_collection: "Guardar en la colección",
+    captured_for_global: "Para el entorno global {environment}: {names}. Se usan por ahora; guárdalas para conservarlas.",
     runner: "Ejecutor",
     run_menu: "Ejecutar…",
     run_recursive: "Subcarpetas",

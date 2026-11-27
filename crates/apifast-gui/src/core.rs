@@ -696,6 +696,10 @@ pub struct PendingCaptures {
     pub names: Vec<String>,
     /// The collection's variables, in capture order.
     pub collection: Vec<String>,
+    /// The global environment; empty when none is active.
+    pub global_environment: String,
+    /// The global environment's variables, in order.
+    pub global: Vec<String>,
 }
 
 /// A workspace.
@@ -1860,6 +1864,7 @@ impl State {
                 self.note_captures(&key.root, &checks.captures);
                 let persisted = captures::persisted(&checks.scripts.variables);
                 self.note_captures(&key.root, &persisted);
+                self.note_global(&key.root, &checks.scripts.variables);
                 ResponseState::Received(received)
             }
             Err(AppError::Transport(TransportError::Cancelled)) => ResponseState::Cancelled,

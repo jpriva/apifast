@@ -1944,9 +1944,22 @@ fn captures_banner(
                 .replace("{names}", &captured.collection.join(", ")),
         );
     }
-    let save = match (captured.names.is_empty(), captured.collection.is_empty()) {
-        (false, true) => strings.save_to_environment,
-        (true, false) => strings.save_to_collection,
+    if !captured.global.is_empty() {
+        texts.push(
+            strings
+                .captured_for_global
+                .replace("{environment}", &captured.global_environment)
+                .replace("{names}", &captured.global.join(", ")),
+        );
+    }
+    let places = [
+        !captured.names.is_empty(),
+        !captured.collection.is_empty(),
+        !captured.global.is_empty(),
+    ];
+    let save = match places {
+        [true, false, false] => strings.save_to_environment,
+        [false, true, false] => strings.save_to_collection,
         _ => strings.save,
     };
     egui::Frame::new()

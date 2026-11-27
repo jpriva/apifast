@@ -896,6 +896,9 @@ pub struct Strings {
     pub captured_for_collection: &'static str,
     /// Writes the captured values to the collection's file.
     pub save_to_collection: &'static str,
+    /// Banner over the editor; `{environment}` and `{names}` are replaced:
+    /// values scripts asked to keep in the global environment.
+    pub captured_for_global: &'static str,
     /// Title of the runner window.
     pub runner: &'static str,
     /// Tree menu: open the runner on a collection or folder.
