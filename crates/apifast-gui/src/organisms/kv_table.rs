@@ -236,6 +236,7 @@ impl<'a, T: KvRow> KvTable<'a, T> {
             placeholder: strings.value,
             missing: strings.variable_missing,
             generated: strings.variable_generated,
+            edit: strings.variable_edit,
         };
         // Rows laid out by hand, not with a grid: a field in a grid cell only
         // gets the width its column measured before, so it never grows.

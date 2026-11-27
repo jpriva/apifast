@@ -222,6 +222,11 @@ La edición con resaltado se limita a unos 200 KB: con más texto, egui tarda de
 - Marcar una variable como secreta la hace **solo local**. Compartirla con el equipo es una acción aparte (la casilla Shared, con una explicación breve de lo que implica).
 - El valor de un secreto se escribe en un campo oculto. Su estado (guardado en esta máquina, compartido, bloqueado porque falta la clave de la colección, o sin valor) se ve en el campo vacío, al pasar el ratón y en su nombre accesible. Reveal lo muestra 15 segundos.
 - Los valores guardados que ya no usa ninguna variable secreta se listan bajo la tabla, con un botón para olvidarlos.
+- **Editar una variable desde donde se usa**, como en Bruno: `Ctrl+clic` sobre una `{{variable}}` de cualquier campo (URL, tablas, editores de body y de auth), o `F2` con el cursor de texto dentro, abre una ventana pequeña. Muestra lo que vale ahora y de dónde viene, un campo con el valor y "Guardar en": la request, cada una de sus carpetas, el entorno activo o la colección. Viene elegido el ámbito donde está escrito el valor que ve la request; si un script o una captura lo tapan, el del archivo que tapan; si no existe, la request.
+  - En la request va a su borrador, que se guarda con `Ctrl+S`; en una carpeta o la colección se escribe en su archivo, y en el entorno, en el suyo.
+  - Un secreto no se escribe ahí: el de un entorno se cambia en la ventana de entornos, y los demás ámbitos no guardan valores secretos.
+  - "Global" no aparece mientras no exista el ámbito `Global`.
+- El tooltip de una variable recuerda cómo editarla.
 - Vista "todas las variables": cada variable efectiva con su valor y el ámbito del que procede.
 - Esa vista y el tooltip de una `{{variable}}` muestran lo que usará el próximo envío. Eso incluye lo que fijaron los scripts (`bru.setVar`, `bru.setCollectionVar`, `bru.setEnvVar`…) y las capturas, que tapan los valores de los archivos mientras la colección está cargada. El origen dice "Fijada por un script" o "Capturada de una respuesta", y la columna de lo tapado nombra el ámbito del archivo. Tras cada envío se recalculan todas las pestañas de la colección, no solo la enviada.
 
@@ -355,6 +360,7 @@ Búsqueda difusa, resultados recientes primero y el atajo de cada acción a la d
 | Cambiar disposición de paneles | `Ctrl+J` |
 | Duplicar / renombrar | `Ctrl+D` / `F2` |
 | Formatear body | `Alt+Shift+F` |
+| Editar la variable bajo el cursor | `F2` con el cursor de texto dentro de una `{{variable}}`, o `Ctrl+clic` sobre ella. Renombrar con `F2` es sobre una fila del árbol, así que no chocan |
 | Zoom | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` |
 | Mostrar historial | (sin atajo) |
 | Editor de atajos | (sin atajo; desde la paleta o el menú) |

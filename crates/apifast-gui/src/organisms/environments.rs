@@ -502,6 +502,7 @@ fn variables(
         placeholder: strings.value,
         missing: strings.variable_missing,
         generated: strings.variable_generated,
+        edit: strings.variable_edit,
     };
     let id = ui.make_persistent_id("environment-variables");
     let columns = Columns::new(ui);

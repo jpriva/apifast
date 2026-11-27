@@ -272,6 +272,7 @@ fn variables_are_suggested_after_an_open_tag() {
         placeholder: "URL",
         missing: "missing",
         generated: "generated",
+        edit: "edit",
     };
     let mut harness = Harness::builder()
         .with_size(egui::vec2(500.0, 300.0))

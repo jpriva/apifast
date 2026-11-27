@@ -1218,6 +1218,17 @@ pub struct Strings {
     pub variable_missing: &'static str,
     /// Hover of a tag whose value is made when sending.
     pub variable_generated: &'static str,
+    /// Under a variable in a field: how to edit it or add it.
+    pub variable_edit: &'static str,
+    /// Action: edit the variable under the text cursor.
+    pub action_edit_variable: &'static str,
+    /// Variable editor: the choice of where the value is saved.
+    pub variable_save_in: &'static str,
+    /// Variable editor: what the variable is now, before the value.
+    pub variable_now: &'static str,
+    /// Variable editor: a secret of an environment is changed in the
+    /// environments window.
+    pub variable_secret_in_environments: &'static str,
     /// Shown instead of a secret's value.
     pub secret_hidden: &'static str,
     /// Origin: apifast's default.

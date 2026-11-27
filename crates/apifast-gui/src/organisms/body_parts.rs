@@ -107,6 +107,7 @@ pub fn multipart(
         placeholder: strings.value,
         missing: strings.variable_missing,
         generated: strings.variable_generated,
+        edit: strings.variable_edit,
     };
     let id = ui.make_persistent_id("multipart-parts");
     let mut changed = false;

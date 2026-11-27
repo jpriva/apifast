@@ -697,3 +697,94 @@ fn the_system_language_shows_and_the_settings_change_it_at_once() {
     harness.get_by_label(EN.settings_appearance);
     assert!(harness.query_by_label(es.strings.new_collection).is_none());
 }
+
+/// Selects everything in the focused field and types `text` over it.
+fn replace_focused(harness: &mut Harness<'_, App>, text: &str) {
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    harness.step();
+    type_into_focus(harness, text);
+    harness.step();
+}
+
+#[test]
+fn a_variable_is_edited_from_the_url_and_saved_where_the_user_chooses() {
+    use apifast_gui::strings::EN;
+    use egui_kittest::kittest::NodeT as _;
+    let dir = collection(server());
+    let data = tempfile::tempdir().unwrap();
+    let mut harness = open_app(dir.path(), data.path());
+    (harness.state().core()).send(Command::SelectEnvironment(Some("local".into())));
+    harness.get_by_label("Users").click();
+    wait_for(&mut harness, "List users");
+    harness
+        .get_by_role_and_label(Role::TreeItem, "List users")
+        .click();
+    wait_for(&mut harness, "Send");
+
+    // The text cursor inside `{{host}}`, then the shortcut.
+    harness
+        .get_by_role_and_label(Role::TextInput, "URL")
+        .focus();
+    harness.step();
+    harness.key_press(egui::Key::Home);
+    for _ in 0..3 {
+        harness.key_press(egui::Key::ArrowRight);
+    }
+    harness.step();
+    harness.key_press(egui::Key::F2);
+    wait_for(&mut harness, "{{host}}");
+    // It is the environment's, so that is picked; the folder is offered.
+    harness.get_by_label(&format!("{} local", EN.origin_environment));
+    harness.get_by_label(EN.variable_save_in).click();
+    harness.step();
+    harness.step();
+    harness.get_by_label(&format!("{} Users", EN.origin_folder));
+    // The sidebar has a tab of that name too: the option is the one not
+    // chosen.
+    let option = harness
+        .query_all_by_role_and_label(Role::Button, EN.origin_collection)
+        .find(|node| node.accesskit_node().toggled() != Some(egui::accesskit::Toggled::True))
+        .unwrap();
+    option.click();
+    harness.step();
+    harness
+        .get_by_role_and_label(Role::TextInput, "{{host}}")
+        .focus();
+    harness.step();
+    replace_focused(&mut harness, "http://collection.test");
+    harness.get_by_label(EN.save).click();
+    let file = dir.path().join("opencollection.yml");
+    wait_until(&mut harness, "the collection's file", || {
+        std::fs::read_to_string(&file)
+            .unwrap()
+            .contains("http://collection.test")
+    });
+    // The environment's value is left as it was.
+    let local = std::fs::read_to_string(dir.path().join("environments/local.yml")).unwrap();
+    assert!(!local.contains("collection.test"), "{local}");
+
+    // A variable not defined anywhere goes to the request by default.
+    harness
+        .get_by_role_and_label(Role::TextInput, "URL")
+        .focus();
+    harness.step();
+    replace_focused(&mut harness, "{{host}}/users?page={{page}}");
+    harness.key_press(egui::Key::ArrowLeft);
+    harness.step();
+    harness.key_press(egui::Key::F2);
+    wait_for(&mut harness, "{{page}}");
+    harness
+        .get_by_role_and_label(Role::TextInput, "{{page}}")
+        .focus();
+    harness.step();
+    replace_focused(&mut harness, "2");
+    harness.get_by_label(EN.save).click();
+    wait_for(&mut harness, &format!("{} (1)", EN.variables));
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::S);
+    let request = dir.path().join("users/list.yml");
+    wait_until(&mut harness, "the request's file", || {
+        std::fs::read_to_string(&request)
+            .unwrap()
+            .contains("name: page")
+    });
+}

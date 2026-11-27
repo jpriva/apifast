@@ -69,6 +69,7 @@ fn texts(strings: &Strings, placeholder: &'static str) -> TemplateFieldTexts<'st
         placeholder,
         missing: strings.variable_missing,
         generated: strings.variable_generated,
+        edit: strings.variable_edit,
     }
 }
 

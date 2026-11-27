@@ -393,6 +393,7 @@ fn texts(strings: &Strings) -> TemplateFieldTexts<'_> {
         placeholder: strings.value,
         missing: strings.variable_missing,
         generated: strings.variable_generated,
+        edit: strings.variable_edit,
     }
 }
 

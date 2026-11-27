@@ -386,6 +386,86 @@ fn the_variables_window_edits_a_collections_variables_and_saves_them() {
 }
 
 #[test]
+fn the_variable_editor_keeps_secrets_and_saves_where_chosen() {
+    use apifast_domain::{Variable, VariableValue};
+    use apifast_gui::atoms::VariableHint;
+    use apifast_gui::organisms::{HomeChoice, VariableEdit, VariableEditor, VariableHome};
+    use egui::accesskit::Role;
+    struct State {
+        editor: VariableEditor,
+        saved: Option<VariableEdit>,
+    }
+    let mut editor = VariableEditor::default();
+    let now = VariableHint {
+        value: EN.secret_hidden.into(),
+        origin: "Environment local".into(),
+    };
+    editor.open(
+        ("token".into(), Some(now)),
+        vec![
+            HomeChoice {
+                home: VariableHome::Request,
+                label: EN.origin_request.into(),
+                current: None,
+            },
+            HomeChoice {
+                home: VariableHome::Environment("local".into()),
+                label: "Environment local".into(),
+                current: Some(Variable::secret("token")),
+            },
+        ],
+        1,
+        String::new(),
+    );
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(600.0, 400.0))
+        .build_ui_state(
+            |ui, state: &mut State| {
+                let ctx = ui.ctx().clone();
+                if let Some(saved) = state.editor.show(&ctx, &EN) {
+                    state.saved = Some(saved);
+                }
+            },
+            State {
+                editor,
+                saved: None,
+            },
+        );
+    harness.run();
+    // An environment's secret is changed in the environments window.
+    harness.get_by_label(EN.variable_secret_in_environments);
+    assert!(
+        harness
+            .query_by_role_and_label(Role::TextInput, "{{token}}")
+            .is_none()
+    );
+    harness.get_by_label(EN.variable_save_in).click();
+    harness.run();
+    harness.get_by_label(EN.origin_request).click();
+    harness.run();
+    let field = harness.get_by_role_and_label(Role::TextInput, "{{token}}");
+    assert_eq!(field.value().as_deref(), Some(""), "never the placeholder");
+    field.focus();
+    harness.run();
+    harness
+        .input_mut()
+        .events
+        .push(egui::Event::Text("abc".into()));
+    harness.run();
+    harness.get_by_label(EN.save).click();
+    harness.run();
+    assert_eq!(
+        harness.state().saved,
+        Some(VariableEdit {
+            name: "token".into(),
+            home: VariableHome::Request,
+            value: VariableValue::text("abc"),
+        })
+    );
+    assert!(!harness.state().editor.is_open());
+}
+
+#[test]
 fn pasting_a_curl_command_into_the_url_is_an_event_and_not_text() {
     let mut events = Vec::new();
     let (mut method, mut url) = (Method::Get, String::new());

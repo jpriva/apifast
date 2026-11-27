@@ -93,6 +93,8 @@ pub struct TemplateFieldTexts<'a> {
     pub missing: &'a str,
     /// Shown for a tag whose value is made when sending.
     pub generated: &'a str,
+    /// Under a variable: how to edit it or add it.
+    pub edit: &'a str,
 }
 
 /// The field. Edits `text` in place.
@@ -225,18 +227,7 @@ impl<'a> TemplateField<'a> {
                 response.mark_changed();
             }
         }
-        if let Some(pointer) = response.hover_pos() {
-            let index = output
-                .galley
-                .cursor_from_pos(pointer - output.galley_pos)
-                .index
-                .0;
-            if let Some(span) = span_at(text, index, hints) {
-                response
-                    .clone()
-                    .on_hover_ui_at_pointer(|ui| hover(ui, &span, hints, texts));
-            }
-        }
+        variables_under(ui, &response, &output, text, (hints, texts));
         response
     }
 }
@@ -295,6 +286,37 @@ pub(crate) fn span_at(text: &str, index: usize, hints: &VariableHints) -> Option
     })
 }
 
+/// What a field does with the variables of `text` under the pointer and
+/// the text cursor: shows the hover of the one pointed at, and follows
+/// them for editing ([`super::variable_edit`]).
+pub(crate) fn variables_under(
+    ui: &egui::Ui,
+    response: &egui::Response,
+    output: &egui::text_edit::TextEditOutput,
+    text: &str,
+    (hints, texts): (&VariableHints, TemplateFieldTexts<'_>),
+) {
+    let mut under_pointer = None;
+    if let Some(pointer) = response.hover_pos() {
+        let index = output
+            .galley
+            .cursor_from_pos(pointer - output.galley_pos)
+            .index
+            .0;
+        if let Some(span) = span_at(text, index, hints) {
+            response
+                .clone()
+                .on_hover_ui_at_pointer(|ui| hover(ui, &span, hints, texts));
+            under_pointer = span.variable;
+        }
+    }
+    let cursor = output.state.cursor.char_range().map(|r| r.primary.index.0);
+    let under_cursor = cursor
+        .and_then(|at| span_at(text, at, hints))
+        .and_then(|span| span.variable);
+    super::variable_edit::follow(ui, response, under_pointer.as_deref(), under_cursor);
+}
+
 pub(crate) fn hover(
     ui: &mut egui::Ui,
     span: &Span,
@@ -316,6 +338,7 @@ pub(crate) fn hover(
             ui.label(RichText::new(texts.missing).color(palette.variable_missing));
         }
     }
+    ui.label(RichText::new(texts.edit).color(palette.text_muted).small());
 }
 
 fn layout_job(

@@ -124,6 +124,7 @@ pub fn variables_table(
         placeholder: strings.value,
         missing: strings.variable_missing,
         generated: strings.variable_generated,
+        edit: strings.variable_edit,
     };
     let columns = Columns::new(ui);
     let mut changed = false;
