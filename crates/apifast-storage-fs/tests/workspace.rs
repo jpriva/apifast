@@ -203,3 +203,80 @@ fn personal_state_and_the_known_list_round_trip() {
     assert_eq!(odd.tabs, [(PathBuf::from("/a"), RequestPath::new("r.yml"))]);
     assert_eq!(odd.expanded, Vec::<PathBuf>::new());
 }
+
+/// The corpus workspace with Bruno's global environments, copied to a
+/// temporary folder.
+fn workspace_with_environments() -> (tempfile::TempDir, FsWorkspace) {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/corpus/bruno/tests/environments/environment-inheritance/fixtures/workspace");
+    let dir = tempfile::tempdir().unwrap();
+    fs::copy(
+        source.join("workspace.yml"),
+        dir.path().join("workspace.yml"),
+    )
+    .unwrap();
+    fs::create_dir(dir.path().join("environments")).unwrap();
+    for file in fs::read_dir(source.join("environments")).unwrap() {
+        let file = file.unwrap().path();
+        fs::copy(
+            &file,
+            dir.path()
+                .join("environments")
+                .join(file.file_name().unwrap()),
+        )
+        .unwrap();
+    }
+    let repo = FsWorkspace::open(dir.path()).unwrap();
+    (dir, repo)
+}
+
+#[test]
+fn a_workspace_reads_and_writes_its_global_environments() {
+    use apifast_app::EnvironmentRepository as _;
+    use apifast_domain::Variable;
+    let (dir, repo) = workspace_with_environments();
+    let environments = repo.environments().unwrap();
+    let names: Vec<_> = environments.iter().map(|e| e.name.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "workspace_base",
+            "workspace_dev",
+            "workspace_qa",
+            "workspace_scripted",
+            "workspace_staging"
+        ]
+    );
+    let dev = environments
+        .iter()
+        .find(|e| e.name == "workspace_dev")
+        .unwrap();
+    assert_eq!(dev.extends.as_deref(), Some("workspace_base"));
+
+    // Saving one changes only what changed.
+    let file = dir.path().join("environments/workspace_dev.yml");
+    let before = fs::read_to_string(&file).unwrap();
+    let mut dev = dev.clone();
+    dev.variables.push(Variable::text("added", "1"));
+    repo.save_environment(&dev).unwrap();
+    let after = fs::read_to_string(&file).unwrap();
+    assert!(after.starts_with(before.trim_end()), "{after}");
+    assert!(after.contains("name: added"), "{after}");
+
+    // A new one gets its own file, named after it.
+    let mut created = apifast_domain::Environment::new("Team prod", Vec::new());
+    created
+        .variables
+        .push(Variable::text("host", "https://api.example"));
+    repo.save_environment(&created).unwrap();
+    assert!(dir.path().join("environments/Team prod.yml").is_file());
+    repo.delete_environment("Team prod").unwrap();
+    assert!(!dir.path().join("environments/Team prod.yml").exists());
+}
+
+#[test]
+fn a_workspace_without_environments_has_none() {
+    use apifast_app::EnvironmentRepository as _;
+    let (_dir, repo) = workspace(TEAM);
+    assert_eq!(repo.environments().unwrap(), []);
+}

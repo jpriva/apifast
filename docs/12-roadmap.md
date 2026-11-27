@@ -253,7 +253,7 @@ El cifrado del tarro de cookies pasa a F5, donde llega el tarro.
 - [x] Clave de la colección por colección: nunca se pide a quien la creó ni dos veces en la misma máquina; verla, copiarla y rotarla desde el menú de la raíz. Fijado con pruebas. Una prueba recorre dos máquinas (dos directorios de datos): quien comparte el primer secreto no escribe la clave y, tras reiniciar, no se le pide; la otra máquina ve la marca en la raíz, pega la clave una vez y tras reiniciar ya no se le pide. El aviso para pegarla es el de la colección enfocada.
 - [x] Medición de memoria con un workspace de tres colecciones y una cargada. Medido con tres colecciones de 1000 requests sin desplegar: 51,2 MB, lo mismo que con una colección pequeña cargada (52,9 MB). El binario sube a 24,6 MiB, cerca del límite ([rendimiento](10-rendimiento-y-memoria.md)).
 
-Siguiente, fuera de esta sección: los entornos globales del workspace (`environments/` de Bruno) como ámbito `Global`.
+Siguiente, fuera de esta sección: los entornos globales del workspace (`environments/` de Bruno) como ámbito `Global`, en F10.
 
 ### Criterio de salida
 
@@ -485,6 +485,14 @@ Fuera de esta colección quedan anotados: `require` de librerías y los módulos
   - [x] El tooltip y "All variables" con lo que verá el próximo envío: `State::context` resuelve con el runtime de la colección, el mismo que usa el envío, y tras cada envío se recalculan todas sus pestañas. El origen distingue "Fijada por un script" de "Capturada de una respuesta" (el núcleo recuerda qué nombres fijó un script por última vez), y lo tapado nombra el ámbito del archivo.
   - [x] Scripts: `bru.setCollectionVar(name, value, {persist: true})`, como `setEnvVar`, y el ámbito `collection` para las capturas. Los dos se usan al momento y se ofrecen en el mismo aviso que las capturas de entorno; al aceptar se escriben en `request.variables` de `opencollection.yml`. Sin `persist` sigue en memoria. Un secreto no se escribe en la colección, que no guarda valores secretos.
   - [x] Como en Bruno: `Ctrl+clic` sobre `{{nombre}}` en cualquier campo, o `F2` (acción "Edit variable", configurable) con el cursor de texto dentro, abre un editor pequeño: el valor de ahora y su origen, el valor nuevo y dónde guardarlo (la request, sus carpetas, el entorno activo o la colección). Viene elegido el ámbito del archivo que da el valor, y la request si no existe. Los campos dejan el pedido en la memoria de egui (`atoms::variable_edit`) y la pantalla lo recoge, sin pasar eventos por cada componente. Un secreto no se escribe desde ahí. La opción "global" espera a los entornos globales del workspace como ámbito `Global` (ver "Workspaces y varias colecciones").
+- [ ] Entornos globales del workspace como ámbito `Global`. Bruno guarda en `environments/` del workspace sus entornos globales, con el mismo formato que los de una colección (también `extends`). apifast los conservaba sin usarlos: docs/05 pone `Global` como el ámbito de menor prioridad, pero el núcleo nunca añadía esa capa, y `bru.setGlobalEnvVar` solo vivía en memoria.
+  - [x] Leerlos y escribirlos: `FsWorkspace` implementa `EnvironmentRepository` con la misma lógica que una colección (`FsEnvironments`, sacada de `FsCollection`), que conserva lo que cada archivo tiene y el modelo no.
+  - [ ] Elegir el entorno global activo, en el estado personal del workspace, y resolverlo como la capa de menor prioridad en los envíos, la copia como código, OAuth 2.0 y el runner.
+  - [ ] Interfaz: selector del entorno global junto al de la colección; editarlos en la ventana de entornos; el origen "Global environment X" en el tooltip y en "All variables"; la opción "Global" en el editor de `{{variable}}`.
+  - [ ] Scripts: `bru.getGlobalEnvVar` lee el entorno global activo, y `bru.setGlobalEnvVar(…, {persist: true})` se ofrece para guardar, como los de entorno y colección.
+  - [ ] Secretos de un entorno global: el valor va a la bóveda local de la máquina, como hace Bruno, y no se comparte. La bóveda guarda hoy por colección y entorno; hace falta un espacio por workspace.
+  - [ ] CLI: elegir el entorno global en `apifast run` y `apifast send`.
+  - [ ] Importar de Postman: `pm.globals` a `bru.*GlobalEnvVar` y `pm.collectionVariables` a `bru.*CollectionVar` (hoy van a las de runtime).
 - [ ] Guía de usuario.
 - [ ] Auditoría de seguridad de la bóveda.
 - [ ] Revisión final de presupuestos de rendimiento.
