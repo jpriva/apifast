@@ -21,12 +21,16 @@ const TRANSLATIONS: &[(&str, &str)] = &[
     (r"pm\.variables\.has\(", "bru.hasVar("),
     (r"pm\.variables\.unset\(", "bru.deleteVar("),
     (r"pm\.variables\.replaceIn\(", "bru.interpolate("),
-    (r"pm\.collectionVariables\.get\(", "bru.getVar("),
-    (r"pm\.collectionVariables\.set\(", "bru.setVar("),
-    (r"pm\.collectionVariables\.has\(", "bru.hasVar("),
-    (r"pm\.collectionVariables\.unset\(", "bru.deleteVar("),
-    (r"pm\.globals\.get\(", "bru.getVar("),
-    (r"pm\.globals\.set\(", "bru.setVar("),
+    // The collection's variables are imported as the collection's, and
+    // Postman's globals are the workspace's global environment.
+    (r"pm\.collectionVariables\.get\(", "bru.getCollectionVar("),
+    (r"pm\.collectionVariables\.set\(", "bru.setCollectionVar("),
+    (r"pm\.collectionVariables\.has\(", "bru.hasCollectionVar("),
+    (r"pm\.collectionVariables\.unset\(", "bru.deleteCollectionVar("),
+    (r"pm\.globals\.get\(", "bru.getGlobalEnvVar("),
+    (r"pm\.globals\.set\(", "bru.setGlobalEnvVar("),
+    (r"pm\.globals\.has\(", "bru.hasGlobalEnvVar("),
+    (r"pm\.globals\.unset\(", "bru.deleteGlobalEnvVar("),
     (
         r"pm\.execution\.setNextRequest\(",
         "bru.runner.setNextRequest(",
@@ -40,8 +44,8 @@ const TRANSLATIONS: &[(&str, &str)] = &[
     (r"postman\.setEnvironmentVariable\(", "bru.setEnvVar("),
     (r"postman\.getEnvironmentVariable\(", "bru.getEnvVar("),
     (r"postman\.clearEnvironmentVariable\(", "bru.deleteEnvVar("),
-    (r"postman\.setGlobalVariable\(", "bru.setVar("),
-    (r"postman\.getGlobalVariable\(", "bru.getVar("),
+    (r"postman\.setGlobalVariable\(", "bru.setGlobalEnvVar("),
+    (r"postman\.getGlobalVariable\(", "bru.getGlobalEnvVar("),
     (r"pm\.test\(", "test("),
     (r"pm\.expect\.fail\(", "expect.fail("),
     (r"pm\.expect\(", "expect("),
@@ -158,7 +162,7 @@ tests["has id"] = data.id !== undefined;"#;
 });
 const data = res.getBody();
 bru.setEnvVar("token", data.token);
-bru.setVar("id", data.id);
+bru.setCollectionVar("id", data.id);
 expect(res.getResponseTime()).to.be.below(500);
 const host = bru.getEnvVar("host");
 if (res.getStatus() === 404) bru.runner.skipRequest();
