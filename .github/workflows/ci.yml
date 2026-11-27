@@ -30,7 +30,7 @@ jobs:
     outputs:
       code: ${{ steps.diff.outputs.code }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - id: diff
@@ -50,7 +50,7 @@ jobs:
     name: Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Installs the version pinned in rust-toolchain.toml.
       - run: rustup toolchain install
       - run: cargo fmt --all --check
@@ -64,7 +64,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Installs the version pinned in rust-toolchain.toml.
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
@@ -91,7 +91,7 @@ jobs:
       CODE: ${{ needs.changes.outputs.code }}
     steps:
       - if: env.CODE == 'true'
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Installs the version pinned in rust-toolchain.toml.
       - if: env.CODE == 'true'
         run: rustup toolchain install
@@ -119,7 +119,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Installs the version pinned in rust-toolchain.toml.
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
@@ -135,7 +135,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: EmbarkStudios/cargo-deny-action@81891abc19297b21343b15ef67dc61e4aea74fda # v2.1.4
         with:
           command: check
